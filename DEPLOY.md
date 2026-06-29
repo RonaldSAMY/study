@@ -1,5 +1,11 @@
 # Deploying Maths for ML
 
+> **Two ways to deploy:**
+> 1. **GitHub Pages** (free, no server) — see *“Option B”* at the bottom. Auto-deploys on push.
+> 2. **Docker + Traefik** (your own server, domain-based routing alongside other services) — below.
+
+
+
 A self-contained Docker stack: **Traefik** (reverse proxy + automatic HTTPS) serves the **static**
 Astro site and routes by **domain name**, so it coexists with your existing services on ports 80/443.
 
@@ -102,3 +108,23 @@ docker build -t maths-llm:local .
 docker run --rm -p 8080:80 maths-llm:local
 # open http://localhost:8080  (try /path, /book, and a lesson)
 ```
+
+---
+
+# Option B — GitHub Pages (free, no server)
+
+The repo includes `.github/workflows/deploy.yml`, which builds the site under the `/study`
+sub-path and publishes it to GitHub Pages on every push to `main`.
+
+**One-time setup:**
+1. The repo must be **public** (free Pages) — or have GitHub Pro for private Pages.
+2. On GitHub: **Settings → Pages → Build and deployment → Source = “GitHub Actions”**.
+3. Push to `main` (or run the workflow manually under the **Actions** tab).
+
+The site goes live at **https://ronaldsamy.github.io/study/**. Subsequent pushes redeploy automatically.
+
+**How the sub-path works:** `base`/`site` are env-driven in `astro.config.mjs`. The Pages workflow
+sets `BASE_PATH=/study`; local dev and the Docker build leave it unset (served at `/`). All internal
+links use the `url()` helper (`src/lib/url.ts`), so the exact same source works at root *and* under
+`/study`. To serve at the domain root instead (e.g. a custom domain or a `RonaldSAMY.github.io` user
+repo), drop the `BASE_PATH` env in the workflow.

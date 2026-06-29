@@ -2,6 +2,7 @@
 // Shows "builds on" (prereqs) and "leads to" (next) lessons, powering the
 // progressive flow. Slugs are resolved against the curriculum data.
 import { getLessonBySlug } from '../data/curriculum';
+import { url } from '../lib/url';
 
 interface Props {
   prereqs?: string[];
@@ -23,7 +24,7 @@ const after = resolve(leadsTo);
         <ul class="space-y-1.5">
           {before.map(({ slug, meta }) => (
             <li>
-              <a href={`/${slug}`} class="text-sm font-semibold text-brand hover:underline">
+              <a href={url(`/${slug}`)} class="text-sm font-semibold text-brand hover:underline">
                 {meta!.trackIcon} {meta!.title}
               </a>
             </li>
@@ -37,7 +38,7 @@ const after = resolve(leadsTo);
         <ul class="space-y-1.5">
           {after.map(({ slug, meta }) => (
             <li>
-              <a href={`/${slug}`} class="text-sm font-semibold text-brand hover:underline">
+              <a href={url(`/${slug}`)} class="text-sm font-semibold text-brand hover:underline">
                 {meta!.trackIcon} {meta!.title}
               </a>
             </li>

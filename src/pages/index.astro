@@ -2,6 +2,7 @@
 import Layout from '../components/Layout.astro';
 import { TRACKS, ALL_LESSONS, TOTAL_COUNT } from '../data/curriculum';
 import { getReadySlugs } from '../lib/lessons';
+import { url } from '../lib/url';
 
 const readySet = await getReadySlugs();
 const READY_COUNT = readySet.size;
@@ -35,10 +36,10 @@ const core = TRACKS.filter((t) => t.stage === 'Core');
       hands-on demos and fresh real-world examples each time.
     </p>
     <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-      <a href="/linear-algebra/vectors" class="rounded-xl bg-brand px-6 py-3.5 font-semibold text-white shadow-lg transition hover:brightness-110">
+      <a href={url('/linear-algebra/vectors')} class="rounded-xl bg-brand px-6 py-3.5 font-semibold text-white shadow-lg transition hover:brightness-110">
         Start with Vectors →
       </a>
-      <a href="/path" class="rounded-xl border border-border bg-surface px-6 py-3.5 font-semibold transition hover:border-brand">
+      <a href={url('/path')} class="rounded-xl border border-border bg-surface px-6 py-3.5 font-semibold transition hover:border-brand">
         See the full path
       </a>
     </div>
@@ -66,7 +67,7 @@ const core = TRACKS.filter((t) => t.stage === 'Core');
     <p class="mt-1 text-muted">Polished, end-to-end examples of how every topic will be taught.</p>
     <div class="mt-5 grid gap-4 sm:grid-cols-2">
       {flagships.map((l) => (
-        <a href={`/${l.slug}`} class="group rounded-2xl border border-border bg-surface p-5 transition hover:-translate-y-0.5 hover:border-brand hover:shadow-lg">
+        <a href={url(`/${l.slug}`)} class="group rounded-2xl border border-border bg-surface p-5 transition hover:-translate-y-0.5 hover:border-brand hover:shadow-lg">
           <div class="flex items-center gap-2">
             <span class="text-2xl">{l.trackIcon}</span>
             <span class="rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand">{l.trackTitle}</span>
@@ -92,7 +93,7 @@ const core = TRACKS.filter((t) => t.stage === 'Core');
             const ready = t.lessons.filter((l) => readySet.has(`${t.id}/${l.id}`)).length;
             const first = t.lessons[0];
             return (
-              <a href={`/${t.id}/${first.id}`} class="group rounded-xl border border-border bg-surface p-4 transition hover:border-brand">
+              <a href={url(`/${t.id}/${first.id}`)} class="group rounded-xl border border-border bg-surface p-4 transition hover:border-brand">
                 <div class="flex items-center justify-between">
                   <span class="text-2xl">{t.icon}</span>
                   <span class="text-xs text-muted">{t.lessons.length} lessons</span>
@@ -111,6 +112,6 @@ const core = TRACKS.filter((t) => t.stage === 'Core');
   <section class="mt-16 rounded-2xl border border-brand/30 bg-brand-soft p-8 text-center">
     <h2 class="text-2xl font-extrabold text-brand">Ready to build your foundation?</h2>
     <p class="mx-auto mt-2 max-w-xl text-muted">No prior maths confidence required. Start at the very beginning and let each lesson carry you to the next.</p>
-    <a href="/path" class="mt-6 inline-block rounded-xl bg-brand px-6 py-3.5 font-semibold text-white shadow-lg transition hover:brightness-110">Open the learning path →</a>
+    <a href={url('/path')} class="mt-6 inline-block rounded-xl bg-brand px-6 py-3.5 font-semibold text-white shadow-lg transition hover:brightness-110">Open the learning path →</a>
   </section>
 </Layout>

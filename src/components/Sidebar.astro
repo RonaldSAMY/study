@@ -1,8 +1,9 @@
 ---
 import { TRACKS } from '../data/curriculum';
 import { getReadySlugs } from '../lib/lessons';
+import { url, stripBase } from '../lib/url';
 
-const current = Astro.url.pathname.replace(/^\/|\/$/g, ''); // current slug
+const current = stripBase(Astro.url.pathname); // current slug, base removed
 const stages = ['Foundations', 'Core'] as const;
 const ready = await getReadySlugs();
 ---
@@ -12,20 +13,20 @@ const ready = await getReadySlugs();
   class="hidden w-full shrink-0 border-b border-border bg-surface lg:sticky lg:top-0 lg:block lg:h-screen lg:w-80 lg:overflow-y-auto lg:border-b-0 lg:border-r"
 >
   <div class="p-5">
-    <a href="/" class="mb-5 hidden items-center gap-2 text-lg font-extrabold lg:flex">
+    <a href={url('/')} class="mb-5 hidden items-center gap-2 text-lg font-extrabold lg:flex">
       <span class="grid h-9 w-9 place-items-center rounded-xl bg-brand text-white">∑</span>
       Maths for ML
     </a>
 
     <div class="mb-5 grid grid-cols-2 gap-2">
       <a
-        href="/path"
+        href={url('/path')}
         class="rounded-xl border border-border bg-surface-2 px-3 py-2.5 text-center text-sm font-semibold transition hover:border-brand"
       >
         🗺️ Path
       </a>
       <a
-        href="/book"
+        href={url('/book')}
         class="rounded-xl border border-border bg-surface-2 px-3 py-2.5 text-center text-sm font-semibold transition hover:border-brand"
       >
         📖 Book map
@@ -49,7 +50,7 @@ const ready = await getReadySlugs();
                 return (
                   <li>
                     <a
-                      href={`/${slug}`}
+                      href={url(`/${slug}`)}
                       data-lesson-slug={slug}
                       class={`group/li flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition ${
                         active ? 'bg-brand-soft font-semibold text-brand' : 'text-muted hover:bg-surface-2 hover:text-text'
