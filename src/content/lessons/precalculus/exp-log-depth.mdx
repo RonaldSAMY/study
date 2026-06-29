@@ -1,0 +1,191 @@
+---
+title: Exponentials & Logs in Depth
+track: precalculus
+summary: Modeling growth, decay and scale with e and the natural log.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - precalculus/poly-rational-functions
+leadsTo:
+  - precalculus/intro-limits
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ExpModelFitter from '../../../components/demos/ExpModelFitter.tsx';
+
+## The hook: when nine cases become a thousand
+
+In the first week of an outbreak, a clinic logs **9** cases. Nobody panics — nine is small. But each
+sick person infects a couple more, who infect a couple more. By week eight the count is in the
+**hundreds**, and the curve is screaming upward. Nothing about the *rule* changed week to week; the
+same multiplication just kept compounding. That runaway behavior — and its mirror image, things that
+fade away by a constant fraction — is the world of **exponentials**. To *measure* and *tame* such
+quantities, we'll need their inverse: the **logarithm**.
+
+<Callout type="intuition" title="The one-sentence idea">
+An **exponential** multiplies by the same factor over and over (so it explodes or decays), and a
+**logarithm** is the question "how many times did we multiply?" — the exact tool that undoes it.
+</Callout>
+
+## Intuition: from "powers" to "rates of change"
+
+You already met **exponents** in algebra ($2^3 = 8$) and the **rational functions** of the previous
+lesson, whose graphs bend toward asymptotes. An exponential function pushes that bending to the
+extreme: instead of adding a fixed amount each step (a straight line), it **multiplies by a fixed
+factor** each step.
+
+- A linear quantity grows by *the same amount*: $+5, +5, +5, \dots$
+- An exponential quantity grows by *the same ratio*: $\times 1.5, \times 1.5, \times 1.5, \dots$
+
+That single change — addition to multiplication — is why exponentials feel slow at first and then
+violently fast. The **logarithm** runs the movie backward: given the result, it recovers the exponent.
+Just as subtraction undoes addition and division undoes multiplication, **logs undo exponentials**.
+
+## Play with it
+
+The dots below are real-looking weekly case counts. Slide the **initial amount $a$** and the **growth
+rate $k$** to fit the smooth model $y = a\,e^{kt}$ through them, and watch the **fit error** shrink as
+you home in. Then flip on **log scale (y)** — the curving data snaps into a near-straight line.
+
+<ExpModelFitter client:visible />
+
+<Callout type="tip">
+On a <strong>log scale</strong>, a pure exponential becomes a <strong>straight line</strong> whose
+slope is the rate $k$. That's why scientists plot outbreaks and stock prices on log axes: a straight
+line means "steady multiplicative growth," and a bend means the rate itself is changing.
+</Callout>
+
+## The formal definition
+
+An **exponential model** is
+
+$$
+y = a\,e^{kt},
+$$
+
+where $a$ is the starting amount (the value at $t = 0$), and $k$ is the **continuous rate**. If
+$k > 0$ the quantity **grows**; if $k < 0$ it **decays**. The base $e \approx 2.71828$ is **Euler's
+number**, the natural choice because it makes the rate of change equal to the quantity itself —
+$\frac{d}{dt}e^{t} = e^{t}$ — which is why it appears everywhere in calculus and modeling.
+
+The **natural logarithm** $\ln$ is the inverse of $e^x$. They cancel cleanly:
+
+$$
+\ln(e^x) = x \qquad\text{and}\qquad e^{\ln x} = x \quad (x > 0).
+$$
+
+Any base can be rewritten in terms of $e$, which is why $e$ and $\ln$ are enough on their own:
+
+$$
+a^x = e^{x \ln a}.
+$$
+
+Two quantities fall straight out of the model. The **doubling time** (when $k>0$) and the
+**half-life** (when $k<0$) come from asking when $y$ reaches twice or half its start:
+
+$$
+t_{\text{double}} = \frac{\ln 2}{k}, \qquad t_{1/2} = \frac{\ln 2}{|k|}.
+$$
+
+Finally, the defining superpower of logs: they turn **multiplication into addition**.
+
+$$
+\ln(xy) = \ln x + \ln y, \qquad \ln(x^p) = p\,\ln x.
+$$
+
+This is exactly why a **log scale** spaces $1, 10, 100, 1000$ evenly — each step is "$\times 10$,"
+which becomes "$+1$" once you take the log.
+
+<Callout type="why">
+Logs and $e$ are the native language of machine learning. We minimize **log-loss** (cross-entropy)
+instead of raw probabilities because multiplying thousands of tiny likelihoods underflows to zero —
+but **adding their logs** is stable. The **log-likelihood** turns a product over a dataset into a sum
+we can optimize, and **exponential learning-rate decay**, $\eta_t = \eta_0\,e^{-\lambda t}$, gently
+shrinks the step size as training settles.
+</Callout>
+
+## The same idea, four different worlds
+
+The pair "multiply repeatedly / ask how many times" shows up far beyond epidemics.
+
+<ExampleCard domain="Epidemiology" icon="🦠">
+Early in an outbreak, cases follow $y = a\,e^{kt}$. A measured **doubling time** of 3 days means
+$k = \frac{\ln 2}{3} \approx 0.23$ per day. Public-health teams watch the *slope on a log plot*: if it
+flattens, interventions are working — the multiplicative engine is slowing even while totals still rise.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💰">
+Money compounded **continuously** grows as $A = P\,e^{rt}$. Invest \$1000 at $r = 5\%$ and after
+$t = 10$ years you have $1000\,e^{0.05 \cdot 10} = 1000\,e^{0.5} \approx 1648$ dollars. The same $\ln 2 / r$
+formula gives the famous "rule of 70": your money doubles in about $70/5 = 14$ years.
+</ExampleCard>
+
+<ExampleCard domain="Archaeology" icon="🦴">
+Carbon-14 **decays** with a half-life of about 5730 years, so $k = -\ln 2 / 5730 \approx -0.000121$
+per year. Measure how much $^{14}\!C$ remains in a bone, then solve $e^{kt}$ for $t$ with a logarithm:
+$t = \frac{\ln(\text{fraction left})}{k}$. That single log turns a leftover fraction into an age.
+</ExampleCard>
+
+<ExampleCard domain="Seismology" icon="🌋">
+The **Richter scale** is a base-10 log of wave amplitude, so each whole number is a $\times 10$ jump in
+shaking (and roughly $\times 32$ in energy). A magnitude 7 isn't "a bit worse" than a 5 — it's
+$10^{2} = 100$ times the amplitude. Logs let a single small number stand in for a vast range, the same
+trick **decibels** use for sound.
+</ExampleCard>
+
+<Callout type="note">
+Notice the symmetry: growth ($k>0$) and decay ($k<0$) are the <em>same</em> equation with the sign
+flipped, and the log is what lets you <em>solve</em> for the unknown time in either one.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the key difference between linear and exponential growth?',
+      options: [
+        'Linear adds a fixed amount each step; exponential multiplies by a fixed factor each step',
+        'Linear multiplies; exponential adds',
+        'They are the same on a normal graph',
+        'Exponential growth always slows down over time',
+      ],
+      answer: 0,
+      explain: 'Linear growth adds the same amount repeatedly (a straight line); exponential growth multiplies by the same ratio repeatedly, which is why it eventually explodes.',
+    },
+    {
+      q: 'A sample has a half-life of 8 days (decay model y = a·e^(k·t)). Roughly what is the rate k?',
+      options: ['k ≈ -0.087 per day', 'k ≈ 8 per day', 'k ≈ -8 per day', 'k ≈ 0.69 per day'],
+      answer: 0,
+      explain: 'Half-life t₁/₂ = ln2 / |k|, so |k| = ln2 / 8 ≈ 0.693 / 8 ≈ 0.087. It decays, so k ≈ -0.087 per day.',
+    },
+    {
+      q: 'Why does machine learning minimize the log-loss (sum of log-probabilities) instead of multiplying raw probabilities?',
+      options: [
+        'Because logs turn a product of many tiny numbers into a stable sum, avoiding underflow',
+        'Because logarithms make every number larger',
+        'Because probabilities are not allowed in optimization',
+        'Because e is hard to compute',
+      ],
+      answer: 0,
+      explain: 'Multiplying thousands of small probabilities underflows toward zero. Taking logs converts the product into a sum (ln(xy) = ln x + ln y), which is numerically stable and easy to optimize.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>exponential</strong> y = a·e^(kt) multiplies by a constant factor each step — growth when k &gt; 0, decay when k &lt; 0.',
+    '<strong>Euler\'s number e</strong> is the natural base, and the <strong>natural log</strong> ln is its inverse: ln(eˣ) = x.',
+    'Any base converts via <strong>aˣ = e^(x·ln a)</strong>, and <strong>doubling time / half-life = ln 2 / |k|</strong>.',
+    'Logs turn <strong>multiplication into addition</strong>, which is why a log scale spaces 1, 10, 100 evenly and straightens exponentials.',
+    'In ML this powers <strong>log-likelihood, log-loss, and exponential learning-rate decay</strong> — stability and modeling in one idea.',
+  ]}
+/>
+
+Next up: **Intro to Limits** — what *exactly* do we mean when a curve like $e^{t}$ "approaches" a value,
+and how that question gives birth to calculus.

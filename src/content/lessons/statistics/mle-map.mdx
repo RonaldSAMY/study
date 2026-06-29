@@ -1,0 +1,174 @@
+---
+title: Estimation (MLE & MAP)
+track: statistics
+summary: Choosing the parameter that best explains your data — with or without a prior belief.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - statistics/descriptive-stats
+leadsTo:
+  - statistics/confidence-intervals
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import LikelihoodMaximizer from '../../../components/demos/LikelihoodMaximizer.tsx';
+
+## The hook: what's the *real* click rate?
+
+You launch a new "Buy now" button and watch the first 20 visitors: **7 of them click**. So... what is the
+button's true click-through rate? "35%," you say — and you're right, but *why* is 35% the best answer and
+not 30% or 40%? What makes one guess better than another when the truth is hidden?
+
+Descriptive statistics summarized the data we *saw*. **Estimation** takes the next step: it reaches past
+the sample to name the hidden **parameter** of the process that generated it. The guiding principle is
+beautifully simple.
+
+<Callout type="intuition" title="The one-sentence idea">
+The best estimate of a parameter is the value that makes the **data you actually observed** as likely as
+possible — that's **Maximum Likelihood Estimation**. **MAP** adds a prior belief to the mix.
+</Callout>
+
+## Intuition: run the world backwards
+
+A probability model runs *forwards*: given a parameter $p$ (the true click rate), it tells you how likely
+any particular outcome is. Estimation runs it *backwards*: given the outcome you saw, which $p$ would have
+made that outcome least surprising?
+
+Try every candidate $p$ and score it by **how probable our 7-out-of-20 result is under that $p$**:
+
+- If $p = 0.05$, seeing 7 clicks would be a freak event — low score.
+- If $p = 0.9$, seeing *only* 7 clicks would also be strange — low score.
+- Somewhere in between is a $p$ that makes 7-out-of-20 most ordinary. That peak is the **MLE**.
+
+This "score as a function of the parameter" is the **likelihood**. We slide the parameter until the
+likelihood is maximized — hence *maximum likelihood*.
+
+## Play with it
+
+The data is fixed: **7 conversions out of 20 visitors**. Slide the parameter $p$ and watch the likelihood
+of *that* data rise and fall. Find the peak — it lands exactly at $7/20 = 0.35$. Then toggle **add a
+prior**: a skeptical prior (we doubt rates are that high) shifts the best estimate to the **MAP**, a
+compromise between the data and the belief.
+
+<LikelihoodMaximizer client:visible />
+
+<Callout type="tip">
+With lots of data the likelihood curve grows tall and narrow, so the prior barely nudges it — MAP and MLE
+nearly agree. With little data the curve is flat and the prior does real steering. <strong>More data,
+weaker prior.</strong>
+</Callout>
+
+## The formal definition
+
+For independent observations $x_1, \dots, x_n$ from a model with parameter $\theta$, the **likelihood** is
+the probability of the data viewed as a function of $\theta$:
+
+$$
+\mathcal{L}(\theta) = \prod_{i=1}^{n} p(x_i \mid \theta).
+$$
+
+The **maximum likelihood estimate** is the maximizer
+
+$$
+\hat{\theta}_{\text{MLE}} = \arg\max_{\theta}\, \mathcal{L}(\theta) = \arg\max_{\theta}\, \sum_{i=1}^{n} \log p(x_i \mid \theta),
+$$
+
+where we take the **log** because it turns the fragile product into a friendly sum (and the maximizer is
+unchanged). For our button, with $k$ clicks in $n$ visitors, this gives the satisfying $\hat{p} = k/n$.
+
+**MAP** estimation multiplies in a **prior** $p(\theta)$ and maximizes the posterior $p(\theta \mid x) \propto
+\mathcal{L}(\theta)\,p(\theta)$:
+
+$$
+\hat{\theta}_{\text{MAP}} = \arg\max_{\theta}\, \Big[ \log \mathcal{L}(\theta) + \log p(\theta) \Big].
+$$
+
+<Callout type="why">
+This *is* how models train. Fitting a neural network by minimizing **cross-entropy loss** is exactly
+maximum likelihood in disguise (minimizing negative log-likelihood). Adding **L2 weight regularization**
+is exactly MAP with a Gaussian prior on the weights. Estimation is the engine under the hood of learning.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="A/B testing" icon="🧪">
+You compare two checkout pages. Each conversion count is binomial data, and the MLE click rate is simply
+$k/n$ for each page. The whole experiment is two likelihood peaks — and deciding whether they truly differ
+is the hypothesis test two lessons from now.
+</ExampleCard>
+
+<ExampleCard domain="Epidemiology" icon="🦠">
+To estimate a disease's transmission rate, scientists pick the parameter under which the observed case
+curve is most probable — maximum likelihood. Early in an outbreak, data is scarce, so a **prior** from past
+epidemics (MAP) stabilizes the estimate until more cases arrive.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+A new machine produces 3 defects in a batch of 500. The MLE defect rate is $3/500 = 0.6\%$. But the
+factory has decades of history saying rates hover near $1\%$; folding that in as a prior gives a MAP
+estimate that won't overreact to one lucky batch.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="🏀">
+A rookie sinks 4 of his first 5 free throws. Pure MLE says he's an 80% shooter — absurd from 5 attempts.
+A MAP estimate with a prior centered on the league average (~75%) pulls that wild number back toward
+reality. This shrinkage is exactly why analysts trust priors with small samples.
+</ExampleCard>
+
+<Callout type="note">
+The recurring lesson: **MLE listens only to the data; MAP also listens to prior knowledge.** When data is
+plentiful they converge. When data is scarce, a good prior is the difference between a sensible estimate
+and a ridiculous one.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does maximum likelihood estimation choose?',
+      options: [
+        'The parameter that is most probable before seeing data',
+        'The parameter that makes the observed data most probable',
+        'The average of all the data points',
+        'The parameter with the smallest variance',
+      ],
+      answer: 1,
+      explain: 'MLE picks the parameter value that maximizes the likelihood of the data you actually observed.',
+    },
+    {
+      q: 'An email campaign gets 30 opens out of 150 sends. What is the MLE of the open rate?',
+      options: ['0.30', '0.15', '0.20', '0.50'],
+      answer: 2,
+      explain: 'For binomial data the MLE is k/n = 30/150 = 0.20, or 20%.',
+    },
+    {
+      q: 'When does the MAP estimate differ most from the MLE?',
+      options: [
+        'When the dataset is very large',
+        'When the dataset is small, so the prior carries more weight',
+        'They are always identical',
+        'Only when the prior is uniform',
+      ],
+      answer: 1,
+      explain: 'With little data the likelihood is flat and the prior dominates, so MAP can differ a lot from MLE. With abundant data the likelihood overwhelms the prior and they converge.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Estimation reaches past the sample to name the hidden <strong>parameter</strong> that generated it.',
+    'The <strong>likelihood</strong> scores each candidate parameter by how probable it makes the observed data.',
+    '<strong>MLE</strong> maximizes the likelihood; for proportions it is just the sample fraction k/n.',
+    'We maximize the <strong>log-likelihood</strong> to turn a product into a stable sum.',
+    '<strong>MAP</strong> multiplies in a prior — it matters most with small data and fades as data grows; regularization is MAP in disguise.',
+  ]}
+/>
+
+Next up: a point estimate alone never tells you how *sure* to be. **Confidence intervals** wrap an
+estimate in a band of plausible values.

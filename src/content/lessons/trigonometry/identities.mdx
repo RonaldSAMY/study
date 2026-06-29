@@ -1,0 +1,184 @@
+---
+title: Trig Identities
+track: trigonometry
+summary: The equations that are true for every angle — Pythagorean and angle-addition — and how they let you rewrite trig with confidence.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - trigonometry/trig-graphs
+leadsTo:
+  - trigonometry/inverse-trig
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import IdentityChecker from '../../../components/demos/IdentityChecker.tsx';
+
+## The hook: spinning a sprite without it wobbling
+
+A game studio rotates thousands of sprites every frame. Naively, each rotation recomputes sines and cosines
+from scratch — expensive, and over many frames tiny errors creep in and the sprite slowly stretches. The fix
+is an **identity**: a rule guaranteeing that the rotation's sine and cosine combine to keep length *exactly*
+1, no matter the angle. Identities are the equations of trigonometry that hold for **every** input, and they
+are what let engineers rearrange, simplify, and trust their trig.
+
+<Callout type="intuition" title="The one-sentence idea">
+A trig **identity** is an equation true for *every* angle — like $\sin^2\theta + \cos^2\theta = 1$ — so you
+can substitute one side for the other anytime, anywhere.
+</Callout>
+
+## Intuition: a true equation vs. an equation to solve
+
+There is a quiet but crucial difference. An *equation* like $\sin\theta = 0.5$ is a question — it's true only
+for special angles ($30°$, $150°$, …). An **identity** like $\sin^2\theta + \cos^2\theta = 1$ is a
+*statement of fact* — it's true for **all** $\theta$. Identities are tools you apply; equations are problems
+you solve.
+
+The most important identity falls straight out of the unit circle. A point at angle $\theta$ has coordinates
+$(\cos\theta, \sin\theta)$, and every point on the unit circle satisfies $x^2 + y^2 = 1$. Substitute and you
+have the **Pythagorean identity**:
+
+$$
+\sin^2\theta + \cos^2\theta = 1.
+$$
+
+The other workhorses are the **angle-addition formulas**, which say what happens when you rotate by a sum of
+two angles:
+
+$$
+\sin(\alpha + \beta) = \sin\alpha\cos\beta + \cos\alpha\sin\beta,
+$$
+$$
+\cos(\alpha + \beta) = \cos\alpha\cos\beta - \sin\alpha\sin\beta.
+$$
+
+Set $\alpha = \beta = \theta$ and these collapse into the **double-angle formulas**
+$\sin 2\theta = 2\sin\theta\cos\theta$ and $\cos 2\theta = \cos^2\theta - \sin^2\theta$. From these few rules,
+almost every other identity can be derived.
+
+## Play with it
+
+Drag the point to change $\theta$ and watch the stacked bar: $\cos^2\theta$ and $\sin^2\theta$ always fill
+exactly one full unit. Then pick different identities from the menu and confirm both sides stay equal as you
+move the angle — that "always equal" is what *identity* means.
+
+<IdentityChecker client:visible />
+
+<Callout type="tip">
+Switch to <strong>Double angle (sin)</strong> and sweep θ: the two columns of numbers — sin(2θ) and 2 sinθ cosθ —
+track each other perfectly. An identity is a coincidence that <em>never</em> stops being true.
+</Callout>
+
+## The formal definition
+
+The core identities you should know:
+
+**Pythagorean (and its two cousins, dividing by $\cos^2$ or $\sin^2$):**
+
+$$
+\sin^2\theta + \cos^2\theta = 1, \qquad 1 + \tan^2\theta = \sec^2\theta.
+$$
+
+**Angle addition:**
+
+$$
+\sin(\alpha \pm \beta) = \sin\alpha\cos\beta \pm \cos\alpha\sin\beta,
+$$
+$$
+\cos(\alpha \pm \beta) = \cos\alpha\cos\beta \mp \sin\alpha\sin\beta.
+$$
+
+**Double angle** (special case $\alpha=\beta$):
+
+$$
+\sin 2\theta = 2\sin\theta\cos\theta, \qquad
+\cos 2\theta = \cos^2\theta - \sin^2\theta = 1 - 2\sin^2\theta.
+$$
+
+**Co-function** (the "co" in cosine): $\sin\theta = \cos\!\left(\tfrac{\pi}{2} - \theta\right)$.
+
+<Callout type="why">
+Angle-addition is exactly **2D rotation**: rotating a point by $\alpha$ then $\beta$ is rotating by
+$\alpha+\beta$, and writing that out *is* the addition formula. Rotation matrices in computer graphics,
+robotics and the rotary positional embeddings (RoPE) inside large language models all encode these
+identities. The Pythagorean identity is also why a rotation never changes a vector's length — it keeps the
+geometry of a model's representations intact.
+</Callout>
+
+## The same idea, four different worlds
+
+Identities are not classroom curiosities — they keep real systems exact and efficient.
+
+<ExampleCard domain="Computer graphics" icon="🎮">
+To rotate a sprite by $\alpha + \beta$, the angle-addition formulas combine the two rotations into one,
+saving repeated trig calls each frame. And because $\sin^2 + \cos^2 = 1$, the rotation preserves every
+sprite's size — no creeping distortion across thousands of frames.
+</ExampleCard>
+
+<ExampleCard domain="Electrical power" icon="🔌">
+Instantaneous AC power is $v\,i = V I\sin^2(\omega t)$, and the identity $\sin^2\theta = \tfrac{1}{2}(1 - \cos 2\theta)$
+splits it into a steady average plus a wobble at *twice* the line frequency. That algebraic split is how
+engineers compute the real "average power" a device draws.
+</ExampleCard>
+
+<ExampleCard domain="Optics" icon="🕶️">
+Polarised sunglasses pass light by a factor of $\cos^2\theta$ (Malus's law), where $\theta$ is the angle
+between filter and light. Using $\cos^2\theta = \tfrac{1}{2}(1 + \cos 2\theta)$, designers predict exactly how
+much glare two stacked polarisers cut as you rotate one.
+</ExampleCard>
+
+<ExampleCard domain="Carpentry" icon="🪚">
+Framing a roof, a carpenter often needs $\sin$ of a doubled pitch angle. Rather than re-measuring, they use
+$\sin 2\theta = 2\sin\theta\cos\theta$ to get the new cut from numbers already on the rafter square — an
+identity doing arithmetic on the job site.
+</ExampleCard>
+
+<Callout type="note">
+Across games, power grids, lenses and rooftops, the move is the same: replace a messy trig expression with an
+equal, friendlier one. Identities are licensed substitutions that are always safe to make.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What makes sin²θ + cos²θ = 1 an *identity* rather than just an equation?',
+      options: [
+        'It is only true for θ = 0',
+        'It is true for every value of θ',
+        'It can never be true',
+        'It is true only in degrees',
+      ],
+      answer: 1,
+      explain: 'An identity holds for all inputs. This one follows from x² + y² = 1 on the unit circle, true at every angle.',
+    },
+    {
+      q: 'If sin θ = 0.6 and θ is acute, what is cos θ?',
+      options: ['0.6', '0.8', '0.4', '1.6'],
+      answer: 1,
+      explain: 'From sin²θ + cos²θ = 1: cos²θ = 1 − 0.36 = 0.64, so cos θ = 0.8 (positive since θ is acute).',
+    },
+    {
+      q: 'Using the double-angle formula, sin(2θ) equals:',
+      options: ['2 sin θ', 'sin²θ − cos²θ', '2 sin θ cos θ', 'sin θ + cos θ'],
+      answer: 2,
+      explain: 'sin(2θ) = 2 sin θ cos θ, the α = β case of the angle-addition formula for sine.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>identity</strong> is an equation true for every angle, so either side may be substituted for the other.',
+    'The <strong>Pythagorean identity</strong> sin²θ + cos²θ = 1 comes directly from the unit circle.',
+    'The <strong>angle-addition formulas</strong> generate the double-angle and most other identities.',
+    'Angle addition <em>is</em> 2D rotation — the backbone of rotation matrices and rotary embeddings in ML.',
+    'Identities keep real systems exact and fast: graphics rotations, AC power, polarised optics and carpentry all rely on them.',
+  ]}
+/>
+
+Next up: **inverse trig functions** — going backwards from a known ratio to recover the angle that produced it.

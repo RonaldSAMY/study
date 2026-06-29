@@ -1,0 +1,185 @@
+---
+title: Eigenvalues & Eigenvectors
+track: linear-algebra
+summary: The special directions a transformation only stretches — never turns — and the numbers that say by how much.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - linear-algebra/linear-transformations
+leadsTo:
+  - linear-algebra/orthogonality-projections
+  - linear-algebra/decompositions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import EigenDirectionFinder from '../../../components/demos/EigenDirectionFinder.tsx';
+
+## The hook: why does a bridge have a frequency that destroys it?
+
+Push a child on a swing at just the right rhythm and the arcs grow huge; push at any other rhythm and
+nothing much happens. Every structure — a swing, a wine glass, a bridge — has a few special patterns
+of motion it *wants* to move in. Hit those patterns and energy piles up; the famous Tacoma Narrows
+bridge tore itself apart this way. Those preferred patterns are **eigenvectors**, and how strongly
+each one responds is its **eigenvalue**. Once you can find them, you can predict how a whole system
+will behave under repeated nudging — which is most of physics and a huge slice of machine learning.
+
+<Callout type="intuition" title="The one-sentence idea">
+An **eigenvector** of a matrix is a direction the matrix only **stretches or shrinks** — never rotates
+— and the **eigenvalue** is that stretch factor.
+</Callout>
+
+## Intuition: most arrows turn, a special few don't
+
+From the previous lesson, a matrix takes every vector and moves it — usually changing both its
+**length** and its **direction**. Picture all the unit arrows pointing out from the origin like a
+sea-urchin. Apply the matrix: almost every spine swings to a new angle.
+
+But for most matrices, one or two spines come out pointing along the *exact same line* they started on
+— maybe longer, maybe shorter, maybe reversed, but not rotated. Those un-turned directions are the
+**eigenvectors**. The factor by which such a direction is scaled is its **eigenvalue** $\lambda$:
+
+- $\lambda = 2$: that direction is stretched to double length.
+- $\lambda = 1$: completely unchanged.
+- $0 < \lambda < 1$: shrunk toward the origin.
+- $\lambda < 0$: flipped to point the opposite way.
+
+Why care? Because along an eigenvector the matrix acts like plain multiplication by a number. Applying
+the matrix a hundred times — which is what iterative algorithms do — becomes just $\lambda^{100}$ along
+each eigen-direction. The largest eigenvalue's direction quietly takes over, and that domination is the
+engine behind Google's PageRank and countless others.
+
+## Play with it
+
+The sky arrows are input directions; the indigo arrows show where the matrix sends them. Adjust the
+matrix entries and hunt for the **green** directions — the ones that land back on their own line. Their
+eigenvalues (stretch factors) appear on the right.
+
+<EigenDirectionFinder client:visible />
+
+<Callout type="tip">
+Try the <strong>Rotation</strong> preset: every direction turns, so there are <em>no</em> real
+eigenvectors (a pure rotation fixes no real line). Then try <strong>Symmetric</strong> — its two
+eigenvectors come out at a clean right angle. That orthogonality is no accident; it powers the next
+lessons.
+</Callout>
+
+## The formal definition
+
+A nonzero vector $\mathbf{v}$ is an **eigenvector** of a square matrix $A$ with **eigenvalue**
+$\lambda$ when applying $A$ is the same as scaling by $\lambda$:
+
+$$
+A\mathbf{v} = \lambda \mathbf{v}, \qquad \mathbf{v} \neq \mathbf{0}.
+$$
+
+To find the eigenvalues, rearrange to $(A - \lambda I)\mathbf{v} = \mathbf{0}$. A nonzero solution
+exists only when the matrix $A - \lambda I$ is singular — i.e. its **determinant vanishes** (the
+collapse idea from earlier):
+
+$$
+\det(A - \lambda I) = 0.
+$$
+
+For a $2\times 2$ matrix this is the **characteristic equation**
+
+$$
+\lambda^2 - (\operatorname{tr} A)\,\lambda + \det A = 0,
+$$
+
+where $\operatorname{tr} A = a + d$. Solve it for $\lambda$, then plug each $\lambda$ back in to get its
+eigenvector direction.
+
+<Callout type="why">
+Repeated application is everywhere in ML — Markov chains, power iteration, the steps of training. Along
+eigenvectors, $A^k \mathbf{v} = \lambda^k \mathbf{v}$, so the behavior of an entire iterative process
+is governed by a handful of eigenvalues. Eigenvalues bigger than 1 blow up; smaller than 1 die out.
+That is exactly the *exploding/vanishing gradient* story in deep networks.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Web search (PageRank)" icon="🔗">
+Google models the web as a giant matrix of links and asks for the **eigenvector** of the dominant
+eigenvalue. Its entries rank every page: a page is important if important pages link to it. Power
+iteration — multiply by the matrix over and over — converges to exactly that top eigenvector.
+</ExampleCard>
+
+<ExampleCard domain="Structural engineering" icon="🌉">
+A building's **mode shapes** are eigenvectors of its stiffness-and-mass system; the matching
+eigenvalues give its natural frequencies. Engineers compute them so a tower's resonant frequency never
+matches the wind or an earthquake — avoiding the Tacoma Narrows fate.
+</ExampleCard>
+
+<ExampleCard domain="Quantum chemistry" icon="⚛️">
+The allowed energy levels of a molecule are the **eigenvalues** of its Hamiltonian matrix, and the
+electron orbitals are the **eigenvectors**. Solving $H\psi = E\psi$ literally means finding the
+directions the energy operator only scales — the spectrum you see in a flame test.
+</ExampleCard>
+
+<ExampleCard domain="Ecology" icon="🦌">
+A population-projection (Leslie) matrix advances age groups one year at a time. Its dominant
+eigenvalue predicts whether a species grows ($\lambda > 1$) or declines ($\lambda < 1$) in the long
+run, and the matching eigenvector is the stable age distribution the population settles into.
+</ExampleCard>
+
+<Callout type="note">
+A symmetric matrix always has real eigenvalues and perpendicular eigenvectors. Covariance matrices are
+symmetric — which is the secret reason PCA at the end of this track works so cleanly.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What defines an eigenvector of a matrix A?',
+      options: [
+        'A vector A turns by 90°',
+        'A nonzero vector v with A·v = λ·v — the matrix only scales it',
+        'Any vector of length 1',
+        'A vector A sends to zero',
+      ],
+      answer: 1,
+      explain: 'An eigenvector keeps its direction under A; the matrix just multiplies it by the scalar eigenvalue λ.',
+    },
+    {
+      q: 'For A = [[3, 0], [0, 3]], what are the eigenvalues and eigenvectors?',
+      options: [
+        'Only [1,0] and [0,1], eigenvalue 0',
+        'Every direction is an eigenvector, eigenvalue 3',
+        'No eigenvectors exist',
+        'Eigenvalue 9 in one direction',
+      ],
+      answer: 1,
+      explain: '3I scales every vector by 3 without turning it, so every nonzero direction is an eigenvector with eigenvalue 3.',
+    },
+    {
+      q: 'An iterative process repeatedly multiplies by a matrix whose largest eigenvalue is 0.9. What happens over many steps?',
+      options: [
+        'It grows without bound',
+        'It stays exactly constant',
+        'It shrinks toward zero',
+        'It rotates forever',
+      ],
+      answer: 2,
+      explain: 'Along each eigen-direction the value scales by λ^k. Since the biggest λ is 0.9 < 1, 0.9^k → 0, so everything decays toward zero.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>eigenvector</strong> is a direction a matrix only stretches or flips, never rotates; its <strong>eigenvalue</strong> λ is the stretch factor.',
+    'They satisfy <strong>A·v = λ·v</strong>, found by solving det(A − λI) = 0 for λ.',
+    'Under repeated application, <strong>A<sup>k</sup>v = λ<sup>k</sup>v</strong>, so the largest eigenvalue dominates long-run behavior.',
+    'A pure rotation has <strong>no real eigenvectors</strong>; a symmetric matrix has real eigenvalues and perpendicular eigenvectors.',
+    'Eigen-analysis powers PageRank, resonance, quantum energy levels, and the stability of training.',
+  ]}
+/>
+
+Next up: **orthogonality and projections** — right angles, shadows, and the least-squares method that
+turns messy data into the best possible fit.

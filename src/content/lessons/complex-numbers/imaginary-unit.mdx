@@ -1,0 +1,172 @@
+---
+title: The Imaginary Unit
+track: complex-numbers
+summary: Meet i, the number whose square is −1, and learn how complex numbers a + bi add and multiply.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - algebra-2/exponents-radicals
+leadsTo:
+  - complex-numbers/complex-plane
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ImaginaryUnitArithmeticLab from '../../../components/demos/ImaginaryUnitArithmeticLab.tsx';
+
+## The hook: the equation with no answer
+
+Try to solve $x^2 = -1$. Every real number you square comes out positive (or zero), so no
+real number works. For centuries mathematicians shrugged and called such equations
+"impossible." Then someone made a bold move: *what if we just invent a number whose square is
+$-1$ and see what happens?* That invented number turned out to be no fantasy at all — it quietly
+runs the math behind your phone charger, every digital photo's compression, and the qubits inside
+a quantum computer.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **imaginary unit** $i$ is defined by the single rule $i^2 = -1$, and a **complex number**
+$a + bi$ simply bundles a familiar real part with a new imaginary part.
+</Callout>
+
+## Intuition: a new direction for numbers
+
+You already know how to multiply powers and roots. The trouble is that $\sqrt{-1}$ has no home on
+the number line — squaring never produces a negative. So instead of forcing it onto the line, we
+give it a brand-new direction, perpendicular to the reals, and label one step in that direction
+$i$.
+
+Once $i$ exists, a complex number is just a pair: a **real part** $a$ and an **imaginary part** $b$,
+written $a + bi$. You can add and multiply these exactly like the algebra you already know — treat
+$i$ as an ordinary symbol — with one extra simplification rule: every time you see $i^2$, replace it
+with $-1$.
+
+That single substitution is the whole trick. Powers of $i$ even cycle:
+$i^1 = i$, $i^2 = -1$, $i^3 = -i$, $i^4 = 1$, and then it repeats.
+
+## Play with it
+
+Set the real and imaginary parts of $z$ and $w$ with the sliders, then switch between
+**$z + w$** and **$z \cdot w$**. Watch the arrows on the plane and read the worked-out algebra.
+
+<ImaginaryUnitArithmeticLab client:visible />
+
+<Callout type="tip">
+In multiply mode, set $z = i$ (a = 0, b = 1) and $w = i$. The product is $-1$ — you can literally
+watch $i \times i$ land on the negative real axis. That is $i^2 = -1$ in action.
+</Callout>
+
+## The formal definition
+
+The imaginary unit satisfies
+
+$$
+i^2 = -1, \qquad \text{equivalently} \qquad i = \sqrt{-1}.
+$$
+
+A **complex number** is any expression
+
+$$
+z = a + bi, \qquad a, b \in \mathbb{R},
+$$
+
+where $a = \operatorname{Re}(z)$ is the real part and $b = \operatorname{Im}(z)$ is the imaginary
+part. **Addition** works component by component:
+
+$$
+(a + bi) + (c + di) = (a + c) + (b + d)\,i.
+$$
+
+**Multiplication** is ordinary distribution (FOIL), then apply $i^2 = -1$:
+
+$$
+(a + bi)(c + di) = (ac - bd) + (ad + bc)\,i.
+$$
+
+One more essential idea: the **complex conjugate** flips the sign of the imaginary part,
+$\bar{z} = a - bi$, and multiplying a number by its conjugate clears the imaginary part entirely:
+$z\bar{z} = a^2 + b^2$. That trick is how you divide complex numbers.
+
+<Callout type="why">
+Machine learning leans on complex numbers wherever signals and rotations appear: the Fourier
+transforms inside audio and image models, the spectral view of graphs, and the linear algebra of
+quantum machine learning all live in $\mathbb{C}$. Comfort with $a + bi$ now pays off everywhere
+later.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Electronics" icon="🔌">
+Engineers describe an AC capacitor's opposition to current as a purely imaginary quantity (they
+write $j$ instead of $i$ to avoid clashing with current). Multiplying a signal by $j$ shifts it a
+quarter cycle. The "impossible" number becomes the natural bookkeeping for *timing* in circuits.
+</ExampleCard>
+
+<ExampleCard domain="Quantum computing" icon="⚛️">
+A qubit's state carries complex **amplitudes** like $a + bi$. You never measure the amplitude
+directly — you measure a probability, which is $\lvert a + bi \rvert^2 = a^2 + b^2$. That is exactly
+the conjugate trick $z\bar{z}$ turning a complex number into a real, observable chance.
+</ExampleCard>
+
+<ExampleCard domain="Game programming" icon="🎮">
+Store a 2D sprite's position as the complex number $x + yi$. Multiplying by $i$ rotates it
+$90°$ around the origin: the point $(x, y)$ becomes $(-y, x)$. One multiplication replaces a whole
+rotation matrix — a favorite shortcut in 2D game engines.
+</ExampleCard>
+
+<ExampleCard domain="Fractals" icon="🌀">
+The Mandelbrot set is generated by the rule $z \mapsto z^2 + c$, repeated over and over with
+complex numbers. Squaring a complex number is just the multiplication above. Whether a point's
+sequence stays bounded or shoots off to infinity paints the famous swirling boundary.
+</ExampleCard>
+
+<Callout type="note">
+Notice the through-line: in every example the *interesting* action is **multiplication**. Adding
+complex numbers is mundane; multiplying them rotates and scales — the superpower we unpack over the
+next three lessons.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the defining property of the imaginary unit i?',
+      options: ['i = 0', 'i² = -1', 'i = 1', 'i² = 1'],
+      answer: 1,
+      explain: 'By definition i² = -1, which is exactly the equation no real number could satisfy.',
+    },
+    {
+      q: 'Compute (2 + 3i)(1 + 4i).',
+      options: ['2 + 12i', '-10 + 11i', '2 + 7i', '14 + 11i'],
+      answer: 1,
+      explain: 'FOIL: 2 + 8i + 3i + 12i² = 2 + 11i + 12(-1) = -10 + 11i.',
+    },
+    {
+      q: 'Why does multiplying z = a + bi by its conjugate a − bi give a real number?',
+      options: [
+        'Because the imaginary parts add up',
+        'Because the cross terms cancel, leaving a² + b²',
+        'Because conjugates are always zero',
+        'It does not — the result is still imaginary',
+      ],
+      answer: 1,
+      explain: '(a + bi)(a − bi) = a² − (bi)² = a² − b²(-1) = a² + b², which is real.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>imaginary unit</strong> is defined by the single rule <strong>i² = −1</strong>.',
+    'A <strong>complex number</strong> a + bi pairs a real part a with an imaginary part b.',
+    '<strong>Add</strong> by combining real and imaginary parts separately; <strong>multiply</strong> by FOIL, then replace i² with −1.',
+    'The <strong>conjugate</strong> a − bi satisfies z·z̄ = a² + b², which turns a complex number into a real one.',
+    'Multiplication is the powerful operation — it secretly <strong>rotates and scales</strong>, as the next lessons reveal.',
+  ]}
+/>
+
+Next up: the **complex plane** — where every complex number becomes a point and an arrow, and
+length and angle take center stage.

@@ -1,0 +1,164 @@
+---
+title: Partial Derivatives
+track: calculus-3
+summary: The slope of a surface when you walk along just one axis — holding everything else still.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - calculus-3/multivariable-functions
+leadsTo:
+  - calculus-3/gradient
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SurfaceSlicer from '../../../components/demos/SurfaceSlicer.tsx';
+
+## The hook: turning one knob at a time
+
+Imagine a metal plate on a workbench with two heat lamps warming it. You want to know: *if I slide my
+sensor a little to the east, does it get hotter or cooler?* You are not asking about north–south at all —
+just east. To answer cleanly, you **freeze** the north–south coordinate and let only east change. That
+deliberate "change one input, hold the rest still" is the whole idea of a **partial derivative**, and it
+is how every weight in a neural network learns its own little nudge.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **partial derivative** is the ordinary slope you get by changing **one variable** while **freezing all
+the others** — the steepness of the surface along a single axis.
+</Callout>
+
+## Intuition: a surface is full of hidden curves
+
+You already know how to differentiate a single-variable function $f(x)$: it is the slope of the curve. A
+surface $z = f(x, y)$ has no single slope — it tilts differently depending on which way you step. So we ask
+a sharper question: *what is the slope if I walk only in the $x$-direction?*
+
+Here is the trick that makes it easy. Slice the surface with a vertical plane that holds $y$ at some fixed
+value $y_0$. The cut edge is just a **curve** in $x$ — a plain single-variable function again. Its slope is
+the partial derivative with respect to $x$:
+
+$$
+\frac{\partial f}{\partial x} = \text{slope of the slice taken along } x \text{ (with } y \text{ held fixed).}
+$$
+
+That is the good news: **you already know how to do this.** Treat every other variable as a *constant* and
+differentiate normally with the rules from single-variable calculus. The curly $\partial$ ("partial") just
+reminds you there are other variables waiting in the wings.
+
+## Play with it
+
+Pick an axis, then use the sliders to choose where you hold the other variable and where your point sits.
+The top heat map shows the slice as a white line; the bottom panel shows that slice as a curve, with the
+green **tangent line** whose steepness is the partial derivative.
+
+<SurfaceSlicer client:visible />
+
+<Callout type="tip">
+Switch between $\partial f/\partial x$ and $\partial f/\partial y$ <em>at the same point</em>. The two
+slopes are usually different — a surface can rise steeply east while staying flat to the north. One point,
+many slopes.
+</Callout>
+
+## The formal definition
+
+The partial derivative with respect to $x$ is the limit of a one-direction difference quotient:
+
+$$
+\frac{\partial f}{\partial x}(x, y) = \lim_{h \to 0} \frac{f(x + h,\, y) - f(x,\, y)}{h},
+$$
+
+and symmetrically for $y$, nudging the second slot instead. In practice you **never** compute the limit —
+you differentiate with $y$ treated as a constant. For example,
+
+$$
+f(x, y) = x^2 y + 3y \quad\Longrightarrow\quad
+\frac{\partial f}{\partial x} = 2xy, \qquad \frac{\partial f}{\partial y} = x^2 + 3.
+$$
+
+Notice how, when differentiating in $x$, the term $3y$ vanished (it is "constant" in $x$), and when
+differentiating in $y$, the factor $x^2$ rode along untouched.
+
+<Callout type="why">
+Backpropagation is built entirely from partial derivatives. To train a network we need
+$\partial L / \partial w_i$ for **every** weight — "if I nudge this one weight, how does the loss move?"
+Each of those is a partial derivative, with all the other weights held fixed. Master this and you have the
+atom of all deep learning.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Cooking" icon="🍳">
+A pancake's doneness depends on heat and time: $D(\text{temp}, \text{time})$. Holding time fixed and asking
+"how much does cranking the burner change the result?" is $\partial D / \partial\text{temp}$. The chef
+adjusts one dial at a time — a partial derivative in an apron.
+</ExampleCard>
+
+<ExampleCard domain="Economics" icon="💹">
+A factory's output depends on labor $L$ and capital $K$: $Q(L, K)$. Economists call $\partial Q / \partial L$
+the **marginal product of labor** — the extra output from one more worker, *with capital unchanged*. It is
+a partial derivative that drives hiring decisions.
+</ExampleCard>
+
+<ExampleCard domain="Climate science" icon="🌍">
+Sea level $S(\text{CO}_2, \text{temp})$ responds to several drivers. To isolate one effect, scientists
+estimate $\partial S / \partial\text{temp}$ — sensitivity to warming alone, other factors held still — so
+they can attribute change to its true cause.
+</ExampleCard>
+
+<ExampleCard domain="Game design" icon="🎮">
+A character's win rate depends on attack and defense stats: $W(A, D)$. A balancing designer checks
+$\partial W / \partial A$ to see whether buffing attack alone makes a hero overpowered, then tweaks just
+that one number.
+</ExampleCard>
+
+<Callout type="warning">
+A common slip: forgetting that "the other variable is a constant" only during *that* derivative. When you
+turn to $\partial f / \partial y$, the variable $x$ becomes the frozen one instead. Always be clear about
+which knob you are turning and which you are holding.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'To compute ∂f/∂x, what do you do with the variable y?',
+      options: ['Set it to zero', 'Treat it as a constant', 'Differentiate it too', 'Set it to one'],
+      answer: 1,
+      explain: 'A partial derivative changes one variable while holding the others fixed, so y is treated as a constant when differentiating with respect to x.',
+    },
+    {
+      q: 'For f(x, y) = x²y + 3y, what is ∂f/∂y?',
+      options: ['2xy', 'x² + 3', 'x²', '2x + 3'],
+      answer: 1,
+      explain: 'Treat x as constant. The derivative of x²y in y is x², and the derivative of 3y is 3, giving x² + 3.',
+    },
+    {
+      q: 'At a single point on a surface, why can ∂f/∂x and ∂f/∂y have different values?',
+      options: [
+        'They are always equal',
+        'Because the surface can tilt differently along different directions',
+        'Because one of them is always zero',
+        'Because the function is one-dimensional',
+      ],
+      answer: 1,
+      explain: 'A surface generally slopes differently depending on which way you walk, so the slope along x can differ from the slope along y at the very same point.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>partial derivative</strong> measures slope along one axis while every other variable is held fixed.',
+    'Compute it by differentiating normally and treating the <strong>other variables as constants</strong>.',
+    'Geometrically it is the slope of the <strong>curve you get by slicing</strong> the surface along that axis.',
+    'A single point has <strong>one partial derivative per input direction</strong>, and they usually differ.',
+    'Every weight update in <strong>backpropagation</strong> is a partial derivative ∂L/∂wᵢ.',
+  ]}
+/>
+
+Next up: collect all the partials into one object — the **gradient** — and discover the single direction of
+steepest climb.

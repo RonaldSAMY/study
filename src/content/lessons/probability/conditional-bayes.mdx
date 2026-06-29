@@ -1,0 +1,181 @@
+---
+title: Conditional Probability & Bayes
+track: probability
+summary: How a probability should change the instant you learn something new — the engine of updating beliefs.
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - probability/sample-spaces
+leadsTo:
+  - probability/random-variables
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BayesGridUpdater from '../../../components/demos/BayesGridUpdater.tsx';
+
+## The hook: your test came back positive — should you panic?
+
+A screening test for a rare disease is *"99% accurate."* Yours comes back **positive**. It feels like a
+99% chance you're sick. Astonishingly, the true chance can be **under 10%**. Doctors get this wrong all
+the time, and the reason is a single missing ingredient: *how rare the disease was in the first place.*
+Learning the test result should **update** your belief — but by exactly how much is the job of
+**conditional probability** and **Bayes' theorem**, the most important idea in applied probability.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Conditional probability** $P(A \mid B)$ rescales the world to only the outcomes where $B$ happened,
+then asks how much of *that* smaller world is also $A$.
+</Callout>
+
+## Intuition: shrink the world to what you know
+
+Before any evidence, the whole sample space is in play. The moment you learn that event $B$ occurred,
+every outcome outside $B$ is impossible — so you **throw them away** and renormalize over what's left.
+The conditional probability of $A$ *given* $B$ is the fraction of the surviving $B$-world that is also
+$A$:
+
+$$
+P(A \mid B) = \frac{P(A \cap B)}{P(B)}.
+$$
+
+The cleanest way to *feel* this is with **natural frequencies**: don't think in percentages, think in
+counts of people. Out of 1,000 people, how many are sick *and* test positive? How many are healthy *but*
+test positive anyway? Compare those two piles and the "paradox" evaporates. That's exactly what the demo
+draws.
+
+A crucial sanity check: $P(A \mid B)$ and $P(B \mid A)$ are **not** the same. *"Positive given sick"*
+(the test's sensitivity) is huge; *"sick given positive"* (what you actually care about) can be small.
+Bayes' theorem is the bridge that flips one into the other.
+
+## Play with it
+
+Each square is one of 1,000 people. Slide the **prevalence** (how common the disease is), the test's
+**sensitivity**, and its **specificity**, and watch the colored piles change. The headline number,
+$P(\text{sick} \mid +)$, is found by *counting*: of everyone who tests positive, what fraction is truly
+sick?
+
+<BayesGridUpdater client:visible />
+
+<Callout type="tip">
+Set prevalence to <strong>1%</strong> with a very accurate test, then look at the two positive piles.
+The blue <em>false positives</em> swamp the indigo <em>true positives</em> — which is why one positive
+screen for a rare condition usually means "test again," not "panic."
+</Callout>
+
+## The formal definition
+
+Rearranging the definition of conditional probability gives the **multiplication rule**:
+
+$$
+P(A \cap B) = P(A \mid B)\,P(B) = P(B \mid A)\,P(A).
+$$
+
+Setting the two right-hand sides equal and solving yields **Bayes' theorem** — the formula for updating
+a belief in light of evidence:
+
+$$
+P(A \mid B) = \frac{P(B \mid A)\,P(A)}{P(B)}.
+$$
+
+Read it as: **posterior** $=$ **likelihood** $\times$ **prior** $/$ **evidence**. The *prior* $P(A)$ is
+the prevalence you'd guess before testing; the *likelihood* $P(B \mid A)$ is how strongly the evidence
+points at $A$; the denominator $P(B)$ is found with the **law of total probability**:
+
+$$
+P(B) = P(B \mid A)\,P(A) + P(B \mid A^c)\,P(A^c).
+$$
+
+Two events are **independent** when learning one tells you nothing about the other —
+$P(A \mid B) = P(A)$, equivalently $P(A \cap B) = P(A)\,P(B)$.
+
+<Callout type="why">
+Bayes' rule *is* machine learning in miniature. A spam filter holds a prior belief about how much mail
+is junk, sees evidence (the words in an email), and computes the posterior $P(\text{spam} \mid
+\text{words})$. Training a model is the same loop at scale: start with a prior over parameters, observe
+data, and update toward the parameters that best explain it.
+</Callout>
+
+## The same idea, four different worlds
+
+Updating a belief with evidence shows up far beyond medicine.
+
+<ExampleCard domain="Email security" icon="📨">
+A filter knows 20% of mail is spam (prior). The word *"invoice"* appears in 60% of spam but only 4% of
+real mail. Seeing it, Bayes updates the spam belief upward dramatically — yet a single innocent word is
+never decisive, because the 80% prior of "real mail" still pulls back. The posterior balances both.
+</ExampleCard>
+
+<ExampleCard domain="Courtroom reasoning" icon="⚖️">
+A DNA match has a "1-in-a-million" random-match probability. That is $P(\text{match} \mid \text{innocent})$
+— *not* $P(\text{innocent} \mid \text{match})$. Confusing the two is the famous **prosecutor's fallacy**.
+With a large suspect pool, several innocent people can match, so the match alone is far from proof.
+</ExampleCard>
+
+<ExampleCard domain="Search & rescue" icon="🚁">
+A lost hiker is most likely on the north trail (prior). A team sweeps it and finds nothing. Rather than
+giving up, rescuers run Bayes: the failed search *lowers* the north-trail posterior and *raises* the
+others, redirecting the next sweep. Every absence of evidence is itself evidence that updates the map.
+</ExampleCard>
+
+<ExampleCard domain="Insurance" icon="🛡️">
+An insurer's prior is the base crash rate for all drivers. A driver's three claim-free years are
+evidence with high likelihood under "safe driver," so the posterior shifts toward safe — and the
+premium drops. Pricing risk *is* continually updating $P(\text{risky} \mid \text{record})$.
+</ExampleCard>
+
+<Callout type="warning">
+The number-one Bayesian error is ignoring the <strong>prior</strong> (the base rate). A 99%-accurate
+test for a 1-in-10,000 disease still produces mostly false alarms, because there are so few true cases
+to find. Always ask "how common was it to begin with?"
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does P(A | B) mean?',
+      options: [
+        'The probability of A and B both happening',
+        'The probability of A, restricted to the outcomes where B already happened',
+        'The probability of B given A',
+        'The probability that A causes B',
+      ],
+      answer: 1,
+      explain: 'Conditioning on B shrinks the world to the B-outcomes and asks what fraction of those are also A: P(A | B) = P(A ∩ B)/P(B).',
+    },
+    {
+      q: 'A disease affects 1% of people. A test is positive for 90% of sick people and for 9% of healthy people. Out of 1,000 people, roughly what fraction of POSITIVE tests are truly sick?',
+      options: ['About 90%', 'About 50%', 'About 9%', 'About 1%'],
+      answer: 2,
+      explain: 'Of 1,000: ~10 sick → 9 true positives; ~990 healthy → ~89 false positives. So P(sick | +) ≈ 9 / (9 + 89) ≈ 9%. The rare prior makes most positives false alarms.',
+    },
+    {
+      q: 'Two events are independent when…',
+      options: [
+        'They cannot both happen',
+        'P(A | B) = P(A): knowing B tells you nothing about A',
+        'P(A) + P(B) = 1',
+        'They always happen together',
+      ],
+      answer: 1,
+      explain: 'Independence means the evidence is uninformative: P(A | B) = P(A), equivalently P(A ∩ B) = P(A)·P(B). (Mutually exclusive is a different idea — those events are highly dependent.)',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Conditional probability</strong> P(A | B) = P(A ∩ B)/P(B) rescales the sample space to the world where B occurred.',
+    "<strong>Bayes' theorem</strong> flips P(B | A) into P(A | B): posterior ∝ likelihood × prior, the formula for updating beliefs with evidence.",
+    'The <strong>base rate</strong> (prior) is decisive: for a rare event, even an accurate test yields mostly false positives.',
+    '<strong>Natural frequencies</strong> (counting people out of 1,000) make these updates intuitive and dodge the classic paradoxes.',
+    "<strong>Independence</strong> means P(A | B) = P(A) — the evidence carries no information about A.",
+  ]}
+/>
+
+Next up: once we can reason about uncertain *events*, we attach **numbers** to them — the
+**random variable**, which turns outcomes into quantities we can average and model.

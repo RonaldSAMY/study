@@ -1,0 +1,177 @@
+---
+title: Relations, Functions & Graphs
+track: discrete-math
+summary: How elements of sets connect — relations, the special ones called functions, and the graphs they draw.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - discrete-math/proofs-induction
+leadsTo:
+  - combinatorics/counting-principles
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import GraphAdjacencyBuilder from '../../../components/demos/GraphAdjacencyBuilder.tsx';
+
+## The hook: the web is just dots and lines
+
+Open any social app and you are staring at a **graph**: people are dots, friendships are lines between
+them. Google ranks pages by how web pages link to one another — dots and lines again. Map apps find
+routes through a graph of intersections and roads. Every one of these is built from a simpler idea: a
+**relation**, a precise statement of *which things are connected to which*. Relations, the special ones
+we call **functions**, and the **graphs** that draw them are the structures discrete math hands directly
+to machine learning.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **relation** says which elements of one set are linked to which of another; a **function** is a
+relation where every input has exactly **one** output; and a **graph** is just a relation drawn as dots
+(nodes) joined by lines (edges).
+</Callout>
+
+## Intuition: from pairs to pictures
+
+Take two sets — say users and movies. A relation picks out **ordered pairs**: *(Ana, Inception)* if Ana
+watched Inception. Formally a relation is any subset of the **Cartesian product** $A \times B$, the set
+of all possible pairs. That is the bridge from the last lessons: a relation is a *set* of pairs,
+selected by a true/false *condition*.
+
+A **function** is the disciplined kind of relation: each input is paired with **exactly one** output.
+"Each user has one birth year" is a function; "each user watched some movies" is a relation but not a
+function (one user, many movies). Functions are the input–output machines you have used since algebra,
+now seen as special relations.
+
+When both sets are the *same* set — people related to people, cities to cities — drawing the relation
+gives a **graph**: a node for each element, and an edge for each related pair. If the relation is
+symmetric (friendship), edges are undirected lines; if it has direction (follows, links), they are
+arrows.
+
+## Play with it
+
+Build your own social network. In **Add edges** mode, drag from one person to another to connect them;
+in **Add nodes** mode, click empty space to add a person and drag to rearrange. Flip **directed** to
+turn friendships into one-way follows, and watch the **adjacency matrix** update live.
+
+<GraphAdjacencyBuilder client:visible />
+
+<Callout type="tip">
+The adjacency matrix has a $1$ in row $i$, column $j$ exactly when there is an edge from $i$ to $j$.
+For an <em>undirected</em> graph it is symmetric — a $1$ at $(i,j)$ forces a $1$ at $(j,i)$ — because
+friendship goes both ways. A node's <strong>degree</strong> is just the number of $1$s in its row.
+</Callout>
+
+## The formal definition
+
+The **Cartesian product** of sets $A$ and $B$ is every ordered pair:
+
+$$
+A \times B = \{\, (a, b) : a \in A,\ b \in B \,\}.
+$$
+
+A **relation** $R$ from $A$ to $B$ is any subset $R \subseteq A \times B$; we write $a\,R\,b$ when the
+pair is in it. A **function** $f : A \to B$ is a relation in which every $a \in A$ appears in **exactly
+one** pair — one output per input:
+
+$$
+\big(a, b_1\big) \in f \ \text{and}\ \big(a, b_2\big) \in f \;\Longrightarrow\; b_1 = b_2.
+$$
+
+A **graph** is a pair $G = (V, E)$ of **vertices** $V$ and **edges** $E$, where $E$ is a relation on
+$V$. Its **adjacency matrix** $A$ encodes the edges:
+
+$$
+A_{ij} = \begin{cases} 1 & \text{if } (i, j) \in E, \\ 0 & \text{otherwise.} \end{cases}
+$$
+
+A handy fact you can prove by induction: entry $(i, j)$ of the matrix power $A^{k}$ counts the number of
+length-$k$ paths from node $i$ to node $j$ — turning a graph question into matrix multiplication.
+
+<Callout type="why">
+This is where discrete math meets the rest of the course. **Graph neural networks** pass information
+along edges; a recommendation engine is a graph of users and items; and that adjacency matrix is a
+**matrix** in the linear-algebra sense — multiply it and you propagate influence through the network.
+Relations are also exactly the tables of a relational database.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Social networks" icon="🧑‍🤝‍🧑">
+People are nodes; friendships are undirected edges, follows are directed ones. "People you may know" is
+the engine finding nodes two hops away in the graph — friends of your friends who are not yet your
+friends, a set difference over the adjacency structure.
+</ExampleCard>
+
+<ExampleCard domain="Family trees" icon="🌳">
+A family tree is a **directed graph**: an arrow from parent to child. "Is an ancestor of" is the
+relation you get by following arrows repeatedly — a *transitive* relation, since an ancestor of your
+ancestor is also your ancestor.
+</ExampleCard>
+
+<ExampleCard domain="Flight routes" icon="✈️">
+Airports are nodes; a direct flight is an edge, often **weighted** by price or time. Finding the
+cheapest trip with one connection is asking for the best length-2 path — the matrix-power idea, made
+into your travel itinerary.
+</ExampleCard>
+
+<ExampleCard domain="Search engines" icon="🔎">
+The web is a giant directed graph: pages are nodes, hyperlinks are arrows. PageRank treats a link as a
+*vote* and ranks pages by the structure of this graph — a relation over billions of nodes that decides
+what you see first.
+</ExampleCard>
+
+<Callout type="note">
+Every example reuses one move: write down which pairs are related, then either reason about the pairs
+(relation), demand one output each (function), or draw the dots and lines (graph). Same object, three
+costumes.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What makes a relation a function?',
+      options: [
+        'It must connect every pair of elements',
+        'Each input is paired with exactly one output',
+        'It must be symmetric',
+        'It must have no edges',
+      ],
+      answer: 1,
+      explain: 'A function is a relation where every input maps to exactly one output — no input gets two values.',
+    },
+    {
+      q: 'In an undirected graph, what does a symmetric adjacency matrix mean?',
+      options: [
+        'Every node connects to itself',
+        'If i links to j, then j links to i',
+        'The graph has no edges',
+        'Every node has the same degree',
+      ],
+      answer: 1,
+      explain: 'Undirected edges go both ways, so a 1 at (i, j) forces a 1 at (j, i) — the matrix mirrors across its diagonal.',
+    },
+    {
+      q: 'A node in a friendship graph is connected to 4 others. What is its degree?',
+      options: ['0', '2', '4', '8'],
+      answer: 2,
+      explain: 'Degree counts incident edges, which equals the number of 1s in that node’s row: 4.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>relation</strong> is a set of ordered pairs — any subset of the Cartesian product A × B.',
+    'A <strong>function</strong> is a relation where every input has <strong>exactly one</strong> output.',
+    'A <strong>graph</strong> G = (V, E) draws a relation as nodes joined by edges, directed or undirected.',
+    'The <strong>adjacency matrix</strong> stores edges as 0s and 1s; it is symmetric for undirected graphs.',
+    'Graphs and their matrices power social networks, search ranking, databases, and graph neural networks.',
+  ]}
+/>
+
+That completes the Discrete Math track. Next you cross into **combinatorics** with *counting
+principles* — using these sets and structures to count the possibilities they contain.

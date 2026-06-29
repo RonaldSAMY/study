@@ -1,0 +1,154 @@
+---
+title: Similarity & Congruence
+track: geometry
+summary: Same shape, different size is similarity; same shape AND size is congruence — and one scale factor controls everything.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - geometry/pythagoras
+leadsTo:
+  - geometry/circles
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ScaleFactorExplorer from '../../../components/demos/ScaleFactorExplorer.tsx';
+
+## The hook: measuring a tree without leaving the ground
+
+You want the height of a tall tree but you only have a tape measure. So you wait for sunshine, measure
+the tree's **shadow** (say $12$ m), then stand a $1$ m ruler upright and measure *its* shadow ($0.8$ m).
+The Sun's rays hit both at the same angle, so the tree-and-shadow triangle is a **scaled-up copy** of
+the ruler-and-shadow triangle. The sides keep the same ratio, so the tree is
+$1 \times \tfrac{12}{0.8} = 15$ m tall. You measured a giant using a stick — because the two shapes are
+**similar**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Two shapes are **similar** if one is a scaled copy of the other: same angles, and all corresponding
+sides in the **same ratio** (the **scale factor** $k$). If $k = 1$, they're identical — that special
+case is **congruence**.
+</Callout>
+
+## Intuition: the same shape, zoomed
+
+In the last lesson, Pythagoras tied the *sides* of a right triangle together. Similarity tells you what
+happens to *all* the sides at once when you zoom a whole shape in or out.
+
+- **Congruent** shapes are perfect copies — same angles **and** same side lengths. You could slide,
+  flip, or rotate one onto the other and it would land exactly. (Scale factor $k = 1$.)
+- **Similar** shapes have identical **angles** but their sides are scaled by a single number $k$. A
+  photo and its enlargement, a model car and the real car — same proportions, different size.
+
+The crucial discipline is *corresponding* parts: the biggest side matches the biggest side, the angle
+at one corner matches the angle at the matching corner. Once you line them up, every pair of
+corresponding sides hides the **same** ratio $k$.
+
+## Play with it
+
+Slide the scale factor and watch the green copy grow and shrink. Notice that **every** side scales by
+the same $k$, the perimeter scales by $k$ too — but the **area** scales by $k^2$.
+
+<ScaleFactorExplorer client:visible />
+
+<Callout type="tip">
+Set $k = 2$: every side doubles, the perimeter doubles, but the area becomes <strong>four</strong> times
+as big ($2^2$). Doubling a shape needs four times the paint. That $k^2$ surprise is one of geometry's
+most useful facts.
+</Callout>
+
+## The formal definition
+
+Two polygons are **similar** (written $\sim$) when, for every pair of corresponding sides,
+
+$$
+\frac{a'}{a} = \frac{b'}{b} = \frac{c'}{c} = k,
+$$
+
+and all corresponding angles are equal. The shared number $k$ is the **scale factor**. From it:
+
+$$
+\text{Perimeter}' = k \cdot \text{Perimeter}, \qquad \text{Area}' = k^2 \cdot \text{Area}.
+$$
+
+**Congruence** (written $\cong$) is the case $k = 1$: corresponding sides *and* angles are all equal.
+For triangles, you don't need to check everything — shortcuts like **SSS**, **SAS**, and **ASA**
+guarantee congruence from just three matching pieces.
+
+<Callout type="why">
+Scale factor is the one-dimensional ancestor of **scalar multiplication** on vectors, which you'll meet
+soon: multiplying a vector by $k$ stretches it by $k$ without changing its direction — exactly what $k$
+does to a shape here. Normalizing data, resizing images, and adjusting learning rates are all "pick a
+$k$ and scale."
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Architecture" icon="📐">
+A blueprint at scale $1\!:\!50$ means every centimeter on paper is a similar copy of $50$ cm of real
+building. A wall drawn $8$ cm long is truly $4$ m. Architects live in similarity: the drawing and the
+building are the same shape, $k = 50$ apart.
+</ExampleCard>
+
+<ExampleCard domain="Photography" icon="📷">
+Enlarging a photo from 4×6 to 8×12 uses $k = 2$. The image stays similar — faces don't stretch — because
+both dimensions scale together. Change only the width and you break similarity, and everyone looks
+squashed.
+</ExampleCard>
+
+<ExampleCard domain="Map making" icon="🗺️">
+A map's scale bar (e.g. "1 cm = 2 km") is a scale factor. Real distances and map distances form similar
+triangles, so you can read true distances straight off the paper — the navigator's everyday use of
+$k$.
+</ExampleCard>
+
+<ExampleCard domain="Pizza value" icon="🍕">
+An 18-inch pizza isn't twice a 9-inch pizza — it's a similar shape with $k = 2$, so it has $k^2 = 4$
+times the area (and feeds four times as many people). The $k^2$ rule is why the big pie is almost always
+the better deal.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Two triangles are similar with scale factor k = 3. A side of 5 in the small one corresponds to which side in the large one?',
+      options: ['5', '8', '15', '45'],
+      answer: 2,
+      explain: 'Corresponding sides scale by k, so 5 × 3 = 15.',
+    },
+    {
+      q: 'You triple every side of a shape (k = 3). How does its area change?',
+      options: ['×3', '×6', '×9', '×27'],
+      answer: 2,
+      explain: 'Area scales by k², and 3² = 9.',
+    },
+    {
+      q: 'What is the difference between similar and congruent shapes?',
+      options: [
+        'Congruent shapes have equal angles; similar ones do not',
+        'Similar shapes have the same shape; congruent shapes have the same shape AND size (k = 1)',
+        'They are exactly the same thing',
+        'Similar shapes must be triangles',
+      ],
+      answer: 1,
+      explain: 'Both share equal angles and proportional sides; congruence is the special case where the scale factor is 1, so sizes match too.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Similar</strong> shapes have equal angles and all corresponding sides in the same ratio — the <strong>scale factor k</strong>.',
+    '<strong>Congruent</strong> shapes are the special case <strong>k = 1</strong>: same shape and same size.',
+    'Match <strong>corresponding</strong> parts carefully; every corresponding side pair hides the same k.',
+    'Perimeter scales by <strong>k</strong>, but area scales by <strong>k²</strong> — doubling a shape quadruples its area.',
+    'Scale factor is the geometric cousin of <strong>scalar multiplication</strong> on vectors, coming up in linear algebra.',
+  ]}
+/>
+
+Next up: the most perfectly proportional shape of all — the **circle**, where one radius controls
+circumference and area through the famous constant $\pi$.

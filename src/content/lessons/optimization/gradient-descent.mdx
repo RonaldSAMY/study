@@ -1,0 +1,168 @@
+---
+title: Gradient Descent
+track: optimization
+summary: Rolling downhill — the simple, relentless rule that lets machines find the best answer by following the slope.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - calculus-3/gradient
+  - calculus-3/vector-calculus-ml
+leadsTo:
+  - optimization/convexity
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import GradientDescentLab from '../../../components/demos/GradientDescentLab.tsx';
+
+## The hook: finding the bottom of a foggy valley
+
+Imagine you are dropped somewhere on a hillside in thick fog. You cannot see the valley floor, but
+you want to reach it. What can you do? You can feel the **slope** under your feet, take a small step
+in the **steepest downhill** direction, and repeat. Step by step, you descend — no map required, just
+the local slope.
+
+That is **gradient descent**, and it is the engine inside almost every machine-learning model. A
+neural network with billions of parameters is just a very high-dimensional foggy valley, and training
+it means rolling downhill on a **cost** (or **loss**) surface until the error is as small as it gets.
+
+<Callout type="intuition" title="The one-sentence idea">
+To minimize a function, repeatedly take a small step in the direction **opposite the gradient** — the
+gradient points uphill, so its negative points the fastest way down.
+</Callout>
+
+## Intuition: the gradient already told you which way is up
+
+You met the **gradient** $\nabla f$ in calculus: it is the vector of partial derivatives, and it points
+in the direction of **steepest ascent**. Gradient descent is the one-line consequence of that fact:
+if $+\nabla f$ is the fastest way *up*, then $-\nabla f$ is the fastest way *down*. So we walk that way.
+
+How big a step? That is the **learning rate** $\eta$ (eta). It is the single most important knob:
+
+- Too **small**, and you crawl — thousands of tiny steps to reach the bottom.
+- Too **big**, and you leap clean over the valley, landing higher than you started. Do that
+  repeatedly and the cost **explodes** to infinity. This is *divergence*.
+
+The art of training is picking $\eta$ in the sweet spot: brisk, but not reckless.
+
+## Play with it
+
+Below is a simple cost curve $C(x) = a\,x^2$ — a smooth energy bowl. Set the **learning rate** and the
+**number of steps**, choose where the ball starts, and press **Run**. Watch it descend toward the
+minimum. Then crank $\eta$ up and watch the very same rule send the ball flying.
+
+<GradientDescentLab client:visible />
+
+<Callout type="tip">
+Start with a small $\eta$ and increase it slowly. There is a threshold where behavior flips from
+smooth convergence to wild oscillation and then divergence — finding that edge by feel is exactly
+what ML engineers do when they tune a model.
+</Callout>
+
+## The formal definition
+
+We want to minimize a differentiable function $C(\mathbf{w})$ of a parameter vector
+$\mathbf{w} \in \mathbb{R}^n$. Gradient descent is the iteration:
+
+$$
+\mathbf{w}_{t+1} = \mathbf{w}_t - \eta \, \nabla C(\mathbf{w}_t),
+$$
+
+where
+
+- $\nabla C(\mathbf{w}_t)$ is the **gradient** at the current point (which direction is uphill, and how steep),
+- $\eta > 0$ is the **learning rate** (how far to step),
+- we repeat until the gradient is nearly zero — a **stationary point** where the slope has flattened out.
+
+In one dimension this is just $x_{t+1} = x_t - \eta\,C'(x_t)$, the rule the demo uses. For the bowl
+$C(x) = a x^2$ we get $x_{t+1} = x_t(1 - 2a\eta)$, which shrinks toward $0$ only when
+$|1 - 2a\eta| < 1$. Cross that and it grows without bound — the algebra behind the divergence you saw.
+
+<Callout type="why">
+Every parameter in a model — each weight in a neural net, each coefficient in a regression — is one
+axis of $\mathbf{w}$. "Learning" is literally running this update until $\nabla C \approx \mathbf{0}$.
+The gradient is computed by **backpropagation**, the vector-calculus chain rule you met earlier.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Logistics" icon="🚚">
+A courier company tunes its delivery routes to cut total fuel cost. Each tweak to the route schedule
+nudges the cost up or down; following the downhill direction repeatedly trims the daily fuel bill
+until no small change helps anymore — a local minimum of the cost surface.
+</ExampleCard>
+
+<ExampleCard domain="Hyperparameter tuning" icon="🎛️">
+A data scientist adjusts a model's regularization strength to lower validation error. Plotting error
+against the setting traces a curve; stepping in the downhill direction is gradient descent applied to
+the *tuning* problem itself — smaller steps near the bottom to avoid overshooting the best value.
+</ExampleCard>
+
+<ExampleCard domain="Aerospace engineering" icon="🛫">
+Designing a wing, engineers minimize aerodynamic drag as a function of shape parameters. A simulator
+returns drag and its sensitivities (the gradient); each iteration reshapes the wing slightly in the
+drag-reducing direction. Too aggressive a step and the shape becomes unstable — divergence in physical form.
+</ExampleCard>
+
+<ExampleCard domain="Renewable energy" icon="🔋">
+A smart grid sets battery charge/discharge levels to minimize electricity cost over a day. The cost
+as a function of those levels is a landscape; the controller rolls downhill on it every few minutes,
+re-stepping as prices change. The learning rate decides how boldly it adjusts.
+</ExampleCard>
+
+<Callout type="note">
+Notice these are all <em>minimization</em> problems with many knobs. The genius of gradient descent
+is that it scales: the rule $\mathbf{w} \leftarrow \mathbf{w} - \eta\nabla C$ is identical whether
+$\mathbf{w}$ has 2 entries or 200 billion.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why do we step in the direction of the negative gradient?',
+      options: [
+        'Because the gradient points downhill',
+        'Because the gradient points uphill, so its negative is the steepest way down',
+        'Because the negative gradient is always zero',
+        'To make the learning rate larger',
+      ],
+      answer: 1,
+      explain: 'The gradient ∇C points toward steepest ascent. To minimize, we go the opposite way: −∇C.',
+    },
+    {
+      q: 'You run gradient descent and the cost keeps growing, jumping above where it started. What is the most likely fix?',
+      options: [
+        'Increase the learning rate',
+        'Decrease the learning rate',
+        'Add more steps',
+        'Start from a different random seed',
+      ],
+      answer: 1,
+      explain: 'Exploding cost is divergence from too large a step. Lowering η keeps each step inside the bowl.',
+    },
+    {
+      q: 'For C(x) = 0.18·x² the update is x ← x(1 − 0.36η). Starting at x = −5.5 with η = 0.4, what does x become after ONE step?',
+      options: ['about −4.71', '−5.5', 'about −7.0', '0'],
+      answer: 0,
+      explain: '1 − 0.36(0.4) = 0.856, and −5.5 × 0.856 ≈ −4.71 — a step toward 0, the minimum.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Gradient descent</strong> minimizes a function by repeatedly stepping opposite the gradient: <strong>w ← w − η∇C</strong>.',
+    'The <strong>gradient</strong> points uphill, so <strong>−∇C</strong> is the steepest way down — no map of the whole surface needed.',
+    'The <strong>learning rate η</strong> controls step size: too small is slow, too big <strong>diverges</strong>.',
+    'It stops at a <strong>stationary point</strong> where ∇C ≈ 0 — the slope has flattened out.',
+    'The same one-line rule scales from a 1-D bowl to a neural network with <strong>billions of parameters</strong>.',
+  ]}
+/>
+
+Next up: **convexity** — the property that decides whether rolling downhill always lands you at the
+*global* best, or whether you can get trapped in a lesser valley.

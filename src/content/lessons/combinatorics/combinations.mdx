@@ -1,0 +1,152 @@
+---
+title: Combinations
+track: combinatorics
+summary: Counting selections where order does not matter — and dividing out the duplicate orderings to get there.
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - combinatorics/permutations
+leadsTo:
+  - combinatorics/binomial-theorem
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CommitteeCombinationLab from '../../../components/demos/CommitteeCombinationLab.tsx';
+
+## The hook: does the lottery care what order you picked?
+
+You fill in 6 numbers on a lottery ticket. When the balls are drawn, nobody checks the *order* you wrote
+them — a winning set is a winning set. That's the opposite of the race podium, where order was
+everything. When order **doesn't** matter, counting "ordered line-ups" overcounts every group many
+times over. Fixing that overcount gives us **combinations**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **combination** counts **unordered** selections: take the ordered count and divide out the $r!$
+different orderings of each chosen group, since they're all the same selection.
+</Callout>
+
+## Intuition: divide away the duplicates
+
+In **permutations**, choosing 3 people for ranked roles (President, VP, Treasurer) from 6 gave
+$P(6,3) = 6 \times 5 \times 4 = 120$ ordered line-ups. But a *committee* of 3 has no roles — only
+membership matters. The trio of Ann, Bo, and Cy got counted once for each of its orderings:
+
+$$
+3! = 6 \text{ orderings of the same three people.}
+$$
+
+So the number of genuine committees is $120 / 6 = 20$. That's the core move of a combination: **count
+ordered, then divide by $r!$** to collapse every reordering of a group into one.
+
+## Play with it
+
+Pick $n$ (the group) and $r$ (how many you select). The bars compare the **ordered** count ($P(n,r)$)
+with the **unordered** count ($C(n,r)$). The readout shows the divisor $r!$ — exactly how many times each
+selection was double-counted. Small cases list every committee.
+
+<CommitteeCombinationLab client:visible />
+
+<Callout type="tip">
+Notice the symmetry: $C(n, r) = C(n, n-r)$. Choosing 4 players to put <em>on</em> the field from 11 is
+the same count as choosing the 7 to leave <em>off</em>. Picking who's in also decides who's out.
+</Callout>
+
+## The formal definition
+
+The number of **combinations of $n$ items taken $r$ at a time** — unordered, no repeats — is
+
+$$
+C(n, r) = \binom{n}{r} = \frac{P(n, r)}{r!} = \frac{n!}{r!\,(n-r)!}.
+$$
+
+The notation $\binom{n}{r}$ is read "$n$ choose $r$". Useful values:
+
+$$
+\binom{n}{0} = 1, \qquad \binom{n}{n} = 1, \qquad \binom{n}{1} = n, \qquad \binom{n}{r} = \binom{n}{n-r}.
+$$
+
+<Callout type="why">
+"Choose $r$ from $n$" is everywhere in machine learning: how many ways to pick a subset of features, to
+sample a mini-batch from a dataset, or to form pairs of points to compare. The binomial coefficient also
+becomes the engine of the binomial distribution — counting how many ways $k$ successes can land among $n$
+trials.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Lottery & gambling" icon="🎰">
+In a 6-from-49 lottery, the order of the drawn balls is irrelevant, so the number of possible tickets is
+$\binom{49}{6} = 13{,}983{,}816$. Your single ticket is one of nearly 14 million equally likely sets —
+that one division by $6!$ is what makes the odds so steep.
+</ExampleCard>
+
+<ExampleCard domain="Card games" icon="🃏">
+A 5-card poker hand is a selection from 52 cards where order doesn't matter:
+$\binom{52}{5} = 2{,}598{,}960$ possible hands. Every probability in poker — flush, full house, the lot —
+starts from this single count of total hands.
+</ExampleCard>
+
+<ExampleCard domain="Team sports" icon="🏀">
+A coach with 10 available players must field a starting 5. With no positions assigned, that's
+$\binom{10}{5} = 252$ possible line-ups. Choosing the 5 who start automatically chooses the 5 on the
+bench — the $C(n,r) = C(n,n-r)$ symmetry in action.
+</ExampleCard>
+
+<ExampleCard domain="Food & dining" icon="🍕">
+A pizza shop has 8 toppings and you want any 3 (no doubling). The number of distinct topping sets is
+$\binom{8}{3} = 56$. Mushroom-pepper-onion is the same pizza however you list the toppings, so order is
+ignored.
+</ExampleCard>
+
+<Callout type="warning">
+The make-or-break question is <strong>does order matter?</strong> Ranked roles, finishing places, and
+sequences are permutations. Committees, hands, teams, and topping sets are combinations. Same items —
+very different counts.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How many ways can you choose a committee of 3 from 6 people (no roles)?',
+      options: ['120', '20', '18', '720'],
+      answer: 1,
+      explain: 'Order ignored: C(6,3) = 6! / (3! · 3!) = 20. (The ordered count 120 divided by 3! = 6.)',
+    },
+    {
+      q: 'Which of these should be counted with a combination, not a permutation?',
+      options: [
+        'Gold, silver, bronze on a podium',
+        'A 4-letter password with no repeats',
+        'Choosing 2 pizza toppings out of 8',
+        'Seating 5 guests in a row',
+      ],
+      answer: 2,
+      explain: 'Topping sets are unordered selections — a combination. The others all depend on order.',
+    },
+    {
+      q: 'Without computing, which equals C(20, 17)?',
+      options: ['C(20, 3)', 'C(17, 3)', 'C(20, 20)', 'C(3, 20)'],
+      answer: 0,
+      explain: 'By symmetry C(n, r) = C(n, n−r), so C(20,17) = C(20,3). Choosing 17 to keep is choosing 3 to drop.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>combination</strong> counts unordered selections — membership matters, arrangement does not.',
+    'Get it from the permutation count by dividing out duplicate orderings: <strong>C(n, r) = P(n, r) / r!</strong>.',
+    'The full formula is <strong>C(n, r) = n! / (r!(n − r)!)</strong>, written as the binomial coefficient (n choose r).',
+    'Symmetry: <strong>C(n, r) = C(n, n − r)</strong> — choosing who is in also chooses who is out.',
+    'Decide permutation vs combination by one question: <strong>does order matter?</strong>',
+  ]}
+/>
+
+Next up: the **binomial theorem** — where these "n choose r" counts line up into Pascal's triangle and
+expand any power of $(a+b)$.

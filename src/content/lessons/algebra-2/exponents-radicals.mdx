@@ -1,0 +1,163 @@
+---
+title: Exponents & Radicals
+track: algebra-2
+summary: Powers, roots, and the handful of rules that let you bend exponents to your will.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - algebra-2/polynomials
+leadsTo:
+  - algebra-2/exp-log
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ExponentScalingVisualizer from '../../../components/demos/ExponentScalingVisualizer.tsx';
+
+## The hook: why a "large" pizza is a steal
+
+A 16-inch pizza isn't twice the food of an 8-inch one — it's **four times** the food. Double the
+*diameter* and the *area* quadruples, because area depends on the radius **squared**. That little
+exponent, the tiny raised number, is one of the most powerful symbols in math. It quietly explains
+pizza deals, data storage, musical pitch, and the cost of shipping a bigger box.
+
+<Callout type="intuition" title="The one-sentence idea">
+An **exponent** is repeated multiplication — $x^n$ means "multiply $x$ by itself $n$ times" — and a
+**radical** (root) simply runs that machine in reverse.
+</Callout>
+
+## Intuition: a shorthand that scales
+
+Writing $2 \cdot 2 \cdot 2 \cdot 2 \cdot 2$ is tedious; $2^5$ says the same thing. The **base** is what's
+being multiplied, the **exponent** counts how many times. That compactness matters because exponents
+grow *fast*: each extra power multiplies the result again.
+
+The key intuition is **dimension**. Scale a shape's length by $s$ and:
+
+- its **length** grows by $s^1$,
+- its **area** grows by $s^2$ (two directions stretched at once),
+- its **volume** grows by $s^3$ (three directions).
+
+A **root** undoes a power. The **square root** $\sqrt{a}$ asks *"what number squared gives $a$?"* and the
+**cube root** $\sqrt[3]{a}$ asks the same for cubing. Roots are how you get from an area back to a side
+length, or from a volume back to an edge.
+
+## Play with it
+
+Pick a dimension, then slide the **scale factor $s$**. Watch length, area, and volume grow by $s$, $s^2$,
+and $s^3$ — the exponent is the difference between "a bit bigger" and "enormously bigger."
+
+<ExponentScalingVisualizer client:visible />
+
+<Callout type="tip">
+Set $s = 2$ and step through the three modes: 2×, then 4×, then 8×. The exponent equals the number of
+dimensions you're stretching at once. That's why a modest size bump can blow up the volume — and the
+shipping cost.
+</Callout>
+
+## The formal definition
+
+For a positive whole number $n$, the exponent means repeated multiplication:
+
+$$
+x^n = \underbrace{x \cdot x \cdots x}_{n \text{ times}}.
+$$
+
+A small set of **power rules** lets you combine and simplify exponents without expanding anything:
+
+$$
+x^m \cdot x^n = x^{m+n}, \qquad \frac{x^m}{x^n} = x^{m-n}, \qquad (x^m)^n = x^{mn}.
+$$
+
+These force the meaning of the awkward cases. Since $x^m / x^m = x^{0}$ must equal 1:
+
+$$
+x^0 = 1, \qquad x^{-n} = \frac{1}{x^n}.
+$$
+
+And **fractional exponents are roots** — the bridge that unites this whole lesson:
+
+$$
+x^{1/n} = \sqrt[n]{x}, \qquad x^{m/n} = \left(\sqrt[n]{x}\right)^{m}.
+$$
+
+So $9^{1/2} = \sqrt{9} = 3$ and $8^{2/3} = (\sqrt[3]{8})^2 = 2^2 = 4$. Every root is secretly just a power.
+
+<Callout type="why">
+Exponents and roots are everywhere in machine learning. The Euclidean distance between two data points is
+a **square root** of squared differences; the "L2 norm" that keeps model weights small uses the same
+square-root-of-sum-of-squares; and learning-rate schedules often decay by a **power** of the step number.
+The rules you learn here are the grammar of all of it.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Food & value" icon="🍕">
+Pizza area is $\pi r^2$. Going from an 8-inch to a 16-inch pizza doubles $r$, so area scales by
+$2^2 = 4$. The big pie has four times the pizza for roughly twice the price — the squared exponent is the
+whole reason the large is the better deal.
+</ExampleCard>
+
+<ExampleCard domain="Computing" icon="💾">
+Digital storage is built on **powers of 2**. One byte holds $2^8 = 256$ values; a kilobyte is $2^{10}$
+bytes, a megabyte $2^{20}$. Add 10 to the exponent and you've multiplied capacity by about a thousand —
+which is why each new storage tier feels like such a leap.
+</ExampleCard>
+
+<ExampleCard domain="Music" icon="🎵">
+Go up one octave and a note's frequency **doubles**. Twelve equal semitones fill an octave, so each
+semitone multiplies frequency by $2^{1/12}$ — a fractional exponent, i.e. the twelfth root of 2. Stack
+twelve of them, $\left(2^{1/12}\right)^{12} = 2$, and you're exactly one octave higher.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+Shipping cost tracks **volume**, which scales as $s^3$. Upsizing a box's every edge by just 25%
+($s = 1.25$) inflates its volume by $1.25^3 \approx 1.95$ — nearly double the space, and nearly double the
+freight charge, from a change that barely looks bigger.
+</ExampleCard>
+
+<Callout type="note">
+Whether it's pizza, bytes, pitch, or freight, the exponent is the dial that turns a small change in size
+into a large change in amount. Master the rules and you can read that dial instantly.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Simplify x³ · x⁴ using the power rules.',
+      options: ['x⁷', 'x¹²', 'x', 'x⁶'],
+      answer: 0,
+      explain: 'When multiplying powers of the same base, you add the exponents: 3 + 4 = 7, so x³ · x⁴ = x⁷.',
+    },
+    {
+      q: 'What does 8^(2/3) equal?',
+      options: ['16', '4', '6', '2'],
+      answer: 1,
+      explain: 'A fractional exponent is a root then a power: 8^(1/3) = 2, and 2² = 4.',
+    },
+    {
+      q: 'You scale a cube’s edge length by 3. By what factor does its volume grow?',
+      options: ['3', '9', '27', '6'],
+      answer: 2,
+      explain: 'Volume scales by the cube of the linear factor: 3³ = 27.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>exponent</strong> is repeated multiplication; a <strong>radical</strong> (root) is its inverse.',
+    'The core rules: <strong>multiply → add exponents</strong>, <strong>divide → subtract</strong>, <strong>power of a power → multiply</strong>.',
+    '<strong>x⁰ = 1</strong> and <strong>x⁻ⁿ = 1/xⁿ</strong> follow directly from those rules.',
+    'A <strong>fractional exponent is a root</strong>: x^(1/n) = ⁿ√x, so powers and roots are one idea.',
+    'Exponents convert a small change in <strong>scale</strong> into a large change in area (s²) or volume (s³).',
+  ]}
+/>
+
+Next up: **exponential & logarithmic functions** — what happens when the exponent itself becomes the
+variable, unleashing explosive growth and its tamer, the logarithm.

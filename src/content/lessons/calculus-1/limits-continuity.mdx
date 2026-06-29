@@ -1,0 +1,190 @@
+---
+title: Limits & Continuity
+track: calculus-1
+summary: Making the idea of "approaching" precise — and spotting where a curve has gaps, holes, and jumps.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - precalculus/intro-limits
+leadsTo:
+  - calculus-1/derivative
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import LimitZoomExplorer from '../../../components/demos/LimitZoomExplorer.tsx';
+
+## The hook: where does the value *want* to go?
+
+A patient takes a steady dose of medicine, and the drug concentration in their blood climbs hour
+after hour — fast at first, then leveling off. It never quite reaches the so-called *steady-state*
+level, but it edges closer and closer, as near as you like. Ask "what is the concentration **at**
+infinite time?" and you get a shrug. Ask "what value is it **heading toward**?" and there is a crisp,
+single answer. That second question — *what value does a quantity approach?* — is the **limit**, and it
+is the foundation every other idea in calculus is built on.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **limit** is the value a function *approaches* as its input creeps toward some point — even if the
+function never actually arrives, or isn't defined there at all.
+</Callout>
+
+## Intuition: approaching from both sides
+
+You met limits informally already: you watched a function's output settle toward a number as the input
+slid toward a target. The key word is *approach*. We don't care what happens **at** the point — we care
+what happens **near** it.
+
+To pin a limit down we sneak up from **two directions**:
+
+- The **left-hand limit** — slide in from smaller inputs.
+- The **right-hand limit** — slide in from larger inputs.
+
+If both sides head to the *same* number, that shared destination is **the limit**. If the two sides
+disagree, the limit **does not exist** — the curve is torn at that point.
+
+A function is **continuous** at a point when three things line up: the function is defined there, the
+limit exists there, and the two are *equal*. Plain-language version: you can draw the curve through that
+point without lifting your pen. When that fails, you get a **removable hole** (a single missing point you
+could patch) or a **jump** (the curve leaps to a new height).
+
+## Play with it
+
+Drag the indigo dot toward $x = 1$, or tap **step ½ closer to 1**, and crank the zoom. The green curve
+$f(x) = \frac{x^2-1}{x-1}$ has an open **hole** right at $x = 1$ — yet the readout for $f(x)$ marches
+straight toward $2$. Use **approach from left** and **approach from right** to confirm both one-sided
+limits agree on the same destination.
+
+<LimitZoomExplorer client:visible />
+
+<Callout type="tip">
+Zooming is the whole trick. A removable hole looks like a tear from far away but a smooth line up close —
+the gap is one lonely point you could patch by defining $f(1) = 2$. Watch the left and right limit
+readouts: they lock onto the *same* number, which is exactly why the limit exists.
+</Callout>
+
+## The formal definition
+
+We write the limit of $f(x)$ as $x$ approaches $a$ like this:
+
+$$
+\lim_{x \to a} f(x) = L.
+$$
+
+It says: as $x$ gets arbitrarily close to $a$ (without necessarily equaling $a$), $f(x)$ gets
+arbitrarily close to $L$. The two **one-sided limits** are written
+
+$$
+\lim_{x \to a^-} f(x) \quad \text{(from the left)}, \qquad \lim_{x \to a^+} f(x) \quad \text{(from the right)}.
+$$
+
+The full limit exists exactly when these agree:
+
+$$
+\lim_{x \to a} f(x) = L \iff \lim_{x \to a^-} f(x) = \lim_{x \to a^+} f(x) = L.
+$$
+
+Finally, $f$ is **continuous at $a$** when the limit not only exists but matches the actual value:
+
+$$
+\lim_{x \to a} f(x) = f(a).
+$$
+
+The demo's first curve, $f(x) = \dfrac{x^2 - 1}{x - 1}$, is undefined at $x = 1$ (it reads $\tfrac{0}{0}$),
+yet it simplifies to $x + 1$ everywhere else, so $\lim_{x \to 1} f(x) = 2$. The limit happily exists; the
+function just has a hole we could fill by *defining* $f(1) = 2$.
+
+<Callout type="why">
+That $\tfrac{0}{0}$ form is not a dead end — it is the engine of the next lesson. The **derivative** is
+exactly a limit of the shape $\frac{f(a+h) - f(a)}{h}$, which is $\tfrac{0}{0}$ at $h = 0$. Limits are
+what let calculus divide "nothing by nothing" and still get a sharp answer.
+</Callout>
+
+## The same idea, four different worlds
+
+A limit is "the value a process is heading toward," and continuity is "no surprises, no tears." Watch them
+appear far from any math class.
+
+<ExampleCard domain="Medicine" icon="💊">
+With repeated doses, blood drug concentration approaches a **steady-state** ceiling it never exactly hits:
+$\lim_{t \to \infty} C(t) = C_{\text{ss}}$. Doctors dose against that limiting value, not the messy hour-by-hour
+numbers, because the limit is the stable target the body settles into.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A courier charges \$4 for parcels up to 1 kg and \$7 the instant you tip over 1 kg. At exactly 1 kg the
+price **jumps** — the left limit is \$4, the right limit is \$7. The cost function is *discontinuous*
+there, which is why that last gram can cost you three dollars.
+</ExampleCard>
+
+<ExampleCard domain="Climate science" icon="🧊">
+Heat a block of ice and its temperature climbs, then **plateaus at 0 °C** while it melts — energy goes into
+the phase change, not the thermometer. The temperature-vs-energy curve stays continuous (no jump) but
+flattens, a vivid picture of a value that momentarily refuses to budge.
+</ExampleCard>
+
+<ExampleCard domain="Streaming video" icon="📶">
+Adaptive players nudge quality up step by step as bandwidth improves, *approaching* the source resolution
+without overshooting it. "Best achievable quality" is a limit the stream homes in on — closer and closer,
+yet capped by what the file actually contains.
+</ExampleCard>
+
+<Callout type="note">
+Same two questions everywhere: *what value is this heading toward* (limit), and *can I get there without a
+sudden break* (continuity). A plateau is a calm limit; a price jump is a torn one.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'When does the two-sided limit of f(x) as x → a exist?',
+      options: [
+        'Whenever f(a) is defined',
+        'When the left-hand and right-hand limits are equal',
+        'Only when f is a straight line',
+        'When f(a) = 0',
+      ],
+      answer: 1,
+      explain: 'The limit exists exactly when both one-sided limits head to the same value — whether or not f(a) itself is defined.',
+    },
+    {
+      q: 'The shipping cost is $4 up to 1 kg and $7 above 1 kg. What is the limit of the cost as weight → 1 kg?',
+      options: [
+        'It is $4',
+        'It is $7',
+        'It is $5.50, the average',
+        'It does not exist — the two sides disagree',
+      ],
+      answer: 3,
+      explain: 'Left limit is $4, right limit is $7. Since they differ, the two-sided limit does not exist — that is a jump discontinuity.',
+    },
+    {
+      q: 'For f(x) = (x² − 1)/(x − 1), what is the limit as x → 1, and is f continuous there?',
+      options: [
+        'Limit 2, and continuous',
+        'Limit 2, but not continuous (a removable hole)',
+        'Limit 0, and continuous',
+        'The limit does not exist',
+      ],
+      answer: 1,
+      explain: 'It simplifies to x + 1, so the limit is 2. But f(1) is undefined (0/0), so the curve has a removable hole — not continuous until you patch it.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>limit</strong> is the value a function approaches as the input nears a point — it ignores what happens exactly <em>at</em> the point.',
+    'The two-sided limit exists only when the <strong>left and right limits agree</strong>.',
+    'A function is <strong>continuous</strong> at a point when the limit exists <em>and</em> equals the actual value there.',
+    'A <strong>removable hole</strong> has a perfectly good limit but a missing point; a <strong>jump</strong> has left and right limits that disagree.',
+    'The indeterminate form <strong>0/0</strong> is not failure — it is exactly the shape of the derivative limit coming next.',
+  ]}
+/>
+
+Next up: **The Derivative** — we take a limit of the troublesome $\tfrac{0}{0}$ kind on purpose and turn it
+into the slope of a curve at a single instant.

@@ -1,0 +1,186 @@
+---
+title: Fourier in the Real World & ML
+track: fourier
+summary: Spectrograms, audio EQ, image filtering and the sinusoidal positional encodings inside Transformers — Fourier ideas, everywhere.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - fourier/convolution-theorem
+leadsTo: []
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SpectrogramEqualizer from '../../../components/demos/SpectrogramEqualizer.tsx';
+
+## The hook: the picture a machine "sees" when it hears
+
+Show a modern speech model a one-second clip and it almost never looks at the raw waveform. It looks at a
+**spectrogram** — a heat-map of *which frequencies are loud at which moments*. That image is built by
+sliding the FFT across short windows of audio, and it is the input to systems that transcribe your voice,
+flag a cough as pneumonia, or tag a song by its hook. This final lesson is the victory lap: every piece —
+sinusoids, series, transform, FFT, convolution — comes together in the tools that shape audio, images, and
+even the attention mechanism inside large language models.
+
+<Callout type="intuition" title="The one-sentence idea">
+Real systems rarely work on raw signals; they work on **frequency content over time** — and machine
+learning increasingly bakes sinusoids straight into its models.
+</Callout>
+
+## Intuition: from one spectrum to a moving picture
+
+A single Fourier transform tells you which frequencies are in a signal — but not **when**. For music or
+speech, *when* is everything: a melody is a sequence of changing pitches. The fix is the **Short-Time
+Fourier Transform (STFT)**: chop the signal into short overlapping windows and take the FFT of each. Stack
+those spectra side by side, color them by energy, and you get a **spectrogram** — time across, frequency
+up, brightness = loudness.
+
+This is the same trade-off the transform first taught us: a short window pins down *time* but blurs
+*frequency*; a long window sharpens *frequency* but smears *time*. You cannot have both perfectly — that's
+the time–frequency uncertainty principle, now a practical knob you tune.
+
+Three big application families fall out of this:
+
+- **Audio:** equalizers boost or cut frequency bands; spectrograms feed speech and music models.
+- **Images:** a 2-D Fourier transform exposes spatial frequencies, so filtering, compression (JPEG), and
+  denoising all happen in frequency space.
+- **Sequence models:** Transformers can't tell token order from attention alone, so they add **sinusoidal
+  positional encodings** — a bank of sines and cosines of many frequencies — to stamp each position with a
+  unique, smoothly varying signature.
+
+## Play with it
+
+This is a live **graphic equalizer + spectrogram**. Each row is a frequency band; the colors scroll left
+as time passes, brightness showing each band's energy. Pull a slider down to **cut** a band — like
+removing bass or taming harsh treble — and watch that stripe go dark.
+
+<SpectrogramEqualizer client:visible />
+
+<Callout type="tip">
+Hit <strong>Bass boost</strong> and notice the low rows light up while the high rows fade — exactly what a
+car stereo's "bass" setting does. A spectrogram like this is what an audio neural network actually receives
+as its input image.
+</Callout>
+
+## The formal definition
+
+The **Short-Time Fourier Transform** of a signal $x$, using a window $w$, is
+
+$$
+\text{STFT}\{x\}(\tau, f) = \int_{-\infty}^{\infty} x(t)\,w(t-\tau)\,e^{-i 2\pi f t}\,dt,
+$$
+
+and the **spectrogram** is its squared magnitude $|\text{STFT}(\tau,f)|^2$ — energy as a function of time
+$\tau$ and frequency $f$. In machine learning, two Fourier-flavored constructions are worth naming.
+
+**Transformer positional encodings.** For a token at position $\text{pos}$ and embedding dimension $i$,
+
+$$
+PE(\text{pos}, 2i) = \sin\!\Big(\frac{\text{pos}}{10000^{\,2i/d}}\Big), \qquad
+PE(\text{pos}, 2i+1) = \cos\!\Big(\frac{\text{pos}}{10000^{\,2i/d}}\Big).
+$$
+
+This is a stack of sinusoids whose frequencies range from very fast to very slow — exactly a Fourier basis
+for position. It lets the model compute relative offsets through phase differences, the same shift property
+you met in the transform.
+
+**Random Fourier features.** To let simple models capture wiggly patterns, map an input $\mathbf{x}$
+through $\cos(\boldsymbol{\omega}^\top \mathbf{x} + b)$ for random frequencies $\boldsymbol{\omega}$; this
+approximates a powerful kernel and is what lets small networks represent fine detail in images and 3-D
+scenes (as in NeRF).
+
+<Callout type="why">
+The thread of this whole track lands here: sinusoids are not just for audio engineers. They are a
+<strong>universal coordinate system</strong>. Encoding position, approximating kernels, building model
+inputs, compressing data — modern ML reaches for Fourier ideas because frequency is often where structure
+is simplest.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Music apps (Shazam)" icon="🎵">
+Song-ID apps don't compare raw audio — they build a spectrogram, pick out the loudest time-frequency peaks
+as a robust "constellation" fingerprint, and match that against a database. Because peaks survive noise and
+compression, it works even in a loud café.
+</ExampleCard>
+
+<ExampleCard domain="Medical diagnostics" icon="🩺">
+A baby's heartbeat, an EEG, or a lung recording is routinely turned into a spectrogram so a model can spot
+abnormal rhythms — atrial fibrillation, a seizure's signature, a wheeze. The diagnostic clues live in the
+frequency pattern, not the raw squiggle.
+</ExampleCard>
+
+<ExampleCard domain="Large language models" icon="🤖">
+The original Transformer adds **sinusoidal positional encodings** so the model knows token order; newer
+schemes like RoPE *rotate* query and key vectors by position-dependent angles — pure Euler-formula
+rotations. Either way, the math you learned for waves is what tells an LLM where each word sits.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy & exoplanets" icon="🪐">
+To find a planet, astronomers take years of a star's brightness and run a periodicity search (a Fourier /
+Lomb–Scargle analysis) to detect the faint, regular dip of a transit. A peak at one period is a candidate
+new world — Fourier analysis as planet-hunting.
+</ExampleCard>
+
+<Callout type="note">
+Notice how the role of Fourier shifts from "analysis tool" to "model ingredient." In Shazam and medicine
+the spectrogram is a feature; in Transformers and NeRF the sinusoids are *built into* the architecture.
+Same waves, deeper integration.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a spectrogram display?',
+      options: [
+        'A single spectrum of the whole signal',
+        'How the frequency content of a signal changes over time',
+        'The raw waveform only',
+        'The phase of one frequency',
+      ],
+      answer: 1,
+      explain: 'A spectrogram is a time–frequency image: it shows which frequencies are present at each moment, built from short-time FFTs.',
+    },
+    {
+      q: 'Why do Transformers add sinusoidal positional encodings to token embeddings?',
+      options: [
+        'To compress the input',
+        'To give each position a unique, smoothly varying signature so the model knows word order',
+        'To remove high-frequency noise',
+        'To speed up the FFT',
+      ],
+      answer: 1,
+      explain: 'Self-attention is order-agnostic, so sinusoids of many frequencies stamp each position, letting the model recover order and relative distances.',
+    },
+    {
+      q: 'In an STFT, what is the trade-off when you choose a shorter analysis window?',
+      options: [
+        'Better time resolution but blurrier frequency resolution',
+        'Better in both time and frequency',
+        'Worse time resolution',
+        'It removes aliasing',
+      ],
+      answer: 0,
+      explain: 'A short window localizes events in time but, being brief, cannot resolve frequencies finely — the time–frequency uncertainty trade-off.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>spectrogram</strong> (from the short-time FFT) shows frequency content <strong>over time</strong> — the input many audio models actually use.',
+    'Audio <strong>equalizers</strong> boost or cut frequency bands; image tools filter and compress (JPEG) in the 2-D frequency domain.',
+    'There is an unavoidable <strong>time–frequency trade-off</strong>: short windows localize time, long windows localize frequency.',
+    'Transformers inject <strong>sinusoidal positional encodings</strong> — a Fourier basis for position — so attention can use word order.',
+    '<strong>Random Fourier features</strong> and Fourier operators show that sinusoids are a universal coordinate system woven through modern ML.',
+  ]}
+/>
+
+That completes the Fourier & Signals track: from a single wave's amplitude, frequency, and phase, all the
+way to the transforms and sinusoidal encodings powering today's audio, imaging, and language models. Every
+signal really is a sum of waves — and now you can see them.

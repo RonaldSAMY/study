@@ -1,0 +1,176 @@
+---
+title: The Unit Circle
+track: trigonometry
+summary: The single picture that ties together sine, cosine and every wave in nature.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - trigonometry/right-triangle-ratios
+  - geometry/circles
+leadsTo:
+  - trigonometry/trig-graphs
+  - trigonometry/identities
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import UnitCircleExplorer from '../../../components/demos/UnitCircleExplorer.tsx';
+
+## The hook: how high are you on the Ferris wheel?
+
+Step into a Ferris-wheel cabin and start to rise. Your **height** climbs, slows near the top, falls,
+bottoms out, and climbs again — smoothly, forever, as long as the wheel turns. Plot that height against
+time and you get one of the most important shapes in all of science: a **sine wave**. The astonishing
+part is that this wave is hiding inside a single, simple picture — a point going around a circle of
+radius 1. Learn that picture and you have learned the heart of trigonometry.
+
+<Callout type="intuition" title="The one-sentence idea">
+On a circle of radius **1**, the point at angle $\theta$ has coordinates $(\cos\theta,\ \sin\theta)$.
+That single fact *is* trigonometry — everything else is a consequence of it.
+</Callout>
+
+## Intuition: from a triangle to a spinning point
+
+You may have met sine and cosine through **SOH-CAH-TOA** — ratios of the sides of a right triangle:
+
+$$
+\sin\theta = \frac{\text{opposite}}{\text{hypotenuse}}, \qquad
+\cos\theta = \frac{\text{adjacent}}{\text{hypotenuse}}.
+$$
+
+Now do something clever: make the **hypotenuse equal to 1**. Dividing by 1 changes nothing, so the
+opposite side is *exactly* $\sin\theta$ and the adjacent side is *exactly* $\cos\theta$. The triangle no
+longer just *contains* the ratios — its legs **are** the ratios.
+
+Drop that triangle inside a circle of radius 1, with one corner at the centre. The far corner sits on
+the circle at the point $(\cos\theta, \sin\theta)$. As you increase $\theta$, that point **spins around
+the circle**. Watch only its height and you see it rise and fall and rise again — the same value comes
+back every full turn. Spinning in a circle and repeating heights is *why* trig functions make **waves**.
+
+## Play with it
+
+Drag the point around the circle below (or use the slider) and watch the right triangle change. Then
+press **Play** and watch the point's height get "unrolled" into a wave on the right.
+
+<UnitCircleExplorer client:visible />
+
+<Callout type="tip">
+Watch the <strong>emerald</strong> height of the point trace out the sine wave on the right. The wave is
+nothing more than the circle's vertical leg, plotted against the angle. Flip to <strong>trace cos θ</strong>
+to see the horizontal leg do the same thing, just shifted.
+</Callout>
+
+## The formal definition
+
+Place a point on the **unit circle** — the circle of radius $1$ centred at the origin — at angle
+$\theta$ measured counter-clockwise from the positive $x$-axis. We *define*:
+
+$$
+\cos\theta = x\text{-coordinate}, \qquad \sin\theta = y\text{-coordinate}.
+$$
+
+Because every point on the circle satisfies $x^2 + y^2 = 1$, substituting immediately gives the most
+famous identity in trigonometry, the **Pythagorean identity**:
+
+$$
+\sin^2\theta + \cos^2\theta = 1.
+$$
+
+The **tangent** is their ratio (the slope of the radius line):
+
+$$
+\tan\theta = \frac{\sin\theta}{\cos\theta}.
+$$
+
+We measure the angle in **radians**, where the angle equals the arc length travelled around the unit
+circle. A full trip around is the circumference $2\pi$, so $360° = 2\pi$ radians. Because going once
+around returns you to the same point, sine and cosine are **periodic**:
+
+$$
+\sin(\theta + 2\pi) = \sin\theta, \qquad \cos(\theta + 2\pi) = \cos\theta.
+$$
+
+<Callout type="why">
+Periodic functions are everywhere in machine learning and signals. **Fourier features** rewrite any
+signal as a sum of sines and cosines; the **positional encodings** inside Transformers use
+$\sin$ and $\cos$ of different frequencies to tell the model *where* each token sits; models of audio,
+weather **seasonality**, and electrical signals all lean on the unit circle. Master this picture and a
+huge amount of applied math suddenly rhymes.
+</Callout>
+
+## The same idea, four different worlds
+
+The unit circle isn't just geometry homework. The same rise-and-fall pattern shows up wherever
+something **goes around** or **swings back and forth**.
+
+<ExampleCard domain="Amusement parks" icon="🎡">
+A Ferris wheel turns at a steady rate, so your **height** above the ground is
+$h(t) = h_0 + R\,\sin(\omega t)$ — the radius $R$ scales the circle's $\sin\theta$, and $\omega$ sets how
+fast you go around. Your height is highest at the top, zero-change at the very top and bottom, and
+changing fastest as you pass the middle — exactly the sine wave from the demo.
+</ExampleCard>
+
+<ExampleCard domain="Audio & music" icon="🎵">
+A **pure tone** is literally a sine wave of air pressure, $p(t) = A\,\sin(2\pi f t)$. The **frequency**
+$f$ (cycles per second) is the **pitch** — concert A is $440$ Hz — and the amplitude $A$ is the loudness.
+Every richer sound is a sum of such sine waves, which is exactly what a Fourier transform pulls apart.
+</ExampleCard>
+
+<ExampleCard domain="Physics" icon="🔧">
+A mass on a spring, or a gently swinging pendulum, traces **simple harmonic motion**: its position is
+$x(t) = A\,\cos(\omega t)$. The bob sweeps back and forth just as the unit-circle point sweeps around,
+and its shadow on the wall moves in a perfect cosine — the horizontal leg of the triangle, animated.
+</ExampleCard>
+
+<ExampleCard domain="Earth & seasons" icon="🌅">
+The length of **daylight** over a year rises and falls smoothly — long days at the solstice, short days
+half a year later. To a good approximation it follows a sine, $D(t) \approx \bar{D} + A\,\sin\!\big(\tfrac{2\pi}{365}\,t\big)$,
+which is why "seasonality" terms in forecasting models are built from sines and cosines.
+</ExampleCard>
+
+<Callout type="note">
+Notice the through-line: a wheel turning, air vibrating, a spring bouncing, the Earth tilting. Different
+physics, identical math — a point circling the unit circle, its coordinates singing out $\cos\theta$ and
+$\sin\theta$.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'On the unit circle, what are the coordinates of the point at angle θ = 0?',
+      options: ['(0, 1)', '(1, 0)', '(0, 0)', '(1, 1)'],
+      answer: 1,
+      explain: 'At θ = 0 the point sits on the positive x-axis: x = cos 0 = 1 and y = sin 0 = 0, so the point is (1, 0).',
+    },
+    {
+      q: 'For any angle θ, what does sin²θ + cos²θ equal?',
+      options: ['0', 'θ', '1', '2π'],
+      answer: 2,
+      explain: 'The point (cos θ, sin θ) lies on the unit circle x² + y² = 1, so sin²θ + cos²θ = 1 always.',
+    },
+    {
+      q: 'What is the value of sin θ when θ = π/2 (a quarter turn, straight up)?',
+      options: ['0', '1', '-1', '1/2'],
+      answer: 1,
+      explain: 'At θ = π/2 the point is at the very top of the circle, (0, 1). The y-coordinate is the maximum, so sin(π/2) = 1.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>unit circle</strong> has radius 1; the point at angle θ is exactly <strong>(cos θ, sin θ)</strong>.',
+    'With hypotenuse 1, the triangle’s legs <em>are</em> the ratios, so SOH-CAH-TOA and the circle are the same idea.',
+    'Because x² + y² = 1 on the circle, the <strong>Pythagorean identity</strong> sin²θ + cos²θ = 1 falls right out.',
+    'Going once around is 2π radians, so sine and cosine <strong>repeat every 2π</strong> — they are periodic waves.',
+    'Anything that spins or swings — Ferris wheels, tones, springs, seasons — is described by these same waves, which power Fourier features and positional encodings in ML.',
+  ]}
+/>
+
+Next up: the **graphs of trig functions** — stretching, shifting and speeding up these waves with
+amplitude, period and phase — and the **identities** that let you rearrange them with confidence.

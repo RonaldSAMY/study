@@ -1,0 +1,177 @@
+---
+title: Euler's Formula
+track: complex-numbers
+summary: e^{iθ} = cos θ + i sin θ — the rotating exponential that unites algebra, geometry and trigonometry, and gives e^{iπ} + 1 = 0.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - complex-numbers/polar-form
+leadsTo:
+  - fourier/sinusoids-frequency
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import EulerCircleAnimator from '../../../components/demos/EulerCircleAnimator.tsx';
+
+## The hook: the most beautiful equation in mathematics
+
+Last lesson we found that multiplying complex numbers *adds* their angles. That is the fingerprint
+of an exponential — because $e^{x}\,e^{y} = e^{x+y}$ turns multiplication into addition too. Euler
+chased that clue and landed on one of the most astonishing identities ever written:
+$e^{i\theta} = \cos\theta + i\sin\theta$. Plug in $\theta = \pi$ and you get
+$e^{i\pi} + 1 = 0$ — a single line tying together $e$, $i$, $\pi$, $1$, and $0$. It is not a trick;
+it is the engine behind every Fourier transform your phone runs.
+
+<Callout type="intuition" title="The one-sentence idea">
+$e^{i\theta}$ is the point on the unit circle at angle $\theta$ — so raising $e$ to an imaginary
+power is just *rotation*.
+</Callout>
+
+## Intuition: why an exponential becomes a circle
+
+You already saw two clues. First, polar multiplication **adds angles**, exactly like exponents add.
+Second, the unit circle is described by $\cos\theta + i\sin\theta$. Euler's formula says these are
+the *same object*:
+
+$$
+e^{i\theta} = \cos\theta + i\sin\theta.
+$$
+
+A quick way to feel why: differentiate $f(\theta) = e^{i\theta}$ and you get
+$f'(\theta) = i\,e^{i\theta}$. Multiplying by $i$ rotates a vector $90°$, so the velocity is always
+perpendicular to the position — and motion that is always at right angles to your radius is exactly
+motion around a circle at constant speed. The point sweeps the unit circle, never speeding up,
+never leaving radius 1.
+
+This means **polar form gets a clean new outfit**: instead of $r(\cos\theta + i\sin\theta)$ we
+simply write $r\,e^{i\theta}$. Every rule from last lesson — multiply lengths, add angles — now reads
+off the exponent automatically.
+
+## Play with it
+
+Press play and watch the point sweep the unit circle. Its shadow on the real axis traces
+$\cos\theta$ and its shadow on the imaginary axis traces $\sin\theta$. Jump to $\theta = \pi$ to land
+on $-1$ — the heart of Euler's identity.
+
+<EulerCircleAnimator client:visible />
+
+<Callout type="tip">
+Watch the two shadows as the point spins: they rise and fall as perfect sine and cosine waves, a
+quarter-turn out of step. One circular motion *is* both waves at once — that is the whole reason
+complex exponentials power signal processing.
+</Callout>
+
+## The formal definition
+
+**Euler's formula** states that for any real $\theta$,
+
+$$
+e^{i\theta} = \cos\theta + i\sin\theta.
+$$
+
+It follows from matching the Taylor series of $e^x$, $\cos x$, and $\sin x$:
+
+$$
+e^{i\theta} = \sum_{n=0}^{\infty}\frac{(i\theta)^n}{n!}
+= \underbrace{\left(1 - \tfrac{\theta^2}{2!} + \cdots\right)}_{\cos\theta}
++ i\underbrace{\left(\theta - \tfrac{\theta^3}{3!} + \cdots\right)}_{\sin\theta}.
+$$
+
+Setting $\theta = \pi$ gives **Euler's identity**:
+
+$$
+e^{i\pi} + 1 = 0.
+$$
+
+Polar form becomes wonderfully compact, $z = r\,e^{i\theta}$, and we recover $\cos$ and $\sin$ as
+combinations of rotations:
+
+$$
+\cos\theta = \frac{e^{i\theta} + e^{-i\theta}}{2}, \qquad
+\sin\theta = \frac{e^{i\theta} - e^{-i\theta}}{2i}.
+$$
+
+<Callout type="why">
+The Fourier transform — the single most used tool in audio, image, and time-series ML — is built
+from $e^{-i 2\pi f t}$, a family of these rotating exponentials. Each one "probes" a signal for a
+particular frequency. Euler's formula is the foundation the next track stands on.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Signal processing" icon="📻">
+A pure tone is modeled as $e^{i\omega t}$: a phasor rotating at angular frequency $\omega$. Real
+audio is a sum of many such rotations, and decomposing a sound into them is exactly what a Fourier
+transform does. Speed up the rotation and the pitch rises.
+</ExampleCard>
+
+<ExampleCard domain="Quantum mechanics" icon="🔬">
+A quantum state's time evolution multiplies it by a phase factor $e^{-iEt/\hbar}$ — a rotation in
+the complex plane whose speed is set by the energy $E$. Interference patterns, the essence of quantum
+behavior, are these rotating phases adding up or cancelling.
+</ExampleCard>
+
+<ExampleCard domain="Electrical power" icon="🔋">
+Grid engineers model the wall-socket voltage as the real part of $V\,e^{i\omega t}$, a phasor
+spinning 50 or 60 times a second. Writing it as a rotating exponential makes the calculus of AC
+power turn into simple algebra on the exponent.
+</ExampleCard>
+
+<ExampleCard domain="Computer graphics" icon="🌐">
+To spin an object smoothly, animate $e^{i\theta}$ with $\theta$ increasing each frame and multiply
+your 2D points by it. Because the modulus stays exactly 1, rotations never distort or drift — a
+numerically clean alternative to accumulating rotation matrices.
+</ExampleCard>
+
+<Callout type="note">
+One identity, two readings: algebraically $e^{i\theta}$ converts multiplication into angle addition;
+geometrically it is steady rotation on the unit circle. Holding both pictures at once is what makes
+the Fourier world click.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does Euler\'s formula say e^{iθ} equals?',
+      options: [
+        'cos θ − i sin θ',
+        'cos θ + i sin θ',
+        'sin θ + i cos θ',
+        'θ + i',
+      ],
+      answer: 1,
+      explain: 'Euler\'s formula is e^{iθ} = cos θ + i sin θ — the point on the unit circle at angle θ.',
+    },
+    {
+      q: 'What is the value of e^{iπ}?',
+      options: ['0', '1', '-1', 'i'],
+      answer: 2,
+      explain: 'e^{iπ} = cos π + i sin π = -1 + 0i = -1, which gives the identity e^{iπ} + 1 = 0.',
+    },
+    {
+      q: 'What is the modulus of e^{iθ} for any real θ?',
+      options: ['θ', '1', '0', 'It varies with θ'],
+      answer: 1,
+      explain: 'Since |e^{iθ}| = √(cos²θ + sin²θ) = √1 = 1, the point always sits on the unit circle.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    "<strong>Euler's formula</strong>: e^{iθ} = cos θ + i sin θ — raising e to an imaginary power is rotation on the unit circle.",
+    'Polar form becomes the compact <strong>z = r·e^{iθ}</strong>, making "multiply lengths, add angles" automatic.',
+    "<strong>Euler's identity</strong> e^{iπ} + 1 = 0 unites e, i, π, 1 and 0 in one line.",
+    'Cosine and sine are <strong>sums of opposite rotations</strong>: cos θ = (e^{iθ} + e^{−iθ})/2.',
+    'Rotating exponentials e^{iωt} are the <strong>building blocks of the Fourier transform</strong> used throughout ML.',
+  ]}
+/>
+
+Next up: the **Fourier** track — where these rotating exponentials decompose any signal into its
+constituent frequencies, amplitudes, and phases.

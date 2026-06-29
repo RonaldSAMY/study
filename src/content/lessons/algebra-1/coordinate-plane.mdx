@@ -1,0 +1,154 @@
+---
+title: The Coordinate Plane
+track: algebra-1
+summary: Turning pairs of numbers into points, and points into pictures, across four quadrants.
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - algebra-1/linear-equations
+leadsTo:
+  - algebra-1/intro-functions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CoordinatePlotter from '../../../components/demos/CoordinatePlotter.tsx';
+
+## The hook: where exactly is the tomato plant?
+
+You're mapping a vegetable garden so you can tell a friend where to water. "Near the fence" is hopeless. But "3 beds to the
+right of the gate and 2 beds up" pins it exactly. Two numbers, in a fixed order, name a single spot with zero ambiguity.
+That pair is a **coordinate**, and the grid it lives on — the **coordinate plane** — is how algebra turns numbers into
+pictures and pictures back into numbers.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **coordinate plane** locates any point with an ordered pair $(x, y)$: how far across, then how far up — and that link
+between numbers and positions is what lets us *draw* relationships.
+</Callout>
+
+## Intuition: two number lines, crossed
+
+You already solved equations to get single numbers on a number line. Now cross **two** number lines at right angles: a
+horizontal **x-axis** and a vertical **y-axis**, meeting at the **origin** $(0, 0)$. Every point is named by an **ordered
+pair** $(x, y)$:
+
+- the **x-coordinate** says how far *right* (positive) or *left* (negative) from the origin,
+- the **y-coordinate** says how far *up* (positive) or *down* (negative).
+
+Order matters: $(3, 2)$ and $(2, 3)$ are different spots — always read **x first**, like reading before climbing.
+
+The two axes slice the plane into four **quadrants**, numbered counter-clockwise starting top-right (I), where both
+coordinates are positive, around to bottom-right (IV), where $x>0$ and $y<0$.
+
+## Play with it
+
+Click or tap anywhere on the grid below to drop a point. It snaps to whole-number coordinates and reads off its $(x, y)$
+and which quadrant it lands in. Plot a few in different regions to feel where the signs flip.
+
+<CoordinatePlotter client:visible />
+
+<Callout type="tip">
+Drop a point in the top-right, then one straight below the x-axis. Watch the y-coordinate go from positive to negative as
+you cross the horizontal line — that crossing is the boundary between Quadrant I and Quadrant IV.
+</Callout>
+
+## The formal definition
+
+The **Cartesian plane** is the set of all ordered pairs of real numbers:
+
+$$
+\mathbb{R}^2 = \{\,(x, y) \mid x \in \mathbb{R},\ y \in \mathbb{R}\,\}.
+$$
+
+The point $(x, y)$ sits $x$ units along the horizontal axis and $y$ units along the vertical axis from the origin
+$(0,0)$. The signs of the coordinates fix the quadrant:
+
+$$
+\text{I}: (+,+), \quad \text{II}: (-,+), \quad \text{III}: (-,-), \quad \text{IV}: (+,-).
+$$
+
+The straight-line distance between two points comes from the Pythagorean theorem:
+
+$$
+d = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}.
+$$
+
+<Callout type="why">
+A data point with two features — say a house's size and price — *is* a point in $\mathbb{R}^2$. Machine learning plots
+thousands of such points and looks for patterns among them. The coordinate plane is the canvas the whole field draws on.
+</Callout>
+
+## The same idea, four different worlds
+
+Pairs of numbers naming positions appear far beyond graph paper.
+
+<ExampleCard domain="Gardening" icon="🥕">
+A garden map: the tomato is at $(3, 2)$ — 3 beds right of the gate, 2 beds up. Anyone with the same grid finds the exact
+plant. The ordered pair removes all guesswork.
+</ExampleCard>
+
+<ExampleCard domain="Video games" icon="🎮">
+Every sprite on screen has a position $(x, y)$ in pixels from a corner. Moving a character is just changing its
+coordinates each frame; a collision is two points landing close together.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="🏀">
+A shot chart records where each attempt was taken as a point on the court. Clusters of made shots in one region reveal a
+player's hot zone — pure coordinate data turned into strategy.
+</ExampleCard>
+
+<ExampleCard domain="Weather tracking" icon="🌡️">
+Plot the day number across and the temperature up: each reading is a point. Connect them and a week of weather becomes a
+visible trend line — numbers made into a picture.
+</ExampleCard>
+
+<Callout type="note">
+Whether it's beds, pixels, court positions, or temperatures, the move is identical: pick an origin and two directions, and
+every location becomes a pair of numbers you can compute with.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In which quadrant does the point (−4, 5) lie?',
+      options: ['Quadrant I', 'Quadrant II', 'Quadrant III', 'Quadrant IV'],
+      answer: 1,
+      explain: 'x is negative (left) and y is positive (up): that is the top-left region, Quadrant II.',
+    },
+    {
+      q: 'What is the straight-line distance from (0, 0) to (3, 4)?',
+      options: ['7', '5', '12', '25'],
+      answer: 1,
+      explain: 'Distance = √((3−0)² + (4−0)²) = √(9 + 16) = √25 = 5.',
+    },
+    {
+      q: 'Why is (3, 2) a different point from (2, 3)?',
+      options: [
+        'They are actually the same point',
+        'Because the pair is ordered: the first number is x (across), the second is y (up)',
+        'Because 3 is bigger than 2',
+        'Because both lie on the x-axis',
+      ],
+      answer: 1,
+      explain: 'Coordinates are ordered. (3,2) is 3 right and 2 up; (2,3) is 2 right and 3 up — distinct locations.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>coordinate plane</strong> is two number lines crossed at the <strong>origin</strong> (0, 0).',
+    'A point is an <strong>ordered pair</strong> (x, y): x is across (right/left), y is up/down — always read x first.',
+    'The axes create four <strong>quadrants</strong>, with sign patterns (+,+), (−,+), (−,−), (+,−).',
+    'The <strong>distance</strong> between points comes straight from the Pythagorean theorem.',
+    'Any two-number measurement becomes a point, which is how data gets drawn and analyzed.',
+  ]}
+/>
+
+Next up: **Intro to Functions** — we'll feed inputs to a rule and watch the matching outputs trace out a graph on this very
+plane.

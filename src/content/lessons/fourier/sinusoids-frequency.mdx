@@ -1,0 +1,174 @@
+---
+title: Sinusoids, Frequency & Phase
+track: fourier
+summary: The building blocks of every signal — amplitude sets the height, frequency the pitch, and phase the timing.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - trigonometry/trig-graphs
+  - complex-numbers/eulers-formula
+leadsTo:
+  - fourier/fourier-series
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SinusoidSynth from '../../../components/demos/SinusoidSynth.tsx';
+
+## The hook: the one shape nature can't stop drawing
+
+Pluck a guitar string, watch a buoy bob on the swell, measure the voltage coming out of a wall socket,
+or trace the daylight hours across a year — and you keep meeting the **same curve**. It rises, eases off,
+falls, and comes back, perfectly smooth and perfectly repeating. That curve is the **sinusoid**, and it
+is the single atom out of which Fourier's whole world is built. Before we can break complicated signals
+into waves, we need to know a wave inside out — and a wave is described by just **three numbers**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Every pure wave is $A\sin(2\pi f t + \varphi)$: **amplitude** $A$ says how tall it is, **frequency** $f$
+says how fast it repeats, and **phase** $\varphi$ says where in its cycle it starts.
+</Callout>
+
+## Intuition: three knobs, one wave
+
+You already know from the unit circle that a point spinning around a circle traces out a sine wave. Now
+we put **three control knobs** on that wave:
+
+1. **Amplitude $A$** — the radius of the circle. Bigger $A$ means a taller wave: a louder sound, a
+   brighter light, a bigger swing. It stretches the curve **vertically**.
+2. **Frequency $f$** — how many full turns happen each second, measured in **hertz** (Hz). High $f$ packs
+   more cycles into the same time: a higher musical pitch, a "faster" wiggle. It squeezes the curve
+   **horizontally**.
+3. **Phase $\varphi$** — where on the circle you started the clock. Changing $\varphi$ slides the whole
+   wave **left or right** without changing its shape. A sine and a cosine are the very same wave, just a
+   quarter-cycle apart in phase.
+
+The factor of $2\pi$ is the bridge between "cycles" and "radians": one full cycle is $2\pi$ radians, so
+multiplying the frequency $f$ by $2\pi$ converts turns-per-second into radians-per-second. That combined
+quantity $\omega = 2\pi f$ is called the **angular frequency**.
+
+## Play with it
+
+Drag the three sliders and watch the wave reshape. Then flip on **Two waves** and add a second sinusoid:
+the bold curve is their **sum** — your first glimpse of how richer signals are stacked up from pure tones.
+
+<SinusoidSynth client:visible />
+
+<Callout type="tip">
+Change <strong>only the phase</strong> first and notice the shape never changes — it just slides sideways.
+Then change frequency and watch the cycles bunch up. Amplitude only ever stretches it taller or shorter.
+Three independent knobs, three independent effects.
+</Callout>
+
+## The formal definition
+
+A **sinusoid** is any function of time of the form
+
+$$
+x(t) = A\,\sin(2\pi f t + \varphi) = A\,\sin(\omega t + \varphi),
+$$
+
+where $A$ is the amplitude, $f$ the frequency in hertz, $\omega = 2\pi f$ the angular frequency in
+radians per second, and $\varphi$ the phase in radians. The **period** — the time for one full cycle — is
+
+$$
+T = \frac{1}{f},
+$$
+
+so a $440$ Hz tone repeats every $1/440$ of a second. A phase shift and an amplitude can always be
+repackaged as a **sum of a sine and a cosine** at the same frequency, using the angle-addition identity:
+
+$$
+A\sin(\omega t + \varphi) = \underbrace{A\cos\varphi}_{a}\,\sin(\omega t) + \underbrace{A\sin\varphi}_{b}\,\cos(\omega t).
+$$
+
+This "sine-plus-cosine" form is the one Fourier analysis loves. Even cleaner is **Euler's formula**,
+$e^{i\theta} = \cos\theta + i\sin\theta$, which lets us write a sinusoid as the imaginary part of a single
+rotating complex exponential $A\,e^{i(\omega t + \varphi)}$ — one tidy object carrying amplitude, frequency,
+and phase all at once.
+
+<Callout type="why">
+Machine-learning models almost never see a raw waveform. They see **features**: the amplitude and phase
+of each frequency. A speech model works on the energy in frequency bands; a Transformer encodes token
+positions with sinusoids of many frequencies. Knowing that any wave is just $(A, f, \varphi)$ is what
+makes those representations make sense.
+</Callout>
+
+## The same idea, four different worlds
+
+The triple $(A, f, \varphi)$ shows up under different names wherever something oscillates.
+
+<ExampleCard domain="Music & audio" icon="🎶">
+A tuning fork produces a near-perfect sinusoid. Its **frequency** is the note (A above middle C is
+$440$ Hz), its **amplitude** is the loudness, and its **phase** is usually inaudible on its own — yet phase
+between two speakers is exactly what stereo and noise-cancelling headphones manipulate.
+</ExampleCard>
+
+<ExampleCard domain="Electrical power" icon="🔌">
+The mains supply is a sinusoid: $230$ V at $50$ Hz in Europe, $120$ V at $60$ Hz in North America. The
+three-phase power that runs factories is literally **three sinusoids** of equal amplitude and frequency,
+offset in **phase** by $120°$ each, so the total delivered power stays smooth.
+</ExampleCard>
+
+<ExampleCard domain="Radio & Wi-Fi" icon="📡">
+A radio station "at $98.5$" broadcasts a carrier sinusoid at $98.5$ MHz. **FM** radio encodes sound by
+nudging the **frequency**; **AM** radio encodes it by nudging the **amplitude**; modern Wi-Fi and 5G pack
+data into the **phase** of many carriers at once. Same three knobs, trillions of times a second.
+</ExampleCard>
+
+<ExampleCard domain="Ocean & climate" icon="🌊">
+Ocean swell arriving at a beach is well modeled as a sinusoid whose **period** $T = 1/f$ (often $8$–$15$
+seconds) sets how far apart the crests are. Tides are sinusoids too, with periods locked to the moon —
+which is why tide tables are essentially a short list of amplitudes, frequencies, and phases.
+</ExampleCard>
+
+<Callout type="note">
+The thread tying these together: nothing here is "approximately" a wave by coincidence. Anything driven
+by steady rotation or a restoring force <em>is</em> a sinusoid, and is pinned down completely by how tall,
+how fast, and when it starts.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A sinusoid has frequency f = 5 Hz. What is its period T?',
+      options: ['5 s', '0.2 s', '10π s', '2π s'],
+      answer: 1,
+      explain: 'Period is the reciprocal of frequency: T = 1/f = 1/5 = 0.2 seconds per cycle.',
+    },
+    {
+      q: 'You change only the phase φ of a wave, leaving A and f alone. What happens to its graph?',
+      options: [
+        'It gets taller',
+        'It slides left or right but keeps its shape',
+        'Its cycles bunch closer together',
+        'It flips upside down only',
+      ],
+      answer: 1,
+      explain: 'Phase shifts the wave horizontally in time without changing amplitude (height) or frequency (how fast it repeats).',
+    },
+    {
+      q: 'Which quantity is the angular frequency ω of a 60 Hz signal?',
+      options: ['60 rad/s', '2π·60 rad/s', '60/2π rad/s', '1/60 rad/s'],
+      answer: 1,
+      explain: 'Angular frequency converts cycles-per-second to radians-per-second: ω = 2πf = 120π rad/s.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A pure wave is <strong>A·sin(2πf·t + φ)</strong> — fully described by amplitude, frequency, and phase.',
+    '<strong>Amplitude</strong> stretches it vertically, <strong>frequency</strong> squeezes it horizontally, <strong>phase</strong> slides it sideways.',
+    'Frequency f (hertz) and period T are reciprocals, T = 1/f, and angular frequency is ω = 2πf.',
+    'Amplitude-and-phase can always be rewritten as a <strong>sine plus a cosine</strong> at the same frequency — the form Fourier uses.',
+    'These same three knobs describe music, mains power, radio, and ocean waves — and become the features ML models actually learn from.',
+  ]}
+/>
+
+Next up: **Fourier series** — what happens when you stop adding two waves and start adding *infinitely
+many*, and how that lets you build a square wave, a sawtooth, or any repeating signal from sinusoids alone.

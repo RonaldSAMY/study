@@ -1,0 +1,126 @@
+---
+import Layout from './Layout.astro';
+import PrereqLinks from './PrereqLinks.astro';
+import ProgressTracker from './ProgressTracker.tsx';
+import { getNeighbors, getTrack } from '../data/curriculum';
+import { bookBadge } from '../data/bookMap';
+
+interface Props {
+  title: string;
+  track: string;
+  summary: string;
+  slug: string;            // "<trackId>/<lessonId>"
+  difficulty?: string;
+  estMinutes?: number;
+  prereqs?: string[];
+  leadsTo?: string[];
+}
+
+const {
+  title, track, summary, slug,
+  difficulty = 'beginner', estMinutes = 12,
+  prereqs = [], leadsTo = [],
+} = Astro.props;
+
+const trackMeta = getTrack(track);
+const { prev, next } = getNeighbors(slug);
+const bRef = bookBadge(slug);
+---
+
+<Layout title={`${title} · Maths for ML`} description={summary}>
+  <article class="animate-fade-up">
+    <!-- Lesson header -->
+    <header class="mb-8 border-b border-border pb-6">
+      <div class="mb-3 flex flex-wrap items-center gap-2 text-sm">
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 font-semibold text-brand">
+          {trackMeta?.icon} {trackMeta?.title ?? track}
+        </span>
+        <span class="rounded-full bg-surface-2 px-3 py-1 font-medium capitalize text-muted">{difficulty}</span>
+        <span class="rounded-full bg-surface-2 px-3 py-1 font-medium text-muted">⏱ {estMinutes} min</span>
+      </div>
+      <h1 class="text-3xl font-extrabold tracking-tight sm:text-4xl">{title}</h1>
+      <p class="mt-3 text-lg text-muted">{summary}</p>
+
+      {bRef && (
+        <a
+          href="/book"
+          title={bRef.full}
+          class="mt-4 inline-flex items-center gap-2 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-sm font-medium text-amber-700 transition hover:border-amber-400 dark:text-amber-300"
+        >
+          <span>📖</span>
+          <span><strong class="font-semibold">In the book:</strong> {bRef.short}</span>
+        </a>
+      )}
+    </header>
+
+    <PrereqLinks prereqs={prereqs} leadsTo={leadsTo} />
+
+    <!-- Lesson body (MDX) -->
+    <div class="lesson-prose text-[1.05rem]">
+      <slot />
+    </div>
+
+    <!-- Mark complete -->
+    <div class="mt-10 flex flex-col items-start gap-4 border-t border-border pt-8">
+      <ProgressTracker client:visible slug={slug} />
+    </div>
+
+    <!-- Prev / next navigation -->
+    <nav class="mt-8 grid gap-3 sm:grid-cols-2">
+      {prev ? (
+        <a href={`/${prev.slug}`} class="group rounded-xl border border-border bg-surface p-4 transition hover:border-brand">
+          <span class="text-xs font-semibold uppercase text-muted">← Previous</span>
+          <span class="mt-1 block font-semibold group-hover:text-brand">{prev.trackIcon} {prev.title}</span>
+        </a>
+      ) : <div />}
+      {next ? (
+        <a href={`/${next.slug}`} class="group rounded-xl border border-border bg-surface p-4 text-right transition hover:border-brand">
+          <span class="text-xs font-semibold uppercase text-muted">Next →</span>
+          <span class="mt-1 block font-semibold group-hover:text-brand">{next.title} {next.trackIcon}</span>
+        </a>
+      ) : <div />}
+    </nav>
+  </article>
+</Layout>
+
+<style>
+  /* The body fills the content column, but running text stays at a
+     comfortable reading measure while interactive demos (astro-islands)
+     and full-width media break out to use the whole width. */
+  .lesson-prose { max-width: none; }
+  .lesson-prose > :global(:not(astro-island)) { max-width: 46rem; }
+  .lesson-prose > :global(astro-island) {
+    display: block;
+    max-width: 100%;
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* Section spacing for the markdown body */
+  .lesson-prose :global(h2) {
+    margin-top: 2.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 1.6rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+  .lesson-prose :global(h3) {
+    margin-top: 1.75rem;
+    margin-bottom: 0.5rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+  }
+  .lesson-prose :global(p) { margin: 0.9rem 0; }
+  .lesson-prose :global(ul),
+  .lesson-prose :global(ol) { margin: 0.9rem 0; padding-left: 1.4rem; }
+  .lesson-prose :global(ul) { list-style: disc; }
+  .lesson-prose :global(ol) { list-style: decimal; }
+  .lesson-prose :global(li) { margin: 0.35rem 0; }
+  .lesson-prose :global(strong) { font-weight: 700; }
+  .lesson-prose :global(blockquote) {
+    border-left: 3px solid rgb(var(--c-brand));
+    padding-left: 1rem;
+    color: rgb(var(--c-muted));
+    font-style: italic;
+  }
+</style>

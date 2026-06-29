@@ -1,0 +1,187 @@
+---
+title: Multivariable Chain Rule & Jacobian
+track: calculus-3
+summary: How a small input nudge ripples through a chain of functions — captured by a matrix of partial derivatives, the Jacobian.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - calculus-3/gradient
+leadsTo:
+  - calculus-3/hessian
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import JacobianPropagator from '../../../components/demos/JacobianPropagator.tsx';
+
+## The hook: wiggling a robot's elbow
+
+A two-jointed robot arm has two angle dials. You nudge the shoulder dial a hair — where does the hand go?
+Not straight along any one axis: the hand traces a little arc determined by *both* joints at once. If you
+wiggle the dials in a tiny circle, the hand sweeps out a tiny **ellipse**. The map from "joint wiggles" to
+"hand movement" is a small matrix called the **Jacobian**, and it is the exact bookkeeping that lets
+gradients flow backward through a deep network, layer by layer.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **Jacobian** is the matrix of all partial derivatives of a vector-valued function; it is the **best
+local linear map** — the rule that turns a tiny input change into the resulting tiny output change.
+</Callout>
+
+## Intuition: derivatives that compose
+
+You already met the single-variable chain rule: to differentiate $f(g(x))$ you multiply slopes,
+$(f \circ g)' = f'(g(x)) \cdot g'(x)$. Multivariable calculus keeps the spirit exactly — **multiply the
+local rates** — but now the "slopes" are matrices, because each function can take several inputs and produce
+several outputs.
+
+Zoom in close enough on any smooth function and it looks **linear** — a flat ramp. The Jacobian *is* that
+ramp written as a matrix. For a function $\mathbf{f}: \mathbb{R}^n \to \mathbb{R}^m$, the Jacobian $J$ is
+$m \times n$, with one row per output and one column per input:
+
+$$
+J_{ij} = \frac{\partial f_i}{\partial x_j}.
+$$
+
+Read a row and you get the gradient of that one output. Read down a column and you see how one input pushes
+every output. Multiply $J$ by a small input change $\Delta \mathbf{x}$ and you get the approximate output
+change:
+
+$$
+\Delta \mathbf{f} \approx J \, \Delta \mathbf{x}.
+$$
+
+When functions are composed, $\mathbf{h} = \mathbf{f}(\mathbf{g}(\mathbf{x}))$, their Jacobians simply
+**multiply** — the chain rule, now matrix-shaped:
+
+$$
+J_{\mathbf{h}} = J_{\mathbf{f}} \, J_{\mathbf{g}}.
+$$
+
+## Play with it
+
+The left panel is **input space** — the two joint angles, with a small blue circle of "wiggles." The right
+panel is **output space** — the arm and the resulting cloud of hand positions. Drag the input handle and
+watch the wiggle circle become a stretched, rotated **ellipse**: that distortion is the Jacobian acting.
+
+<JacobianPropagator client:visible />
+
+<Callout type="tip">
+Straighten the arm out (drive the elbow angle near zero). Watch <strong>det J</strong> collapse toward 0 and
+the ellipse flatten into a sliver — a <em>singular</em> pose where the hand can barely move one way. A zero
+determinant means the local linear map has squashed a dimension flat.
+</Callout>
+
+## The formal definition
+
+For $\mathbf{f}(\mathbf{x}) = \big(f_1(\mathbf{x}), \ldots, f_m(\mathbf{x})\big)$ with
+$\mathbf{x} \in \mathbb{R}^n$, the **Jacobian** is
+
+$$
+J = \frac{\partial \mathbf{f}}{\partial \mathbf{x}} =
+\begin{bmatrix}
+\dfrac{\partial f_1}{\partial x_1} & \cdots & \dfrac{\partial f_1}{\partial x_n} \\[6pt]
+\vdots & \ddots & \vdots \\[4pt]
+\dfrac{\partial f_m}{\partial x_1} & \cdots & \dfrac{\partial f_m}{\partial x_n}
+\end{bmatrix}.
+$$
+
+Two special cases tie back to earlier lessons:
+
+- If $m = 1$ (one output), $J$ is a single row — the **gradient** transposed, $\nabla f^{\top}$.
+- The **determinant** $\det J$ (when $m = n$) measures how the map scales tiny areas/volumes — the ellipse's
+  area divided by the circle's. That factor is what shows up when changing variables in multiple integrals.
+
+The **multivariable chain rule** is then matrix multiplication of Jacobians in the order the data flows:
+
+$$
+\underbrace{J_{\mathbf{f}\circ\mathbf{g}}(\mathbf{x})}_{\text{whole chain}} = J_{\mathbf{f}}\big(\mathbf{g}(\mathbf{x})\big)\, J_{\mathbf{g}}(\mathbf{x}).
+$$
+
+<Callout type="why">
+A neural network is a long composition: input → layer 1 → layer 2 → ⋯ → loss. The chain rule says the
+overall sensitivity is the **product of each layer's Jacobian**. Backpropagation evaluates that product
+**right to left**, multiplying by one layer's Jacobian at a time, so the loss's gradient reaches every
+weight efficiently. The Jacobian is the gear that meshes the layers together.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Robotics" icon="🦾">
+The arm above is real engineering. Roboticists invert the Jacobian to solve the reverse problem — "to move
+the hand <em>here</em>, how must each joint turn?" Near singular poses the inverse blows up, which is why
+robots slow down when their arms stretch out straight.
+</ExampleCard>
+
+<ExampleCard domain="Drone control" icon="🚁">
+A quadcopter's four motor speeds map to its motion: roll, pitch, yaw, and lift. The flight controller uses
+the Jacobian of this map to translate "tilt forward a little" into the precise four-motor change required —
+a small input wiggle propagated to the right output.
+</ExampleCard>
+
+<ExampleCard domain="Cartography" icon="🗺️">
+Flattening the globe onto a map distorts areas — Greenland looks huge. The Jacobian determinant of the map
+projection is exactly the local stretch factor, telling cartographers how much each region is exaggerated.
+</ExampleCard>
+
+<ExampleCard domain="Epidemiology" icon="🦠">
+A disease model turns today's counts (susceptible, infected, recovered) into tomorrow's. The Jacobian of
+that update reveals how a small outbreak today amplifies or fades — its largest factor signals whether cases
+will explode or die out.
+</ExampleCard>
+
+<Callout type="warning">
+Order matters: matrix multiplication does not commute, so $J_{\mathbf{f}} J_{\mathbf{g}}$ is not
+$J_{\mathbf{g}} J_{\mathbf{f}}$. Always multiply the Jacobians in the direction the data actually flows
+through the composition.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'For a function f: ℝⁿ → ℝᵐ, what are the dimensions of its Jacobian matrix?',
+      options: ['n × n', 'm × n (rows = outputs, columns = inputs)', 'n × m', '1 × n'],
+      answer: 1,
+      explain: 'The Jacobian has one row per output (m) and one column per input (n), so it is m × n. Entry (i, j) is ∂fᵢ/∂xⱼ.',
+    },
+    {
+      q: 'How does the multivariable chain rule combine the Jacobians of composed functions h = f(g(x))?',
+      options: [
+        'It adds them: J_f + J_g',
+        'It multiplies them as matrices: J_f · J_g',
+        'It takes the larger one',
+        'It averages them',
+      ],
+      answer: 1,
+      explain: 'Local linear maps compose by matrix multiplication, so the Jacobian of the composition is the product J_f · J_g, evaluated in the order data flows.',
+    },
+    {
+      q: 'A small circle of inputs maps to a thin sliver (near-zero-area ellipse). What does that say about det J?',
+      options: [
+        'det J is large',
+        'det J is near zero — the map has squashed a dimension flat (singular)',
+        'det J equals 1',
+        'det J is negative and large',
+      ],
+      answer: 1,
+      explain: 'The determinant is the area-scaling factor. A sliver has almost no area, so det J ≈ 0 — a singular, non-invertible local map.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>Jacobian</strong> collects every partial derivative of a vector-valued function into an m × n matrix.',
+    'It is the <strong>best local linear map</strong>: Δf ≈ J · Δx turns small input changes into output changes.',
+    'For composed functions, Jacobians <strong>multiply</strong> — the multivariable chain rule.',
+    'Its <strong>determinant</strong> is the local area/volume scaling factor; det J ≈ 0 marks a singular (squashing) point.',
+    '<strong>Backpropagation</strong> is this chain rule run right-to-left, multiplying one layer Jacobian at a time.',
+  ]}
+/>
+
+Next up: the **Hessian** — the matrix of *second* derivatives that reveals the curvature of a surface and
+sorts minima from maxima from saddles.

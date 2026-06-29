@@ -1,0 +1,65 @@
+---
+import { getCollection } from 'astro:content';
+import Layout from '../components/Layout.astro';
+import LessonLayout from '../components/LessonLayout.astro';
+import { ALL_LESSONS, getLessonBySlug, getTrack } from '../data/curriculum';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('lessons');
+  // Map "<track>/<id>" -> rendered MDX entry
+  const bySlug = new Map(entries.map((e) => [e.slug, e]));
+
+  return ALL_LESSONS.map((lesson) => ({
+    params: { slug: lesson.slug },
+    props: { entry: bySlug.get(lesson.slug) ?? null, slug: lesson.slug },
+  }));
+}
+
+const { entry, slug } = Astro.props;
+const meta = getLessonBySlug(slug)!;
+const track = getTrack(meta.trackId)!;
+
+let Content: any = null;
+let data: any = null;
+if (entry) {
+  const rendered = await entry.render();
+  Content = rendered.Content;
+  data = entry.data;
+}
+---
+
+{entry ? (
+  <LessonLayout
+    title={data.title}
+    track={data.track}
+    summary={data.summary}
+    slug={slug}
+    difficulty={data.difficulty}
+    estMinutes={data.estMinutes}
+    prereqs={data.prereqs}
+    leadsTo={data.leadsTo}
+  >
+    <Content />
+  </LessonLayout>
+) : (
+  <Layout title={`${meta.title} · Coming soon`} description={meta.summary}>
+    <div class="mx-auto max-w-prose py-10 text-center animate-fade-up">
+      <div class="mb-4 text-6xl">{track.icon}</div>
+      <p class="mb-2 inline-flex items-center gap-1.5 rounded-full bg-brand-soft px-3 py-1 text-sm font-semibold text-brand">
+        {track.title}
+      </p>
+      <h1 class="mt-3 text-3xl font-extrabold">{meta.title}</h1>
+      <p class="mt-3 text-lg text-muted">{meta.summary}</p>
+      <div class="mt-8 rounded-2xl border border-dashed border-border bg-surface p-8">
+        <p class="text-lg font-semibold">✨ This interactive lesson is coming soon.</p>
+        <p class="mt-2 text-muted">
+          The full curriculum is mapped out — this topic is part of the learning path and
+          will get the same treatment: intuition, animations, multiple real-world examples and a quiz.
+        </p>
+        <a href="/path" class="mt-6 inline-block rounded-xl bg-brand px-5 py-3 font-semibold text-white shadow transition hover:brightness-110">
+          Explore the learning path
+        </a>
+      </div>
+    </div>
+  </Layout>
+)}

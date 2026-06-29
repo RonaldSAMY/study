@@ -1,0 +1,188 @@
+---
+title: Systems & Gaussian Elimination
+track: linear-algebra
+summary: A systematic recipe of row operations that reduces a system of equations to its solution.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - linear-algebra/matrix-multiplication
+leadsTo:
+  - linear-algebra/inverse-determinant
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import RowReduceStepper from '../../../components/demos/RowReduceStepper.tsx';
+
+## The hook: balancing a chemical reaction
+
+A chemist needs to balance $a\,\text{H}_2 + b\,\text{O}_2 \to c\,\text{H}_2\text{O}$ so no atom is
+created or destroyed. Counting hydrogen and oxygen gives two equations in three unknowns. Trial and
+error is slow and unreliable. There's a mechanical procedure that *always* works — and the same
+procedure solves traffic-flow networks, fits lines to data, and inverts matrices. It's called
+**Gaussian elimination**, and it is the single most-used algorithm in all of computational
+mathematics.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Gaussian elimination** uses three reversible row operations to whittle a system down to "staircase"
+form, where the answer can be read off directly.
+
+</Callout>
+
+## Intuition: a system is one matrix equation
+
+Three equations like
+
+$$
+\begin{aligned}
+2x + y - z &= 8 \\
+-3x - y + 2z &= -11 \\
+-2x + y + 2z &= -3
+\end{aligned}
+$$
+
+pack neatly into a single matrix statement $A\mathbf{x}=\mathbf{b}$, where $A$ holds the coefficients,
+$\mathbf{x}=[x,y,z]^\top$ is the unknown, and $\mathbf{b}$ is the right-hand side. (That product
+$A\mathbf{x}$ is exactly the matrix-times-vector you just learned.)
+
+Stick $A$ and $\mathbf{b}$ together into one **augmented matrix** $[A \mid \mathbf{b}]$ and you can
+forget the letters $x, y, z$ — they just ride along in fixed columns. Now solving means cleaning up the
+grid using three moves that never change the solution set:
+
+1. **Swap** two rows.
+2. **Scale** a row by a nonzero number.
+3. **Add** a multiple of one row to another.
+
+The strategy: use these to create a **pivot** of 1 in each column and zeros below it (forward
+elimination), then zeros above it (back-substitution). The result reads off the answer.
+
+## Play with it
+
+Step through the elimination of the system above. Each click does one row operation; the highlighted
+cell is the current **pivot**. Watch the messy grid march toward the clean identity on the left, with
+the solution appearing on the right.
+
+<RowReduceStepper client:visible />
+
+<Callout type="tip">
+Always work <strong>left to right, top to bottom</strong>: lock in the first pivot and clear its
+column before moving on. Jumping around is how sign errors creep in.
+</Callout>
+
+## The formal definition
+
+Goal: transform $[A \mid \mathbf{b}]$ into **reduced row echelon form** (RREF) using the three
+elementary row operations. RREF means:
+
+- Each nonzero row's leading entry (its **pivot**) is 1.
+- Each pivot sits to the right of the pivot above it — the "staircase."
+- Every pivot is the only nonzero entry in its column.
+
+For an $n\times n$ system with a unique solution, RREF looks like the identity beside the answer:
+
+$$
+\left[\begin{array}{ccc|c}
+1 & 0 & 0 & x \\
+0 & 1 & 0 & y \\
+0 & 0 & 1 & z
+\end{array}\right].
+$$
+
+The number of pivots is the **rank**. Three outcomes are possible:
+
+- **Unique solution** — a pivot in every variable column (the case above).
+- **No solution** — a row says $0 = (\text{nonzero})$, a contradiction.
+- **Infinitely many** — a free variable column with no pivot.
+
+<Callout type="why">
+Solving $A\mathbf{x}=\mathbf{b}$ is everywhere in ML: least-squares regression, the *normal
+equations*, and the linear solves inside optimizers all reduce to this. Gaussian elimination is the
+exact method; iterative solvers approximate it when matrices get huge.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Chemistry" icon="⚗️">
+Balancing a reaction means finding whole-number coefficients so every element's atom count matches on
+both sides. That's a homogeneous linear system $A\mathbf{x}=\mathbf{0}$; row-reducing it hands you the
+balancing numbers directly.
+</ExampleCard>
+
+<ExampleCard domain="Traffic engineering" icon="🚦">
+At each intersection, cars in must equal cars out — one equation per junction. The unknowns are the
+flows on each street. Gaussian elimination solves the whole road network at once, revealing which
+roads are over capacity.
+</ExampleCard>
+
+<ExampleCard domain="Electric circuits" icon="🔌">
+Kirchhoff's laws give one equation per loop and node of a circuit. The unknown currents form a linear
+system; engineers (and SPICE simulators) row-reduce it to find every current and voltage in the board.
+</ExampleCard>
+
+<ExampleCard domain="Economics" icon="🏭">
+Leontief's input-output model asks how much each industry must produce to meet final demand. That's a
+linear system $(\mathbf{I}-A)\mathbf{x}=\mathbf{d}$ — solved by elimination — predicting total output
+across an entire economy.
+</ExampleCard>
+
+<Callout type="note">
+Elimination also <strong>detects</strong> trouble. If a pivot column never appears, the system has free
+variables (infinitely many solutions); if a row collapses to 0 = nonzero, there's no solution at all.
+The algorithm tells you which case you're in.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which of these is NOT a valid elementary row operation?',
+      options: [
+        'Swap two rows',
+        'Multiply a row by a nonzero number',
+        'Add a multiple of one row to another',
+        'Multiply a row by zero',
+      ],
+      answer: 3,
+      explain: 'Scaling by zero erases a row and loses information, changing the solution set. Scaling must use a nonzero factor.',
+    },
+    {
+      q: 'During elimination a row becomes [0  0  0 | 5]. What does this mean?',
+      options: [
+        'The solution is 5',
+        'The system has no solution (a contradiction)',
+        'There are infinitely many solutions',
+        'You made an arithmetic mistake every time',
+      ],
+      answer: 1,
+      explain: 'That row reads 0 = 5, which is impossible, so the system is inconsistent — no solution exists.',
+    },
+    {
+      q: 'In reduced row echelon form of a 3×3 system with a unique solution, what does the coefficient part look like?',
+      options: [
+        'All zeros',
+        'The 3×3 identity matrix',
+        'An upper triangle of 1s',
+        'A single row',
+      ],
+      answer: 1,
+      explain: 'A unique solution drives the coefficient block to the identity; the augmented column then holds x, y, z.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A linear system is the matrix equation <strong>Ax = b</strong>, handled as an augmented matrix [A | b].',
+    'Three <strong>row operations</strong> — swap, scale (nonzero), add-a-multiple — change the grid but never the solution.',
+    'Forward elimination then back-substitution reach <strong>reduced row echelon form</strong>, where the answer is read off.',
+    'The number of <strong>pivots is the rank</strong>; outcomes are unique, none, or infinitely many solutions.',
+    'This one algorithm balances reactions, solves circuits and networks, and underlies regression in ML.',
+  ]}
+/>
+
+Next up: the **inverse and determinant** — a matrix that *undoes* a transformation, and the single
+number that says whether undoing is even possible.

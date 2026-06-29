@@ -1,0 +1,171 @@
+---
+title: Right-Triangle Ratios
+track: trigonometry
+summary: SOH-CAH-TOA — how the sides of a right triangle define sine, cosine and tangent of an angle.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - trigonometry/angles-radians
+  - geometry/pythagoras
+leadsTo:
+  - trigonometry/unit-circle
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import RightTriangleRatios from '../../../components/demos/RightTriangleRatios.tsx';
+
+## The hook: measuring a building you can't climb
+
+A surveyor stands 50 metres from a skyscraper, points a small sighting tool called a clinometer at the roof,
+and reads one number: the **angle** up to the top, say 58°. That single angle, plus the distance she already
+paced out, is enough to know the building's height to the metre — no ladder, no drone, no tape measure
+flung skyward. The secret is that in any right triangle, an **angle locks the ratios of the sides**. Learn
+those ratios and you can turn an angle into a length, or a length into an angle, anywhere.
+
+<Callout type="intuition" title="The one-sentence idea">
+In a right triangle, each angle fixes the **ratios** of the sides: **sine**, **cosine** and **tangent** are
+just three of those ratios, captured by the mnemonic **SOH-CAH-TOA**.
+</Callout>
+
+## Intuition: same angle, same shape
+
+You met angles in radians and degrees in the previous lesson. Now drop one into a right triangle — a triangle
+with a 90° corner. Pick one of the *other* two angles and call it $\theta$. Relative to $\theta$, the three
+sides get names:
+
+- the **opposite** side (across from $\theta$),
+- the **adjacent** side (next to $\theta$, not the long one),
+- the **hypotenuse** (the long side, across from the right angle).
+
+Here is the key fact, which comes straight from *similar triangles*: if two right triangles share the same
+angle $\theta$, they are scaled copies of each other, so their side **ratios** are identical — even though
+the triangles can be wildly different sizes. A ratio that depends only on the angle, not the size, deserves
+its own name. We get three of them:
+
+$$
+\sin\theta = \frac{\text{opp}}{\text{hyp}}, \qquad
+\cos\theta = \frac{\text{adj}}{\text{hyp}}, \qquad
+\tan\theta = \frac{\text{opp}}{\text{adj}}.
+$$
+
+The mnemonic **SOH-CAH-TOA** packs all three: **S**ine = **O**pp/**H**yp, **C**osine = **A**dj/**H**yp,
+**T**angent = **O**pp/**A**dj.
+
+## Play with it
+
+Drag the apex to reshape the right triangle. Watch the three ratios update — then try to **keep the angle θ
+fixed** while changing the size, and notice the ratios stay put. That invariance is the whole point.
+
+<RightTriangleRatios client:visible />
+
+<Callout type="tip">
+Make the triangle tall and thin: <strong>opposite</strong> grows, so <strong>sin θ</strong> climbs toward 1 and the angle
+approaches 90°. Make it short and wide and <strong>cos θ</strong> approaches 1 instead. The ratios are pure functions of the angle.
+</Callout>
+
+## The formal definition
+
+For a right triangle with the angle $\theta$ (one of the two non-right angles):
+
+$$
+\sin\theta = \frac{\text{opposite}}{\text{hypotenuse}}, \quad
+\cos\theta = \frac{\text{adjacent}}{\text{hypotenuse}}, \quad
+\tan\theta = \frac{\text{opposite}}{\text{adjacent}} = \frac{\sin\theta}{\cos\theta}.
+$$
+
+Because the Pythagorean theorem says $\text{opp}^2 + \text{adj}^2 = \text{hyp}^2$, dividing through by
+$\text{hyp}^2$ gives a relation you will see again and again:
+
+$$
+\sin^2\theta + \cos^2\theta = 1.
+$$
+
+To solve the surveyor's problem: the height is the **opposite** side and the 50 m is **adjacent**, so use
+tangent — $\tan(58°) = \frac{h}{50}$, giving $h = 50\tan(58°) \approx 80$ m.
+
+<Callout type="why">
+These ratios are the bridge between **angles and coordinates**, and machine learning lives on that bridge:
+rotating data or images, decomposing a vector into components, and the attention "rotations" in modern
+Transformers all reduce to multiplying by sines and cosines of an angle. Master the right triangle and the
+geometry of high-dimensional models becomes far less mysterious.
+</Callout>
+
+## The same idea, four different worlds
+
+Any time you know an angle and one length — or two lengths and want the angle — these ratios do the work.
+
+<ExampleCard domain="Surveying" icon="📐">
+A surveyor 50 m from a tower measures the angle to its top as 58°. Height is opposite, distance is adjacent,
+so $h = 50\tan(58°) \approx 80$ m. This "angle of elevation" trick is how heights of mountains, trees and
+chimneys are found without touching them.
+</ExampleCard>
+
+<ExampleCard domain="Skateboarding" icon="🛹">
+A skate ramp rises 1.2 m over a horizontal run of 2.0 m. The launch angle satisfies
+$\tan\theta = \frac{1.2}{2.0} = 0.6$, and the ramp surface (the part you actually roll up) is the hypotenuse,
+$\sqrt{1.2^2 + 2.0^2} \approx 2.33$ m of plywood to cut.
+</ExampleCard>
+
+<ExampleCard domain="Ladder safety" icon="🪜">
+Safety codes want a ladder at about 75° to the ground. For a 6 m ladder, the base should sit
+$6\cos(75°) \approx 1.55$ m from the wall (adjacent = hyp·cos θ), and it reaches
+$6\sin(75°) \approx 5.8$ m up (opposite = hyp·sin θ). Too shallow and it slides; too steep and it tips.
+</ExampleCard>
+
+<ExampleCard domain="Aviation" icon="✈️">
+On final approach a jet follows a 3° glide slope. To lose 900 m of altitude (the opposite side), the ground
+distance is $\frac{900}{\tan(3°)} \approx 17.2$ km. Pilots and autoland systems treat the descent as one
+long, thin right triangle.
+</ExampleCard>
+
+<Callout type="note">
+Every example is the same triangle wearing a costume: an angle plus one side hands you the others through
+sin, cos and tan. Tower, ramp, ladder, flight path — one set of ratios.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In a right triangle, which ratio is cos θ?',
+      options: ['opposite / hypotenuse', 'adjacent / hypotenuse', 'opposite / adjacent', 'hypotenuse / adjacent'],
+      answer: 1,
+      explain: 'CAH: Cosine = Adjacent / Hypotenuse — the side next to θ over the long side.',
+    },
+    {
+      q: 'A ramp rises 3 m over a 4 m horizontal run. What is tan θ of the ramp angle?',
+      options: ['0.75', '1.33', '0.6', '5'],
+      answer: 0,
+      explain: 'tan θ = opposite / adjacent = 3 / 4 = 0.75. (The ramp surface itself is the hypotenuse, √(3²+4²)=5.)',
+    },
+    {
+      q: 'Why do two right triangles with the same angle θ have the same sin θ even if one is much bigger?',
+      options: [
+        'Because all triangles are congruent',
+        'Because they are similar, so their side ratios match',
+        'Because area is preserved',
+        'They do not — sin θ depends on size',
+      ],
+      answer: 1,
+      explain: 'Equal angles make the triangles similar (scaled copies), and scaling leaves every side ratio unchanged.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>SOH-CAH-TOA</strong>: sin = opp/hyp, cos = adj/hyp, tan = opp/adj — three side ratios of a right triangle.',
+    'The ratios depend on the <strong>angle alone</strong>, not the triangle’s size, because equal angles make similar triangles.',
+    'Knowing one angle and one side lets you find every other side: opp = hyp·sin θ, adj = hyp·cos θ.',
+    'Pythagoras turns into <strong>sin²θ + cos²θ = 1</strong>, the seed of the unit circle.',
+    'Surveying heights, ramp angles, ladder placement and glide slopes are all one right-triangle calculation.',
+  ]}
+/>
+
+Next up: **the unit circle** — set the hypotenuse to 1 and these ratios become the coordinates of a spinning
+point, unifying all of trigonometry.

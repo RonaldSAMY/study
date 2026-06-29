@@ -1,0 +1,162 @@
+---
+title: Transformations
+track: geometry
+summary: Slide, turn, and resize shapes with translations, rotations, and scalings — and meet the vector, the object that powers all of linear algebra.
+difficulty: advanced
+estMinutes: 14
+prereqs:
+  - geometry/coordinate-geometry
+leadsTo:
+  - linear-algebra/vectors
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ShapeTransformLab from '../../../components/demos/ShapeTransformLab.tsx';
+
+## The hook: how a video game moves a thousand things at once
+
+In a racing game, the car, the trees, the crowd, and the road signs are all just lists of corner
+points. Every frame — sixty times a second — the engine **slides**, **turns**, and **resizes** those
+points to make the world rush past. It never redraws anything from scratch; it just *transforms* the
+coordinates it already has. The same three moves animate cartoons, rotate a CAD model, and let your
+phone re-orient a photo. Master sliding, turning, and scaling, and you've learned the grammar of every
+moving picture — and you've arrived at the doorstep of **vectors**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **transformation** takes every point of a shape and moves it by a rule: **translation** slides
+(add the same amount to every point), **rotation** turns around a center, and **scaling** stretches or
+shrinks — and a translation is described by a single **vector**.
+</Callout>
+
+## Intuition: from measuring shapes to moving them
+
+So far geometry has been about *static* figures — their angles, sides, areas. Coordinate geometry let us
+pin a shape to the grid as a list of points. Transformations are what we do when we **change those
+points by a rule** while keeping the shape recognizable.
+
+The three rigid-or-similar moves:
+
+- **Translation** — slide every point the same distance in the same direction. Shape, size, and
+  orientation all stay the same; only position changes. The "how far and which way" is captured by a
+  pair of numbers $[\,t_x, t_y\,]$ — a **vector**.
+- **Rotation** — turn every point by an angle $\theta$ about a fixed center. Distances from the center
+  are preserved, so the shape is congruent to the original, just spun.
+- **Scaling** — multiply every coordinate by a factor $k$. This is the **similarity** move from earlier:
+  same shape, new size.
+
+Translations and rotations keep a shape **congruent**; scaling makes it **similar**. Notice how every
+idea in this track is converging.
+
+## Play with it
+
+Slide the translation, rotation, and scale sliders and watch the faint original become the solid copy.
+The **green arrow** is the translation vector $[\,t_x, t_y\,]$ — keep your eye on it.
+
+<ShapeTransformLab client:visible />
+
+<Callout type="tip">
+Set rotation and scale aside and move only <strong>translate x</strong> and <strong>translate y</strong>.
+The whole shape slides by exactly the green arrow. That arrow — a length and a direction stored as two
+numbers — <em>is</em> a vector. You've been doing vector addition to every corner at once.
+</Callout>
+
+## The formal definition
+
+Write a point as $(x, y)$. The three transformations act like this:
+
+**Translation** by vector $\mathbf{t} = [\,t_x, t_y\,]$ — add it to every point:
+
+$$
+(x, y) \;\mapsto\; (x + t_x,\; y + t_y).
+$$
+
+**Scaling** by factor $k$ about the origin — multiply every coordinate:
+
+$$
+(x, y) \;\mapsto\; (k\,x,\; k\,y).
+$$
+
+**Rotation** by angle $\theta$ about the origin:
+
+$$
+\begin{aligned}
+x' &= x\cos\theta - y\sin\theta, \\
+y' &= x\sin\theta + y\cos\theta.
+\end{aligned}
+$$
+
+<Callout type="why">
+Look closely at translation: $(x,y) \mapsto (x + t_x, y + t_y)$ is **vector addition**, and scaling is
+**scalar multiplication** — the two operations that *define* a vector space. Rotation, written compactly,
+becomes a **matrix** multiplying a vector. In other words, the entire next track — vectors, then
+matrices, then linear transformations — is this lesson, formalized. Transformations are where geometry
+hands the baton to linear algebra.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Computer animation" icon="🎞️">
+A 3D character is a mesh of thousands of points. To make it walk, the animator applies a translation
+vector each frame and rotations at every joint. The figure never gets re-drawn — only transformed,
+which is why animation is really just vector arithmetic at scale.
+</ExampleCard>
+
+<ExampleCard domain="Architecture & CAD" icon="🏢">
+A drafter designs one window, then <em>translates</em> copies across a facade and <em>rotates</em> the
+whole floor plan to study the building from new angles. Each "copy and place" is a transformation acting
+on the same base coordinates.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🤖">
+A robot arm reaches a target by chaining rotations at its joints and translations along its links.
+Computing where the gripper ends up is a sequence of transformations — the literal math that guides the
+hand to the object.
+</ExampleCard>
+
+<ExampleCard domain="Art & perspective" icon="🖼️">
+A digital artist drags, spins, and resizes a layer with on-screen handles. Each handle move is a
+translation, rotation, or scaling applied to the layer's pixels — the same three operations, wrapped in
+a friendly interface.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You translate the point (2, 5) by the vector [3, −1]. Where does it land?',
+      options: ['(5, 4)', '(6, −5)', '(−1, 6)', '(5, 6)'],
+      answer: 0,
+      explain: 'Add the vector component-wise: (2 + 3, 5 + (−1)) = (5, 4).',
+    },
+    {
+      q: 'Which transformation changes a shape’s SIZE but keeps it similar?',
+      options: ['Translation', 'Rotation', 'Scaling', 'Reflection'],
+      answer: 2,
+      explain: 'Scaling multiplies every coordinate by k, producing a similar shape of a different size.',
+    },
+    {
+      q: 'A translation of a shape is fully described by…',
+      options: ['an angle', 'a single number', 'a vector (how far, which way)', 'a scale factor'],
+      answer: 2,
+      explain: 'A translation needs both a distance and a direction — exactly what a vector [tx, ty] encodes.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>transformation</strong> moves every point of a shape by a rule.',
+    '<strong>Translation</strong> slides by a vector [tx, ty]; <strong>rotation</strong> turns by an angle; <strong>scaling</strong> resizes by a factor k.',
+    'Translations and rotations keep a shape <strong>congruent</strong>; scaling makes it <strong>similar</strong>.',
+    'Translation is <strong>vector addition</strong> and scaling is <strong>scalar multiplication</strong> — the defining operations of a vector space.',
+    'Written compactly, rotation is a <strong>matrix times a vector</strong> — geometry handing off directly to linear algebra.',
+  ]}
+/>
+
+You've reached the end of geometry — and the start of something bigger. Next up: **vectors**, the
+arrows-and-lists that turn every idea in this track into the language of machine learning.

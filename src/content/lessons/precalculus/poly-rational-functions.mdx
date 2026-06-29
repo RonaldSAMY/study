@@ -1,0 +1,209 @@
+---
+title: Polynomial & Rational Functions
+track: precalculus
+summary: Behavior, asymptotes and end behavior.
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - precalculus/transformations-composition
+leadsTo:
+  - precalculus/exp-log-depth
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import RootBuilderPlot from '../../../components/demos/RootBuilderPlot.tsx';
+
+## The hook: designing a roller coaster from its low points
+
+Imagine you are sketching a roller-coaster track. You don't start by writing a formula — you start by
+deciding **where the track touches the ground**: here, here, and here. Those touch points are the
+**roots** of a polynomial, and once you know them, the whole swooping shape between them is locked in.
+Flip a single sign and the ride that climbed to the sky now plunges off the page. Polynomials let you
+*build a curve from the places it crosses zero*, and **rational functions** — one polynomial divided by
+another — add invisible walls the curve can never cross. Together they describe how drugs clear your
+blood, how filters shape sound, and how an average cost settles as a factory scales up.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **polynomial** is fixed by its **roots** (where it hits zero) plus a leading term that decides how its
+arms fly off; a **rational function** is one polynomial over another, gaining **asymptotes** — lines the
+curve approaches but never touches.
+</Callout>
+
+## Intuition: from one bump to a whole landscape
+
+You already met the parabola $y = x^2$ and learned to **factor** quadratics like
+$x^2 - x - 6 = (x-3)(x+2)$ to read off where they cross the axis. A polynomial is just that idea, **scaled
+up**: instead of two roots you might have three or four, and the factored form
+$(x-r_1)(x-r_2)(x-r_3)$ tells you *every* place the curve crosses zero at a glance.
+
+You also met **transformations** — shifting, stretching, and reflecting a graph. The leading coefficient
+$a$ does exactly that here: it stretches the curve and, if negative, **reflects** it top-to-bottom,
+flipping which way the arms point. So a polynomial's shape is two questions: *where are the roots?* and
+*which way do the ends go?*
+
+A **rational function** then asks a brand-new question that polynomials never could: *what if the
+denominator hits zero?* Dividing by something that shrinks toward zero sends the output racing toward
+infinity — and that creates a **vertical asymptote**, an invisible wall in the graph.
+
+## Play with it
+
+Drag the indigo dots along the x-axis to place the **roots**, slide the leading coefficient $a$, and hit
+**reflect** to flip the curve. Watch the factored formula and the **end-behavior** note rewrite
+themselves as you build the shape — exactly like sketching that coaster from its ground contacts.
+
+<RootBuilderPlot client:visible />
+
+<Callout type="tip">
+Add a 4th root and the degree becomes even — now <strong>both</strong> arms point the same way. Knock it
+back to 3 (odd) and the arms split: one up, one down. Degree controls the ends; the sign of <strong>a</strong>
+decides up-or-down.
+</Callout>
+
+## The formal definition
+
+A **polynomial** of degree $n$ is a sum of power terms with constant coefficients:
+
+$$
+p(x) = a_n x^n + a_{n-1} x^{n-1} + \cdots + a_1 x + a_0, \qquad a_n \neq 0.
+$$
+
+When it factors completely, we can write it in **factored form**, which exposes the roots
+$r_1, r_2, \dots$ directly:
+
+$$
+f(x) = a\,(x - r_1)(x - r_2)(x - r_3).
+$$
+
+Each $r_i$ is a **root** (or *zero*): $f(r_i) = 0$, so the graph touches the x-axis there. A repeated
+factor $(x - r)^m$ has **multiplicity** $m$: if $m$ is odd the curve **crosses** the axis, if $m$ is even
+it just **touches and bounces** off. A degree-$n$ polynomial has at most $n$ roots and at most $n-1$
+**turning points** (the hills and valleys between them).
+
+**End behavior** is decided entirely by the leading term $a_n x^n$ — every other term becomes
+negligible as $|x|$ grows:
+
+$$
+\text{as } x \to \pm\infty, \quad p(x) \;\text{behaves like}\; a_n x^n .
+$$
+
+If $n$ is **even**, both arms go the same direction (up if $a_n > 0$, down if $a_n < 0$). If $n$ is
+**odd**, the arms go opposite ways.
+
+A **rational function** is one polynomial divided by another:
+
+$$
+R(x) = \frac{p(x)}{q(x)}, \qquad q(x) \neq 0.
+$$
+
+Two new features appear:
+
+- **Vertical asymptotes** occur where $q(x) = 0$ but $p(x) \neq 0$. Near such an $x$, the output blows up
+  toward $\pm\infty$ — informally, $R(x) \to \pm\infty$. (If $p$ and $q$ share that factor, you instead
+  get a **hole**, a single missing point.)
+- **Horizontal asymptotes** describe the far-away behavior, found by comparing degrees of $p$ and $q$.
+  Writing $\deg$ for degree:
+
+$$
+\lim_{x \to \pm\infty} R(x) =
+\begin{cases}
+0 & \deg p < \deg q,\\[4pt]
+\dfrac{\text{leading coeff of } p}{\text{leading coeff of } q} & \deg p = \deg q,\\[4pt]
+\text{no horizontal asymptote} & \deg p > \deg q.
+\end{cases}
+$$
+
+(Keep the $\lim$ informal here — it just means "the value the curve settles toward as you go far left or
+far right.")
+
+<Callout type="why">
+Machine-learning models are often **rational** in disguise. The <strong>softmax</strong> and
+<strong>sigmoid</strong> outputs are ratios that saturate toward horizontal asymptotes (0 and 1), which
+is why a confident network's probabilities flatten out instead of exploding. And <strong>polynomial
+features</strong> — adding $x^2, x^3, \dots$ to a model — let a simple linear learner bend into curves;
+their roots and end behavior are precisely what control overfitting at the edges of your data.
+</Callout>
+
+## The same idea, four different worlds
+
+The roots-and-asymptotes picture shows up far from graph paper.
+
+<ExampleCard domain="Medicine" icon="💊">
+After one dose, the **drug concentration** in your blood often follows a rational shape like
+$C(t) = \dfrac{20\,t}{t^2 + 4}$. It rises, peaks, then decays — and because the denominator grows faster
+than the numerator, $C(t) \to 0$ as $t \to \infty$: a **horizontal asymptote at zero**. That asymptote is
+why the drug eventually clears and why doctors schedule the next dose before it gets there.
+</ExampleCard>
+
+<ExampleCard domain="Theme-park engineering" icon="🎢">
+A **roller-coaster track** profile can be designed straight from its **roots**: pick where the track
+should pass through "ground level," say $h(x) = a(x+3)(x-1)(x-4)$, and the polynomial fills in the hills
+and dips between them. Because the degree is odd, one end soars and the other dives — exactly the dramatic
+entrance-and-exit engineers want.
+</ExampleCard>
+
+<ExampleCard domain="Audio engineering" icon="🎚️">
+A **filter's gain** versus frequency is a rational function. Near a **resonant frequency** the
+denominator dips toward zero, creating a tall **vertical-asymptote-like spike** (the resonance), while far
+above and below it the gain levels off toward a **horizontal asymptote**. That is how a graphic equalizer
+boosts the bass and tames the treble.
+</ExampleCard>
+
+<ExampleCard domain="Economics" icon="🏭">
+The **average cost** of making $x$ units is $A(x) = \dfrac{C(x)}{x}$, where $C(x) = F + cx$ folds a fixed
+cost $F$ into a per-unit cost $c$. So $A(x) = \dfrac{F}{x} + c$, which falls steeply at first and then
+flattens toward the **horizontal asymptote $A = c$**. That asymptote is the famous "economies of scale":
+spread the fixed cost over enough units and average cost approaches the marginal cost.
+</ExampleCard>
+
+<Callout type="note">
+Same two ingredients every time: <strong>roots</strong> (where a polynomial vanishes) and
+<strong>asymptotes</strong> (walls and floors a rational function approaches). Spot them and you can
+sketch the behavior before computing a single extra value.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A polynomial is written in factored form as f(x) = 2(x − 1)(x + 3)(x − 4). What are its roots (x-intercepts)?',
+      options: ['1, 3, 4', '1, −3, 4', '−1, 3, −4', '2, 1, 3'],
+      answer: 1,
+      explain: 'Each factor (x − r) is zero at x = r. (x − 1) → 1, (x + 3) → −3, (x − 4) → 4. So the roots are 1, −3, and 4.',
+    },
+    {
+      q: 'For the rational function R(x) = (3x² + 1) / (x² − 5), what is the horizontal asymptote as x → ±∞?',
+      options: ['y = 0', 'y = 3', 'y = 1/5', 'There is none'],
+      answer: 1,
+      explain: 'Top and bottom have equal degree (2), so the horizontal asymptote is the ratio of leading coefficients: 3/1 = 3.',
+    },
+    {
+      q: 'A polynomial has even degree and a negative leading coefficient. What is its end behavior?',
+      options: [
+        'Both arms point up',
+        'Both arms point down',
+        'Left arm up, right arm down',
+        'Left arm down, right arm up',
+      ],
+      answer: 1,
+      explain: 'Even degree means both ends go the same way; a negative leading coefficient flips them downward — so both arms point down.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>polynomial</strong> in factored form a(x − r₁)(x − r₂)… reveals its <strong>roots</strong> (x-intercepts) at a glance.',
+    '<strong>Multiplicity</strong> decides behavior at a root: odd → the curve crosses, even → it touches and bounces.',
+    '<strong>End behavior</strong> comes only from the leading term: even degree sends both arms the same way, odd degree splits them; the sign of <strong>a</strong> flips up/down.',
+    'A <strong>rational function</strong> p(x)/q(x) gains <strong>vertical asymptotes</strong> where q = 0 (and a <strong>hole</strong> if a factor cancels).',
+    'Its <strong>horizontal asymptote</strong> follows the degree comparison: lower top → y = 0, equal degrees → ratio of leading coefficients, higher top → none.',
+  ]}
+/>
+
+Next up: **Exponentials & Logs in Depth** — functions whose growth eventually outruns *every* polynomial,
+and the asymptotes that tame them.

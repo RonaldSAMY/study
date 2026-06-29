@@ -1,0 +1,189 @@
+---
+title: Vector Spaces, Basis & Rank
+track: linear-algebra
+summary: The hidden structure beneath every list of vectors — what you can build, with how few pieces.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - linear-algebra/inverse-determinant
+leadsTo:
+  - linear-algebra/linear-transformations
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BasisSpanTiler from '../../../components/demos/BasisSpanTiler.tsx';
+
+## The hook: how many LEGO bricks do you actually need?
+
+Imagine a giant tub of LEGO. To rebuild *any* model in the set, you don't need every brick — you
+need a small, well-chosen **kit** of brick types. From that kit you can combine and stack to reach
+every shape the set allows. Pick a kit that's too small and some models are impossible; throw in a
+brick that's just two smaller bricks glued together and you've wasted a slot — it adds nothing new.
+
+Linear algebra has exactly this idea. A handful of vectors that can build *everything* in a space,
+with **no redundancy**, is called a **basis**. The size of that kit is the **dimension**, and the
+number of genuinely independent directions a set of vectors gives you is its **rank**. These three
+words describe the skeleton of every dataset, image, and model you will ever touch.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **basis** is a minimal set of building-block vectors whose combinations reach every point in a
+space; the **rank** counts how many truly independent directions you actually have.
+</Callout>
+
+## Intuition: building blocks, span, and waste
+
+You already know two moves from earlier lessons: **adding** vectors and **scaling** them. Chaining
+those moves together — $c_1\mathbf{v}_1 + c_2\mathbf{v}_2 + \cdots$ — is a **linear combination**, and
+the set of *all* points you can reach this way is the **span** (the idea behind the earlier span
+lesson).
+
+Now ask two sharper questions about a collection of vectors:
+
+1. **Do they reach everything?** If every point in the plane is some combination of them, they
+   **span** the space.
+2. **Is any one of them wasted?** If one vector is already a combination of the others, it adds no new
+   direction — the set is **linearly dependent**. If none is redundant, the set is **independent**.
+
+A set that is *both* spanning *and* independent is a **basis** — just enough, with nothing wasted. In
+2D you need exactly two independent vectors. The moment your two vectors line up (become parallel),
+you lose a direction: the **rank** drops from 2 to 1, and the span collapses from the whole plane down
+to a single line. That collapse is the same event you met as a **zero determinant** in the previous
+lesson.
+
+## Play with it
+
+Drag the two basis vectors below. Each green dot is an integer combination $m\,\mathbf{e}_1 +
+n\,\mathbf{e}_2$, so you can literally see the kit *tiling* the plane. Now drag one vector until it
+lines up with the other and watch the tiling flatten onto a line.
+
+<BasisSpanTiler client:visible />
+
+<Callout type="tip">
+Watch the <strong>tile area</strong> readout — it equals $|\det|$. When the vectors are independent the
+tile has real area and the dots fill the plane. When they're parallel the area hits 0, the rank drops
+to 1, and the dots all fall on one line. <em>No area = no second direction.</em>
+</Callout>
+
+## The formal definition
+
+A **vector space** $V$ is a set you can add and scale within, where the results stay inside and obey
+the familiar rules (associativity, a zero vector, distributivity, and so on). A **linear combination**
+of vectors $\mathbf{v}_1, \dots, \mathbf{v}_k$ is
+
+$$
+c_1\mathbf{v}_1 + c_2\mathbf{v}_2 + \cdots + c_k\mathbf{v}_k, \qquad c_i \in \mathbb{R},
+$$
+
+and their **span** is the set of *all* such combinations. The vectors are **linearly independent** if
+the only way to get the zero vector is the trivial one:
+
+$$
+c_1\mathbf{v}_1 + \cdots + c_k\mathbf{v}_k = \mathbf{0}
+\quad\Longrightarrow\quad c_1 = \cdots = c_k = 0.
+$$
+
+A **basis** of $V$ is a set that is both linearly independent and spans $V$. Every basis of a given
+space has the same number of vectors — that number is the **dimension**, $\dim V$. For a matrix, the
+**rank** is the dimension of the span of its columns:
+
+$$
+\operatorname{rank}(A) = \dim\big(\operatorname{span}\{\text{columns of } A\}\big).
+$$
+
+<Callout type="why">
+Rank is the number of *independent* features your data really carries. If a 100-column dataset has
+rank 7, then 93 columns are combinations of the other 7 — the data secretly lives in a 7-dimensional
+space. Spotting that is the first step toward compression, denoising, and PCA later in this track.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Genetics" icon="🧬">
+Human genomes have hundreds of thousands of markers, yet when researchers look for **independent
+directions** of variation, only a handful matter — and astonishingly, the top two often reconstruct a
+map of geographic ancestry. The genome's effective **rank** is tiny compared to its raw size; a small
+**basis** of variation patterns explains most of the differences between people.
+</ExampleCard>
+
+<ExampleCard domain="Music production" icon="🎚️">
+A mixing board has many faders, but a finished track is a **linear combination** of a few stems —
+drums, bass, vocals, synth. Those stems form a **basis** for the song: blend them with different gains
+and you span every mix. If two stems are identical, one fader is redundant — dependent — and your
+effective control **rank** drops.
+</ExampleCard>
+
+<ExampleCard domain="Cooking" icon="🧂">
+A pantry of five base sauces (a *mother-sauce* kit) lets a chef build dozens of dishes by combining
+and scaling them. That kit **spans** the menu. Add a sixth sauce that's just two others mixed together
+and it's **dependent** — it expands nothing. The smallest kit that still covers the menu is the
+**basis**.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🤖">
+A robot arm's reachable poses are spanned by its independent **joints**. Each joint that moves the
+hand in a genuinely new direction adds to the arm's **rank** (its degrees of freedom). If two joints
+happen to produce the same motion, the arm loses a degree of freedom — a *singular configuration*,
+exactly a rank collapse.
+</ExampleCard>
+
+<Callout type="note">
+"Dimension," "rank," and "degrees of freedom" are the same idea wearing three coats: how many
+independent knobs you can turn. The rest of the track is about finding the *best* knobs to turn.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What makes a set of vectors a basis for a space?',
+      options: [
+        'It contains as many vectors as possible',
+        'It is linearly independent and spans the space',
+        'All its vectors are perpendicular',
+        'All its vectors have length 1',
+      ],
+      answer: 1,
+      explain: 'A basis is the "just enough" kit: independent (no waste) and spanning (reaches everything). Perpendicular or unit-length are nice-to-haves, not requirements.',
+    },
+    {
+      q: 'The vectors [2, 1] and [4, 2] are given. What is the rank of the set, and what do they span?',
+      options: [
+        'Rank 2; they span the whole plane',
+        'Rank 1; they span a single line',
+        'Rank 0; they span only the origin',
+        'Rank 2; they span a line',
+      ],
+      answer: 1,
+      explain: '[4,2] = 2·[2,1], so the second vector is redundant. Only one independent direction remains: rank 1, spanning the line through [2,1].',
+    },
+    {
+      q: 'A dataset has 50 columns but rank 6. What does that tell you?',
+      options: [
+        'The data is corrupted',
+        'Every column is independent',
+        'The data really lives in a 6-dimensional space; 44 columns are combinations of 6',
+        'You need at least 50 basis vectors',
+      ],
+      answer: 2,
+      explain: 'Rank 6 means only 6 independent directions exist; the other columns are linear combinations of those, so a 6-vector basis describes the data.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>linear combination</strong> adds and scales vectors; the set of all of them is the <strong>span</strong>.',
+    'Vectors are <strong>independent</strong> when none is a combination of the others — no wasted directions.',
+    'A <strong>basis</strong> is independent <em>and</em> spanning: the minimal kit that builds the whole space.',
+    'The <strong>dimension</strong> is the basis size; the <strong>rank</strong> of a matrix is the number of independent columns.',
+    'A <strong>rank collapse</strong> (parallel vectors, zero determinant) flattens the span onto a smaller space.',
+  ]}
+/>
+
+Next up: **linear transformations** — what happens to that whole tiled grid when a matrix reshapes it,
+and why straight, evenly-spaced lines are the signature of linearity.

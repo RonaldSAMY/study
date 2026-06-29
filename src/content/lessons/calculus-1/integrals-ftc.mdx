@@ -1,0 +1,180 @@
+---
+title: Integrals & the Fundamental Theorem
+track: calculus-1
+summary: Adding up infinitely many tiny slices to recover totals — and the deep link between area and slope.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - calculus-1/applications-derivatives
+leadsTo:
+  - calculus-2/integration-techniques
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import RiemannSumExplorer from '../../../components/demos/RiemannSumExplorer.tsx';
+
+## The hook: how much water is in the tank?
+
+A pipe pours water into a tank, but the flow keeps changing — a surge here, a trickle there. You don't
+have a meter on the tank itself, only a gauge on the *rate* of inflow, litres per minute, wobbling
+moment to moment. How many litres ended up inside? If the rate were constant you'd just multiply rate by
+time. It isn't, so you chop the time into thin slices, treat the rate as roughly constant across each
+sliver, multiply, and add up all the pieces. Slice finer and finer and that running total sharpens into
+the exact volume. That summing-of-slices is the **integral** — and it turns out to be the derivative run
+in reverse.
+
+<Callout type="intuition" title="The one-sentence idea">
+An **integral** adds up infinitely many infinitely thin slices to give a total — the **area under a
+curve** — and the Fundamental Theorem says integrating is the *inverse* of differentiating.
+</Callout>
+
+## Intuition: from a staircase to the smooth truth
+
+To find the area under a rate curve, approximate it with **rectangles**. Each rectangle's height is the
+rate at some sample point and its width is a small slice of time, so its area (height × width) is the
+amount delivered during that slice. Add the rectangles and you get a **Riemann sum** — a staircase
+estimate of the total.
+
+Here's the magic: with just a few fat rectangles the staircase is crude, overshooting on the way up and
+undershooting on the way down. But pack in more, thinner rectangles and the staircase hugs the curve ever
+more tightly. In the limit of infinitely many infinitely thin rectangles, the error vanishes and the sum
+becomes the *exact* area. That limit is the **definite integral**.
+
+And now the punchline that ties this whole track together. The **Fundamental Theorem of Calculus** says
+the two great operations — slicing-and-summing (integration) and finding-the-slope (differentiation) — are
+inverses. Accumulating a rate gives back the original total, because the rate *was* the derivative of the
+total all along. Derivatives take totals apart; integrals put them back together.
+
+## Play with it
+
+Drag the **rectangles** slider from a handful up to dozens and watch the blue staircase melt into the
+indigo curve. The estimate closes in on the true area — the total litres delivered. Switch between
+**left**, **midpoint**, and **right** sampling: notice midpoint is uncannily accurate even with few
+rectangles, while left and right lean low or high until $n$ grows large.
+
+<RiemannSumExplorer client:visible />
+
+<Callout type="tip">
+The "true area" never changes — only your *estimate* of it improves as $n$ climbs. That fixed number the
+staircase is chasing is the definite integral. Convergence is the entire idea: more slices, less error.
+</Callout>
+
+## The formal definition
+
+Split the interval $[a, b]$ into $n$ slices of width $\Delta x = \frac{b - a}{n}$, sample the function at a
+point $x_i^{*}$ in each, and sum the rectangle areas. The **definite integral** is the limit of that
+Riemann sum:
+
+$$
+\int_a^b f(x)\,dx = \lim_{n \to \infty} \sum_{i=1}^{n} f(x_i^{*})\,\Delta x.
+$$
+
+It is the signed area between the curve and the axis from $a$ to $b$. Computing it from the limit every
+time would be brutal — so the **Fundamental Theorem of Calculus** hands us a shortcut. If $F$ is an
+**antiderivative** of $f$ (meaning $F'(x) = f(x)$), then
+
+$$
+\int_a^b f(x)\,dx = F(b) - F(a).
+$$
+
+To integrate, just *undo* a derivative and subtract the endpoints. For the demo, the inflow rate is
+$r(t) = 2 + \sin t$. An antiderivative is $R(t) = 2t - \cos t$, so the total over $[0, 8]$ is
+
+$$
+\int_0^8 (2 + \sin t)\,dt = R(8) - R(0) = (16 - \cos 8) - (0 - 1) \approx 17.15 \text{ litres},
+$$
+
+exactly the green "true area" the staircase converges to.
+
+<Callout type="why">
+Probability lives on integrals. The area under a probability density curve **is** the probability, and it
+must total $1$ across all outcomes. Expected values, the normalizing constant of a distribution, the area
+under an ROC curve grading a classifier — each is an integral. Accumulating a rate into a total is one of
+the most reused moves in all of machine learning.
+</Callout>
+
+## The same idea, four different worlds
+
+Integration is "add up a rate over an interval to get the total." Watch it gather quantities everywhere.
+
+<ExampleCard domain="Water systems" icon="🚰">
+A pump's inflow rate $r(t)$ litres/min wobbles over time. The water collected is
+$\int_0^T r(t)\,dt$ — the area under the rate curve. No tank meter needed: integrate the flow gauge and you
+recover the exact volume, the same accumulation the demo animates.
+</ExampleCard>
+
+<ExampleCard domain="Energy billing" icon="🔌">
+Your home draws power $P(t)$ in kilowatts, swinging as appliances switch on and off. The **energy** the
+meter bills you for is $\int P(t)\,dt$ in kilowatt-hours — the area under the power curve. Your electric
+bill is literally a definite integral.
+</ExampleCard>
+
+<ExampleCard domain="Travel" icon="🚙">
+On a road trip your speed $v(t)$ rises and falls. The **distance covered** is $\int_a^b v(t)\,dt$, the area
+under the speed graph. Since position is the antiderivative of speed, the Fundamental Theorem says total
+distance is just the change in odometer reading — end minus start.
+</ExampleCard>
+
+<ExampleCard domain="Hydrology" icon="🌧️">
+A storm dumps rain at a varying intensity $i(t)$ mm/hour. Total rainfall is $\int i(t)\,dt$ — accumulate
+the intensity over the storm's hours. Flood models integrate these rates across whole catchments to predict
+how high the river will crest.
+</ExampleCard>
+
+<Callout type="note">
+Every example is "rate × time, summed up." Whatever you have the *rate* of — water, energy, distance,
+rainfall — integrating recovers the *total*. And by the Fundamental Theorem, that total is just an
+antiderivative evaluated end minus start.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a definite integral ∫ₐᵇ f(x) dx represent geometrically?',
+      options: [
+        'The slope of f at the point b',
+        'The signed area between the curve and the x-axis from a to b',
+        'The maximum value of f on [a, b]',
+        'The length of the curve from a to b',
+      ],
+      answer: 1,
+      explain: 'The definite integral is the limit of Riemann sums — the signed area between the curve and the axis over [a, b].',
+    },
+    {
+      q: 'In the Riemann-sum demo, what happens to the estimate as the number of rectangles n increases?',
+      options: [
+        'It drifts further from the true area',
+        'It converges toward the exact area under the curve',
+        'It stays exactly the same',
+        'It oscillates forever without settling',
+      ],
+      answer: 1,
+      explain: 'More, thinner rectangles hug the curve better, so the staircase estimate converges to the true definite integral.',
+    },
+    {
+      q: 'The Fundamental Theorem says ∫ₐᵇ f(x) dx = F(b) − F(a), where F is an antiderivative of f. If f(x) = 2x, what is ∫₀³ 2x dx?',
+      options: ['3', '6', '9', '12'],
+      answer: 2,
+      explain: 'An antiderivative of 2x is F(x) = x². So F(3) − F(0) = 9 − 0 = 9.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>integral</strong> sums infinitely many infinitely thin slices — the area under a curve, the total of an accumulating rate.',
+    'A <strong>Riemann sum</strong> approximates that area with rectangles; as n → ∞ the estimate converges to the exact integral.',
+    'The <strong>definite integral</strong> ∫ₐᵇ f(x) dx is the limit of those sums.',
+    'The <strong>Fundamental Theorem of Calculus</strong> makes integration the inverse of differentiation: ∫ₐᵇ f = F(b) − F(a) for an antiderivative F.',
+    'Integrals power probability and ML — the area under a density is a <strong>probability</strong>, and expected values are integrals.',
+  ]}
+/>
+
+Next up: **Integration Techniques** — substitution, integration by parts, and partial fractions: the
+toolkit for finding antiderivatives when the answer isn't obvious.

@@ -1,0 +1,153 @@
+---
+title: Angles & Radians
+track: trigonometry
+summary: Two ways to measure rotation — degrees and radians — and why arc length makes radians the natural choice.
+difficulty: beginner
+estMinutes: 12
+prereqs:
+  - geometry/circles
+leadsTo:
+  - trigonometry/right-triangle-ratios
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import AngleRadianDial from '../../../components/demos/AngleRadianDial.tsx';
+
+## The hook: how far does a robot's wrist travel?
+
+A robotics engineer tells a motor to rotate the arm "0.8". Not 0.8 degrees — just **0.8**. A moment later
+the gripper at the end of a half-metre arm has swept a precise distance through the air, and the controller
+knew that distance instantly. How? Because the angle was given in **radians**, the unit where *rotation*
+and *distance travelled* are the same kind of number. Degrees are the unit we grew up with; radians are the
+unit the math (and the robot) actually prefers.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **radian** measures an angle by the **arc length** it cuts on a circle of radius 1 — so a full turn is
+$2\pi$ radians, and the arc on a circle of radius $r$ is simply $s = r\theta$.
+</Callout>
+
+## Intuition: roll the circle out flat
+
+You already know a circle of radius $r$ has circumference $2\pi r$ — that $2\pi$ is the star of this lesson.
+A **degree** chops a full turn into 360 equal slices, a choice the Babylonians made for calendar reasons,
+not mathematical ones. A **radian** instead asks a more honest question: *how far did I actually walk along
+the circle?*
+
+Walk all the way around a unit circle (radius 1) and you cover a distance of $2\pi \approx 6.283$. So one
+full turn is $2\pi$ radians. Half a turn is $\pi$; a quarter turn (a right angle) is $\pi/2$. The beauty is
+that the **angle and the arc length become the same number** on the unit circle. Scale the circle up to
+radius $r$ and the arc just scales with it: $s = r\theta$. No mysterious conversion factor, no $\frac{\pi}{180}$
+sprinkled everywhere — that simplicity is exactly why every formula in calculus and physics uses radians.
+
+## Play with it
+
+Drag the dot around the circle (or use the slider) to sweep an angle. Watch the **degrees** and **radians**
+readouts move together, and see the emerald **arc** grow. Change the circle's radius and notice the arc
+length follow the rule $s = r\theta$.
+
+<AngleRadianDial client:visible />
+
+<Callout type="tip">
+Find the angle where radians reads about <strong>3.14</strong> — that is exactly half a turn, which is also
+<strong>180°</strong>. The two columns are the same rotation written in two languages.
+</Callout>
+
+## The formal definition
+
+For an arc of length $s$ on a circle of radius $r$, the angle it subtends **in radians** is
+
+$$
+\theta = \frac{s}{r}, \qquad\text{equivalently}\qquad s = r\,\theta.
+$$
+
+Because a full circle has arc length $s = 2\pi r$, a full turn is $\theta = \frac{2\pi r}{r} = 2\pi$ radians.
+That gives the master conversion between the two units:
+
+$$
+360° = 2\pi \text{ rad} \quad\Longrightarrow\quad
+1° = \frac{\pi}{180}\,\text{rad}, \qquad 1\,\text{rad} = \frac{180}{\pi}° \approx 57.3°.
+$$
+
+So to convert, multiply by $\dfrac{\pi}{180}$ (degrees → radians) or by $\dfrac{180}{\pi}$ (radians → degrees).
+
+<Callout type="why">
+Radians make calculus clean: the derivative of $\sin\theta$ is $\cos\theta$ **only** when $\theta$ is in
+radians (in degrees an ugly factor of $\frac{\pi}{180}$ appears). Every gradient that flows through a sine
+or cosine inside a model — Fourier features, rotary positional embeddings, signal layers — silently relies
+on angles being radians. Learn to think in $\pi$ now and the later math stays tidy.
+</Callout>
+
+## The same idea, four different worlds
+
+Anywhere something turns or curves, radians turn the rotation directly into a distance.
+
+<ExampleCard domain="Robotics" icon="🤖">
+A robot arm of length $r = 0.5$ m commanded to rotate $\theta = 0.8$ rad sweeps its gripper through an arc
+of $s = r\theta = 0.5 \times 0.8 = 0.4$ m. Motion planners store joint angles in radians precisely so that
+"how far did the tool move" is a one-step multiplication, not a unit-conversion headache.
+</ExampleCard>
+
+<ExampleCard domain="Cycling" icon="🚲">
+A bike wheel of radius $0.35$ m that turns through $\theta = 10$ rad rolls forward $s = r\theta = 3.5$ m
+along the road. A cycle-computer counts wheel rotations and multiplies by $2\pi r$ — arc length per turn — to
+report your distance. The wheel is literally unrolling radians onto the pavement.
+</ExampleCard>
+
+<ExampleCard domain="Athletics" icon="🏟️">
+On a curved running track, the outer lanes are longer because $s = r\theta$: same sweep angle $\theta$ around
+the bend, but a larger radius $r$. That is why staggered start lines exist — they hand back the extra arc
+length the outer runners would otherwise have to cover.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="🔭">
+The Moon spans only about $0.009$ rad of sky (half a degree). Astronomers love radians here because the
+**small-angle rule** says the Moon's true diameter $\approx r\theta$, where $r$ is its distance. One
+multiplication turns an angle you can measure into a size you cannot reach.
+</ExampleCard>
+
+<Callout type="note">
+The thread tying these together: a turn of $\theta$ radians on a radius-$r$ circle always produces an arc of
+exactly $r\theta$. Robot grippers, bike wheels, track lanes and moonlight all obey the same single rule.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How many radians are in a full turn (360°)?',
+      options: ['π', '2π', '180', '360'],
+      answer: 1,
+      explain: 'Walking once around the unit circle covers an arc length of 2π, so a full turn is 2π radians ≈ 6.28.',
+    },
+    {
+      q: 'A wheel of radius 0.5 m turns through 4 radians. How far does it roll along the ground?',
+      options: ['0.125 m', '2 m', '8 m', '4 m'],
+      answer: 1,
+      explain: 'Arc length s = rθ = 0.5 × 4 = 2 metres. This formula only works when θ is in radians.',
+    },
+    {
+      q: 'Convert 90° to radians.',
+      options: ['π/4', 'π/2', 'π', '2π'],
+      answer: 1,
+      explain: 'Multiply by π/180: 90 × π/180 = π/2 radians — a quarter of a full turn.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>radian</strong> is the angle whose arc length equals the radius; one full turn is <strong>2π</strong> radians.',
+    'The arc-length rule <strong>s = rθ</strong> works only when θ is measured in radians — that is their superpower.',
+    'Convert with <strong>×π/180</strong> (degrees→radians) and <strong>×180/π</strong> (radians→degrees); 180° = π.',
+    'Radians make calculus clean: derivatives of sine and cosine are simple <em>only</em> in radians.',
+    'Robot arms, bike wheels, track lanes and telescopes all turn an angle into a distance with the same s = rθ.',
+  ]}
+/>
+
+Next up: **right-triangle ratios** — SOH-CAH-TOA — where these angles meet the sides of a triangle and give
+us sine, cosine and tangent.

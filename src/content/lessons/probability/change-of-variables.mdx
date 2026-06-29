@@ -1,0 +1,191 @@
+---
+title: Change of Variables
+track: probability
+summary: How a probability density transforms when you reshape the variable — and why the Jacobian must appear.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - probability/continuous-distributions
+  - calculus-1/differentiation-rules
+leadsTo: []
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DensityTransformViewer from '../../../components/demos/DensityTransformViewer.tsx';
+
+## The hook: from a flat random number to anything you want
+
+Every simulator, game, and Monte-Carlo engine starts with one humble tool: a generator that spits out a
+**uniform** random number between $0$ and $1$ — every value equally likely. Yet the world you want to
+model is rarely flat. Wait-times decay. Asset prices drift and skew. Noise is bell-shaped. So how do you
+turn that featureless uniform into a richly-shaped distribution?
+
+You push it through a **function**. Feed $x \sim \text{Uniform}(0,1)$ into $y = -\ln(1 - x)$ and out comes
+a perfectly **exponential** random variable. But here's the subtlety: when you bend the variable, the
+*probability density* does **not** just come along for the ride unchanged. Stretch one region and the
+density there must **thin out**; compress another and it must **pile up** — so that the total probability
+stays exactly $1$. The bookkeeping that enforces this is the **change-of-variables formula**, and its
+star is the **Jacobian**.
+
+<Callout type="intuition" title="The one-sentence idea">
+When you transform a random variable with $y = g(x)$, the density must be **rescaled by how much $g$
+stretches or squeezes space** — that local stretch factor is the Jacobian, and without it probability
+would leak away.
+</Callout>
+
+## Intuition: probability is conserved, density is not
+
+A density $f_X(x)$ is **probability per unit length** — area, not height, is what counts. The chance of
+landing in a tiny interval is $f_X(x)\,dx$. Now apply a smooth, one-to-one map $y = g(x)$. That same
+chunk of probability must survive the trip, just relabeled:
+
+$$
+f_Y(y)\,|dy| = f_X(x)\,|dx|.
+$$
+
+Probability in the little box on the $x$ side equals probability in its image on the $y$ side — outcomes
+were merely renamed, not created or destroyed. Rearranging gives the density on the new variable:
+
+$$
+f_Y(y) = f_X(x)\left|\frac{dx}{dy}\right| = \frac{f_X\big(g^{-1}(y)\big)}{\big|\,g'\big(g^{-1}(y)\big)\big|}.
+$$
+
+That fraction is the whole story. Where $g$ is **steep** ($|g'|$ large), it spreads a small $x$-interval
+across a wide $y$-range, so the density is **divided down** — it thins out. Where $g$ is **flat**, it
+crams a wide $x$-interval into a narrow $y$-range, so the density **spikes up**. The total area stays $1$
+because we paid the toll: dividing by the local stretch $|g'|$.
+
+A quick sanity check with squaring, $y = x^2$ on $x \sim \text{Uniform}(0,1)$: near $x = 0$ the function is
+nearly flat, so equal $x$-steps barely move $y$ — probability bunches up, and indeed
+$f_Y(y) = \tfrac{1}{2\sqrt{y}}$ blows up as $y \to 0$. Watch it happen in the demo.
+
+## Play with it
+
+The top panel shows a **source** density with a histogram of samples drawn from it. The bottom panel
+shows what those same samples become after the transform — and the smooth curve is the **exact**
+change-of-variables prediction. Switch scenarios and hit **Resample**: the histogram always lands on the
+curve, Jacobian and all.
+
+<DensityTransformViewer client:visible />
+
+<Callout type="tip">
+Try <strong>Uniform RNG → Exponential</strong>: a flat input becomes a decaying output — that's how your
+computer manufactures exponential wait-times from nothing but a uniform generator. Then try
+<strong>y = x²</strong> and watch the density pile up near zero exactly where the curve flattens.
+</Callout>
+
+## The formal definition
+
+Let $X$ have density $f_X$, and let $y = g(x)$ be **differentiable and strictly monotonic** (so its
+inverse $g^{-1}$ exists). The density of $Y = g(X)$ is
+
+$$
+f_Y(y) = f_X\big(g^{-1}(y)\big)\,\left|\frac{d}{dy}\,g^{-1}(y)\right|.
+$$
+
+The derivative factor — borrowed straight from the **chain rule** you met in differentiation — is the
+one-dimensional **Jacobian**. In higher dimensions, $\mathbf{x} \mapsto \mathbf{y}$, the single
+derivative becomes the absolute value of the determinant of the **Jacobian matrix** of partial
+derivatives:
+
+$$
+f_{\mathbf{Y}}(\mathbf{y}) = f_{\mathbf{X}}\big(g^{-1}(\mathbf{y})\big)\,
+\left|\det \mathbf{J}_{g^{-1}}(\mathbf{y})\right|,
+\qquad
+\big(\mathbf{J}\big)_{ij} = \frac{\partial x_i}{\partial y_j}.
+$$
+
+The determinant measures how the map scales **volume** locally — the exact multidimensional version of
+"how much does $g$ stretch space here?"
+
+<Callout type="why">
+This formula is the literal engine of <strong>normalizing flows</strong>, a class of deep generative
+models. They learn an invertible neural network $g$ that warps a simple Gaussian into the complicated
+distribution of real images or audio. Training maximizes the log-likelihood
+$\log f_X(g^{-1}(y)) + \log|\det \mathbf{J}|$ — so the log-Jacobian term is not a footnote, it's half the
+loss. The same factor appears in the reparameterization trick behind variational autoencoders.
+</Callout>
+
+## The same idea, four different worlds
+
+Reshape a variable, and its density reshapes with it — always paying the Jacobian toll.
+
+<ExampleCard domain="Finance" icon="📈">
+Daily <strong>log-returns</strong> $r$ are modeled as Gaussian (symmetric, can be negative). The price
+multiplier is $M = e^{r}$. Pushing the bell curve through the exponential gives the
+<strong>lognormal</strong> density $f_M(m) = f_r(\ln m)/m$ — that $1/m$ is the Jacobian, and it's why
+modeled prices are skewed and never go negative.
+</ExampleCard>
+
+<ExampleCard domain="Simulation" icon="🎲">
+<strong>Inverse-transform sampling</strong> turns a uniform $U$ into any distribution with CDF $F$ via
+$X = F^{-1}(U)$. The Jacobian of $F^{-1}$ is $1/f(x)$, which neatly cancels to reproduce exactly $f$.
+This is how libraries generate exponential, Cauchy, or custom random variables from a single uniform RNG.
+</ExampleCard>
+
+<ExampleCard domain="Audio engineering" icon="🔊">
+Loudness is measured in <strong>decibels</strong>, $L = 10\log_{10}(P/P_0)$ — a logarithmic squashing of
+sound power $P$. If power fluctuates with some density, the decibel reading's density is reshaped by the
+Jacobian of the log, $|dP/dL|$. The compression is why a whisper and a jet engine fit on the same tidy
+scale.
+</ExampleCard>
+
+<ExampleCard domain="Generative AI" icon="🧠">
+A <strong>normalizing flow</strong> samples $z$ from a plain Gaussian and applies a learned invertible
+map $x = g(z)$ to produce a realistic image. To score how likely a real image is, it runs $g^{-1}$ and
+adds the log-Jacobian term — the change-of-variables formula, evaluated millions of times per training
+run.
+</ExampleCard>
+
+<Callout type="note">
+Forward (build a sample) or backward (score a sample), every one of these relies on the same identity:
+density on the new variable equals density on the old, divided by the local stretch.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does a Jacobian factor appear when transforming a probability density?',
+      options: [
+        'To keep the density values below 1',
+        'To rescale for how much the transform stretches or compresses space, so total probability stays 1',
+        'Because densities must always be symmetric',
+        'It only appears for discrete variables',
+      ],
+      answer: 1,
+      explain: 'Probability (area), not density (height), is conserved. Dividing by the local stretch |g′| corrects the density so the total area remains 1.',
+    },
+    {
+      q: 'For a strictly monotonic y = g(x), the density of Y is f_Y(y) = f_X(g⁻¹(y)) · ___. What fills the blank?',
+      options: ['|g′(g⁻¹(y))|', '|d g⁻¹(y)/dy|', 'g(y)', '1'],
+      answer: 1,
+      explain: 'You multiply by the absolute derivative of the inverse, |d g⁻¹/dy| = 1/|g′(g⁻¹(y))| — the one-dimensional Jacobian.',
+    },
+    {
+      q: 'Pushing a symmetric Gaussian variable through y = eˣ gives which output distribution?',
+      options: ['Another Gaussian', 'A uniform distribution', 'A lognormal distribution', 'An exponential distribution'],
+      answer: 2,
+      explain: 'The exponential of a normal variable is lognormal — skewed and strictly positive, with density f(y) = f_X(ln y)/y.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Transforming a random variable conserves <strong>probability (area)</strong>, not density (height): f_Y(y)|dy| = f_X(x)|dx|.',
+    'For a monotonic y = g(x), <strong>f_Y(y) = f_X(g⁻¹(y)) / |g′(g⁻¹(y))|</strong> — divide by the local stretch, the Jacobian.',
+    'Steep regions of g <strong>thin</strong> the density; flat regions make it <strong>pile up</strong> — that\'s why y = x² spikes near 0.',
+    'In multiple dimensions the factor becomes the absolute <strong>determinant of the Jacobian matrix</strong>, measuring local volume change.',
+    'The formula powers <strong>inverse-transform sampling</strong>, lognormal price models, and the log-Jacobian loss of <strong>normalizing flows</strong>.',
+  ]}
+/>
+
+With change of variables, you can now build any distribution you like from a simple one — and score
+samples under invertible models. That closes the probability track's core toolkit; from here the ideas
+flow straight into modern generative modeling.

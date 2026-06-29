@@ -1,0 +1,188 @@
+---
+title: Mutual Information
+track: information-theory
+summary: How many bits knowing one variable reveals about another — the dependence measure that catches even nonlinear relationships.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - information-theory/cross-entropy-kl
+leadsTo:
+  - information-theory/info-theory-ml
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import MutualInfoGridDemo from '../../../components/demos/MutualInfoGridDemo.tsx';
+
+## The hook: how much does height tell you about shoe size?
+
+If I tell you a stranger is unusually tall, you'd confidently bet their shoes are large too — not
+because height *causes* a shoe size in any simple way, but because the two travel together. Knowing one
+**shrinks your uncertainty** about the other. Plain correlation captures part of this, but only the
+straight-line part. **Mutual information** captures *all* of it: every way two variables share fate,
+linear or curved, smooth or lumpy, measured in honest bits.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **mutual information** $I(X;Y)$ is the number of bits of uncertainty about $Y$ that vanish once you
+learn $X$ (and vice versa — it's symmetric). It is zero exactly when the two variables are independent.
+</Callout>
+
+## Intuition: uncertainty removed
+
+Recall entropy $H(Y)$ — your uncertainty about $Y$ before you know anything. Now suppose you get to see
+$X$ first. Your *remaining* uncertainty about $Y$ is the **conditional entropy** $H(Y \mid X)$: the
+average entropy of $Y$ once $X$ is pinned down. The drop between the two is the information that $X$
+carried about $Y$:
+
+$$
+I(X;Y) = H(Y) - H(Y \mid X).
+$$
+
+If $X$ tells you nothing, $H(Y \mid X) = H(Y)$ and the information is $0$. If $X$ determines $Y$
+completely, $H(Y \mid X) = 0$ and the information equals the entire $H(Y)$. Everything useful lives in
+between.
+
+There is a second, deeper way to read the same quantity. Two variables are **independent** exactly when
+their joint distribution factorizes, $p(x,y) = p(x)\,p(y)$. Mutual information is the **KL divergence**
+(from the last lesson) between the real joint and that idealized independent version — a measurement of
+*how far from independent* the variables actually are:
+
+$$
+I(X;Y) = D_{\mathrm{KL}}\big(p(x,y)\,\|\,p(x)\,p(y)\big).
+$$
+
+Because KL is never negative, $I(X;Y) \ge 0$, with equality **only** under independence.
+
+## Play with it
+
+The grid is a joint distribution $p(x,y)$: columns are $X$, rows are $Y$, and brightness is
+probability. Click cells to shape the marginals, then drag the **dependence** slider to morph the same
+marginals from independent toward a perfect diagonal.
+
+<MutualInfoGridDemo client:visible />
+
+<Callout type="tip">
+At <strong>dependence = 0</strong> every cell equals $p(x)\,p(y)$ and $I(X;Y)$ sits at $0$ — the joint
+is just the outer product of the margins. Slide toward $1$ and the mass collapses onto the diagonal:
+now $X$ pins down $Y$, and the mutual information climbs to meet $H(X)$.
+</Callout>
+
+## The formal definition
+
+For a joint pmf $p(x,y)$ with marginals $p(x)$ and $p(y)$, mutual information is
+
+$$
+I(X;Y) = \sum_{x}\sum_{y} p(x,y)\, \log_2 \frac{p(x,y)}{p(x)\,p(y)}.
+$$
+
+It can be rewritten in several equivalent and illuminating ways:
+
+$$
+I(X;Y) = H(X) + H(Y) - H(X,Y) = H(X) - H(X \mid Y) = H(Y) - H(Y \mid X).
+$$
+
+Key properties, all flowing from these forms:
+
+- **Non-negative and symmetric:** $I(X;Y) = I(Y;X) \ge 0$. Shared information has no preferred direction.
+- **Zero iff independent:** $I(X;Y) = 0 \iff p(x,y) = p(x)\,p(y)$.
+- **Bounded:** $I(X;Y) \le \min\big(H(X), H(Y)\big)$ — you can't learn more about $Y$ than $Y$'s own
+  uncertainty.
+- **Catches nonlinearity:** unlike Pearson correlation, MI sees curved or non-monotone dependence;
+  $Y = X^2$ has zero correlation but plenty of mutual information.
+
+<Callout type="why">
+Mutual information is the principled answer to *"which feature is worth keeping?"* A feature with high
+$I(\text{feature};\text{label})$ carries real signal about the target; one with $I \approx 0$ is noise,
+no matter how complex it looks. It also underlies the **information bottleneck** view of deep learning,
+where a good representation maximizes information about the label while compressing away the input.
+</Callout>
+
+## The same idea, four different worlds
+
+Wherever two quantities might share information, MI puts a number on it.
+
+<ExampleCard domain="Feature selection" icon="🧪">
+Building a churn model, you score each candidate feature by its mutual information with the
+"will-cancel" label. *Months-since-last-login* might carry $0.4$ bits while *zodiac sign* carries
+$\approx 0$. Ranking features by $I(\text{feature};\text{label})$ — called the **information gain
+filter** — drops the dead weight before any model is trained.
+</ExampleCard>
+
+<ExampleCard domain="Genetics" icon="🧬">
+Two genes that sit close on a chromosome are **co-inherited**, so their variants are statistically
+linked. Geneticists quantify this *linkage disequilibrium* with mutual information between the two loci:
+high MI flags genes that travel together through generations, helping map which stretch of DNA carries a
+trait.
+</ExampleCard>
+
+<ExampleCard domain="Language" icon="📰">
+Why do *"strong tea"* and *"powerful engine"* sound right but *"powerful tea"* sound off? Linguists
+measure **pointwise mutual information** between word pairs: collocations like *San–Francisco* or
+*machine–learning* have high PMI, meaning the words co-occur far more than chance. Search engines and
+language models lean on exactly this signal.
+</ExampleCard>
+
+<ExampleCard domain="Computer vision" icon="📸">
+To align two photos of the same scene from different cameras, software slides one image over the other
+and **maximizes the mutual information** between their pixel intensities. Because MI doesn't assume the
+brightness scales match, it aligns even images with wildly different contrast — the standard trick in
+multi-sensor image registration.
+</ExampleCard>
+
+<Callout type="note">
+Correlation asks *"do they rise and fall together in a straight line?"* Mutual information asks the more
+honest question: *"does knowing one reduce my uncertainty about the other — in any way at all?"* That
+generality is why MI shows up far beyond linear statistics.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Two variables X and Y are statistically independent. What is I(X;Y)?',
+      options: ['Exactly 0', 'Exactly 1 bit', 'H(X) + H(Y)', 'Always negative'],
+      answer: 0,
+      explain: 'Independence means p(x,y) = p(x)p(y), so the log term is log(1) = 0 everywhere and I(X;Y) = 0. Knowing one reveals nothing about the other.',
+    },
+    {
+      q: 'Using I(X;Y) = H(Y) − H(Y|X), what does mutual information represent?',
+      options: [
+        'The total entropy of Y',
+        'The reduction in uncertainty about Y once you learn X',
+        'The entropy of X alone',
+        'The cross-entropy between X and Y',
+      ],
+      answer: 1,
+      explain: 'It is exactly how much your uncertainty about Y shrinks after observing X — the bits of shared information.',
+    },
+    {
+      q: 'A feature has zero linear correlation with the label but Y depends on it as Y = X². What can mutual information detect that correlation misses?',
+      options: [
+        'Nothing — MI also reports zero',
+        'The nonlinear dependence, giving I > 0',
+        'Only the sign of the relationship',
+        'The mean of Y',
+      ],
+      answer: 1,
+      explain: 'Pearson correlation only sees straight-line relationships, so it reads ~0 here. MI captures any dependence, so I(X;Y) > 0 — X clearly informs Y.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Mutual information</strong> I(X;Y) = H(Y) − H(Y|X) is the number of bits of uncertainty about one variable removed by learning the other.',
+    'Equivalently it is the <strong>KL divergence</strong> between the true joint p(x,y) and the independent product p(x)p(y).',
+    'It is <strong>symmetric and non-negative</strong>, and equals zero <em>if and only if</em> the variables are independent.',
+    'MI is bounded by min(H(X), H(Y)) and unlike correlation it captures <strong>nonlinear</strong> dependence.',
+    'It powers <strong>feature selection</strong>, gene linkage, word collocations, and image registration — anywhere shared information matters.',
+  ]}
+/>
+
+Next up: we put all three measures to work. **Information theory in ML** shows how cross-entropy becomes
+the loss function and how mutual information becomes the **information gain** that decision trees use to
+choose their splits.

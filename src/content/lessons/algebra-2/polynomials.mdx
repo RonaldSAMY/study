@@ -1,0 +1,164 @@
+---
+title: Polynomials
+track: algebra-2
+summary: Degree, end behavior, and the arithmetic of higher-power curves with many twists.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - algebra-2/quadratics
+leadsTo:
+  - algebra-2/exponents-radicals
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PolynomialShapeExplorer from '../../../components/demos/PolynomialShapeExplorer.tsx';
+
+## The hook: designing a roller coaster
+
+A roller-coaster engineer needs a track that climbs, plunges, levels into a dip, then soars again —
+all in one smooth, unbroken curve. A line can only go one way. A parabola can turn just once. To make a
+ride with *several* hills and valleys, you need a richer curve: a **polynomial**. The more "twists" you
+want, the higher the **degree** you reach for.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **polynomial** is a sum of power terms — $a_n x^n + \dots + a_1 x + a_0$ — and its highest power, the
+**degree**, controls how many times the curve can turn and where its two ends ultimately head.
+</Callout>
+
+## Intuition: quadratics were just the beginning
+
+You already met two members of this family. A **line**, $mx + b$, is a degree-1 polynomial. A
+**quadratic**, $ax^2 + bx + c$, is degree 2. Polynomials simply keep going: degree 3 is a **cubic**,
+degree 4 a **quartic**, and so on. Each new power buys the curve another possible bend.
+
+Two features tell you almost everything about a polynomial's shape at a glance:
+
+- **Turning points** — the local peaks and valleys. A degree-$n$ polynomial has **at most $n-1$** of
+  them. A cubic can turn twice (one hill, one valley); a quartic up to three times.
+- **End behavior** — what the curve does far out to the left and right. This is decided entirely by the
+  **leading term** (the highest power). If the degree is *even*, both ends point the same way; if *odd*,
+  they point opposite ways. The sign of the leading coefficient flips which way.
+
+The number $a_0$ — the constant term — is still the y-intercept, just as $c$ was for a quadratic.
+
+## Play with it
+
+Pick a degree, then slide the coefficients. Count the green **turning points** and watch the
+**end behavior** readout — see how raising the degree lets the curve wiggle more, and how the leading
+term alone decides where the far ends go.
+
+<PolynomialShapeExplorer client:visible />
+
+<Callout type="tip">
+Set a high degree but slide every coefficient except the top one to zero — the curve snaps back to the
+simplest shape of that degree. Then nudge the lower coefficients to add wiggles. The leading term is the
+boss of the big picture; the smaller terms handle the local detail.
+</Callout>
+
+## The formal definition
+
+A **polynomial** in one variable is a finite sum of terms, each a number times a whole-number power of
+$x$:
+
+$$
+p(x) = a_n x^n + a_{n-1} x^{n-1} + \cdots + a_1 x + a_0, \qquad a_n \neq 0.
+$$
+
+The **degree** is $n$, the largest exponent, and $a_n$ is the **leading coefficient**.
+
+Polynomials add and subtract by **combining like terms** — terms with the same power:
+
+$$
+(2x^2 + 3x) + (x^2 - 5x + 4) = 3x^2 - 2x + 4.
+$$
+
+They multiply by the **distributive law**, multiplying every term in the first by every term in the
+second (the FOIL rule for two binomials is just this in miniature):
+
+$$
+(x + 2)(x^2 - 3x + 1) = x^3 - 3x^2 + x + 2x^2 - 6x + 2 = x^3 - x^2 - 5x + 2.
+$$
+
+Notice the degrees: multiplying a degree-1 by a degree-2 gives a degree-3 result. **Degrees add when you
+multiply.** And just as with quadratics, the **roots** are the $x$-values where $p(x) = 0$ — a degree-$n$
+polynomial has at most $n$ of them.
+
+<Callout type="why">
+Polynomials are the universal "approximators" of math. Any smooth curve can be matched arbitrarily well
+by a polynomial of high enough degree — the idea behind Taylor series and behind the curved decision
+boundaries and feature expansions that let machine-learning models fit data that a straight line never
+could.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Theme-park engineering" icon="🎢">
+A coaster's height along the track is modeled by a cubic like $h(x) = 0.2x^3 - 1.5x + 6$. Its two
+**turning points** are the crest of the first hill and the bottom of the dip, and the engineer reads them
+straight off the curve to check the ride never dips below ground or exceeds the safe peak.
+</ExampleCard>
+
+<ExampleCard domain="Medicine" icon="💊">
+After a dose, a drug's concentration in the blood rises, peaks, then falls — a curve a pharmacologist
+fits with a polynomial. The **turning point** is the moment of maximum concentration, and a **root**
+marks when the drug has effectively cleared the body and the next dose is due.
+</ExampleCard>
+
+<ExampleCard domain="Packaging design" icon="📦">
+Cut equal squares of side $x$ from the corners of a sheet of cardboard and fold it into an open box. Its
+volume is $V(x) = x(W - 2x)(L - 2x)$ — a **cubic** once expanded. The **turning point** in the realistic
+range gives the cut size that maximizes the box's volume, saving material on every shipment.
+</ExampleCard>
+
+<ExampleCard domain="Climate" icon="🌡️">
+A day's temperature, sampled hourly, traces a gentle multi-bend curve. Meteorologists fit a polynomial so
+they can smooth the noisy readings and locate the **turning points** — the morning low and the afternoon
+high — without being fooled by minute-to-minute jitter.
+</ExampleCard>
+
+<Callout type="note">
+The arithmetic never changes between these worlds: add by combining like terms, multiply by distributing,
+and read the shape from the degree and leading term. One toolkit, every curve.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the maximum number of turning points (peaks and valleys) a degree-4 polynomial can have?',
+      options: ['2', '3', '4', '5'],
+      answer: 1,
+      explain: 'A degree-n polynomial has at most n − 1 turning points, so a quartic (n = 4) can turn at most 3 times.',
+    },
+    {
+      q: 'Multiply (x + 3)(x − 2). What do you get?',
+      options: ['x² + x − 6', 'x² − x − 6', 'x² + 5x − 6', 'x² + x + 6'],
+      answer: 0,
+      explain: 'Distribute: x² − 2x + 3x − 6 = x² + x − 6. The degrees added: 1 + 1 = 2.',
+    },
+    {
+      q: 'A polynomial has odd degree with a positive leading coefficient. What is its end behavior?',
+      options: ['Both ends rise', 'Both ends fall', 'Falls on the left, rises on the right', 'Rises on the left, falls on the right'],
+      answer: 2,
+      explain: 'Odd degree means the ends go opposite ways; a positive leading coefficient sends the right end up and the left end down.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>polynomial</strong> is a sum of power terms; its <strong>degree</strong> is the highest exponent.',
+    'Lines (degree 1) and quadratics (degree 2) are just the smallest members of the same family.',
+    'A degree-n polynomial has at most <strong>n − 1 turning points</strong> and at most <strong>n roots</strong>.',
+    '<strong>End behavior</strong> is set by the leading term: even degree → ends match, odd degree → ends oppose.',
+    '<strong>Add</strong> by combining like terms and <strong>multiply</strong> by distributing — and degrees add when you multiply.',
+  ]}
+/>
+
+Next up: **exponents & radicals** — the rules that govern powers and roots, the engine behind every
+polynomial term and the gateway to exponential growth.

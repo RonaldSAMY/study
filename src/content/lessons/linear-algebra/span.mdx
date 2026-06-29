@@ -1,0 +1,164 @@
+---
+title: Linear Combinations & Span
+track: linear-algebra
+summary: Mix and stretch a set of vectors and you reach a whole region — the span — the set of everything they can build.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - linear-algebra/vector-ops-dot
+leadsTo:
+  - linear-algebra/matrices
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SpanExplorer from '../../../components/demos/SpanExplorer.tsx';
+
+## The hook: every smoothie from two scoops
+
+A juice bar has two base blends: a green scoop and a berry scoop. By choosing **how many** of each
+you want — two greens and half a berry, say — you can hit a huge range of flavors and nutrition
+profiles. Each recipe is just *"this much of one plus that much of the other."* The full menu of
+everything you can make from those two scoops is their **span**. Change the two base blends and the
+reachable menu changes with them. That single idea — building new vectors by scaling and adding a
+fixed set — is the backbone of linear algebra.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **linear combination** is "scale each vector by a weight, then add them up." The **span** is the set
+of **every** point you can reach by trying all possible weights.
+</Callout>
+
+## Intuition: building blocks and the territory they cover
+
+You already add vectors and scale them by numbers. Do both at once to a *collection* of vectors and
+you get a **linear combination**:
+
+$$
+c_1\mathbf{v}_1 + c_2\mathbf{v}_2 + \cdots + c_k\mathbf{v}_k .
+$$
+
+The weights $c_1, c_2, \dots$ are dials you can turn to any real number. As you turn them, the result
+sweeps across space. The **span** is the complete territory you can cover.
+
+How much territory depends on whether the vectors point in genuinely different directions:
+
+- Two vectors pointing **different ways** → their span is the **whole 2D plane**. Any point is some mix.
+- Two vectors that are **parallel** (one is a multiple of the other) → the second adds nothing new, so
+  the span collapses to a single **line**. Most of the plane becomes unreachable.
+
+That distinction — does a new vector add a new direction, or is it redundant? — is exactly what we'll
+later call **linear independence**.
+
+## Play with it
+
+Turn the weight dials $c_1$ and $c_2$ and watch the emerald point travel. Then flip between
+**independent** vectors (they fill the plane) and **parallel** ones (everything trapped on a line).
+Toggle the shading to see the span itself.
+
+<SpanExplorer client:visible />
+
+<Callout type="tip">
+In <strong>parallel</strong> mode, try as hard as you like — the point never leaves the line. Adding a
+vector that's just a stretched copy of one you already have grows the span by <strong>nothing</strong>.
+</Callout>
+
+## The formal definition
+
+Given vectors $\mathbf{v}_1, \dots, \mathbf{v}_k$ in $\mathbb{R}^n$, their **span** is the set of all
+linear combinations:
+
+$$
+\operatorname{span}\{\mathbf{v}_1, \dots, \mathbf{v}_k\}
+= \left\{\, c_1\mathbf{v}_1 + \cdots + c_k\mathbf{v}_k \;\middle|\; c_1, \dots, c_k \in \mathbb{R} \,\right\}.
+$$
+
+A few facts worth holding onto:
+
+- The span **always contains the origin** (set every weight to 0).
+- In $\mathbb{R}^2$, two vectors span the whole plane **exactly when** they aren't parallel.
+- "Is $\mathbf{b}$ in the span of these vectors?" is the same question as "do weights exist that build
+  $\mathbf{b}$?" — a system of equations, which the Gaussian-elimination lesson will solve.
+
+<Callout type="why">
+Span is the geometry behind what a model **can express**. The reachable outputs of a linear layer are
+the span of its columns. If your building blocks don't span the space your target lives in, no choice
+of weights can ever reach it — the model is blind to that direction by construction.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Nutrition" icon="🥤">
+Two base smoothies, each a vector of (protein, sugar, calories). Every blend $c_1\mathbf{s}_1 +
+c_2\mathbf{s}_2$ is a linear combination. The span is the full set of nutrition profiles the bar can
+serve — and if the two bases are nutritionally proportional, that menu shrinks to a single line.
+</ExampleCard>
+
+<ExampleCard domain="Audio synthesis" icon="🎚️">
+A synth builds tones by mixing a few basic waveforms. Sliding the volume fader on each is scaling;
+summing them is adding. The set of all sounds you can produce is the span of those waveforms — add a
+truly new waveform and you unlock timbres the others could never reach.
+</ExampleCard>
+
+<ExampleCard domain="Investing" icon="📈">
+A portfolio is a weighted mix of assets: $c_1$ shares of one, $c_2$ of another. The span of your
+chosen assets is every risk-return position you can hold. Two assets that always move together (highly
+correlated) span barely more than one — you've added no real diversification.
+</ExampleCard>
+
+<ExampleCard domain="3D animation" icon="🎭">
+Character faces are animated with **blendshapes**: a neutral face plus weighted "smile," "frown," and
+"blink" vectors. Every expression the rig can show is a linear combination of those shapes — their
+span is the character's entire emotional range.
+</ExampleCard>
+
+<Callout type="note">
+Counting directions: in $\mathbb{R}^2$ you need **two** non-parallel vectors to span everything; a
+third is always redundant. In $\mathbb{R}^3$ you need three. That minimum count is the dimension — the
+star of a later lesson.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the linear combination 2·[1, 0] + 3·[0, 1]?',
+      options: ['[2, 3]', '[3, 2]', '[5, 5]', '[2, 0]'],
+      answer: 0,
+      explain: 'Scale: [2,0] and [0,3]. Add: [2,3]. With these two building blocks you can reach any point in the plane.',
+    },
+    {
+      q: 'Two vectors in the plane are parallel (one is a multiple of the other). What is their span?',
+      options: ['The whole plane', 'A single line through the origin', 'Just the origin', 'A curve'],
+      answer: 1,
+      explain: 'The second vector adds no new direction, so every combination stays on the one line they share.',
+    },
+    {
+      q: 'Why must the span of any set of vectors always include the origin?',
+      options: [
+        'Because vectors are always positive',
+        'Because choosing all weights equal to 0 gives the zero vector',
+        'Because the origin is the longest vector',
+        'It does not have to include the origin',
+      ],
+      answer: 1,
+      explain: 'Setting every coefficient cᵢ = 0 produces 0·v₁ + ... + 0·vₖ = the origin, which is therefore always reachable.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>linear combination</strong> scales each vector by a weight and sums them: c₁v₁ + ... + cₖvₖ.',
+    'The <strong>span</strong> is the set of all such combinations — every point you can build from the vectors.',
+    'Two non-parallel vectors span the whole plane; <strong>parallel</strong> vectors span only a line.',
+    'The span <strong>always contains the origin</strong> (take every weight to be zero).',
+    'A linear model can only output points inside the <strong>span of its columns</strong> — span is the limit of what it can express.',
+  ]}
+/>
+
+Next up: **matrices** — a tidy grid that packs many vectors side by side and lets us store and
+transform data all at once.

@@ -1,0 +1,195 @@
+---
+title: Vector Calculus for ML
+track: calculus-3
+summary: How gradients, Jacobians, and the chain rule combine into backpropagation — the algorithm that trains every neural network.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - calculus-3/multiple-integrals
+leadsTo:
+  - optimization/gradient-descent
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BackpropGraph from '../../../components/demos/BackpropGraph.tsx';
+
+## The hook: blame, assigned perfectly
+
+A neural network makes a prediction, compares it to the truth, and gets one number back: the loss. Then it
+must answer a staggering question — *which of my millions of weights, and by exactly how much, caused that
+error?* Computing each weight's effect from scratch would take forever. Instead, the network sends the blame
+**backward** through its own computation, handing each step its share via the chain rule. That single
+elegant pass is **backpropagation**, and it is nothing more than the vector calculus of this entire track,
+finally assembled.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Backpropagation** computes $\nabla L$ for every weight by applying the **chain rule** backward through the
+network — reusing each layer's local derivative so the whole gradient costs about the same as one forward
+pass.
+
+</Callout>
+
+## Intuition: one number out, gradients back to everything
+
+Everything you have learned now clicks into place. A network is a **composition** of functions — each layer
+transforms a vector into another vector, and a final loss squeezes it all into one scalar:
+
+$$
+\mathbf{x} \xrightarrow{\ \mathbf{f}_1\ } \mathbf{h}_1 \xrightarrow{\ \mathbf{f}_2\ } \mathbf{h}_2 \xrightarrow{\quad} \cdots \xrightarrow{\quad} L \in \mathbb{R}.
+$$
+
+The chain rule says the gradient of $L$ with respect to early parameters is a **product of Jacobians**, one
+per layer. Backpropagation evaluates that product in the smart order — **right to left**:
+
+- A **forward pass** runs left to right, computing and caching each layer's output.
+- A **backward pass** runs right to left, starting from $\partial L / \partial L = 1$ and multiplying by one
+  layer's **local Jacobian** at each step, accumulating $\partial L / \partial(\cdot)$ as it goes.
+
+Why backward? Because the loss is a single scalar, so at every stage we carry a small **gradient vector**
+(one number per neuron), not a giant Jacobian matrix. Multiplying vector-by-Jacobian repeatedly is cheap;
+multiplying full Jacobians would be ruinous. The direction of travel is the whole trick.
+
+This is also why the building blocks mattered: each **partial derivative** is one weight's blame, the
+**gradient** bundles them, the **Jacobian** moves blame across a layer, and the **chain rule** chains the
+layers together.
+
+## Play with it
+
+Here is one neuron with a squared-error loss: $m = wx$, $z = m + b$, $a = \sigma(z)$, $L = (a - t)^2$. Drag
+the sliders to run the **forward** pass, then switch to **backward** to watch gradients flow right to left.
+Edge thickness shows each gradient's size; green is positive, blue negative.
+
+<BackpropGraph client:visible />
+
+<Callout type="tip">
+Switch to backward and read the edge into <strong>w</strong>: that number is $\partial L/\partial w$. It is
+built by multiplying the local derivatives along the path from $L$ back to $w$ — the chain rule, drawn as a
+literal chain. Nudge $x$ toward 0 and watch $\partial L/\partial w$ shrink: with no input signal, the weight
+gets no blame.
+</Callout>
+
+## The formal definition
+
+Write the network as a composition $L = \ell \circ \mathbf{f}_n \circ \cdots \circ \mathbf{f}_1$. The chain
+rule gives the gradient as a chain of Jacobian-transpose products. Backpropagation computes it with the
+recurrence, defining the **adjoint** $\boldsymbol{\delta}_k = \partial L / \partial \mathbf{h}_k$:
+
+$$
+\boldsymbol{\delta}_{k} = J_{k+1}^{\top}\, \boldsymbol{\delta}_{k+1}, \qquad \boldsymbol{\delta}_{\text{out}} = \nabla_{\mathbf{h}} \ell,
+$$
+
+where $J_{k+1} = \partial \mathbf{h}_{k+1} / \partial \mathbf{h}_{k}$ is layer $k{+}1$'s Jacobian. The
+gradient for that layer's weights is then a local product:
+
+$$
+\frac{\partial L}{\partial \mathbf{W}_k} = \boldsymbol{\delta}_k \, \frac{\partial \mathbf{h}_k}{\partial \mathbf{W}_k}.
+$$
+
+For our one-neuron demo this unrolls to a textbook chain:
+
+$$
+\frac{\partial L}{\partial w} = \underbrace{2(a - t)}_{\partial L/\partial a}\cdot \underbrace{a(1 - a)}_{\sigma'(z)} \cdot \underbrace{1}_{\partial z/\partial m} \cdot \underbrace{x}_{\partial m/\partial w}.
+$$
+
+Finally, the gradients feed the optimizer — every weight steps downhill:
+
+$$
+\mathbf{W} \leftarrow \mathbf{W} - \eta\, \nabla_{\mathbf{W}} L.
+$$
+
+<Callout type="why">
+This is the payoff of the entire <strong>Mathematics for Machine Learning</strong> journey. Reverse-mode
+automatic differentiation — backprop — is what makes training deep networks <em>feasible</em>: it computes
+the full gradient in one backward sweep, roughly as cheap as the forward pass. Every framework you'll touch
+(PyTorch, JAX, TensorFlow) is, at heart, an engine that builds the computation graph above and runs this
+chain rule automatically.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Deep learning" icon="🧠">
+Training a language or vision model is billions of repetitions of: forward pass → loss → backward pass →
+weight step. The backward pass is exactly the gradient flow in the demo, scaled to billions of edges and run
+on GPUs — vector calculus at industrial scale.
+</ExampleCard>
+
+<ExampleCard domain="Supply chains" icon="🚚">
+A logistics network's total cost depends on routing choices feeding into hubs feeding into delivery. To find
+which early decision most affects final cost, planners propagate sensitivities backward through the
+graph — reverse-mode differentiation applied to operations, not neurons.
+</ExampleCard>
+
+<ExampleCard domain="Climate modeling" icon="🌎">
+"Adjoint" climate models run the simulation backward to find how sensitive a future temperature is to each
+present input. That adjoint method is mathematically identical to backprop: chain-rule gradients flowing in
+reverse through a long computation.
+</ExampleCard>
+
+<ExampleCard domain="Computer graphics" icon="🎨">
+Differentiable renderers compute how each pixel's color depends on scene parameters — light, material,
+geometry — by backpropagating through the rendering equation. Artists and vision researchers then optimize a
+3D scene to match a target photo, descending the gradient.
+</ExampleCard>
+
+<Callout type="note">
+Backprop has two siblings: <strong>forward-mode</strong> AD is efficient when there are few inputs and many
+outputs; <strong>reverse-mode</strong> (backprop) wins when there are many inputs and one output — precisely
+the shape of a loss. Choosing the cheap direction is the same insight as the Jacobian-order trick.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does backpropagation traverse the network from output back to input rather than the other way?',
+      options: [
+        'It is an arbitrary convention',
+        'Because the loss is a single scalar, so carrying a gradient vector backward is far cheaper than propagating full Jacobians forward',
+        'Because forward computation is impossible',
+        'To save memory only at the input layer',
+      ],
+      answer: 1,
+      explain: 'With one scalar output, reverse mode carries a small gradient vector at each step (vector × Jacobian), which is dramatically cheaper than building full Jacobian matrices forward.',
+    },
+    {
+      q: 'For the demo neuron with a = σ(z), z = wx + b, L = (a − t)², what is ∂L/∂w?',
+      options: [
+        '2(a − t) · a(1 − a) · x',
+        '2(a − t) · x',
+        'a(1 − a) · x',
+        '2(a − t) · a(1 − a)',
+      ],
+      answer: 0,
+      explain: 'Chain the local derivatives: ∂L/∂a = 2(a − t), σ′(z) = a(1 − a), ∂z/∂w = x. Their product is 2(a − t)·a(1 − a)·x.',
+    },
+    {
+      q: 'In the backward pass, the gradient at one layer is built from the next layer’s gradient using which operation?',
+      options: [
+        'Adding the gradients',
+        'Multiplying by that layer’s local Jacobian (transpose)',
+        'Taking the maximum gradient',
+        'Integrating over the layer',
+      ],
+      answer: 1,
+      explain: 'The adjoint recurrence δ_k = Jᵀ δ_{k+1} multiplies the incoming gradient by the layer’s transposed Jacobian — the chain rule run backward.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Backpropagation</strong> is the multivariable chain rule applied backward through a network’s computation graph.',
+    'A <strong>forward pass</strong> caches each layer’s output; a <strong>backward pass</strong> accumulates ∂L/∂· from the loss inward.',
+    'Going <strong>output → input</strong> keeps a cheap gradient vector at each step instead of full Jacobians — the key efficiency.',
+    'Each weight’s gradient is a <strong>product of local derivatives</strong> along its path back to the loss.',
+    'These gradients drive <strong>gradient descent</strong>: W ← W − η∇L, the loop that trains every modern model.',
+  ]}
+/>
+
+That completes Calculus 3. You now hold the entire toolkit behind learning — next, put it in motion with
+**gradient descent**, where these gradients actually roll a model downhill to its best answer.

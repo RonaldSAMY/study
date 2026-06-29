@@ -1,0 +1,170 @@
+---
+title: The Complex Plane
+track: complex-numbers
+summary: Every complex number is a point and an arrow on the Argand plane, with a modulus (length) and an argument (angle).
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - complex-numbers/imaginary-unit
+  - geometry/coordinate-geometry
+leadsTo:
+  - complex-numbers/polar-form
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ArgandPlaneExplorer from '../../../components/demos/ArgandPlaneExplorer.tsx';
+
+## The hook: giving imaginary numbers a place to live
+
+In the last lesson $i$ felt abstract — a symbol with a rule. But here is the move that turned
+complex numbers from a curiosity into a workhorse: draw them. Put the real part along a horizontal
+axis and the imaginary part along a vertical one, and suddenly every complex number is a *dot you can
+point at*. This picture, the **Argand plane**, is why engineers can "see" the phase of a signal and
+why control engineers can glance at a chart and declare a system stable.
+
+<Callout type="intuition" title="The one-sentence idea">
+A complex number $a + bi$ is the point $(a, b)$ on a plane — and that arrow from the origin has a
+**length** (the modulus) and an **angle** (the argument).
+</Callout>
+
+## Intuition: it's a vector in disguise
+
+You already met vectors — arrows with a length and a direction. A complex number is exactly that,
+with the horizontal axis renamed "real" and the vertical axis renamed "imaginary." Plotting
+$3 + 2i$ is the same as plotting the point $(3, 2)$.
+
+What's new is the language we use to describe the arrow:
+
+- The **modulus** $\lvert z \rvert$ is the arrow's length — its distance from the origin. From the
+  distance formula you already know, $\lvert z \rvert = \sqrt{a^2 + b^2}$.
+- The **argument** $\arg(z)$ is the angle the arrow makes with the positive real axis, measured
+  counter-clockwise.
+
+Together, length and angle are a second address for the same point — and that address is what makes
+multiplication beautiful in the next lesson.
+
+## Play with it
+
+Drag the point around the plane. Watch the **modulus** (the dashed circle's radius) and the
+**argument** (the blue arc) update, and notice how the real and imaginary parts are just the
+horizontal and vertical drop-lines.
+
+<ArgandPlaneExplorer client:visible />
+
+<Callout type="tip">
+Park the point on the negative real axis (around $-3 + 0i$). The argument reads $180°$ — confirming
+that $-1$, which we got from $i^2$, sits exactly half a turn around the plane. That hint is the seed
+of Euler's formula later.
+</Callout>
+
+## The formal definition
+
+For $z = a + bi$, the **modulus** (or absolute value) is
+
+$$
+\lvert z \rvert = \sqrt{a^2 + b^2} = \sqrt{z\bar{z}},
+$$
+
+which reuses the conjugate trick from last lesson. The **argument** is the angle
+
+$$
+\arg(z) = \operatorname{atan2}(b, a),
+$$
+
+the quadrant-aware version of $\tan^{-1}(b/a)$. The pair $(\lvert z \rvert, \arg(z))$ are the
+**polar coordinates** of the point, while $(a, b)$ are its **rectangular coordinates** — two names
+for one location.
+
+A few facts worth keeping:
+
+$$
+\lvert z \rvert \ge 0, \qquad \lvert \bar{z} \rvert = \lvert z \rvert, \qquad
+\arg(\bar{z}) = -\arg(z).
+$$
+
+<Callout type="why">
+Distance on the complex plane *is* the modulus of a difference: $\lvert z - w \rvert$. That makes
+$\mathbb{C}$ a metric space, and many ML signal-processing pipelines measure error exactly this way
+— how far apart two complex spectra are.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Audio engineering" icon="🎧">
+A single pure tone is captured by one complex number called a **phasor**. Its modulus is the tone's
+loudness and its argument is its **phase** — how far the wave is shifted in time. Slide two phasors
+to the same angle and the speakers reinforce; flip one to the opposite angle and they cancel into
+silence.
+</ExampleCard>
+
+<ExampleCard domain="Control systems" icon="🛰️">
+Engineers plot a system's **poles** as points on the complex plane. The rule is gorgeously simple:
+if every pole sits in the left half (negative real part), the system settles down and is stable;
+drift a pole to the right half and it oscillates out of control. Stability becomes a question of
+*where the dots are*.
+</ExampleCard>
+
+<ExampleCard domain="Medical imaging" icon="🧲">
+An MRI scanner doesn't record a picture directly — it records complex numbers across "k-space."
+Each measurement has a modulus and an argument, and only after combining them does an image emerge.
+The brightness you finally see is built from those moduli.
+</ExampleCard>
+
+<ExampleCard domain="Game programming" icon="🕹️">
+Store a spaceship's facing as a complex number on the unit circle. Its **argument** is the heading
+angle, so reading "which way am I pointing?" is just reading $\arg(z)$ — and you never have to worry
+about the awkward jump when an angle wraps past $360°$.
+</ExampleCard>
+
+<Callout type="note">
+Two addresses, one point: rectangular $(a, b)$ is perfect for **adding**, polar
+$(\lvert z\rvert, \arg z)$ is perfect for **multiplying**. Fluency means switching between them on
+demand — exactly the skill the next lesson rewards.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the modulus of a complex number measure?',
+      options: [
+        'Its angle from the real axis',
+        'Its distance from the origin',
+        'Its imaginary part only',
+        'Whether it is positive',
+      ],
+      answer: 1,
+      explain: 'The modulus |z| = √(a² + b²) is the length of the arrow — its distance from the origin.',
+    },
+    {
+      q: 'Find the modulus of z = 3 + 4i.',
+      options: ['7', '5', '12', '25'],
+      answer: 1,
+      explain: '|z| = √(3² + 4²) = √(9 + 16) = √25 = 5.',
+    },
+    {
+      q: 'A complex number lies on the positive imaginary axis. What is its argument?',
+      options: ['0°', '90°', '180°', '270°'],
+      answer: 1,
+      explain: 'Straight up the imaginary axis is a quarter turn counter-clockwise from the positive real axis, i.e. 90°.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>Argand plane</strong> plots a + bi as the point (a, b): real on the x-axis, imaginary on the y-axis.',
+    'The <strong>modulus</strong> |z| = √(a² + b²) is the arrow\'s length — its distance from the origin.',
+    'The <strong>argument</strong> arg(z) = atan2(b, a) is the arrow\'s angle from the positive real axis.',
+    'Rectangular (a, b) and polar (|z|, arg z) are <strong>two addresses for the same point</strong>.',
+    'Distance between complex numbers is <strong>|z − w|</strong>, making the plane a true measuring space.',
+  ]}
+/>
+
+Next up: **polar form** — writing $z$ by its length and angle, where multiplication finally reveals
+its secret as a rotate-and-scale.

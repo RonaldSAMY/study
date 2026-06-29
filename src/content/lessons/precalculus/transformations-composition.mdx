@@ -1,0 +1,195 @@
+---
+title: Transformations & Composition
+track: precalculus
+summary: Shifting, stretching and chaining functions together.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - algebra-2/quadratics
+  - trigonometry/trig-graphs
+leadsTo:
+  - precalculus/poly-rational-functions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TransformComposerLab from '../../../components/demos/TransformComposerLab.tsx';
+
+## The hook: one knob to turn the volume up
+
+Picture the volume slider on your phone. The song doesn't change — the *shape* of the
+sound wave stays exactly the same — but every value gets bigger or smaller together.
+Slide it up and the quiet parts and loud parts both grow in proportion. That single
+control is doing math: it takes a function (the sound wave) and **stretches it
+vertically**. Reach for a different knob — say, a delay that nudges the whole track a
+beat later — and you've **shifted** the function sideways.
+
+Almost every "knob" in the world works like this. Instead of inventing a brand-new
+function each time, we take a function we already understand and **bend, slide, flip, or
+chain** it. That is the entire idea of *transformations and composition*.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **transformation** takes a function you already know and slides, stretches, or flips it
+into a new one; **composition** feeds one function's output into another so their effects
+stack up.
+</Callout>
+
+## Intuition: start from a shape you already know
+
+You already met some "parent" shapes. From **quadratics** you know the parabola
+$y = x^2$, and from **trig graphs** you know the wave $y = \sin x$. Transformations let
+you describe a *whole family* of curves by saying how they differ from that parent shape.
+
+There are four moves, and each maps to one knob:
+
+- **Vertical shift** — $f(x) + k$ lifts the graph up by $k$ (or down if $k$ is negative).
+  *Everything gets $k$ added to its height.*
+- **Horizontal shift** — $f(x - h)$ slides the graph right by $h$. (Yes, *minus* moves it
+  *right* — the graph has to "wait" until $x$ catches up to $h$ before it does what it did at $0$.)
+- **Stretch / shrink** — $a\,f(x)$ scales the height by $a$ (your volume knob), and $f(bx)$
+  squeezes the graph horizontally by a factor of $b$ (it happens faster).
+- **Reflection** — $-f(x)$ flips it upside down across the $x$-axis; $f(-x)$ mirrors it
+  left-to-right across the $y$-axis.
+
+These are exactly the "$a$, $h$, and $k$" knobs you turned on the quadratic
+$y = a(x - h)^2 + k$ — only now they work on *any* function, not just parabolas.
+
+## Play with it
+
+Pick a base function below, then turn the four knobs and watch the grey dashed parent
+curve bend into the bold emerald result. Then flip to **Compose f∘g** to chain two
+functions and see their effects stack.
+
+<TransformComposerLab client:visible />
+
+<Callout type="tip">
+Turn only the <strong>k</strong> knob first and watch the whole curve rise. Then set
+<strong>a = -1</strong> to flip it upside down. Changing one knob at a time is the fastest
+way to feel what each letter does.
+</Callout>
+
+## The formal definition
+
+Start with any base function $f$. We can build a new function $g$ by applying all four
+moves at once:
+
+$$
+g(x) = a\,f\big(b\,(x - h)\big) + k.
+$$
+
+Reading it from the inside out tells you the order things happen to the input and output:
+
+- **Horizontal:** $x - h$ shifts right by $h$; multiplying by $b$ stretches/squeezes the
+  $x$-axis. (Inside the parentheses, effects feel *backwards*: bigger $b$ makes it narrower.)
+- **Vertical:** multiplying by $a$ stretches the height (and flips it if $a < 0$); adding
+  $k$ lifts it.
+
+**Reflections** are just the sign choices $a < 0$ (flip top-to-bottom) and $b < 0$ (flip
+left-to-right).
+
+**Composition** is a different operation: instead of bending one function, you feed the
+output of one into the input of another. We write it $f \circ g$, meaning
+
+$$
+(f \circ g)(x) = f\big(g(x)\big).
+$$
+
+The inner function $g$ runs **first**, then $f$ acts on its result. Order matters:
+
+$$
+f\big(g(x)\big) \neq g\big(f(x)\big) \quad \text{in general.}
+$$
+
+For example, with $f(x) = \sqrt{x}$ and $g(x) = x^2$, we get $f(g(x)) = \sqrt{x^2} = |x|$,
+but $g(f(x)) = (\sqrt{x})^2 = x$ (only for $x \ge 0$). Same two functions, different result.
+
+<Callout type="why">
+Composition is the skeleton of every neural network. A network is literally a long chain
+$f_L(\dots f_2(f_1(x)))$ — each layer is a function fed the previous layer's output. And
+training nudges the per-layer versions of $a$ (weights, the stretch) and $k$ (biases, the
+shift). Learning these transformations *is* what "learning" means.
+</Callout>
+
+## The same idea, four different worlds
+
+The same shifts, stretches, and chains show up far from any math class.
+
+<ExampleCard domain="Audio synthesis" icon="🎹">
+A synthesizer starts from a base wave like $\sin x$. The **volume** knob is the vertical
+stretch $a$: louder means a taller wave, $a\,\sin x$. **Pitch** is the horizontal squeeze
+$b$: a higher note is $\sin(bx)$, the same wave cycling faster. Add a constant offset and
+you've shifted the wave's baseline — exactly $a\,f(b(x-h)) + k$ with sound coming out.
+</ExampleCard>
+
+<ExampleCard domain="Photography" icon="📷">
+A camera's **brightness curve** maps incoming light to pixel values. Sliding the
+*exposure* slider is a vertical shift $f(x) + k$ — every pixel gets brighter. Cranking
+*contrast* is a stretch $a\,f(x)$ that pushes lights lighter and darks darker around the
+midpoint. A "negative" film look is the reflection $-f(x)$: bright becomes dark.
+</ExampleCard>
+
+<ExampleCard domain="Smart home" icon="🌡️">
+Your thermostat follows a daily temperature schedule $T(t)$. Travel across one time zone
+and you don't redesign the schedule — you just shift it: $T(t - 1)$ runs the *same* curve
+one hour later. Want it a couple degrees warmer all day? That's the vertical shift
+$T(t) + 2$. One curve, slid around to fit your life.
+</ExampleCard>
+
+<ExampleCard domain="Currency exchange" icon="💱">
+Converting money is pure **composition**. Let $g$ turn dollars into euros and $f$ turn
+euros into yen. To go straight from USD to JPY you chain them: $f(g(x))$ — euros are the
+intermediate output handed to the next step. Reverse the order and you'd get a completely
+different (wrong) number, which is why $f \circ g \neq g \circ f$.
+</ExampleCard>
+
+<Callout type="note">
+Notice the pattern: a transformation reshapes *one* function with knobs, while composition
+*links* functions in a chain. Real systems use both at once — a synth stretches a wave and
+then pipes it through a filter (another function).
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Starting from f(x), which expression slides the graph 3 units to the RIGHT and 2 units UP?',
+      options: ['f(x + 3) + 2', 'f(x - 3) + 2', 'f(x - 3) - 2', 'f(x + 3) - 2'],
+      answer: 1,
+      explain: 'Right by 3 means subtract inside: f(x - 3). Up by 2 means add outside: + 2. So f(x - 3) + 2.',
+    },
+    {
+      q: 'With f(x) = x² and g(x) = x + 1, what is the composition f(g(x))?',
+      options: ['x² + 1', '(x + 1)²', 'x² + x', '(x + 1)² + 1'],
+      answer: 1,
+      explain: 'Run g first: g(x) = x + 1. Then feed that into f: f(x + 1) = (x + 1)². The inner function acts before the outer.',
+    },
+    {
+      q: 'What does multiplying by a negative number, as in -f(x), do to a graph?',
+      options: [
+        'Shifts it to the left',
+        'Reflects it across the x-axis (flips it upside down)',
+        'Makes it narrower',
+        'Reflects it across the y-axis',
+      ],
+      answer: 1,
+      explain: 'A negative outside multiplier, -f(x), negates every output, flipping the graph top-to-bottom across the x-axis. (A negative INSIDE, f(-x), would mirror it left-to-right.)',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Transformations reshape a function you already know: <strong>f(x) + k</strong> shifts up, <strong>f(x − h)</strong> shifts right, <strong>a·f(x)</strong> stretches the height, and <strong>f(bx)</strong> squeezes the width.',
+    'Signs flip graphs: <strong>−f(x)</strong> reflects across the x-axis, <strong>f(−x)</strong> across the y-axis.',
+    'The combined form <strong>g(x) = a·f(b(x − h)) + k</strong> packs all four moves into one expression.',
+    '<strong>Composition</strong> f(g(x)) feeds one function into another; the inner function runs first.',
+    '<strong>Order matters</strong>: f(g(x)) ≠ g(f(x)) in general — and chained functions are exactly how neural networks are built.',
+  ]}
+/>
+
+Next up: **Polynomial & Rational Functions** — where you'll combine these moves with new
+parent shapes to read and sketch curves with multiple bends and asymptotes.

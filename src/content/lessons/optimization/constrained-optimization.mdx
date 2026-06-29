@@ -1,0 +1,171 @@
+---
+title: Constrained Optimization
+track: optimization
+summary: Finding the best answer when you are not free to roam — Lagrange multipliers and the tangency condition that balances a goal against a rule.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - optimization/convexity
+leadsTo:
+  - optimization/ml-capstone
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import LagrangeConstraintDemo from '../../../components/demos/LagrangeConstraintDemo.tsx';
+
+## The hook: the best you can do with a fixed budget
+
+So far we have let the ball roll anywhere downhill. But real decisions come with **rules you cannot
+break**. You have exactly \$10,000 to split between two investments — not a penny more. A drone has
+a fixed battery, so the route length is capped. A factory has a quota it must hit exactly. The question
+is no longer "what is the best point anywhere?" but "what is the best point **on this line / curve /
+surface** I am confined to?"
+
+This is **constrained optimization**, and its central tool — the **Lagrange multiplier** — is one of
+the most elegant ideas in all of applied math. It turns "optimize while obeying a rule" back into the
+familiar language of gradients.
+
+<Callout type="intuition" title="The one-sentence idea">
+At the best point on a constraint, the goal's contour line is exactly **tangent** to the constraint —
+so the two gradients point along the same line: $\nabla f = \lambda \, \nabla g$.
+</Callout>
+
+## Intuition: walk the fence until you can't climb higher
+
+Picture the objective $f(x, y)$ as a hill, drawn with **contour lines** (rings of equal height, like a
+topographic map). The constraint $g(x, y) = c$ is a fence you must walk along — you cannot leave it.
+
+As you walk the fence, you cross contour lines, going up or down in $f$. You are at the best point when
+walking *either* direction along the fence no longer increases $f$. Geometrically, that happens exactly
+where the fence runs **tangent** to a contour — where it just *kisses* one ring without crossing it.
+
+At that kiss point, the contour and the fence share the same direction, so their **perpendiculars**
+(the gradients $\nabla f$ and $\nabla g$) are **parallel**. "Parallel" means one is a scalar multiple of
+the other, and that scalar is the **Lagrange multiplier** $\lambda$. That single picture is the whole
+method.
+
+## Play with it
+
+Here you maximize output $f(x, y) = x \cdot y$ (think: total value from splitting a budget between two
+holdings) subject to the budget line $x + y = B$. Drag the point along the blue line and watch the
+output. The best spot is where the line touches the **orange** contour — and there the two gradient
+arrows $\nabla f$ and $\nabla g$ line up.
+
+<LagrangeConstraintDemo client:visible />
+
+<Callout type="tip">
+Slide the point and watch the gradient arrows. Away from the optimum, $\nabla f$ tilts off the line —
+meaning you could still climb by moving along it. Right at the tangency, $\nabla f$ points the same way
+as $\nabla g$, so there is no climbing left to do. Change the budget $B$ and the optimum stays at
+$x = y$, the balanced split.
+</Callout>
+
+## The formal definition
+
+To optimize $f(\mathbf{x})$ subject to a constraint $g(\mathbf{x}) = c$, form the **Lagrangian**:
+
+$$
+\mathcal{L}(\mathbf{x}, \lambda) = f(\mathbf{x}) - \lambda\,\big(g(\mathbf{x}) - c\big).
+$$
+
+Setting all its partial derivatives to zero recovers the tangency condition plus the constraint itself:
+
+$$
+\nabla f(\mathbf{x}) = \lambda \, \nabla g(\mathbf{x}), \qquad g(\mathbf{x}) = c.
+$$
+
+The first equation says the gradients are parallel (the geometric "kiss"); the second keeps you on the
+fence. For our demo, $f = xy$ gives $\nabla f = (y, x)$ and $g = x + y$ gives $\nabla g = (1, 1)$, so
+$\nabla f = \lambda \nabla g$ forces $y = x$. Combined with $x + y = B$ that yields the balanced
+optimum $x = y = B/2$ — exactly what the slider shows.
+
+<Callout type="why">
+Constraints are everywhere in machine learning. <strong>Regularization</strong> is "minimize the loss
+subject to keeping the weights small." <strong>Support vector machines</strong> maximize a margin
+subject to classifying points correctly. The multiplier $\lambda$ even has a meaning: it is the
+<em>shadow price</em> — how much the optimal value would improve if you loosened the constraint by one unit.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Investment allocation" icon="💰">
+Maximize a portfolio's expected return subject to spending exactly your capital and not exceeding a
+risk ceiling. The optimum sits where the return contour is tangent to the budget plane — and the
+Lagrange multiplier tells you the extra return one more dollar of risk budget would buy.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+A plant minimizes production cost while meeting an exact output quota. The cost contours kiss the
+quota surface at the cheapest feasible production mix; the multiplier is the marginal cost of raising
+the quota by one unit — gold for pricing decisions.
+</ExampleCard>
+
+<ExampleCard domain="Nutrition planning" icon="🥗">
+Design the cheapest meal plan that hits exact calorie and protein targets. Minimizing cost subject to
+those equality constraints is a classic Lagrange problem; the optimal plan is where the cost contour is
+tangent to the constraint set, balancing price against the binding requirements.
+</ExampleCard>
+
+<ExampleCard domain="Spaceflight" icon="🛰️">
+Plan a satellite maneuver that reaches a target orbit using the least fuel, subject to fixed
+start and end conditions. The fuel-optimal trajectory is found where the cost's gradient aligns with
+the constraint gradients — Lagrange multipliers underpin the whole field of optimal control.
+</ExampleCard>
+
+<Callout type="note">
+The leap from unconstrained to constrained optimization is small but profound: instead of seeking
+$\nabla f = \mathbf{0}$ (flat everywhere), we seek $\nabla f$ <em>parallel to</em> $\nabla g$ (flat
+<em>along the constraint</em>). The fence absorbs the leftover slope.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'At the solution of a constrained optimization, what is true about the contour of f and the constraint curve?',
+      options: [
+        'They cross at a right angle',
+        'They are tangent — they just touch without crossing',
+        'They are always parallel lines that never meet',
+        'The constraint is ignored',
+      ],
+      answer: 1,
+      explain: 'The optimum is where a contour of f is tangent to the constraint, so their gradients are parallel.',
+    },
+    {
+      q: 'The Lagrange condition is ∇f = λ∇g. What does it say geometrically?',
+      options: [
+        'The gradients of f and g point in the same (parallel) direction',
+        'The gradient of f is zero',
+        'The constraint has no effect',
+        'f and g are equal',
+      ],
+      answer: 0,
+      explain: '∇f = λ∇g means ∇f is a scalar multiple of ∇g — the two gradients are parallel.',
+    },
+    {
+      q: 'Maximize f = x·y subject to x + y = 10. What is the optimal point?',
+      options: ['(1, 9)', '(5, 5)', '(0, 10)', '(8, 2)'],
+      answer: 1,
+      explain: 'Tangency forces y = x, and x + y = 10 gives x = y = 5, the balanced split with the largest product (25).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Constrained optimization</strong> seeks the best point that obeys a rule g(x) = c, not the best point anywhere.',
+    'At the optimum, the objective contour is <strong>tangent</strong> to the constraint, so the gradients are parallel.',
+    'The <strong>Lagrange condition</strong> is ∇f = λ∇g together with the constraint g(x) = c.',
+    'Build the <strong>Lagrangian</strong> ℒ = f − λ(g − c) and set its partial derivatives to zero to solve.',
+    'The multiplier <strong>λ is the shadow price</strong> — the value of loosening the constraint by one unit; it powers regularization and SVMs.',
+  ]}
+/>
+
+Next up: the **capstone** — we put gradient descent, convexity, vectors, gradients, and probability
+together to train a real model: linear regression that learns from data.

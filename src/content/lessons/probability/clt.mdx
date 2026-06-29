@@ -1,0 +1,166 @@
+---
+title: The Central Limit Theorem
+track: probability
+summary: Why averages of almost anything pile up into the same bell curve — the reason the Gaussian rules statistics.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - probability/joint-covariance
+leadsTo:
+  - statistics/confidence-intervals
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CLTSamplingMachine from '../../../components/demos/CLTSamplingMachine.tsx';
+
+## The hook: why is *everything* a bell curve?
+
+Test scores, measurement errors, polling results, the heights of a crowd — wildly different processes,
+yet they all pile up into the same bell-shaped hump. It seems too neat to be a coincidence, and it isn't.
+There's a single theorem behind it, one so central that it's named for its place in the subject: the
+**Central Limit Theorem**. It explains why the Gaussian from two lessons ago shows up *everywhere*, and
+it's the quiet justification for nearly every confidence interval and hypothesis test in statistics.
+
+<Callout type="intuition" title="The one-sentence idea">
+Add up (or average) many independent random pieces, and — no matter what wonky distribution each piece
+came from — the total settles into a **Gaussian** bell curve.
+</Callout>
+
+## Intuition: averaging launders away the shape
+
+Take a deeply *non*-normal source — a coin that's only 0 or 1, a lopsided exponential, a two-spike
+distribution. Draw a handful of values and average them. That single average, the **sample mean**, is
+itself random; do it again and you get a different number. The CLT is a statement about the distribution
+of *those sample means*.
+
+The magic is twofold. First, **the shape washes out**: whatever the source looked like, the histogram of
+sample means grows into a bell as the sample size $n$ rises. Second, **the spread shrinks predictably**:
+the sample means cluster around the true mean $\mu$ with a standard deviation of $\sigma/\sqrt{n}$ — the
+**standard error**. Quadruple your sample size and the wobble halves (because $\sqrt{4} = 2$). That single
+fact is why bigger samples give more trustworthy estimates, and *how much* more.
+
+This also closes the loop on the whole track: it's why the Gaussian is the "default" distribution, why
+measurement errors (sums of countless tiny perturbations) are normal, and why we can put error bars on an
+average without knowing the messy distribution it came from.
+
+## Play with it
+
+Choose a deliberately un-bell-like **source**, set the sample size $n$, and start drawing sample means.
+Each draw averages $n$ values and drops the result into the histogram. Watch a bell emerge from chaos —
+and watch the green predicted curve, with width $\sigma/\sqrt{n}$, tighten as you raise $n$.
+
+<CLTSamplingMachine client:visible />
+
+<Callout type="tip">
+Pick the <strong>Two spikes</strong> source — about as un-Gaussian as it gets — and draw means with
+<strong>n = 1</strong>: you just see the two spikes. Now slide n to <strong>30</strong> and run: a clean
+bell. The source's shape is irrelevant; only its mean and variance survive the averaging.
+</Callout>
+
+## The formal definition
+
+Let $X_1, X_2, \dots, X_n$ be independent and identically distributed (i.i.d.) with mean $\mu$ and finite
+variance $\sigma^2$. The sample mean $\bar{X}_n = \tfrac{1}{n}\sum_i X_i$ has
+
+$$
+\mathbb{E}[\bar{X}_n] = \mu, \qquad \mathrm{Var}(\bar{X}_n) = \frac{\sigma^2}{n}, \qquad \mathrm{SE} = \frac{\sigma}{\sqrt{n}}.
+$$
+
+The Central Limit Theorem says the *standardized* sample mean converges to a standard normal as
+$n \to \infty$:
+
+$$
+\frac{\bar{X}_n - \mu}{\sigma / \sqrt{n}} \;\xrightarrow{\;d\;}\; \mathcal{N}(0, 1).
+$$
+
+Equivalently, for large $n$, $\bar{X}_n \approx \mathcal{N}\!\left(\mu,\ \sigma^2/n\right)$. The
+requirements are mild — independence, identical distribution, and a **finite variance** — which is why
+the theorem applies so broadly. A common rule of thumb is $n \gtrsim 30$, though heavily skewed sources
+need more.
+
+<Callout type="why">
+The CLT is the license for **uncertainty quantification** in ML and statistics. It's why a model's
+average test accuracy comes with a ± error bar, why mini-batch gradients (averages over a batch) behave
+like the true gradient plus roughly Gaussian noise, and why confidence intervals — the very next lesson —
+take the form estimate ± (a few) × standard error.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Election polling" icon="🗳️">
+Each polled voter is a chaotic yes/no (a Bernoulli). Average 1,000 of them and the CLT says the result is
+Gaussian around the true support with standard error $\sqrt{p(1-p)/n}$. That's where a poll's "±3% margin
+of error" comes from — and why doubling precision needs *four times* the sample.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing QC" icon="🏭">
+A factory can't measure every part, so it averages samples of 30. Even if a single part's dimension has a
+skewed distribution, the **sample average** is Gaussian — letting engineers set control-chart limits at
+$\mu \pm 3\,\mathrm{SE}$ and flag a drifting process with calibrated confidence.
+</ExampleCard>
+
+<ExampleCard domain="Casino economics" icon="🎰">
+One spin of a roulette wheel is high-variance and unpredictable. But the casino's *average* profit over
+millions of spins is, by the CLT, tightly Gaussian around the house edge. The bell curve's shrinking
+$\sigma/\sqrt{n}$ is precisely why the house's nightly take is so dependable.
+</ExampleCard>
+
+<ExampleCard domain="Experimental science" icon="🔬">
+A physicist averages many noisy readings of a constant. Each reading carries random error of unknown
+shape; the average is Gaussian with standard error $\sigma/\sqrt{n}$, so taking 100 readings cuts the
+uncertainty tenfold. This is why "repeat and average" is the oldest trick in the lab.
+</ExampleCard>
+
+<Callout type="warning">
+The CLT needs a <strong>finite variance</strong>. Heavy-tailed sources (like a Cauchy distribution, or
+some financial returns) violate this — their sample means refuse to settle into a bell. The theorem is
+powerful but not unconditional.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You average n independent samples from a strongly skewed distribution. As n grows, the distribution of the SAMPLE MEAN becomes…',
+      options: [
+        'Even more skewed',
+        'Approximately Gaussian (bell-shaped)',
+        'Uniform',
+        'Identical to the original distribution',
+      ],
+      answer: 1,
+      explain: "That's the Central Limit Theorem: regardless of the source's shape (given finite variance), the sample mean tends toward a Gaussian as n increases.",
+    },
+    {
+      q: 'A population has standard deviation σ = 20. What is the standard error of the mean of n = 100 samples?',
+      options: ['20', '2', '0.2', '200'],
+      answer: 1,
+      explain: 'Standard error = σ/√n = 20/√100 = 20/10 = 2. The spread of the sample mean shrinks like 1/√n.',
+    },
+    {
+      q: 'You want to halve the standard error of your estimated mean. By what factor must you multiply the sample size?',
+      options: ['2', '4', '1/2', '10'],
+      answer: 1,
+      explain: 'Since SE = σ/√n, halving it requires √n to double, so n must quadruple (×4). Precision is expensive — it grows with the square root of n.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>Central Limit Theorem</strong>: the sum or average of many i.i.d. pieces is approximately Gaussian, whatever the original distribution.',
+    'The sample mean centers on the true μ with <strong>standard error σ/√n</strong> — its spread shrinks as samples grow.',
+    'Because precision scales with √n, <strong>halving the error means quadrupling the sample size</strong>.',
+    'The CLT needs independence, identical distribution, and a <strong>finite variance</strong>; heavy-tailed sources can break it.',
+    'It is the foundation of error bars, polling margins, control charts, and the <strong>confidence intervals</strong> coming next in statistics.',
+  ]}
+/>
+
+That wraps the probability track — from listing outcomes to taming uncertainty with the bell curve. Next
+you'll put it to work in **statistics**, starting with **confidence intervals**: turning the standard
+error into a precise statement of how sure you really are.

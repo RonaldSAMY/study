@@ -1,0 +1,166 @@
+---
+title: Numerical Methods (Euler)
+track: differential-equations
+summary: When no formula exists, march the solution forward one small step at a time — Euler's method and the step-size tradeoff that governs every simulation.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - differential-equations/applications-de
+leadsTo:
+  - optimization/gradient-descent
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import EulerStepExplorer from '../../../components/demos/EulerStepExplorer.tsx';
+
+## The hook: the equation no one can solve
+
+The predator-prey and epidemic models you just played with have a dirty secret: most of them have **no
+closed-form solution**. There is no neat formula to plug $t$ into. Yet weather services, game engines, and
+spacecraft navigate by these equations every second. How? They cheat — beautifully. Instead of solving for
+all time, they take the slope you *do* know right now and step a tiny bit forward, then repeat. That is
+**Euler's method**, the humble idea behind nearly every simulation on Earth.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Euler's method** turns an ODE into a recipe: from where you are, follow the current slope for one small
+step $h$, land at a new point, and repeat — trading a perfect formula for a good-enough chain of straight lines.
+</Callout>
+
+## Intuition: walking along the slope field
+
+Remember the slope field from the very first lesson? At every point the ODE $y' = f(x, y)$ hands you a
+slope. Euler's method literally *walks* that field:
+
+1. Start at the known point $(x_0, y_0)$.
+2. Read the slope $f(x_0, y_0)$ there.
+3. Step forward by $h$ in $x$, rising by slope $\times h$: $y_1 = y_0 + h\,f(x_0, y_0)$.
+4. You're at a new point. Repeat.
+
+Each step is a tiny straight-line tangent guess. String them together and you get a polyline that *shadows*
+the true curve. The catch: each step drifts a little off, and errors accumulate. The fix is intuitive — take
+**smaller steps**. Halve $h$ and you roughly halve the error, at the cost of twice the work. That tradeoff,
+accuracy versus computation, is the central tension of all numerical computing.
+
+## Play with it
+
+Drag the **step-size slider $h$**. The smooth sky curve is the true solution; the indigo polyline with
+emerald dots is Euler's march. With a big $h$ the polyline cuts corners and drifts away; shrink $h$ and it
+snaps tight against the truth. Watch the **final error** readout shrink as you do.
+
+<EulerStepExplorer client:visible />
+
+<Callout type="tip">
+On the $y' = 0.6y$ (growth) equation, Euler always lands *below* the true curve — because each straight step
+underestimates a curve that keeps bending upward. Smaller $h$ shrinks the gap but never fully closes it.
+That systematic lag is Euler's signature weakness.
+</Callout>
+
+## The formal definition
+
+For the initial value problem $y' = f(x, y),\; y(x_0) = y_0$, **Euler's method** generates approximations
+$y_n \approx y(x_n)$ at points $x_n = x_0 + nh$ via the update
+
+$$
+y_{n+1} = y_n + h\,f(x_n, y_n), \qquad x_{n+1} = x_n + h.
+$$
+
+This is just the first two terms of the Taylor expansion $y(x+h) = y(x) + h\,y'(x) + \tfrac{h^2}{2}y''(\xi)$.
+The dropped term makes the **local error** per step $O(h^2)$; accumulated over $\sim 1/h$ steps, the **global
+error** is $O(h)$ — Euler is a **first-order** method. Halving $h$ halves the error:
+
+$$
+\text{global error} \approx C\,h.
+$$
+
+Smarter schemes (Runge–Kutta 4, the method powering the demos in earlier lessons) reuse several slope samples
+per step to reach global error $O(h^4)$ — vastly more accurate for the same $h$.
+
+<Callout type="why">
+Euler's update *is* gradient descent. Training a model solves $\frac{d\theta}{dt} = -\nabla L(\theta)$ by
+Euler steps $\theta_{n+1} = \theta_n - \eta\,\nabla L(\theta_n)$, where the learning rate $\eta$ is exactly
+the step size $h$. Too large and you overshoot and diverge; too small and training crawls — the very same
+tradeoff you are dragging on the slider. That is your bridge to the next track.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Meteorology" icon="🌦️">
+Weather models step the fluid-dynamics equations forward over a grid of the atmosphere, a few minutes of
+simulated time per step. Too large a step and the simulation becomes unstable and blows up; that stability
+limit is why forecasts demand supercomputers churning through billions of tiny Euler-like updates.
+</ExampleCard>
+
+<ExampleCard domain="Game development" icon="🎮">
+Every game physics engine integrates motion each frame: $v \mathrel{+}= a\,\Delta t$, then $x \mathrel{+}= v\,\Delta t$.
+That's Euler (its "semi-implicit" cousin) with $h$ = the frame time. Low frame rates mean big steps, which is
+why physics can glitch — characters tunneling through walls — when a game stutters.
+</ExampleCard>
+
+<ExampleCard domain="Spaceflight" icon="🛰️">
+Spacecraft trajectories integrate gravitational equations of motion numerically — no closed form exists for
+three or more bodies. Mission planners use tiny, carefully controlled steps (and higher-order methods) so
+errors stay small over months of coasting between planets.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🤖">
+A robot's controller predicts where its arm will be a moment from now by Euler-stepping its dynamics, then
+corrects. The control loop runs at a fixed rate, so its step size $h$ is the loop period — faster loops mean
+smaller steps and steadier, more precise motion.
+</ExampleCard>
+
+<Callout type="note">
+From thunderstorms to spaceflight, the recipe never changes: read the slope, take a small step, repeat. The
+only knob is $h$ — and choosing it well is the difference between a stable simulation and a crash.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the Euler update for y′ = f(x, y)?',
+      options: [
+        'y_{n+1} = y_n · f(x_n, y_n)',
+        'y_{n+1} = y_n + h·f(x_n, y_n)',
+        'y_{n+1} = f(x_n, y_n) / h',
+        'y_{n+1} = y_n − f(x_n)',
+      ],
+      answer: 1,
+      explain: 'Euler steps forward along the current slope: new value = old value + step size × slope.',
+    },
+    {
+      q: 'You halve the step size h in Euler’s method. Roughly what happens to the global error?',
+      options: ['It doubles', 'It is roughly halved', 'It is unchanged', 'It becomes zero'],
+      answer: 1,
+      explain: 'Euler is first-order: global error ≈ C·h, so halving h roughly halves the error (at twice the work).',
+    },
+    {
+      q: 'How does Euler’s method relate to gradient descent in ML?',
+      options: [
+        'They are unrelated',
+        'Gradient descent is Euler’s method applied to dθ/dt = −∇L, with learning rate as the step size',
+        'Gradient descent avoids step sizes entirely',
+        'Euler’s method only works for linear equations',
+      ],
+      answer: 1,
+      explain: 'A gradient-descent update θ − η∇L is exactly an Euler step on dθ/dt = −∇L, with η playing the role of h.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Most real ODEs have <strong>no closed-form solution</strong>, so we approximate them numerically.',
+    'Euler’s method steps along the current slope: <strong>y_{n+1} = y_n + h·f(x_n, y_n)</strong>.',
+    'It is a <strong>first-order</strong> method — global error ≈ C·h, so smaller steps mean proportionally less error but more work.',
+    'Higher-order schemes like <strong>Runge–Kutta 4</strong> achieve far smaller error for the same step size.',
+    'Gradient descent is literally Euler’s method on dθ/dt = −∇L, with the <strong>learning rate as the step size</strong> — your gateway to optimization.',
+  ]}
+/>
+
+Next up: **gradient descent** — take everything you now know about stepping along a slope and point it
+downhill, and you have the algorithm that trains nearly every machine-learning model.

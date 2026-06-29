@@ -1,0 +1,25 @@
+---
+// A colored highlight box for intuition, warnings, tips, and "why it matters".
+interface Props {
+  type?: 'intuition' | 'tip' | 'warning' | 'why' | 'note';
+  title?: string;
+}
+const { type = 'note', title } = Astro.props;
+
+const styles: Record<string, { icon: string; ring: string; bg: string; label: string }> = {
+  intuition: { icon: '💡', ring: 'border-precalc/40', bg: 'bg-precalc/10', label: 'Intuition' },
+  tip:       { icon: '✅', ring: 'border-calculus/40', bg: 'bg-calculus/10', label: 'Tip' },
+  warning:   { icon: '⚠️', ring: 'border-geometry/40', bg: 'bg-geometry/10', label: 'Watch out' },
+  why:       { icon: '🤔', ring: 'border-brand/40', bg: 'bg-brand-soft', label: 'Why it matters' },
+  note:      { icon: '📝', ring: 'border-border', bg: 'bg-surface-2', label: 'Note' },
+};
+const s = styles[type];
+---
+<div class={`not-prose my-6 rounded-xl border ${s.ring} ${s.bg} p-4`}>
+  <p class="mb-1 flex items-center gap-2 font-bold">
+    <span>{s.icon}</span>{title ?? s.label}
+  </p>
+  <div class="text-[0.95rem] leading-relaxed [&_p]:my-2 [&_:last-child]:mb-0">
+    <slot />
+  </div>
+</div>

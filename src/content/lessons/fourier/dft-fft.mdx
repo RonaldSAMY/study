@@ -1,0 +1,179 @@
+---
+title: DFT & FFT
+track: fourier
+summary: How a computer turns a finite list of samples into a spectrum — and the divide-and-conquer trick that makes it fast.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - fourier/fourier-transform
+leadsTo:
+  - fourier/convolution-theorem
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DFTSampler from '../../../components/demos/DFTSampler.tsx';
+
+## The hook: the algorithm that runs a trillion times a day
+
+The continuous Fourier transform is a beautiful integral over all of time — but a computer has never seen
+"all of time." It sees a **finite list of numbers**: $1024$ samples from a microphone, a row of pixels, a
+stream of sensor readings. To get a spectrum from that, we need a discrete version of the transform. And
+the fast way to compute it — the **Fast Fourier Transform** — has been called the most important numerical
+algorithm of our lifetime. Every phone call, song stream, JPEG, and Wi-Fi packet leans on it, quietly,
+billions of times a second.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **DFT** computes the spectrum of $N$ evenly spaced samples; the **FFT** is a clever way to compute that
+exact same answer in $O(N\log N)$ time instead of $O(N^2)$.
+</Callout>
+
+## Intuition: sampling, bins, and a famous shortcut
+
+Two things change when we go from theory to a computer.
+
+**First, we sample.** Instead of a continuous $x(t)$, we keep its value at $N$ equally spaced instants.
+This raises a hazard: if we sample too slowly, a high frequency masquerades as a low one — an effect
+called **aliasing** (the "wagon wheel spinning backwards" in old films). The **Nyquist limit** says you
+must sample at *more than twice* the highest frequency present, or that frequency will fold back into the
+wrong place.
+
+**Second, the spectrum becomes discrete too.** With $N$ samples you get exactly $N$ frequency **bins**,
+evenly spaced from $0$ up to the sampling rate. Bin $k$ measures how much of the signal completes exactly
+$k$ cycles across your window. That's it — the DFT is just the series projection idea, evaluated at a
+finite set of frequencies.
+
+The DFT formula is a double loop: for each of $N$ output bins, sum over all $N$ input samples — that's
+$N^2$ multiplications. For a few seconds of CD audio ($N$ in the hundreds of thousands), $N^2$ is
+hopeless. The **FFT** notices that a size-$N$ DFT can be split into two size-$N/2$ DFTs (the even-indexed
+and odd-indexed samples), whose results are then combined cheaply. Recurse all the way down and the cost
+collapses from $N^2$ to $N\log N$. For $N = 10^6$ that is roughly a **50,000× speed-up** — the difference
+between instant and overnight.
+
+## Play with it
+
+Watch a continuous signal get **sampled** (the emerald dots) and its **DFT bins** appear below. Push the
+sample count down toward the danger zone and watch a peak land in the *wrong* bin — that's aliasing. The
+readout compares the naive $N^2$ cost with the FFT's $N\log N$.
+
+<DFTSampler client:visible />
+
+<Callout type="tip">
+Crank a tone above the Nyquist limit (half the sample count) and its peak <em>folds back</em> to a lower
+bin — the spectrum lies to you. Adding samples raises Nyquist and fixes it. This is exactly why audio is
+sampled at $44{,}100$ Hz: to safely capture everything up to the $\sim 20$ kHz limit of human hearing.
+</Callout>
+
+## The formal definition
+
+Given $N$ samples $x_0, x_1, \dots, x_{N-1}$, the **Discrete Fourier Transform** produces $N$ complex
+bins:
+
+$$
+X_k = \sum_{n=0}^{N-1} x_n\, e^{-i 2\pi k n / N}, \qquad k = 0, 1, \dots, N-1.
+$$
+
+Each $X_k$ is the correlation of the samples with a discrete probe wave that completes $k$ cycles over the
+window. The inverse rebuilds the samples exactly:
+
+$$
+x_n = \frac{1}{N}\sum_{k=0}^{N-1} X_k\, e^{\,i 2\pi k n / N}.
+$$
+
+Computed directly this is $O(N^2)$. The **Cooley–Tukey FFT** uses the symmetry of the twiddle factors
+$e^{-i 2\pi k n / N}$ to split the sum by parity:
+
+$$
+X_k = \underbrace{\sum_{m} x_{2m}\, e^{-i 2\pi k m /(N/2)}}_{\text{even samples}}
+   + e^{-i 2\pi k / N}\underbrace{\sum_{m} x_{2m+1}\, e^{-i 2\pi k m /(N/2)}}_{\text{odd samples}}.
+$$
+
+Each half is a smaller DFT; solving the recurrence $T(N) = 2T(N/2) + O(N)$ gives the famous
+
+$$
+T(N) = O(N \log N).
+$$
+
+<Callout type="why">
+Fast spectra are infrastructure for ML. Audio models compute thousands of FFTs to build spectrograms;
+large-kernel convolutions are sometimes done via the FFT; and "Fourier feature" layers and FNet (which
+literally replaces attention with an FFT) ride on the same routine. Knowing the DFT is $O(N\log N)$ — not
+$O(N^2)$ — is what makes these designs practical.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Music streaming (MP3/AAC)" icon="🎧">
+To compress a song, the encoder chops it into short windows, FFTs each one, and discards frequency
+components your ears can't hear (psychoacoustic masking). Storing a handful of significant bins instead of
+every sample is how a track shrinks 10× with no audible loss.
+</ExampleCard>
+
+<ExampleCard domain="Wi-Fi & 5G" icon="📶">
+Modern wireless (OFDM) sends data on hundreds of frequency bins at once. The transmitter builds the signal
+with an **inverse FFT** and your device decodes it with a **forward FFT** — millions of times a second.
+The FFT's speed is the reason your phone isn't a brick.
+</ExampleCard>
+
+<ExampleCard domain="Radio astronomy" icon="🛰️">
+Pulsar hunters record radio noise and FFT it to spot a faint periodic blip buried in static. Without the
+FFT, scanning the data volumes from a modern array for these signals would be computationally impossible.
+</ExampleCard>
+
+<ExampleCard domain="Big-number multiplication" icon="🔢">
+Multiplying two enormous integers (think cryptography or computing π to a trillion digits) is, under the
+hood, a convolution of their digits. Libraries do it with the FFT, turning an $O(n^2)$ schoolbook multiply
+into $O(n\log n)$ — a pure-math payoff far from any wave.
+</ExampleCard>
+
+<Callout type="note">
+Sampling and the FFT show up the moment a continuous idea meets a finite computer — audio, radio,
+telescopes, even arithmetic. The lesson repeats: respect Nyquist when you sample, and never pay $N^2$ when
+$N\log N$ will do.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You sample a signal at 1000 samples per second. What is the highest frequency you can represent without aliasing?',
+      options: ['1000 Hz', '500 Hz', '2000 Hz', '250 Hz'],
+      answer: 1,
+      explain: 'The Nyquist limit is half the sampling rate: 1000/2 = 500 Hz. Anything higher folds back to a wrong frequency.',
+    },
+    {
+      q: 'How many frequency bins does a DFT of N samples produce?',
+      options: ['N/2', 'N', '2N', 'log N'],
+      answer: 1,
+      explain: 'A length-N DFT yields exactly N bins (for real signals the upper half mirrors the lower, but there are still N values).',
+    },
+    {
+      q: 'What is the FFT’s key advantage over computing the DFT directly?',
+      options: [
+        'It gives a more accurate answer',
+        'It computes the same result in O(N log N) instead of O(N²)',
+        'It needs no samples',
+        'It avoids aliasing automatically',
+      ],
+      answer: 1,
+      explain: 'The FFT produces the identical DFT output but uses divide-and-conquer to cut the cost from O(N²) to O(N log N).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>DFT</strong> turns N evenly spaced samples into N frequency <strong>bins</strong> — the discrete cousin of the Fourier transform.',
+    'Sampling forces the <strong>Nyquist limit</strong>: sample above twice the highest frequency, or it <strong>aliases</strong> into the wrong bin.',
+    'Computed directly the DFT costs <strong>O(N²)</strong>; the <strong>FFT</strong> gets the identical answer in <strong>O(N log N)</strong>.',
+    'The FFT works by splitting a DFT into even- and odd-indexed halves and combining them — divide and conquer.',
+    'This single fast routine powers MP3, Wi-Fi, telescopes, big-number math, and spectrogram features for ML.',
+  ]}
+/>
+
+Next up: the **convolution theorem** — why filtering, blurring, and even neural-network convolutions
+become simple *multiplication* once you step into the frequency domain.

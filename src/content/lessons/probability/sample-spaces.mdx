@@ -1,0 +1,171 @@
+---
+title: Sample Spaces & Events
+track: probability
+summary: Listing everything that could happen, then measuring the chance of the parts you care about.
+difficulty: beginner
+estMinutes: 13
+prereqs: []
+leadsTo:
+  - probability/conditional-bayes
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SampleSpaceVenn from '../../../components/demos/SampleSpaceVenn.tsx';
+
+## The hook: how does a lottery promise *exact* odds?
+
+When a state lottery prints *"1 in 13,983,816 chance to win the jackpot,"* nobody flipped a coin to
+get that number. They **listed every possible draw**, counted how many of them win, and divided. That
+is the entire machinery of probability in one move: write down everything that *could* happen, mark the
+slice you care about, and measure its size. Before we can talk about random variables, distributions,
+or any model an AI learns, we need this foundation — the **sample space** and the **events** inside it.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **sample space** is the set of *all* possible outcomes; an **event** is any subset of them, and its
+**probability** is just the share of the sample space it occupies.
+</Callout>
+
+## Intuition: the universe of outcomes, and slices of it
+
+Start with a single experiment — anything with an uncertain result. The **sample space** $\Omega$ is the
+complete list of outcomes that experiment could produce, with two rules: the outcomes must be
+**mutually exclusive** (only one happens) and **exhaustive** (one of them definitely happens).
+
+- Drawing a lottery ball numbered 1–36: $\Omega = \{1, 2, \dots, 36\}$.
+- A weekend's weather (sun/rain) over two days: $\Omega = \{(S,S), (S,R), (R,S), (R,R)\}$.
+
+An **event** is any subset of $\Omega$ — a question you can ask whose answer is yes or no for each
+outcome. *"The ball is a multiple of 3"* picks out $\{3, 6, 9, \dots, 33\}$. When every outcome is
+**equally likely**, probability is beautifully simple: count the favorable outcomes and divide by the
+total.
+
+$$
+P(A) = \frac{\#\,\text{outcomes in } A}{\#\,\text{outcomes in } \Omega}.
+$$
+
+Events are sets, so we combine them with set operations: **union** ($A \cup B$, "$A$ or $B$"),
+**intersection** ($A \cap B$, "$A$ and $B$"), and **complement** ($A^c$, "not $A$"). Those three are
+all you need to build any question out of simpler ones.
+
+## Play with it
+
+Below is a sample space of 36 equally likely lottery balls. **Event A** is yours to edit — click any
+ball to add or remove it. **Event B** is fixed (*"the number is greater than 24"*). Switch modes to
+see the **union**, **intersection**, and **complement** light up, with the probability counted live.
+
+<SampleSpaceVenn client:visible />
+
+<Callout type="tip">
+Flip between <strong>A</strong>, <strong>Aᶜ</strong> and watch the two probabilities always add to 1 —
+that's the complement rule. Then compare <strong>A ∪ B</strong> with <strong>A ∩ B</strong>: the union
+is always at least as big, because "or" is an easier bar to clear than "and."
+</Callout>
+
+## The formal definition
+
+A **probability** is a function $P$ that assigns each event a number, obeying three axioms (due to
+Kolmogorov):
+
+$$
+P(A) \ge 0, \qquad P(\Omega) = 1, \qquad P(A \cup B) = P(A) + P(B) \;\text{ if } A \cap B = \varnothing.
+$$
+
+Everything else follows. The **complement rule** drops out immediately, because $A$ and $A^c$ together
+fill $\Omega$ and never overlap:
+
+$$
+P(A^c) = 1 - P(A).
+$$
+
+When two events *can* overlap, naively adding them double-counts the shared part, so we subtract it
+back — the **inclusion–exclusion** rule:
+
+$$
+P(A \cup B) = P(A) + P(B) - P(A \cap B).
+$$
+
+<Callout type="why">
+Machine-learning models are scored by how much probability they place on what actually happened. A
+language model assigns a probability to every possible next token — its own sample space — and good
+training pushes mass onto the real continuation. Getting the sample space and these add/subtract rules
+right is the bedrock everything sits on.
+</Callout>
+
+## The same idea, four different worlds
+
+The "list everything, measure a slice" pattern is everywhere uncertainty lives.
+
+<ExampleCard domain="Genetics" icon="🧬">
+Two brown-eyed parents each carry one brown (B) and one blue (b) gene. A child gets one gene from each
+parent, so $\Omega = \{BB, Bb, bB, bb\}$ — four equally likely outcomes. The event *"blue eyes"* needs
+two recessive genes: just $\{bb\}$, so $P = \tfrac14$. Three of the four outcomes show brown, giving the
+famous 3:1 ratio.
+</ExampleCard>
+
+<ExampleCard domain="Weather forecasting" icon="⛅">
+A meteorologist's sample space for a weekend is $\{(S,S), (S,R), (R,S), (R,R)\}$ for sun/rain across
+two days. The event *"at least one rainy day"* is everything except $(S,S)$ — so it's easiest to use the
+complement: $P(\text{rain at least once}) = 1 - P(S,S)$. Complements turn an awkward "at least one" into
+a single subtraction.
+</ExampleCard>
+
+<ExampleCard domain="Card games" icon="🃏">
+Draw one card from a 52-card deck: $\Omega$ has 52 equally likely outcomes. Let $A$ = "a heart" (13
+cards) and $B$ = "a face card" (12 cards). They overlap in the three heart-faces, so
+$P(A \cup B) = \tfrac{13}{52} + \tfrac{12}{52} - \tfrac{3}{52} = \tfrac{22}{52}$. Inclusion–exclusion
+keeps you from counting the jack of hearts twice.
+</ExampleCard>
+
+<ExampleCard domain="Quality control" icon="🏭">
+A factory pulls one phone off the line; the sample space is $\{\text{works},\ \text{scratched screen},\ \text{dead battery},\ \text{both faults}\}$. The event *"ships to a customer"* is the single "works" outcome. Counting the defect
+outcomes and subtracting from 1 gives the yield — the same complement trick, now driving a business
+decision.
+</ExampleCard>
+
+<Callout type="note">
+Notice the recurring move: when an event is hard to count directly ("at least one defect," "rain on
+some day"), count its <em>opposite</em> and subtract from 1. The complement is your most reliable
+shortcut.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You draw one ball from balls numbered 1–36 (all equally likely). What is P(the number is a multiple of 3)?',
+      options: ['1/3', '12/36 = 1/3', 'Both A and B say the same thing — 12 of the 36 are multiples of 3', '3/36'],
+      answer: 2,
+      explain: 'The multiples of 3 up to 36 are 3,6,…,36 — exactly 12 of them. So P = 12/36 = 1/3. Options A and B are just two ways of writing the same correct answer.',
+    },
+    {
+      q: 'An event A has P(A) = 0.7. What is P(Aᶜ), the probability that A does NOT happen?',
+      options: ['0.7', '0.3', '1.7', 'Cannot be determined'],
+      answer: 1,
+      explain: 'Complement rule: P(Aᶜ) = 1 − P(A) = 1 − 0.7 = 0.3. An event and its complement always sum to 1.',
+    },
+    {
+      q: 'For two events, P(A) = 0.5, P(B) = 0.4, and P(A ∩ B) = 0.2. What is P(A ∪ B)?',
+      options: ['0.9', '0.7', '0.5', '1.1'],
+      answer: 1,
+      explain: 'Inclusion–exclusion: P(A ∪ B) = 0.5 + 0.4 − 0.2 = 0.7. We subtract the overlap so it is not counted twice.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>sample space</strong> Ω is the complete set of mutually exclusive, exhaustive outcomes of an experiment.',
+    'An <strong>event</strong> is any subset of Ω; with equally likely outcomes, P(A) = (favorable)/(total).',
+    'The <strong>complement rule</strong> P(Aᶜ) = 1 − P(A) turns hard "at least one" questions into a single subtraction.',
+    '<strong>Inclusion–exclusion</strong> P(A ∪ B) = P(A) + P(B) − P(A ∩ B) avoids double-counting the overlap.',
+    'These few set rules (union, intersection, complement) are the foundation every distribution and ML probability model is built on.',
+  ]}
+/>
+
+Next up: what happens to these probabilities when you learn something new? **Conditional probability and
+Bayes' theorem** show how an event's chance shifts the moment fresh evidence arrives.

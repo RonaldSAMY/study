@@ -1,0 +1,170 @@
+---
+title: Intro to ODEs
+track: differential-equations
+summary: A differential equation states the rule a quantity's rate of change must obey — and a slope field lets you see every solution at once.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - calculus-1/integrals-ftc
+leadsTo:
+  - differential-equations/first-order
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SlopeFieldExplorer from '../../../components/demos/SlopeFieldExplorer.tsx';
+
+## The hook: the rule that doesn't tell you *where*, only *how fast*
+
+Imagine a skydiver leaping from a plane. Nobody hands you a formula for her speed at every second.
+What you *do* know is the rule the speed must follow: *gravity speeds her up, air resistance slows her
+down, and the faster she falls the harder the air pushes back.* That single sentence — a statement
+about the **rate of change** — is a **differential equation**. The whole field is the art of turning
+"here's the rule for change" into "here's what actually happens."
+
+<Callout type="intuition" title="The one-sentence idea">
+A **differential equation** is an equation whose unknown is a *function*, and which relates that
+function to its own **derivative** — it tells you the slope the solution must have at every point.
+</Callout>
+
+## Intuition: from a rate to a path
+
+In calculus you learned that the derivative $\frac{dy}{dx}$ is the **slope** of a curve. An ordinary
+differential equation (**ODE**) flips the script: instead of being handed $y$ and asked for its slope,
+you are handed the *slope rule* and asked to find $y$.
+
+The simplest ODE you already solved without naming it. When you computed an integral
+$y = \int f(x)\,dx$, you were solving
+
+$$
+\frac{dy}{dx} = f(x).
+$$
+
+That is a differential equation! The Fundamental Theorem of Calculus *is* a recipe for solving the
+easiest kind. Real ODEs are richer because the rate can depend on the current value too, as in
+$\frac{dy}{dx} = y$ — "grow in proportion to how big you already are."
+
+Because integration always leaves a "+ C", a single ODE has a whole **family** of solutions. Pin down
+one specific curve by giving a starting point, called an **initial condition** like $y(0) = 2$.
+
+## Play with it
+
+Below is a **slope field**: at a grid of points we draw a tiny dash whose tilt is the slope the rule
+demands there. A solution is simply a curve that stays tangent to those dashes everywhere. Pick an
+equation, then **drag the sky dot** to choose a starting point and watch the emerald solution thread
+its way through the field.
+
+<SlopeFieldExplorer client:visible />
+
+<Callout type="tip">
+Drag the dot to different heights for the same equation. Every starting point gives a *different* curve,
+but they never cross — that's the solution family, one member per initial condition.
+</Callout>
+
+## The formal definition
+
+An **ordinary differential equation** is an equation involving an unknown function $y(x)$ and its
+derivatives. Its **order** is the highest derivative that appears. A general first-order ODE looks like
+
+$$
+\frac{dy}{dx} = f(x, y),
+$$
+
+and a **solution** is any function $y(x)$ that makes the equation true on an interval. The **general
+solution** carries arbitrary constants (one per order); an **initial value problem** adds a condition
+such as $y(x_0) = y_0$ to select a single curve:
+
+$$
+\frac{dy}{dx} = f(x, y), \qquad y(x_0) = y_0.
+$$
+
+For example, $\frac{dy}{dx} = y$ has general solution $y = Ce^{x}$. The condition $y(0) = 2$ forces
+$C = 2$, so the one true curve is $y = 2e^{x}$.
+
+<Callout type="why">
+Machine learning is differential equations in disguise. Training a network with gradient descent solves
+$\frac{d\theta}{dt} = -\nabla L(\theta)$ — "move the parameters opposite the loss gradient." Diffusion
+image generators, neural ODEs, and physics-informed networks are all built on exactly this language.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Skydiving" icon="🪂">
+A diver's speed obeys $\frac{dv}{dt} = g - \tfrac{k}{m}v^2$: gravity adds speed, drag removes it in
+proportion to $v^2$. You can read the ending off the equation without solving it — when the two terms
+cancel, $\frac{dv}{dt}=0$ and she stops accelerating. That balance speed is **terminal velocity**.
+</ExampleCard>
+
+<ExampleCard domain="Personal finance" icon="💰">
+Continuously compounded savings follow $\frac{dB}{dt} = rB$: the balance grows at a rate proportional to
+the balance itself. More money earns more interest, which earns more interest — the slope field tilts
+ever steeper as you climb, exactly the runaway shape of compound growth.
+</ExampleCard>
+
+<ExampleCard domain="Microbiology" icon="🦠">
+A young bacterial colony with unlimited food doubles on a schedule: $\frac{dN}{dt} = \mu N$. Each cell
+divides independently, so total births scale with the current count. The same equation as the bank
+account — biology and finance share one differential rule.
+</ExampleCard>
+
+<ExampleCard domain="Engineering" icon="🪣">
+Water draining from a tank obeys Torricelli's law, $\frac{dh}{dt} = -c\sqrt{h}$: a deeper tank pushes
+water out faster, so the level falls quickly at first and then crawls. The rate depends on the current
+height — you can't know $h(t)$ until you solve the ODE.
+</ExampleCard>
+
+<Callout type="note">
+Notice none of these gave a formula for the quantity directly. Each gave a *rule for its rate*. That's
+the signature of a differential equation — and why slope fields are such a powerful way to see them.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What makes an equation a differential equation?',
+      options: [
+        'It contains a square root',
+        'Its unknown is a function, and it relates that function to its derivative(s)',
+        'It has more than one variable',
+        'It can only be solved by a computer',
+      ],
+      answer: 1,
+      explain: 'A differential equation’s unknown is a function, and it ties that function to its rate of change (derivative).',
+    },
+    {
+      q: 'Why does a single first-order ODE usually have infinitely many solutions?',
+      options: [
+        'Because derivatives are always positive',
+        'Because integrating introduces an arbitrary constant, fixed only by an initial condition',
+        'Because slope fields are random',
+        'It actually has exactly one solution',
+      ],
+      answer: 1,
+      explain: 'Solving involves integration, which adds a constant C. An initial condition like y(0)=2 picks out one member of the family.',
+    },
+    {
+      q: 'For dy/dx = y, which function is a solution passing through (0, 1)?',
+      options: ['y = x + 1', 'y = e^x', 'y = x²', 'y = ln x'],
+      answer: 1,
+      explain: 'd/dx(e^x) = e^x = y, and e^0 = 1, so y = e^x satisfies both the equation and the initial condition.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>differential equation</strong> relates an unknown function to its own derivative — it gives the <strong>rule for change</strong>, not the answer directly.',
+    'The simplest ODE, <strong>dy/dx = f(x)</strong>, is just integration; the Fundamental Theorem of Calculus solves it.',
+    'A <strong>slope field</strong> draws the required slope at each point; solutions are curves that stay tangent to it.',
+    'One ODE has a whole <strong>family</strong> of solutions; an <strong>initial condition</strong> selects a single curve.',
+    'The same rate-of-change rule shows up across skydiving, finance, biology, and engineering — and underlies how ML models train.',
+  ]}
+/>
+
+Next up: **first-order ODEs** — the separable and linear types you can solve by hand, and how a single
+rate constant reshapes the entire solution family.

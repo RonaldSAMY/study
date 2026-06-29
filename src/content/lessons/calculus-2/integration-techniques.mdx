@@ -1,0 +1,165 @@
+---
+title: Integration Techniques
+track: calculus-2
+summary: Substitution, integration by parts, and partial fractions — the three tools that turn scary integrals into easy ones.
+difficulty: beginner
+estMinutes: 16
+prereqs:
+  - calculus-1/integrals-ftc
+leadsTo:
+  - calculus-2/applications-integrals
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import USubstitutionVisualizer from '../../../components/demos/USubstitutionVisualizer.tsx';
+
+## The hook: how much work does a rocket do?
+
+A rocket's engine doesn't push with a constant force. As it climbs, the thrust ramps up — say it grows
+like $2t\,e^{t^2}$. The **work** done over the burn is the area under that curve, an integral. But you
+can't just "read off" the antiderivative of $2t\,e^{t^2}$ from a table. You need a *technique* — a way
+to massage the integral into something you already know.
+
+That is what this lesson is about. The Fundamental Theorem told us that *an antiderivative computes
+area*. It did **not** tell us how to find antiderivatives of messy expressions. Three techniques cover
+the vast majority of cases: **u-substitution**, **integration by parts**, and **partial fractions**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Integration techniques are pattern-matching tricks: each one **rewrites a hard integral as an easy one**
+you already know how to do — substitution undoes the chain rule, by parts undoes the product rule, and
+partial fractions splits one fraction into several simple ones.
+</Callout>
+
+## Intuition: run the derivative rules backwards
+
+Every differentiation rule you learned has an integration twin, read in reverse:
+
+- The **chain rule** $\frac{d}{dx}f(g(x)) = f'(g(x))\,g'(x)$ run backwards becomes **u-substitution**.
+- The **product rule** $\frac{d}{dx}(uv) = u'v + uv'$ run backwards becomes **integration by parts**.
+- Splitting a complicated fraction back into the pieces it "came from" is **partial fractions**.
+
+The star of the show is **u-substitution**. The idea: if you spot a chunk $g(x)$ *and* its derivative
+$g'(x)$ both sitting in the integrand, rename the chunk $u = g(x)$. Then $du = g'(x)\,dx$ — and the
+$g'(x)\,dx$ already present silently turns into $du$. The integral collapses into the variable $u$.
+
+## Play with it
+
+Below are three integrals. For each, **pick what to call $u$**. Only the substitution whose derivative
+is *already in the integrand* will cancel cleanly — and when it does, the bottom graph (the integral in
+$u$-space) unlocks. Drag the upper limit and confirm the shaded **areas stay identical**: substitution
+just relabels the axis, it never changes the area.
+
+<USubstitutionVisualizer client:visible />
+
+<Callout type="tip">
+The test for a good $u$: differentiate your candidate. If $du$ "uses up" a factor that is already
+sitting in the integrand, you have a match. If leftover $x$'s remain after substituting, pick a
+different $u$.
+</Callout>
+
+## The formal definition
+
+**u-substitution** (the reverse chain rule):
+
+$$
+\int f\big(g(x)\big)\,g'(x)\,dx = \int f(u)\,du, \qquad u = g(x),\; du = g'(x)\,dx.
+$$
+
+For our rocket, $u = t^2$ gives $du = 2t\,dt$, so $\int 2t\,e^{t^2}\,dt = \int e^{u}\,du = e^{u} + C = e^{t^2} + C.$
+
+**Integration by parts** (the reverse product rule):
+
+$$
+\int u\,dv = uv - \int v\,du.
+$$
+
+You use it when the integrand is a *product* of two unrelated things — e.g. $\int x\,e^{x}\,dx$. Choose
+$u = x$ (gets simpler when differentiated) and $dv = e^x\,dx$, then $\int x e^x dx = x e^x - \int e^x dx = (x-1)e^x + C.$
+
+**Partial fractions** splits a rational function into a sum of simple fractions:
+
+$$
+\frac{1}{x^2 - 1} = \frac{1}{(x-1)(x+1)} = \frac{1/2}{x-1} - \frac{1/2}{x+1},
+$$
+
+and each piece integrates to a logarithm.
+
+<Callout type="why">
+In machine learning these aren't academic. Computing the **normalizing constant** of a probability
+distribution, the **expected value** of a continuous variable, or the area under an ROC curve all reduce
+to integrals — and substitution is the workhorse that makes them solvable in closed form.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Spaceflight" icon="🚀">
+The **work** done by a variable thrust $F(t) = 2t\,e^{t^2}$ over a burn from $t=0$ to $t=1$ is
+$\int_0^1 2t\,e^{t^2}\,dt$. Substituting $u = t^2$ turns it into $\int_0^1 e^{u}\,du = e - 1 \approx 1.72$.
+A wall of notation becomes a one-line answer.
+</ExampleCard>
+
+<ExampleCard domain="Environmental science" icon="🏭">
+A pollutant enters a lake at rate $\frac{2t}{1+t^2}$. The total accumulated over time is
+$\int \frac{2t}{1+t^2}\,dt$. Let $u = 1 + t^2$, so $du = 2t\,dt$ — the numerator *is* $du$. The integral
+becomes $\int \frac{du}{u} = \ln(1+t^2) + C$. Buildup that looked intractable is just a logarithm.
+</ExampleCard>
+
+<ExampleCard domain="Pharmacology" icon="💊">
+A drug's concentration decays while the body absorbs more, modelled by a product like $t\,e^{-t}$.
+The total exposure $\int t\,e^{-t}\,dt$ needs **integration by parts** ($u=t$, $dv=e^{-t}dt$), giving
+$-(t+1)e^{-t} + C$ — the basis of the "area under the curve" dosing that pharmacists actually use.
+</ExampleCard>
+
+<ExampleCard domain="Electronics" icon="🔌">
+Filter and circuit responses constantly produce rational functions like $\frac{1}{x^2-1}$. **Partial
+fractions** breaks them into $\frac{1/2}{x-1} - \frac{1/2}{x+1}$, each a clean logarithm — exactly how
+engineers invert Laplace transforms to find a circuit's behavior over time.
+</ExampleCard>
+
+<Callout type="note">
+There's an art to it: the same integral can sometimes be cracked by more than one technique, and some
+need two in sequence. Fluency comes from recognizing the *shape* of the integrand quickly — the demo
+above trains exactly that reflex.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'For ∫ 2x·cos(x²) dx, what substitution makes it collapse cleanly?',
+      options: ['u = cos(x²)', 'u = x²', 'u = 2x', 'u = x'],
+      answer: 1,
+      explain: 'With u = x², du = 2x dx — and that 2x dx is already in the integrand. The integral becomes ∫ cos(u) du = sin(x²) + C.',
+    },
+    {
+      q: 'Which differentiation rule does integration by parts reverse?',
+      options: ['The chain rule', 'The product rule', 'The quotient rule', 'The power rule'],
+      answer: 1,
+      explain: 'Integration by parts, ∫u dv = uv − ∫v du, is the product rule d(uv) = u dv + v du rearranged and integrated.',
+    },
+    {
+      q: 'Using u = 1 + x², evaluate ∫₀¹ 2x/(1+x²) dx.',
+      options: ['ln 2 ≈ 0.693', '1', 'ln 1 = 0', '2'],
+      answer: 0,
+      explain: 'u goes from 1 (x=0) to 2 (x=1), and the integral becomes ∫₁² du/u = ln 2 − ln 1 = ln 2 ≈ 0.693.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Integration techniques <strong>rewrite a hard integral as an easy, known one</strong> — they are reverse differentiation rules.',
+    '<strong>u-substitution</strong> reverses the chain rule: rename a chunk g(x) as u when its derivative g′(x) is already present.',
+    'A substitution only works if <strong>no stray x’s remain</strong> after switching to u — and the area is always preserved.',
+    '<strong>Integration by parts</strong> (∫u dv = uv − ∫v du) handles products; <strong>partial fractions</strong> splits rational functions into simple logs.',
+    'These tools unlock the integrals behind <strong>work, accumulation, dosing, and probability</strong> — the next lesson puts them to work.',
+  ]}
+/>
+
+Next up: **Applications of Integrals** — turning these techniques into areas between curves, the volumes
+of spun solids, and averages.

@@ -1,0 +1,177 @@
+---
+title: Matrices
+track: linear-algebra
+summary: A rectangular grid of numbers that stores tables of data and encodes transformations of space.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - linear-algebra/span
+leadsTo:
+  - linear-algebra/matrix-multiplication
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import MatrixGridInspector from '../../../components/demos/MatrixGridInspector.tsx';
+
+## The hook: a spreadsheet is already a matrix
+
+Open any spreadsheet of sensor logs: each **row** is one device, each **column** is one measurement,
+and every cell holds a number. You've been using matrices your whole life without the name. A
+**matrix** is exactly that — a rectangular grid of numbers — but linear algebra gives it superpowers:
+the same grid that *stores* a table can also *transform* space, rotating and stretching every point at
+once. Learning to read a matrix two ways — as data and as an action — is the key that unlocks the rest
+of the subject.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **matrix** is a rectangular grid of numbers. Read its rows and columns as **records and features**
+to store data, or read its columns as **vectors** to transform space.
+</Callout>
+
+## Intuition: stacking vectors into a grid
+
+Last lesson you mixed a few vectors. A matrix is what you get when you line those vectors up
+**side by side** as columns:
+
+$$
+A = \begin{bmatrix} 2 & -1 \\ 1 & 3 \end{bmatrix}
+\quad\text{has columns}\quad
+\begin{bmatrix} 2 \\ 1 \end{bmatrix},\ \begin{bmatrix} -1 \\ 3 \end{bmatrix}.
+$$
+
+That packaging gives two readings:
+
+1. **As a data table.** Rows are samples (one customer, one sensor, one day), columns are features
+   (height, price, temperature). The entry $a_{ij}$ sits in row $i$, column $j$. This is how data
+   *enters* a machine-learning model.
+2. **As a transformation.** Each **column says where a basis arrow lands.** Column 1 is the new home
+   of $\hat{\imath}=[1,0]$; column 2 is the new home of $\hat{\jmath}=[0,1]$. Feed any vector in and the
+   matrix relocates it. This is the view we lean on in the next lesson.
+
+We describe a matrix's shape as **rows × columns**. The matrix above is $2\times 2$; the sensor table
+in the demo is $3\times 3$.
+
+## Play with it
+
+Edit any cell of this $3\times 3$ sensor table. Then click a **row** or **column** label to highlight
+it and read what that slice means: a row is one complete record, a column is one feature across all
+records.
+
+<MatrixGridInspector client:visible />
+
+<Callout type="tip">
+Keep the order straight: <strong>rows then columns</strong>, always. The entry a<sub>23</sub> lives in
+row 2, column 3 — never the other way around. Getting this index order wrong is the most common early
+matrix bug.
+</Callout>
+
+## The formal definition
+
+A matrix $A$ with $m$ rows and $n$ columns is written
+
+$$
+A = \begin{bmatrix}
+a_{11} & a_{12} & \cdots & a_{1n} \\
+a_{21} & a_{22} & \cdots & a_{2n} \\
+\vdots & \vdots & \ddots & \vdots \\
+a_{m1} & a_{m2} & \cdots & a_{mn}
+\end{bmatrix}, \qquad A \in \mathbb{R}^{m\times n}.
+$$
+
+A few essentials:
+
+- The **shape** is $m\times n$ (rows × columns). A vector in $\mathbb{R}^n$ is just an $n\times 1$ matrix.
+- The **transpose** $A^\top$ flips rows and columns, turning an $m\times n$ matrix into $n\times m$.
+- The **identity** $I$ has 1's on the diagonal and 0's elsewhere; it's the "do-nothing" transformation
+  that leaves every vector exactly where it was.
+
+$$
+I_3 = \begin{bmatrix} 1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1 \end{bmatrix}.
+$$
+
+<Callout type="why">
+Every dataset a model ever sees is a matrix: rows are examples, columns are features. And every linear
+layer in a neural network *is* a matrix. Storing data and transforming it are the same object — which
+is why this one grid sits at the center of machine learning.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Spreadsheets" icon="📊">
+A class gradebook: rows are students, columns are assignments, cells are scores. Averaging a column
+grades one assignment across the class; averaging a row gives one student's overall mark. Same grid,
+two questions — that's the matrix mindset.
+</ExampleCard>
+
+<ExampleCard domain="Digital images" icon="🖼️">
+A grayscale photo *is* a matrix: each entry is a pixel's brightness from 0 (black) to 255 (white).
+A 1080p frame is a $1080\times 1920$ matrix. Editing the picture means doing arithmetic on that grid.
+</ExampleCard>
+
+<ExampleCard domain="Economics" icon="🏭">
+An input-output table lists how much each industry buys from every other: row $i$, column $j$ is what
+sector $i$ needs from sector $j$ to produce one unit. Economists read whole supply chains straight off
+this matrix.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="🚚">
+A distance matrix for delivery: rows and columns are cities, each cell the travel time between them.
+Route planners scan rows and columns of this grid to stitch together the fastest tour.
+</ExampleCard>
+
+<Callout type="note">
+A matrix doesn't have to be square. A dataset of 10,000 customers with 12 features is a
+$10{,}000\times 12$ matrix — tall and thin. Shape carries meaning, and it decides which matrices can be
+multiplied together, as you'll see next.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A matrix has 4 rows and 7 columns. What is its shape?',
+      options: ['7 × 4', '4 × 7', '28 × 1', '11 × 11'],
+      answer: 1,
+      explain: 'Shape is always rows × columns, so 4 × 7. It has 4·7 = 28 entries.',
+    },
+    {
+      q: 'In a data matrix where rows are customers and columns are features, what does a single column represent?',
+      options: [
+        'One customer',
+        'One feature measured across all customers',
+        'The total of all data',
+        'A transformation of space',
+      ],
+      answer: 1,
+      explain: 'A column collects one variable (e.g., age) across every record; a row collects all features of one customer.',
+    },
+    {
+      q: 'What does the identity matrix do when it transforms a vector?',
+      options: [
+        'Doubles it',
+        'Rotates it 90°',
+        'Leaves it unchanged',
+        'Sends it to the origin',
+      ],
+      answer: 2,
+      explain: 'The identity has 1s on the diagonal and 0s elsewhere; it maps every vector to itself — the "do-nothing" transform.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>matrix</strong> is a rectangular grid of numbers with shape m × n (rows × columns).',
+    'Read it as <strong>data</strong> (rows = records, columns = features) or as a <strong>transformation</strong> (columns = where the basis vectors land).',
+    'The entry <strong>a<sub>ij</sub></strong> lives in row i, column j — rows first, always.',
+    'The <strong>identity matrix</strong> leaves every vector unchanged; the <strong>transpose</strong> swaps rows and columns.',
+    'Every dataset and every linear layer in ML is a matrix — storing and transforming are the same object.',
+  ]}
+/>
+
+Next up: **matrix multiplication** — how applying one matrix, then another, composes their
+transformations into a single new matrix.

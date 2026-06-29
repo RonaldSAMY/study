@@ -1,0 +1,161 @@
+---
+title: Numbers & Operations
+track: algebra-1
+summary: Integers, fractions, and the order of operations — the rules of the game before the game begins.
+difficulty: beginner
+estMinutes: 12
+prereqs: []
+leadsTo:
+  - algebra-1/variables-expressions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import OrderOfOpsEvaluator from '../../../components/demos/OrderOfOpsEvaluator.tsx';
+
+## The hook: a recipe that doubles itself
+
+You are doubling a soup recipe. It calls for *"3 cups of stock plus 2 cans of beans, where each can is 1.5 cups."* Do you write
+$3 + 2 \times 1.5$ and read it left to right to get $7.5$? Or do you multiply first to get $3 + 3 = 6$? Those are
+**different amounts of soup** — and only one is right. The number isn't ambiguous; the *order you combine* the numbers is.
+Before algebra can use letters, we have to agree on exactly how numbers combine. That agreement is this lesson.
+
+<Callout type="intuition" title="The one-sentence idea">
+Arithmetic has a fixed **order of operations** — parentheses, then multiplication and division, then addition and
+subtraction — so that every person (and every computer) reads the same expression the same way.
+</Callout>
+
+## Intuition: numbers, then the rules that bind them
+
+You already count, add, and split things into fractions every day. Algebra just makes the rules explicit so they never
+get fuzzy. Three things are worth naming clearly:
+
+1. **Integers** — the whole numbers and their negatives: $\dots, -2, -1, 0, 1, 2, \dots$. Negatives are just "the other
+   direction" (owing money, below sea level, below zero).
+2. **Fractions** — a part of a whole, $\tfrac{3}{4}$, which is the same as the division $3 \div 4 = 0.75$.
+3. **Order of operations** — when several operations sit in one expression, we don't read strictly left to right. We do
+   **P**arentheses, then **E**xponents, then **M**ultiplication/**D**ivision, then **A**ddition/**S**ubtraction (PEMDAS).
+
+Parentheses are the override switch: anything inside them happens *first*, no matter what. That single power is what lets
+the same digits and signs mean different things.
+
+## Play with it
+
+Below is the expression **a + b × c − d**. Slide the four numbers, then toggle where the parentheses go. The numbers and
+operators never change — only the grouping — yet the result jumps around. Watch the step-by-step evaluation update live.
+
+<OrderOfOpsEvaluator client:visible />
+
+<Callout type="tip">
+Start with "no parentheses" and note the answer. Now switch to <strong>( a + b ) × c − d</strong>. Same symbols, new
+result — because you forced the addition to happen before the multiplication.
+</Callout>
+
+## The formal definition
+
+An **integer** is any number in the set
+
+$$
+\mathbb{Z} = \{\,\dots, -2,\, -1,\, 0,\, 1,\, 2,\, \dots\,\}.
+$$
+
+A **rational number** (fraction) is any ratio of two integers with a non-zero denominator:
+
+$$
+\frac{p}{q}, \qquad p, q \in \mathbb{Z}, \quad q \neq 0.
+$$
+
+The **order of operations** says that to evaluate an expression you resolve, in this priority:
+
+$$
+\text{Parentheses} \;\to\; \text{Exponents} \;\to\; \text{Multiply / Divide} \;\to\; \text{Add / Subtract},
+$$
+
+working left to right within each equal-priority level. So
+
+$$
+3 + 2 \times 1.5 = 3 + 3 = 6, \qquad \text{but} \qquad (3 + 2) \times 1.5 = 5 \times 1.5 = 7.5.
+$$
+
+<Callout type="why">
+Computers evaluate billions of expressions exactly this way. Every line of machine-learning code — a loss like
+$\tfrac{1}{n}\sum (y - \hat{y})^2$ — relies on the interpreter applying these precedence rules consistently. Get the order
+wrong and the model "learns" the wrong thing.
+</Callout>
+
+## The same idea, four different worlds
+
+The order of operations isn't a school ritual — it is how careful totals get computed everywhere.
+
+<ExampleCard domain="Cooking" icon="🍲">
+Scaling a recipe: *base 3 cups of stock, plus 2 cans at 1.5 cups each.* Written
+$3 + 2 \times 1.5$, multiplication binds the cans to their size first, giving $6$ cups. Reading it left-to-right
+($7.5$) would over-fill the pot. The math protects the dish.
+</ExampleCard>
+
+<ExampleCard domain="Personal budgeting" icon="💰">
+Your monthly leftover is $\text{income} - (\text{rent} + \text{food} + \text{transport})$. The parentheses say *add up all
+the bills first, then subtract.* Drop them — $2000 - 800 + 400 + 200$ — and you'd compute $1800$ instead of $600$, a very
+expensive typo.
+</ExampleCard>
+
+<ExampleCard domain="Sports statistics" icon="⚾">
+A batting average is $\tfrac{\text{hits}}{\text{at-bats}}$ — a fraction, an integer over an integer. 45 hits in 150 at-bats
+is $\tfrac{45}{150} = 0.300$. The division *is* the operation, and it must finish before you compare two players.
+</ExampleCard>
+
+<ExampleCard domain="Gardening" icon="🌱">
+Planting a bed: 4 rows of 6 seedlings, plus a spare 5 in a pot, is $4 \times 6 + 5 = 29$. Multiplication (rows of plants)
+resolves before the lone addition. Mis-order it and you'd order the wrong number of seedlings.
+</ExampleCard>
+
+<Callout type="note">
+Notice negatives quietly at work in budgeting (spending is subtraction) and fractions in batting averages and recipes.
+The same handful of rules covers all of them.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Evaluate 2 + 6 × 3.',
+      options: ['24', '20', '11', '36'],
+      answer: 1,
+      explain: 'Multiplication comes before addition: 6 × 3 = 18, then 2 + 18 = 20.',
+    },
+    {
+      q: 'Which expression equals 7.5 for the recipe "3 plus 2 cans of 1.5 cups"?',
+      options: ['3 + 2 × 1.5', '(3 + 2) × 1.5', '3 × 2 + 1.5', '3 + 2 + 1.5'],
+      answer: 1,
+      explain: 'Forcing the addition first with parentheses: (3 + 2) × 1.5 = 5 × 1.5 = 7.5.',
+    },
+    {
+      q: 'Why do we need an agreed order of operations at all?',
+      options: [
+        'So expressions look tidier',
+        'So everyone (and every computer) reads the same expression the same way',
+        'Because multiplication is harder than addition',
+        'To make fractions disappear',
+      ],
+      answer: 1,
+      explain: 'Without a shared rule, the same symbols could mean different amounts — the order removes the ambiguity.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Integers</strong> are whole numbers and their negatives; <strong>fractions</strong> are one integer divided by another (denominator ≠ 0).',
+    'The <strong>order of operations</strong> (PEMDAS) fixes how mixed expressions are read: parentheses → exponents → ×/÷ → +/−.',
+    'Work <strong>left to right</strong> only within the same priority level.',
+    '<strong>Parentheses</strong> are the override: they force whatever is inside to happen first.',
+    'These exact rules are what every calculator and every line of ML code use to evaluate expressions.',
+  ]}
+/>
+
+Next up: **Variables & Expressions** — we replace some of these numbers with letters, and learn to tidy the result by
+collecting like terms.

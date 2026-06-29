@@ -1,0 +1,180 @@
+---
+title: Inverse & Determinant
+track: linear-algebra
+summary: The inverse undoes a transformation; the determinant measures how it scales area and whether undoing is possible.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - linear-algebra/gaussian-elimination
+leadsTo:
+  - linear-algebra/vector-spaces
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DeterminantAreaDemo from '../../../components/demos/DeterminantAreaDemo.tsx';
+
+## The hook: can you un-scramble a secret message?
+
+A classic cipher turns blocks of letters into number-vectors and multiplies them by a secret matrix to
+scramble them. To read the message, the receiver must apply the **inverse** matrix to undo the
+scramble. But here's the catch: not every matrix can be undone. If the encoding matrix squashes two
+different messages onto the same output, the original is lost forever. A single number — the
+**determinant** — tells you up front whether an inverse exists. When it's zero, information has been
+destroyed and there's no way back.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **inverse** $A^{-1}$ is the transformation that undoes $A$; the **determinant** is one number
+telling you how much $A$ scales area — and if it's **zero, no inverse exists**.
+</Callout>
+
+## Intuition: undoing a transformation
+
+A matrix $A$ moves every point in space. The **inverse** $A^{-1}$ is the matrix that moves them all
+back, so that doing $A$ then $A^{-1}$ lands you exactly where you started:
+
+$$
+A^{-1}A = AA^{-1} = I .
+$$
+
+When does an undo exist? Think back to **span** and **determinant-as-area**. The **determinant**
+measures how $A$ scales the area of the unit square:
+
+- $\det A = 2$ → areas double.
+- $\det A = -1$ → area is preserved but space is flipped (a mirror image).
+- $\det A = 0$ → the square is **flattened onto a line**: 2D space collapses to 1D.
+
+That last case is fatal. Once everything is crushed onto a line, infinitely many starting points share
+the same image, so there's **no way to reverse it**. A matrix is invertible **exactly when its
+determinant is nonzero** — equivalently, when Gaussian elimination produces a pivot in every column.
+
+## Play with it
+
+Drag the sliders to reshape the $2\times 2$ matrix and watch the unit square (area 1) morph into a
+parallelogram. Its area *is* $|\det A|$. Push the determinant toward 0 and watch the square collapse to
+a line — the moment the matrix stops being invertible.
+
+<DeterminantAreaDemo client:visible />
+
+<Callout type="tip">
+Drive the parallelogram until it's a flat sliver: the area readout hits <strong>0</strong> and the
+warning fires. A flat shadow can't be puffed back into a square — that's non-invertibility you can see.
+</Callout>
+
+## The formal definition
+
+For a $2\times 2$ matrix the determinant is
+
+$$
+\det \begin{bmatrix} a & b \\ c & d \end{bmatrix} = ad - bc ,
+$$
+
+and when it's nonzero the inverse has a tidy closed form:
+
+$$
+A^{-1} = \frac{1}{ad - bc} \begin{bmatrix} d & -b \\ -c & a \end{bmatrix}.
+$$
+
+Notice the determinant sitting in the denominator — that's why $\det A = 0$ forbids an inverse (you
+can't divide by zero). The defining property in any dimension is
+
+$$
+A^{-1}A = AA^{-1} = I .
+$$
+
+A matrix is called **singular** (non-invertible) when $\det A = 0$ and **invertible** otherwise. These
+statements are all equivalent for a square $A$:
+
+- $\det A \neq 0$.
+- $A^{-1}$ exists.
+- $A\mathbf{x}=\mathbf{b}$ has a unique solution for every $\mathbf{b}$.
+- The columns of $A$ are linearly independent (they span the whole space).
+
+<Callout type="why">
+Solving $A\mathbf{x}=\mathbf{b}$ is "in principle" $\mathbf{x}=A^{-1}\mathbf{b}$. In practice ML rarely
+forms the inverse — it's slow and unstable — and uses elimination instead. But a determinant **near**
+zero is a red flag: the matrix is nearly singular, and solutions become wildly sensitive to noise.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Cryptography" icon="🔐">
+A Hill cipher encrypts letter-blocks by multiplying them with a secret key matrix. Decryption applies
+the inverse key. The key is only usable if its determinant is invertible — choose a singular matrix and
+even the intended recipient can't recover the message.
+</ExampleCard>
+
+<ExampleCard domain="3D graphics" icon="🎥">
+The camera matrix maps world points onto the screen. To turn a click on the screen back into a ray
+through the 3D world, the renderer applies the **inverse** camera matrix — essential for picking and
+selecting objects in a scene.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🦿">
+Forward kinematics multiplies joint matrices to find where the hand is. **Inverse** kinematics runs it
+backward: given a target, what joint angles get there? Near configurations where a determinant goes to
+zero — a **singularity** — the arm loses a degree of freedom and control breaks down.
+</ExampleCard>
+
+<ExampleCard domain="Computer animation" icon="🎬">
+A "squash" effect that flattens a bouncing ball uses a matrix with a tiny determinant. Push it to
+exactly zero and the ball becomes a 2D pancake with no thickness — visually striking, but the move can
+never be cleanly reversed because volume information is gone.
+</ExampleCard>
+
+<Callout type="warning">
+A nonzero-but-tiny determinant is sneaky. The matrix is *technically* invertible, but it's nearly
+singular: tiny input errors blow up into huge output errors. This "ill-conditioning" quietly wrecks
+numerical results far more often than an exact zero does.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Compute the determinant of [[3, 2], [1, 4]].',
+      options: ['10', '14', '5', '-10'],
+      answer: 0,
+      explain: 'ad - bc = (3)(4) - (2)(1) = 12 - 2 = 10. Since it is nonzero, the matrix is invertible.',
+    },
+    {
+      q: 'A 2×2 matrix has determinant 0. What does that tell you?',
+      options: [
+        'It doubles every area',
+        'It is non-invertible: it collapses space and cannot be undone',
+        'It is the identity matrix',
+        'Its inverse equals itself',
+      ],
+      answer: 1,
+      explain: 'det = 0 means the unit square flattens onto a line, so the map is not reversible — the matrix is singular.',
+    },
+    {
+      q: 'Geometrically, what does |det A| measure for a 2×2 matrix?',
+      options: [
+        'The length of the longest column',
+        'The angle between the columns',
+        'The factor by which it scales area',
+        'The number of solutions',
+      ],
+      answer: 2,
+      explain: 'The absolute determinant is the area of the parallelogram the unit square becomes — the area-scaling factor.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>inverse</strong> A⁻¹ undoes A: A⁻¹A = AA⁻¹ = I.',
+    'The <strong>determinant</strong> measures how a matrix scales area (and flips orientation when negative).',
+    '<strong>det A = 0 ⇔ non-invertible</strong>: space is collapsed and information is lost for good.',
+    'For 2×2: det = ad − bc, and A⁻¹ = (1/det)·[[d, −b], [−c, a]].',
+    'Invertible, nonzero determinant, unique solutions, and independent columns all say the <strong>same thing</strong>.',
+  ]}
+/>
+
+Next up: **vector spaces, basis, and rank** — the structure that ties span, independence, and
+dimension into one elegant framework.

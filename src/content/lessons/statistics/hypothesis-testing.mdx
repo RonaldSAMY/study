@@ -1,0 +1,181 @@
+---
+title: Hypothesis Testing
+track: statistics
+summary: Deciding whether an effect is real or just luck — null vs alternative, and the p-value.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - statistics/confidence-intervals
+leadsTo:
+  - statistics/regression
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PValueTailExplorer from '../../../components/demos/PValueTailExplorer.tsx';
+
+## The hook: did the new page actually win?
+
+Your website's old checkout page converts at 10%. You redesign it, run an A/B test, and the new version
+converts at 12%. Champagne? Not yet. With only a few hundred visitors, **random luck alone** could produce
+a 12% just by the toss of the coin. Before you ship the change, you need to answer one question: *is this
+gap too big to be a fluke?*
+
+Hypothesis testing is the disciplined way to answer it. It assumes "nothing changed" and then checks
+whether your data is **too surprising** for that assumption to survive.
+
+<Callout type="intuition" title="The one-sentence idea">
+Assume there is **no effect**, then ask: *if that were true, how often would I see data at least this
+extreme by pure chance?* If the answer is "rarely," the no-effect story is implausible.
+</Callout>
+
+## Intuition: innocent until proven surprising
+
+A hypothesis test is a courtroom for ideas. It starts from a presumption of innocence:
+
+- The **null hypothesis** $H_0$ — the boring default: *no difference, no effect, nothing's going on.*
+- The **alternative** $H_1$ — what you suspect: *the new page really is better.*
+
+We give the null every benefit of the doubt and ask: *if the null were true, what range of results would
+chance alone produce?* That range is the **sampling distribution under the null** — a bell curve (thanks
+again to the Central Limit Theorem) centered on "no effect."
+
+Then we drop our actual observed result onto that curve. If it lands in the fat middle, it's an ordinary
+fluctuation — the null survives. If it lands far out in a thin tail, then *either* an extraordinary
+coincidence happened *or* the null is wrong. The **p-value** measures exactly how far out we are: the
+probability, under the null, of a result at least this extreme.
+
+## Play with it
+
+The bell curve is the distribution of the test statistic **assuming the null is true** (no real effect).
+Drag the **observed** line. The shaded tail is the **p-value** — the chance of being this extreme by luck
+alone. Slide past the red 5% line and the tail shrinks below $\alpha$; that's when we **reject the null**.
+Toggle two-tailed to test "different in either direction."
+
+<PValueTailExplorer client:visible />
+
+<Callout type="warning">
+A small p-value does <strong>not</strong> mean the effect is large or important — only that it's unlikely
+to be pure chance. With a huge sample, a trivial 0.1% lift can be "statistically significant" yet
+commercially worthless. Always read the <strong>effect size</strong> alongside the p-value.
+</Callout>
+
+## The formal definition
+
+We compute a **test statistic** that measures how far the data sits from the null, in units of standard
+error. For comparing an observed proportion $\hat{p}$ to a null value $p_0$:
+
+$$
+z = \frac{\hat{p} - p_0}{\sqrt{\dfrac{p_0(1-p_0)}{n}}}.
+$$
+
+The **p-value** is the probability, *assuming $H_0$*, of a statistic at least as extreme as the one
+observed:
+
+$$
+p = P\big(\,|Z| \ge |z| \;\big|\; H_0\,\big) \quad\text{(two-tailed)}.
+$$
+
+We fix a **significance level** $\alpha$ (usually $0.05$) in advance and decide:
+
+$$
+p \le \alpha \;\Rightarrow\; \text{reject } H_0, \qquad p > \alpha \;\Rightarrow\; \text{fail to reject } H_0.
+$$
+
+Two ways to be wrong: a **Type I error** (false positive — reject a true null, rate $\alpha$) and a
+**Type II error** (false negative — miss a real effect, rate $\beta$). Lowering one tends to raise the
+other.
+
+<Callout type="why">
+Every claim that a new model "beats the baseline" is a hypothesis test in spirit. Is the accuracy gain
+real or did it ride one lucky test split? The same logic guards against fooling yourself — the single most
+important skill in empirical machine learning.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="A/B testing" icon="🖱️">
+The null is "both checkout pages convert equally." You compute a $z$ from the two conversion counts; if its
+p-value drops below 0.05 you ship the new page. Run enough tests, though, and some will look "significant"
+by chance — which is why teams correct for multiple comparisons.
+</ExampleCard>
+
+<ExampleCard domain="Clinical trials" icon="💊">
+The null is "the drug works no better than placebo." A small p-value is the evidence regulators demand
+before approval. Here a **Type I error** approves a useless drug and a **Type II error** buries a working
+one — so trials are sized to keep both rates low.
+</ExampleCard>
+
+<ExampleCard domain="Quality control" icon="🏭">
+The null is "this machine is still calibrated to 500 g." Each shift, a sample of boxes yields a $z$; a
+significant result triggers a halt-and-inspect. A two-tailed test is right here — overfilling and
+underfilling are both faults.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="🎾">
+A coach claims a new serve technique boosts ace rate. The null says "no change." With only 40 serves the
+test may lack the **power** to detect a real improvement — a Type II error — reminding us that "not
+significant" means *not enough evidence*, not *proven false*.
+</ExampleCard>
+
+<Callout type="note">
+A confidence interval and a hypothesis test are two views of one idea: if the 95% CI for an effect
+**excludes** the null value, the two-tailed test rejects $H_0$ at $\alpha = 0.05$. Same evidence, two
+languages.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is a p-value?',
+      options: [
+        'The probability that the null hypothesis is true',
+        'The probability of seeing data at least this extreme if the null hypothesis were true',
+        'The probability the effect is large',
+        'The chance you made a mistake',
+      ],
+      answer: 1,
+      explain: 'The p-value is computed assuming the null is true; it measures how extreme the observed data is under that assumption — not the probability that the null itself is true.',
+    },
+    {
+      q: 'You run a test with α = 0.05 and get p = 0.03. What do you conclude?',
+      options: [
+        'Fail to reject the null; no effect',
+        'Reject the null; the result is statistically significant',
+        'The effect is definitely large',
+        'The null is proven false with certainty',
+      ],
+      answer: 1,
+      explain: 'Since p = 0.03 ≤ 0.05, you reject the null. It is significant, but this says nothing about effect size and is never a 100% certain proof.',
+    },
+    {
+      q: 'A test fails to reject the null. Which statement is correct?',
+      options: [
+        'The null is proven true',
+        'There is not enough evidence to conclude an effect — it may be a Type II error',
+        'The alternative is definitely false',
+        'The p-value must be exactly 1',
+      ],
+      answer: 1,
+      explain: 'Failing to reject means insufficient evidence, not proof of no effect. A real effect could have been missed due to low power (a Type II error).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A hypothesis test pits a <strong>null</strong> (no effect) against an <strong>alternative</strong>, presuming the null until the data is too surprising.',
+    'The <strong>p-value</strong> is the chance of a result at least this extreme <em>if the null were true</em> — not the probability the null is true.',
+    'Reject the null when <strong>p ≤ α</strong> (often 0.05); otherwise fail to reject — which is not the same as proving no effect.',
+    'Two errors trade off: <strong>Type I</strong> (false positive, rate α) and <strong>Type II</strong> (false negative, rate β).',
+    'Significance is not importance — always pair the p-value with the <strong>effect size</strong>, and remember a CI excluding the null says the same thing.',
+  ]}
+/>
+
+Next up: **regression** — instead of testing one number, we fit a whole line through data to predict one
+quantity from another.

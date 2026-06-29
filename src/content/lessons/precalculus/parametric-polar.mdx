@@ -1,0 +1,191 @@
+---
+title: Parametric & Polar
+track: precalculus
+summary: Describing curves with a parameter or an angle.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - precalculus/sequences-series
+leadsTo:
+  - precalculus/conic-sections
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ParametricTracer from '../../../components/demos/ParametricTracer.tsx';
+
+## The hook: how do you draw a loop-the-loop?
+
+Picture a rider on a **Ferris wheel**. As the wheel turns, their seat sweeps out a perfect circle.
+But here's the catch: at the very top and the very bottom they are at the *same* horizontal spot — two
+different heights for one value of $x$. A normal function $y = f(x)$ can't do that; it only allows **one
+$y$ for each $x$**. So how do we describe a path that doubles back, loops, or spirals?
+
+The trick is to stop asking *"what is $y$ when $x$ is here?"* and start asking *"where is the point
+**right now**?"* We let a hidden helper variable — **time** $t$, or an **angle** $\theta$ — drive both
+coordinates at once. That single idea unlocks circles, spirals, flower petals, and the swirling art of
+a spirograph.
+
+<Callout type="intuition" title="The one-sentence idea">
+Instead of tying $y$ to $x$, let a **parameter** (a clock $t$ or an angle $\theta$) move a point around,
+and read off **both** $x$ and $y$ from it — so the curve can loop, cross, and spiral freely.
+</Callout>
+
+## Intuition: a moving point, not a fixed graph
+
+You already know two things that make this click:
+
+1. **Functions** map one input to one output. Great for "height vs. distance," but helpless when a curve
+   revisits the same $x$. The Ferris wheel breaks the one-$y$-per-$x$ rule.
+2. **The unit circle** from trigonometry. You learned that as the angle $\theta$ sweeps around,
+   $(\cos\theta, \sin\theta)$ traces a circle. That was your *first parametric curve* — you just didn't
+   call it that. The angle was the hidden driver doing all the work.
+
+There are two flavors of this idea:
+
+- **Parametric form** — a clock $t$ feeds **two separate functions**: $x = f(t)$ and $y = g(t)$. As $t$
+  ticks forward, the point $(x, y)$ moves and paints a path.
+- **Polar form** — instead of left/right and up/down, you steer by **angle $\theta$** and **distance from
+  the origin $r$**. Curves that are "round" or "petal-shaped" become astonishingly simple this way.
+
+## Play with it
+
+Press **Play** and watch a single point trace out each curve as its parameter advances — or drag the
+slider to scrub $t$ (or $\theta$) by hand and freeze the motion. The faint line is the **whole path**;
+the bright trail shows how much of it the point has painted so far. Switch between the parametric curves
+(Circle, Lissajous) and the polar curves (Spiral, Rose) and watch the readout.
+
+<ParametricTracer client:visible />
+
+<Callout type="tip">
+On the <strong>polar</strong> curves, watch the sky-blue radius line: its length is $r$ and its angle is
+$\theta$. The petals of the <strong>Rose</strong> appear because $r$ shrinks to $0$ and grows back as
+$\theta$ turns — the point keeps diving through the origin and back out.
+</Callout>
+
+## The formal definition
+
+**Parametric form.** A curve in the plane is given by two functions of one parameter $t$:
+
+$$
+x = f(t), \qquad y = g(t), \qquad t \in [a, b].
+$$
+
+As $t$ runs over its interval, the point $\big(f(t), g(t)\big)$ sweeps out the curve. The classic example
+is the **circle of radius 1**:
+
+$$
+x = \cos t, \qquad y = \sin t, \qquad t \in [0, 2\pi].
+$$
+
+A check: at $t = 0$ we are at $(1, 0)$; at $t = \tfrac{\pi}{2}$ we are at $(0, 1)$ — a quarter turn
+counterclockwise, exactly as the unit circle promised.
+
+**Polar coordinates.** Instead of $(x, y)$, locate a point by its distance from the origin $r$ and its
+angle $\theta$ from the positive $x$-axis. The two systems convert with plain trigonometry:
+
+$$
+x = r\cos\theta, \qquad y = r\sin\theta, \qquad r = \sqrt{x^2 + y^2}, \qquad \tan\theta = \frac{y}{x}.
+$$
+
+**Polar curves.** Let the radius itself depend on the angle, $r = f(\theta)$, and beautiful shapes fall
+out almost for free:
+
+$$
+\underbrace{r = a\theta}_{\text{spiral}}, \qquad
+\underbrace{r = \cos(k\theta)}_{\text{rose}}, \qquad
+\underbrace{r = 1 + \cos\theta}_{\text{cardioid}}.
+$$
+
+The rose has $k$ petals when $k$ is odd and $2k$ petals when $k$ is even — a whole flower from one tiny
+formula.
+
+<Callout type="why">
+Machine learning loves this trick. A robot arm or self-driving planner describes its **path as $x(t),
+y(t)$** so it can reason about position *and* timing together. Periodic signals (hour-of-day,
+day-of-year) are fed to models as **angle features** $\big(\sin\theta, \cos\theta\big)$ so that 23:59 and
+00:01 sit next to each other instead of at opposite ends of a line. And radial, polar-style encodings
+turn "round" data into coordinates a model can actually learn from.
+</Callout>
+
+## The same idea, four different worlds
+
+The same "let a parameter move the point" recipe shows up far from the math classroom.
+
+<ExampleCard domain="Amusement parks" icon="🎡">
+A Ferris-wheel seat of radius $R$ turning at rate $\omega$ has position
+$x(t) = R\cos(\omega t)$, $y(t) = R\sin(\omega t) + R$ (lifted so the bottom sits at the ground). One
+parameter $t$ — time — drives both coordinates, so the seat can be at the same $x$ twice (top and bottom)
+without breaking any rule. That's something $y = f(x)$ simply cannot express.
+</ExampleCard>
+
+<ExampleCard domain="Sports" icon="⛲">
+Water arcing from a fountain (or a thrown ball) is parametric in time:
+$x(t) = v_x\,t$ and $y(t) = v_y\,t - \tfrac{1}{2}g t^2$. The horizontal part marches steadily while the
+vertical part rises and falls, and together they trace the graceful arc. Eliminating $t$ would hide the
+timing — but the *splash moment* is exactly when $y(t) = 0$.
+</ExampleCard>
+
+<ExampleCard domain="Radar & sonar" icon="📡">
+A radar sweep is pure polar. The dish points at angle $\theta$ and reports the distance $r$ to whatever
+it pings, giving a point $(r, \theta)$. The whole screen is a polar plot: angle = direction, radius =
+range. Converting with $x = r\cos\theta,\ y = r\sin\theta$ drops each blip onto a flat map.
+</ExampleCard>
+
+<ExampleCard domain="Art & toys" icon="🌀">
+A **spirograph** gear rolling inside a ring traces a hypotrochoid — a parametric curve like
+$x(t) = (R - r)\cos t + d\cos\!\big(\tfrac{R - r}{r}t\big)$ with a matching $y(t)$. Tiny changes to the
+gear ratio give wildly different looping flowers. Lissajous figures (in the demo) are the same spirit:
+$x = \sin(3t),\ y = \sin(2t)$ weaves an over-under braid.
+</ExampleCard>
+
+<Callout type="note">
+Notice the pattern: the first two examples use <strong>time</strong> as the parameter, the radar uses an
+<strong>angle</strong>, and the spirograph uses an abstract dial. Same machinery, different driver.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why can a parametric curve describe a Ferris-wheel loop when a function y = f(x) cannot?',
+      options: [
+        'Because parametric curves are always circles',
+        'Because x and y are each driven by the parameter, so one x can map to two different y values',
+        'Because polar coordinates forbid loops',
+        'Because functions can only be straight lines',
+      ],
+      answer: 1,
+      explain: 'With x = f(t) and y = g(t), the point can return to the same x at a different y as t advances — impossible for a single-valued function y = f(x).',
+    },
+    {
+      q: 'For the circle x = cos t, y = sin t, where is the point at t = π?',
+      options: ['(1, 0)', '(0, 1)', '(-1, 0)', '(0, -1)'],
+      answer: 2,
+      explain: 'cos π = -1 and sin π = 0, so the point is at (-1, 0) — halfway around the circle.',
+    },
+    {
+      q: 'A radar reports a blip at polar coordinates r = 2, θ = π/2. What are its Cartesian (x, y)?',
+      options: ['(2, 0)', '(0, 2)', '(2, 2)', '(0, -2)'],
+      answer: 1,
+      explain: 'x = r cos θ = 2·cos(π/2) = 0 and y = r sin θ = 2·sin(π/2) = 2, so (x, y) = (0, 2).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>parametric curve</strong> uses a hidden driver — time t or angle θ — to set <strong>both</strong> x and y, so paths can loop, cross, and spiral.',
+    'Parametric form is <strong>x = f(t), y = g(t)</strong>; the unit circle x = cos t, y = sin t is the canonical example.',
+    '<strong>Polar coordinates</strong> locate a point by distance r and angle θ, converting via x = r·cos θ and y = r·sin θ.',
+    'Letting <strong>r = f(θ)</strong> produces roses, spirals, and cardioids from one tiny formula.',
+    'ML uses these for <strong>robot/vehicle paths x(t), y(t)</strong> and <strong>periodic angle features</strong> (sin θ, cos θ) that wrap time around smoothly.',
+  ]}
+/>
+
+Next up: **Conic Sections** — circles, ellipses, parabolas, and hyperbolas, where these parametric and
+polar descriptions meet the curves that shape orbits, antennas, and lenses.

@@ -1,0 +1,177 @@
+---
+title: Expectation & Variance
+track: probability
+summary: Two numbers that summarize any distribution — where it balances, and how far it spreads.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - probability/continuous-distributions
+leadsTo:
+  - probability/joint-covariance
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import MeanVarianceBalance from '../../../components/demos/MeanVarianceBalance.tsx';
+
+## The hook: would you take this bet?
+
+A casino game pays you \$10 if you win and costs \$1 to play, but you only win 8% of the time. Should
+you play? You can't know any single outcome — but you *can* compute what happens **on average** over
+thousands of plays, and whether the results swing wildly or stay tame. Those two questions —
+*where does it center?* and *how much does it scatter?* — are answered by **expectation** and
+**variance**, the two numbers that compress an entire distribution into a usable summary.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **expectation** $\mathbb{E}[X]$ is the distribution's balance point (its long-run average), and the
+**variance** is the average squared distance from that point — how widely outcomes scatter.
+</Callout>
+
+## Intuition: balance point and spread
+
+Picture the distribution's probabilities as weights placed along a ruler. The **expectation** is the
+single spot where the ruler balances on a fingertip — heavier values pull the balance point toward
+themselves. It need not be a value the variable can actually take (the average roll of a die is 3.5).
+
+Once you know the center, the natural next question is *how far from it do outcomes usually land?* That's
+**spread**. We measure it with the **variance**: the probability-weighted average of the *squared*
+distance from the mean. Why squared? Squaring makes every deviation positive (so left and right don't
+cancel) and punishes big misses more than small ones. Because the variance is in *squared* units, we
+usually report its square root — the **standard deviation** $\sigma$ — which lives in the same units as
+$X$ and is far easier to interpret.
+
+A crucial early warning: **two distributions can share the same mean yet feel totally different.** A
+steady index fund and a wild meme stock might both average 7% a year — but their variances, and therefore
+your sleep, are worlds apart.
+
+## Play with it
+
+Drag the bars to sculpt a distribution over the values 1–7. The green **fulcrum** slides to the mean —
+the exact balance point — while the variance and standard deviation update live. Try the presets:
+*Symmetric*, *Skewed*, *Two peaks*, and *Flat*.
+
+<MeanVarianceBalance client:visible />
+
+<Callout type="tip">
+Make the distribution <strong>Symmetric</strong> and watch the fulcrum sit dead center. Now switch to
+<strong>Two peaks</strong>: same mean, but the variance jumps — the balance point can sit in a <em>valley</em>
+where almost no probability lives. The mean alone never tells the whole story.
+</Callout>
+
+## The formal definition
+
+For a discrete variable, the **expectation** is the probability-weighted sum of values; for a continuous
+one, the sum becomes an integral:
+
+$$
+\mathbb{E}[X] = \sum_x x\, p(x), \qquad \mathbb{E}[X] = \int x\, f(x)\, dx.
+$$
+
+Expectation is **linear** — the single most-used property in all of probability — and this holds *even
+when variables are dependent*:
+
+$$
+\mathbb{E}[aX + b] = a\,\mathbb{E}[X] + b, \qquad \mathbb{E}[X + Y] = \mathbb{E}[X] + \mathbb{E}[Y].
+$$
+
+The **variance** is the expected squared deviation from the mean, with a handy shortcut formula:
+
+$$
+\mathrm{Var}(X) = \mathbb{E}\big[(X - \mu)^2\big] = \mathbb{E}[X^2] - \big(\mathbb{E}[X]\big)^2, \qquad \sigma = \sqrt{\mathrm{Var}(X)}.
+$$
+
+Variance scales by the **square** of a constant, and for **independent** variables it simply adds:
+
+$$
+\mathrm{Var}(aX + b) = a^2\,\mathrm{Var}(X), \qquad \mathrm{Var}(X + Y) = \mathrm{Var}(X) + \mathrm{Var}(Y) \;\text{ (independent)}.
+$$
+
+<Callout type="why">
+Expectation and variance *are* the language of ML evaluation. A model's expected loss is the quantity
+training minimizes. The famous **bias–variance tradeoff** literally decomposes prediction error into a
+(bias)² term and a variance term. And every "mean ± std" you've ever seen on a benchmark is these two
+numbers doing their job.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Casino & gambling" icon="🎲">
+That \$10-or-nothing game: $\mathbb{E}[\text{payout}] = 0.08 \times 10 = 0.80$ dollars, but it costs \$1, so
+the expected *profit* is $-0.20$ dollars per play. Negative expectation is the house edge — play long enough
+and the average guarantees you lose. The casino's profit is just the law of large numbers collecting.
+</ExampleCard>
+
+<ExampleCard domain="Insurance" icon="🏠">
+An insurer charges a premium a bit above the **expected** payout per policy. Any single house may burn
+down (huge variance) — but across a million policies the variance of the *average* shrinks, so the total
+is predictable. Insurance is a business built on taming variance through pooling.
+</ExampleCard>
+
+<ExampleCard domain="Investing" icon="📊">
+Two portfolios both expect a 7% return, but one has σ = 4% and the other σ = 20%. Same mean, wildly
+different risk. Modern portfolio theory treats variance *as* risk and seeks the highest expected return
+per unit of standard deviation — the Sharpe ratio.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A courier's deliveries average 40 minutes, but the *variance* decides how big a buffer to promise.
+Quoting the mean alone means you're late half the time; quoting mean + 2σ keeps ~97% of deliveries on
+time. Spread, not center, sets the service-level guarantee.
+</ExampleCard>
+
+<Callout type="note">
+Linearity of expectation is almost magical: 𝔼[X + Y] = 𝔼[X] + 𝔼[Y] <em>always</em>, even for dependent
+variables. Variance has no such free pass — it only adds cleanly when the variables are
+<strong>independent</strong>, which is exactly what the next lesson explores.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A lottery ticket pays \$500 with probability 0.001 and \$0 otherwise. What is the expected payout?',
+      options: ['\$500', '\$5', '\$0.50', '\$0.05'],
+      answer: 2,
+      explain: 'E[payout] = 0.001 × \$500 + 0.999 × \$0 = \$0.50. If the ticket costs more than 50 cents, its expected value is negative.',
+    },
+    {
+      q: 'Two distributions both have mean 5. Distribution A is tightly clustered near 5; distribution B is spread far from 5. What differs?',
+      options: [
+        'Their expectations',
+        'Their variances — B has the larger variance',
+        'Nothing, they are identical',
+        'Their total probability',
+      ],
+      answer: 1,
+      explain: 'Same mean, different spread: B scatters farther from the center, so it has the larger variance (and standard deviation). The mean cannot distinguish them.',
+    },
+    {
+      q: 'Which statement about expectation is always true, even for dependent variables?',
+      options: [
+        'Var(X + Y) = Var(X) + Var(Y)',
+        'E[X + Y] = E[X] + E[Y]',
+        'E[XY] = E[X]·E[Y]',
+        'E[X²] = (E[X])²',
+      ],
+      answer: 1,
+      explain: 'Linearity of expectation holds unconditionally. The variance-adds rule and E[XY] = E[X]E[Y] require independence, and E[X²] = (E[X])² is false unless the variance is 0.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>expectation</strong> 𝔼[X] = Σ x·p(x) is the long-run average — the balance point of the distribution.',
+    '<strong>Variance</strong> = 𝔼[(X−μ)²] = 𝔼[X²] − (𝔼[X])² measures spread; its square root σ (standard deviation) shares the units of X.',
+    'Two distributions can have the <strong>same mean but very different variance</strong> — center and spread are independent summaries.',
+    '<strong>Linearity of expectation</strong> 𝔼[X+Y] = 𝔼[X] + 𝔼[Y] always holds; variance adds only for <strong>independent</strong> variables.',
+    'These two numbers drive ML evaluation, the <strong>bias–variance tradeoff</strong>, and every "mean ± std" benchmark.',
+  ]}
+/>
+
+Next up: what if two random quantities move *together*? **Joint distributions, covariance and
+correlation** measure exactly that.

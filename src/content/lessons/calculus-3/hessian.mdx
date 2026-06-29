@@ -1,0 +1,173 @@
+---
+title: The Hessian
+track: calculus-3
+summary: The matrix of second derivatives that measures curvature — and tells a minimum from a maximum from a saddle.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - calculus-3/chain-rule-jacobian
+leadsTo:
+  - calculus-3/multiple-integrals
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import HessianClassifier from '../../../components/demos/HessianClassifier.tsx';
+
+## The hook: is this valley really the bottom?
+
+Gradient descent stops where the gradient is zero — but a flat spot is ambiguous. Are you at the bottom of a
+bowl (a true minimum), perched on a dome (a maximum), or balanced on a mountain pass that goes up one way
+and down the other (a **saddle**)? The slope alone cannot tell; it is zero in all three. You need
+**curvature** — how the slope itself is changing. The object that measures curvature in every direction at
+once is the **Hessian**, and in high-dimensional learning, saddles are the traps that lurk everywhere.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **Hessian** is the matrix of all **second** partial derivatives; it captures the **curvature** of a
+surface and classifies each flat point as a minimum, a maximum, or a saddle.
+</Callout>
+
+## Intuition: curvature is the derivative of the slope
+
+In single-variable calculus, the second derivative $f''(x)$ told you concavity: $f'' > 0$ is a cup that
+holds water (minimum), $f'' < 0$ is a cap (maximum). On a surface there are many directions to curve, so one
+number is not enough — we need a whole matrix of second partials. That matrix is the **Hessian**:
+
+$$
+H = \begin{bmatrix}
+\dfrac{\partial^2 f}{\partial x^2} & \dfrac{\partial^2 f}{\partial x\, \partial y} \\[8pt]
+\dfrac{\partial^2 f}{\partial y\, \partial x} & \dfrac{\partial^2 f}{\partial y^2}
+\end{bmatrix}.
+$$
+
+The diagonal entries are the pure curvatures along each axis. The off-diagonal entries are **mixed
+partials** — how the slope in $x$ changes as you move in $y$ — the "twist" of the surface. (For smooth
+functions the mixed partials are equal, $f_{xy} = f_{yx}$, so $H$ is symmetric.)
+
+The magic is in its **eigenvalues**. A symmetric matrix has real eigenvalues, and each one is the curvature
+along a special "principal" direction. Their signs decide everything:
+
+- **All positive** → curves up every way → a **bowl** (local minimum).
+- **All negative** → curves down every way → a **dome** (local maximum).
+- **Mixed signs** → up one way, down another → a **saddle**.
+
+## Play with it
+
+Shape a loss surface near its critical point (the green dot). The sliders set the curvatures $a$, $b$ and
+the twist $c$ of $f(x,y) = ax^2 + by^2 + cxy$. Watch the Hessian, its eigenvalues, and the live
+classification change as the bowl tips into a saddle and back.
+
+<HessianClassifier client:visible />
+
+<Callout type="tip">
+Set $a = 1$, $b = -1$, $c = 0$: a perfect saddle. The contours form an X and the eigenvalues are
+$+2$ and $-2$ — opposite signs. Now turn up the twist $c$ and watch the eigenvalues shift while the surface
+rotates. Curvature, captured by numbers.
+</Callout>
+
+## The formal definition
+
+For $f : \mathbb{R}^n \to \mathbb{R}$, the Hessian is the $n \times n$ matrix of second partials,
+$H_{ij} = \partial^2 f / \partial x_i \partial x_j$. At a **critical point** (where $\nabla f = \mathbf{0}$),
+the **second-derivative test** classifies it by the eigenvalues of $H$:
+
+$$
+\begin{aligned}
+H \succ 0 \ (\text{all } \lambda > 0) &\implies \text{local minimum},\\
+H \prec 0 \ (\text{all } \lambda < 0) &\implies \text{local maximum},\\
+\lambda\ \text{of mixed sign} &\implies \text{saddle point}.
+\end{aligned}
+$$
+
+For the $2\times 2$ case there is a shortcut using the determinant $\det H = f_{xx} f_{yy} - f_{xy}^2$:
+if $\det H > 0$ and $f_{xx} > 0$ it is a minimum; $\det H > 0$ and $f_{xx} < 0$ a maximum;
+$\det H < 0$ a saddle; and $\det H = 0$ is inconclusive. The Hessian also gives the **second-order Taylor
+expansion** of the surface near a point $\mathbf{x}_0$:
+
+$$
+f(\mathbf{x}_0 + \mathbf{d}) \approx f(\mathbf{x}_0) + \nabla f^{\top}\mathbf{d} + \tfrac{1}{2}\,\mathbf{d}^{\top} H\, \mathbf{d}.
+$$
+
+<Callout type="why">
+In deep learning the Hessian explains why training is hard. High-dimensional loss surfaces are riddled with
+<strong>saddle points</strong> — far more than true minima — and the gradient is tiny near all of them, so
+plain gradient descent crawls. Second-order methods (Newton's method, and approximations like the curvature
+used in Adam-style optimizers) use Hessian information to escape saddles and pick smarter step sizes.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Neural-net training" icon="🧠">
+A loss surface in millions of weights is almost never a simple bowl. Its critical points are mostly saddles,
+identified by a Hessian with both positive and negative eigenvalues. Knowing this reshaped how modern
+optimizers are designed — to slip past saddles rather than stall on them.
+</ExampleCard>
+
+<ExampleCard domain="Structural engineering" icon="🌉">
+A loaded structure settles into the shape that minimizes its potential energy. Engineers check the Hessian
+of that energy: all-positive eigenvalues mean a stable equilibrium, a negative one warns of **buckling** — a
+direction in which the structure would rather collapse.
+</ExampleCard>
+
+<ExampleCard domain="Mountain geography" icon="🏔️">
+A mountain **pass** (a col) is a literal saddle point: it is the lowest way over a ridge but the highest
+point along the trail through it. Up along the ridge, down along the valley — opposite curvatures, exactly
+mixed-sign eigenvalues.
+</ExampleCard>
+
+<ExampleCard domain="Portfolio optimization" icon="📈">
+Minimizing investment risk for a target return is a quadratic problem whose Hessian is the **covariance
+matrix** of asset returns. Its eigenvalues describe the directions of most and least volatility — curvature
+of the risk surface guiding the safest mix.
+</ExampleCard>
+
+<Callout type="note">
+The Hessian is the Jacobian of the gradient: $H = J(\nabla f)$. So "second derivatives of $f$" and "first
+derivatives of $\nabla f$" are the same object — last lesson and this one are two views of one idea.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'At a critical point, the Hessian has eigenvalues +3 and −1. What kind of point is it?',
+      options: ['Local minimum', 'Local maximum', 'Saddle point', 'Cannot be determined'],
+      answer: 2,
+      explain: 'Eigenvalues of opposite sign mean the surface curves up in one principal direction and down in another — a saddle point.',
+    },
+    {
+      q: 'Why is the Hessian a symmetric matrix for a smooth function?',
+      options: [
+        'Because all its entries are positive',
+        'Because the mixed partials are equal: ∂²f/∂x∂y = ∂²f/∂y∂x',
+        'Because it is always diagonal',
+        'Because the gradient is zero',
+      ],
+      answer: 1,
+      explain: 'For functions with continuous second derivatives, the order of partial differentiation does not matter (Clairaut’s theorem), so f_xy = f_yx and H is symmetric.',
+    },
+    {
+      q: 'In high-dimensional machine-learning loss surfaces, which type of critical point is most common and slows training?',
+      options: ['Local maxima', 'Saddle points', 'Global minima', 'Discontinuities'],
+      answer: 1,
+      explain: 'Saddle points vastly outnumber minima in high dimensions. The gradient is small near them, so plain gradient descent stalls — motivating curvature-aware optimizers.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>Hessian</strong> is the matrix of second partial derivatives — the curvature of a surface in every direction.',
+    'It is <strong>symmetric</strong> for smooth functions because mixed partials are equal.',
+    'The <strong>signs of its eigenvalues</strong> classify a critical point: all + → minimum, all − → maximum, mixed → saddle.',
+    'It supplies the <strong>second-order Taylor term</strong> ½ dᵀHd, the best local quadratic fit to the surface.',
+    'Saddle points dominate <strong>deep-learning loss surfaces</strong>, which is why curvature-aware optimizers matter.',
+  ]}
+/>
+
+Next up: switch from slopes to areas — **multiple integrals** add up a function over a whole region to find
+the volume beneath a surface.

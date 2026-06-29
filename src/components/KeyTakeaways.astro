@@ -1,0 +1,20 @@
+---
+// Bullet list of the lesson's key takeaways. Pass `points` as string[].
+interface Props {
+  points: string[];
+}
+const { points } = Astro.props;
+---
+<div class="not-prose my-6 rounded-xl border border-brand/30 bg-brand-soft p-5">
+  <p class="mb-3 flex items-center gap-2 font-bold text-brand">
+    <span>🔑</span> Key takeaways
+  </p>
+  <ul class="space-y-2">
+    {points.map((p) => (
+      <li class="flex gap-2 text-[0.95rem]">
+        <span class="mt-1 text-brand">▸</span>
+        <span set:html={p} />
+      </li>
+    ))}
+  </ul>
+</div>

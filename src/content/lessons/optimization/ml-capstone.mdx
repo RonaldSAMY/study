@@ -1,0 +1,202 @@
+---
+title: 'Capstone: Learning as Optimization'
+track: optimization
+summary: Every idea, together — train a linear regression by gradient descent and watch vectors, gradients, probability, and regression become one machine that learns.
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - optimization/gradient-descent
+  - statistics/regression
+  - linear-algebra/vectors
+leadsTo: []
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import RegressionTrainerCapstone from '../../../components/demos/RegressionTrainerCapstone.tsx';
+
+## The hook: watching a machine learn, live
+
+You have now collected every piece. **Vectors** gave us a way to represent data and parameters as
+lists of numbers. **Gradients** told us which way is uphill on a multivariable surface. **Gradient
+descent** turned that into a rule for rolling downhill. **Convexity** told us when that roll is
+guaranteed to find the best answer. **Probability** gave us a principled way to say what "best" even
+means. And **regression** gave us a model to fit.
+
+In this capstone we assemble them into the simplest complete learning system there is: a straight line
+that **learns its own slope and intercept** from data, purely by descending a loss surface. This is, in
+miniature, exactly what training a neural network does — same loop, just more parameters.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Learning is optimization**: define a loss that measures error, then run gradient descent on the
+model's parameters until the loss is as small as it gets — and the model has "learned."
+</Callout>
+
+## Intuition: the four ideas, working as one
+
+Here is how each earlier idea shows up in one training run.
+
+1. **Vectors (linear algebra).** The data points are vectors, and the model's parameters
+   $\mathbf{w} = (w, b)$ — slope and intercept — are a vector too. Prediction is the affine map
+   $\hat{y} = w x + b$. Stacking many points turns this into a single matrix–vector equation, the
+   bridge to everything in linear algebra.
+
+2. **Probability.** We assume each observation is the true line plus **Gaussian noise**. Asking "which
+   line makes the data most likely?" (maximum likelihood) turns out to be *identical* to "which line
+   has the smallest squared error." So the loss is not arbitrary — it falls out of a probability model.
+
+3. **Gradients (calculus).** To improve the line we need to know how the loss changes as we nudge $w$
+   and $b$. That is the gradient $\nabla L = (\partial L/\partial w,\; \partial L/\partial b)$ — the
+   steepest-uphill direction in parameter space.
+
+4. **Gradient descent + convexity.** We step opposite the gradient, over and over. Because the
+   squared-error loss for a line is **convex** (a single bowl), this is guaranteed to converge to the
+   one best fit — no local-minimum traps.
+
+## Play with it
+
+Drag the blue data points to whatever cloud you like — say, **delivery time vs. distance**. Then press
+**Train**. The green line starts flat and wrong; each step descends the MSE loss, and you watch both
+the line snap to the data and the loss curve fall. The orange sticks are the **residuals** (errors)
+the model is shrinking.
+
+<RegressionTrainerCapstone client:visible />
+
+<Callout type="tip">
+Drag one point far away to create an outlier, then retrain. Squared error punishes big residuals
+heavily, so the line tilts noticeably toward the outlier — a direct, visible consequence of the
+Gaussian assumption behind MSE.
+</Callout>
+
+## The formal definition
+
+**The model (vectors).** For each input $x_i$ the prediction is
+
+$$
+\hat{y}_i = w\,x_i + b.
+$$
+
+**The loss (probability).** Assume targets are the line plus Gaussian noise,
+$y_i = w x_i + b + \varepsilon_i$ with $\varepsilon_i \sim \mathcal{N}(0, \sigma^2)$. The likelihood of
+all the data is a product of Gaussians; taking $-\log$ turns the product into a sum and the exponent
+into a square. The **negative log-likelihood** is, up to constants,
+
+$$
+L(w, b) = \frac{1}{n}\sum_{i=1}^{n} \big(w x_i + b - y_i\big)^2,
+$$
+
+the **mean squared error**. So *minimizing MSE is maximizing the Gaussian likelihood* — that is the
+probability thread made concrete.
+
+**The gradient (calculus).** Differentiate $L$ with respect to each parameter:
+
+$$
+\frac{\partial L}{\partial w} = \frac{2}{n}\sum_i (w x_i + b - y_i)\,x_i, \qquad
+\frac{\partial L}{\partial b} = \frac{2}{n}\sum_i (w x_i + b - y_i).
+$$
+
+**The update (gradient descent).** Step both parameters opposite the gradient:
+
+$$
+w \leftarrow w - \eta\,\frac{\partial L}{\partial w}, \qquad
+b \leftarrow b - \eta\,\frac{\partial L}{\partial b}.
+$$
+
+Repeat until $\nabla L \approx \mathbf{0}$. Because $L$ is a convex quadratic in $(w, b)$, this single
+loop is *guaranteed* to land at the global best-fit line — the same answer the closed-form normal
+equations give, but reached by rolling downhill.
+
+<Callout type="why">
+This loop — predict, measure loss, compute gradient, step — is the <strong>entire</strong> training
+recipe for modern ML. A deep network swaps the line $wx + b$ for millions of stacked nonlinear layers
+and computes the gradient by <strong>backpropagation</strong>, but the outer loop is exactly what you
+just watched. Master this and you understand how every model learns.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Last-mile logistics" icon="📦">
+Fit delivery time as a function of distance from the depot to set realistic customer ETAs. Each
+day's deliveries are data points; gradient descent learns the slope (minutes per km) and intercept
+(fixed handling time) that minimize squared prediction error.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="🏀">
+Model how a player's points scored relate to minutes played. Training a line by gradient descent
+yields a per-minute scoring rate; the residuals flag games where a player wildly over- or
+under-performed their usual pace.
+</ExampleCard>
+
+<ExampleCard domain="Climate science" icon="🌡️">
+Regress average regional temperature against year to estimate a warming trend. The learned slope is
+the degrees-per-decade rate, and viewing it as maximum likelihood under Gaussian noise gives an
+honest sense of how confident that trend really is.
+</ExampleCard>
+
+<ExampleCard domain="Neural networks" icon="🧠">
+The very same loop scales up: replace the single line with stacked layers of weights (giant parameter
+vectors), keep the predict → loss → gradient → step cycle, and you are training a deep net. Linear
+regression is the one-neuron, one-layer special case of everything that follows.
+</ExampleCard>
+
+<Callout type="note">
+Step back and see the unity: a <em>vector</em> of parameters, a <em>probabilistic</em> loss, its
+<em>gradient</em>, and a <em>descent</em> step on a <em>convex</em> surface. Five tracks of this course
+collapse into one elegant idea — <strong>learning is just optimization</strong>.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In training a linear regression, what plays the role of the parameter vector we optimize?',
+      options: [
+        'The data points (x, y)',
+        'The slope and intercept (w, b)',
+        'The learning rate η',
+        'The number of points n',
+      ],
+      answer: 1,
+      explain: 'We descend the loss with respect to (w, b) — the model parameters. The data is fixed; the parameters learn.',
+    },
+    {
+      q: 'Why is minimizing mean squared error a principled choice, not arbitrary?',
+      options: [
+        'It is the only function a computer can minimize',
+        'It equals the negative log-likelihood of the data under Gaussian noise',
+        'It makes the gradient always zero',
+        'It guarantees the model is non-convex',
+      ],
+      answer: 1,
+      explain: 'Assuming Gaussian noise, maximizing likelihood is the same as minimizing squared error — that is where MSE comes from.',
+    },
+    {
+      q: 'Why can we trust gradient descent to find the single best line here, unlike when training a deep net?',
+      options: [
+        'Because the learning rate is always perfect',
+        'Because the squared-error loss in (w, b) is convex — one global minimum',
+        'Because lines have no parameters',
+        'Because there is no noise in the data',
+      ],
+      answer: 1,
+      explain: 'Linear-regression MSE is a convex quadratic in (w, b), so any minimum is the global one. Deep nets are non-convex.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Learning is optimization</strong>: define a loss, then gradient-descend the parameters until it is minimal.',
+    'The model parameters (w, b) form a <strong>vector</strong> we optimize — predictions are an affine map ŷ = wx + b.',
+    '<strong>MSE = negative log-likelihood</strong> under Gaussian noise, so the loss comes straight from probability.',
+    'The <strong>gradient</strong> of the loss gives the update w ← w − η∂L/∂w; the loss is <strong>convex</strong>, so descent finds the global best.',
+    'This predict → loss → gradient → step loop is the <strong>same recipe</strong> that trains neural networks — just with more parameters.',
+  ]}
+/>
+
+That completes the journey: from vectors and gradients to probability and regression, every thread
+converges here. You now understand, end to end, how a machine actually learns. 🎯

@@ -1,0 +1,180 @@
+---
+title: Applications of Derivatives
+track: calculus-1
+summary: Using f'(x) = 0 to find maxima, minima, and how fast linked quantities change together.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - calculus-1/differentiation-rules
+leadsTo:
+  - calculus-1/integrals-ftc
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import OptimizationExplorer from '../../../components/demos/OptimizationExplorer.tsx';
+
+## The hook: what price makes the most money?
+
+You run a lemonade stand. Charge too little and you barely cover your lemons; charge too much and the
+line vanishes. Somewhere in between sits a sweet spot — the price that squeezes out maximum profit. You
+could guess prices all afternoon, or you could notice something: at the very top of the profit curve, the
+slope is **flat**. Nudge the price either way from the peak and profit barely moves. That flatness — a
+derivative equal to zero — is calculus's universal fingerprint for "best possible," and it turns
+guesswork into a one-line equation.
+
+<Callout type="intuition" title="The one-sentence idea">
+At a maximum or minimum, the tangent is **horizontal**, so the derivative is **zero** — solving
+$f'(x) = 0$ finds the peaks and valleys.
+</Callout>
+
+## Intuition: flat tangents mark the extremes
+
+You already know $f'(x)$ is the slope of the tangent line. Walk along a curve and read the sign of that
+slope:
+
+- $f'(x) > 0$: the curve is **rising** — you can still climb higher.
+- $f'(x) < 0$: the curve is **falling** — you have overshot.
+- $f'(x) = 0$: the tangent is **flat** — a possible peak (max) or valley (min).
+
+The points where $f'(x) = 0$ are called **critical points**, and the maxima and minima hide among them. To
+tell a peak from a valley, check whether the slope switches from $+$ to $-$ (a peak) or $-$ to $+$ (a
+valley) — or peek at the second derivative $f''$: concave-down ($f'' < 0$) is a peak, concave-up
+($f'' > 0$) is a valley.
+
+There's a second power move: **related rates**. When two quantities are tied by an equation, the chain
+rule links their *rates* of change. A balloon's radius and its volume are connected, so the rate the
+radius grows is locked to the rate you pump air in. Differentiate the relationship with respect to time
+and the unknown rate falls out.
+
+## Play with it
+
+Slide the **lemonade price** and watch the tangent line. While the slope (shown in blue) is positive you
+can still earn more; once it turns negative you have gone too far. The profit peaks exactly where the
+tangent goes flat and lands on the green optimum line. Switch to **Fencing a pen** for the classic "most
+area from fixed fence" problem.
+
+<OptimizationExplorer client:visible />
+
+<Callout type="tip">
+Optimization is "walk uphill until the ground goes flat." The slope readout is your altimeter: positive
+means keep climbing, negative means turn back, zero means you've arrived at the summit.
+</Callout>
+
+## The formal definition
+
+To find the extreme values of a smooth function $f$ on an interval:
+
+1. Compute the derivative $f'(x)$.
+2. Solve for the **critical points** where it vanishes:
+$$
+f'(x) = 0.
+$$
+3. Classify each with the **second-derivative test**:
+$$
+f''(x) < 0 \;\Rightarrow\; \text{local maximum}, \qquad f''(x) > 0 \;\Rightarrow\; \text{local minimum}.
+$$
+4. On a closed interval, also check the endpoints — the global extreme may sit at a boundary.
+
+For the lemonade stand, profit is $P(p) = (p-1)(12 - 2p) = -2p^2 + 14p - 12$. Then $P'(p) = -4p + 14$, and
+$P'(p) = 0$ gives the optimal price $p = 3.5$. Since $P''(p) = -4 < 0$, it's a maximum — exactly the peak in
+the demo.
+
+For **related rates**, differentiate a relationship with respect to time. If a quantity $V$ depends on a
+quantity $r$ that depends on time, the chain rule chains the rates:
+
+$$
+\frac{dV}{dt} = \frac{dV}{dr}\cdot\frac{dr}{dt}.
+$$
+
+<Callout type="why">
+Training a model *is* optimization. Gradient descent hunts for the spot where the loss is smallest, and
+that minimum is where the gradient — the multivariable cousin of $f'(x) = 0$ — vanishes. "Set the
+derivative to zero" is the same instinct, whether you're pricing lemonade or fitting a billion-parameter
+network.
+</Callout>
+
+## The same idea, four different worlds
+
+Find the flat tangent, or chain the rates — here's that single move across very different problems.
+
+<ExampleCard domain="Small business" icon="🍋">
+Lemonade profit $P(p) = -2p^2 + 14p - 12$ peaks where $P'(p) = -4p + 14 = 0$, at \$3.50 a cup. Below it
+you're leaving money on the table; above it you scare off customers. One derivative pins the perfect price.
+</ExampleCard>
+
+<ExampleCard domain="Construction" icon="🚧">
+With 40 m of fencing for a rectangular pen, the area is $A(w) = w(20 - w)$. Setting $A'(w) = 20 - 2w = 0$
+gives $w = 10$ — a square encloses the most space. The same logic sizes packaging, storage yards, and
+solar-panel layouts.
+</ExampleCard>
+
+<ExampleCard domain="Aviation fuel" icon="✈️">
+Fuel burn per kilometre is U-shaped in airspeed: too slow wastes time aloft, too fast fights drag. The
+**most efficient cruise speed** is the bottom of that curve, exactly where the derivative of cost-per-km is
+zero. Airlines fly that critical point to shave millions off fuel bills.
+</ExampleCard>
+
+<ExampleCard domain="Hot-air balloon" icon="🎈">
+A balloon's volume is $V = \tfrac{4}{3}\pi r^3$, so its radius and volume rates are linked:
+$\frac{dV}{dt} = 4\pi r^2 \frac{dr}{dt}$. Pump air at a steady $\frac{dV}{dt}$ and the skin expands slower as
+$r$ grows — a textbook **related-rates** chain, the same one that tracks spreading oil spills and rising
+floodwaters.
+</ExampleCard>
+
+<Callout type="note">
+Two flavours of the same tool: <strong>optimization</strong> asks "where is the slope zero?" to find best
+and worst; <strong>related rates</strong> asks "how do linked rates connect?" via the chain rule. Both are
+just the derivative, put to work.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is true about the derivative at a local maximum or minimum of a smooth function?',
+      options: [
+        'The derivative is undefined',
+        'The derivative equals zero (the tangent is flat)',
+        'The derivative is as large as possible',
+        'The derivative equals the function value',
+      ],
+      answer: 1,
+      explain: 'At a smooth peak or valley the tangent line is horizontal, so f′(x) = 0. Those are the critical points to test.',
+    },
+    {
+      q: 'Lemonade profit is P(p) = −2p² + 14p − 12, so P′(p) = −4p + 14. Which price maximizes profit?',
+      options: ['$2.00', '$3.50', '$5.00', '$7.00'],
+      answer: 1,
+      explain: 'Set P′(p) = −4p + 14 = 0, giving p = 3.5. Since P″ = −4 < 0, it is a maximum.',
+    },
+    {
+      q: 'After solving f′(x) = 0, how do you confirm a critical point is a maximum rather than a minimum?',
+      options: [
+        'Check that f(x) is positive there',
+        'Check that the second derivative f″(x) is negative there',
+        'Check that x is positive',
+        'You cannot tell them apart',
+      ],
+      answer: 1,
+      explain: 'The second-derivative test: f″(x) < 0 means concave down — a maximum; f″(x) > 0 means concave up — a minimum.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'At a smooth maximum or minimum the tangent is flat, so <strong>f′(x) = 0</strong> — these are the critical points.',
+    'The sign of f′ tells the story: <strong>positive rises, negative falls, zero is a turning point</strong>.',
+    'The <strong>second-derivative test</strong> sorts peaks (f″ &lt; 0) from valleys (f″ &gt; 0).',
+    '<strong>Related rates</strong> use the chain rule to link how fast two connected quantities change.',
+    'Optimization is the heart of machine learning: training minimizes loss exactly where the gradient is <strong>zero</strong>.',
+  ]}
+/>
+
+Next up: **Integrals & the Fundamental Theorem** — we flip the derivative around to add up tiny pieces and
+recover totals like distance, volume, and area under a curve.

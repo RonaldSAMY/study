@@ -1,0 +1,179 @@
+---
+title: Law of Sines & Cosines
+track: trigonometry
+summary: Two formulas that solve any triangle — even ones with no right angle — from a few sides and angles.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - trigonometry/inverse-trig
+leadsTo:
+  - precalculus/transformations-composition
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TriangleLawsExplorer from '../../../components/demos/TriangleLawsExplorer.tsx';
+
+## The hook: how wide is the canyon you can't cross?
+
+A survey crew needs the distance across a canyon, but they can't stretch a tape over the gap. So they do
+something clever: they pace out a 200 m baseline along their own rim, then measure the angles from each end of
+that baseline to a lone tree on the far side. Three numbers — one length and two angles — and a triangle with
+no right angle anywhere. The **Law of Sines** turns those numbers into the canyon's width exactly. Right
+triangles got us this far; these two laws break the right-angle restriction and let us solve *any* triangle.
+
+<Callout type="intuition" title="The one-sentence idea">
+In **any** triangle, sides and the angles opposite them are linked: the **Law of Sines** ties each side to
+its opposite angle, and the **Law of Cosines** is the Pythagorean theorem generalised to any angle.
+</Callout>
+
+## Intuition: every triangle, not just the right ones
+
+SOH-CAH-TOA only works when there's a $90°$ corner. But most real triangles — survey sightlines, flight paths,
+truss members — are *oblique*: no right angle in sight. Two laws rescue us.
+
+Label a triangle so that side $a$ is opposite angle $A$, side $b$ opposite $B$, and side $c$ opposite $C$
+(the standard convention). Then:
+
+**Law of Sines** — a bigger angle faces a longer side, in exact proportion:
+
+$$
+\frac{a}{\sin A} = \frac{b}{\sin B} = \frac{c}{\sin C}.
+$$
+
+If you know an angle and its opposite side, you know that common ratio, and any other angle-or-side unlocks
+the rest. It's the tool when you have an angle paired with its opposite side.
+
+**Law of Cosines** — Pythagoras with a correction term for the angle:
+
+$$
+c^2 = a^2 + b^2 - 2ab\cos C.
+$$
+
+When $C = 90°$, $\cos C = 0$ and this collapses to $c^2 = a^2 + b^2$ — ordinary Pythagoras. For any other
+angle, the $-2ab\cos C$ term accounts for how "open" the corner is. Use it when you know two sides and the
+angle *between* them, or all three sides and want an angle.
+
+## Play with it
+
+Drag the vertices $A$, $B$, $C$ to make any triangle you like. Watch the three Law-of-Sines ratios
+$a/\sin A$, $b/\sin B$, $c/\sin C$ stay locked together, and see the Law of Cosines correctly predict side
+$c$ from the other two sides and their included angle.
+
+<TriangleLawsExplorer client:visible />
+
+<Callout type="tip">
+Drag a vertex to make one angle obtuse: the three <strong>a/sin A</strong> ratios still agree to the decimal, and the
+Law-of-Cosines prediction still matches the measured side <strong>c</strong>. The laws hold for <em>every</em> triangle.
+</Callout>
+
+## The formal definition
+
+For a triangle with sides $a, b, c$ opposite angles $A, B, C$:
+
+$$
+\frac{a}{\sin A} = \frac{b}{\sin B} = \frac{c}{\sin C} = 2R,
+$$
+
+where $R$ is the radius of the triangle's circumscribed circle. And the Law of Cosines, in all three forms:
+
+$$
+a^2 = b^2 + c^2 - 2bc\cos A, \quad
+b^2 = a^2 + c^2 - 2ac\cos B, \quad
+c^2 = a^2 + b^2 - 2ab\cos C.
+$$
+
+**Which to use?** Match what you're given:
+
+- **ASA / AAS** (an angle with its opposite side, plus more): Law of Sines.
+- **SAS** (two sides + the included angle) or **SSS** (all three sides): Law of Cosines.
+
+One caution — the **ambiguous case (SSA)**: knowing two sides and a non-included angle can fit zero, one, or
+two triangles, so check whether a second solution exists before trusting one.
+
+<Callout type="why">
+These laws are **triangulation**, the geometric heart of positioning. GPS, indoor beacons, robot
+localisation (SLAM), and 3D reconstruction from multiple camera views all recover unknown distances from
+measured angles and baselines using exactly this reasoning. The Law of Cosines also reappears as the
+algebra behind the distance between two vectors, which underlies similarity scores throughout machine
+learning.
+</Callout>
+
+## The same idea, four different worlds
+
+Wherever you must find a distance or angle you cannot measure directly, you build a triangle and apply a law.
+
+<ExampleCard domain="Land surveying" icon="🏞️">
+From a 200 m baseline along a canyon rim, the angles to a tree across the gap are $65°$ and $78°$. The third
+angle is $180° - 65° - 78° = 37°$, then the Law of Sines gives the sightline to the tree —
+$\frac{200}{\sin 37°} = \frac{d}{\sin 78°}$ — and from there the canyon's width, no tape required.
+</ExampleCard>
+
+<ExampleCard domain="Air navigation" icon="🛩️">
+A pilot flies 120 km, turns through an interior angle, then flies 90 km on a new heading. The straight-line
+distance back to the start is one Law of Cosines step: $d^2 = 120^2 + 90^2 - 2(120)(90)\cos(\text{turn})$.
+Flight computers chain these to convert a series of legs into a direct return path.
+</ExampleCard>
+
+<ExampleCard domain="Sailing" icon="⛵">
+A boat can't sail straight into the wind, so it **tacks** in a zigzag. Each tack and the desired course form
+an oblique triangle; the Law of Sines tells the skipper how far to sail on each leg to make good a target
+distance upwind, trading extra distance for a workable angle.
+</ExampleCard>
+
+<ExampleCard domain="Soccer" icon="⚽">
+The "shooting angle" — how wide the goal looks from where a striker stands — is the angle at the player's
+vertex of the triangle to the two goalposts. With distances to each post known, the Law of Cosines returns
+that angle, quantifying how good the chance really is.
+</ExampleCard>
+
+<Callout type="note">
+Canyon, flight path, tacking course, shot on goal: each is an oblique triangle where a couple of measurements
+plus one law unlock everything else. Triangulation is just these two formulas, applied with care.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You know one angle, the side opposite it, and a second angle. Which law finds the remaining sides most directly?',
+      options: ['Law of Cosines', 'Law of Sines', 'Pythagorean theorem', 'SOH-CAH-TOA'],
+      answer: 1,
+      explain: 'An angle paired with its opposite side gives the common ratio, so the Law of Sines unlocks the rest (AAS).',
+    },
+    {
+      q: 'In c² = a² + b² − 2ab·cos C, what happens when C = 90°?',
+      options: [
+        'The formula is undefined',
+        'It becomes c² = a² + b² (Pythagoras)',
+        'c becomes 0',
+        'It becomes the Law of Sines',
+      ],
+      answer: 1,
+      explain: 'cos 90° = 0, so the correction term vanishes and the Law of Cosines reduces to the Pythagorean theorem.',
+    },
+    {
+      q: 'A triangle has sides a = 5, b = 7 with included angle C = 60°. What is side c?',
+      options: ['√39 ≈ 6.24', '12', '√74 ≈ 8.6', '6'],
+      answer: 0,
+      explain: 'c² = 25 + 49 − 2·5·7·cos60° = 74 − 70·0.5 = 74 − 35 = 39, so c = √39 ≈ 6.24.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>Law of Sines</strong> a/sin A = b/sin B = c/sin C links every side to its opposite angle in any triangle.',
+    'The <strong>Law of Cosines</strong> c² = a² + b² − 2ab·cos C generalises Pythagoras to any angle.',
+    'Use the <strong>Law of Sines</strong> for angle-with-opposite-side cases (ASA/AAS); the <strong>Law of Cosines</strong> for SAS and SSS.',
+    'Beware the <strong>ambiguous SSA case</strong>, which can yield zero, one, or two valid triangles.',
+    'These laws are <strong>triangulation</strong> — the math behind GPS, SLAM, 3D reconstruction and vector distances in ML.',
+  ]}
+/>
+
+You've completed the trigonometry track — from radians to oblique triangles. Next, **Pre-Calculus:
+Transformations & Composition** builds on this to shift, stretch and chain functions of every kind.

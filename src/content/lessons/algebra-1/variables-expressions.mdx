@@ -1,0 +1,161 @@
+---
+title: Variables & Expressions
+track: algebra-1
+summary: Letters that stand for numbers, and how to simplify them by collecting like terms.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - algebra-1/numbers-operations
+leadsTo:
+  - algebra-1/linear-equations
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ExpressionSliderLab from '../../../components/demos/ExpressionSliderLab.tsx';
+
+## The hook: one formula, every month's bill
+
+Your phone plan charges a flat \$20 plus \$5 for every extra gigabyte you use. In March you used 3 GB, in April 7 GB,
+in May 2 GB. You *could* write a fresh sum each month — but it's the same shape every time. So you write it **once**, with a
+letter standing in for "however many gigabytes": $20 + 5g$. Now one expression covers every month, past and future. That
+letter is a **variable**, and learning to write and tidy such expressions is the real start of algebra.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **variable** is a letter holding a number you don't know yet (or that can change); an **expression** combines variables
+and numbers with operations, and **simplifying** means writing the same expression in its shortest equal form.
+</Callout>
+
+## Intuition: building on the order of operations
+
+In the last lesson every quantity was a fixed number and PEMDAS told you how to combine them. Nothing about those rules
+changes here — we just allow some of the numbers to be **letters**. The expression $20 + 5g$ still means "multiply $g$ by
+5 first, then add 20," exactly as PEMDAS demands.
+
+Two pieces of vocabulary make the rest easy:
+
+- A **term** is a chunk separated by $+$ or $-$. In $2x + 3x + 4y - 5$ the terms are $2x$, $3x$, $4y$, and $-5$.
+- The **coefficient** is the number multiplying a variable. In $5g$ the coefficient is $5$.
+
+**Like terms** carry the *same* variable, so they can be merged: $2x + 3x = 5x$, just as 2 apples plus 3 apples is 5
+apples. You cannot merge $5x$ with $4y$ any more than you can add apples to oranges — different variables stay separate.
+
+## Play with it
+
+Below is the expression **2x + 3x + 4y − 5**. Slide $x$ and $y$ and watch it evaluate. Then hit the toggle to collect like
+terms into **5x + 4y − 5** — the bars and the final value stay identical, proving the two forms are the same expression.
+
+<ExpressionSliderLab client:visible />
+
+<Callout type="tip">
+Set any $x$ and $y$, note the value, then toggle to the simplified form. The number never moves. Simplifying changes how
+the expression <em>looks</em>, never what it <em>equals</em>.
+</Callout>
+
+## The formal definition
+
+An **expression** is a finite combination of numbers, variables, and operations, for example
+
+$$
+2x + 3x + 4y - 5.
+$$
+
+Each additive piece is a **term**; a term's numeric multiplier is its **coefficient**. Two terms are **like terms** when
+they have identical variable parts. Combining them uses the **distributive law** in reverse:
+
+$$
+2x + 3x = (2 + 3)\,x = 5x.
+$$
+
+More generally, for any like terms with the same variable,
+
+$$
+a\,x + b\,x = (a + b)\,x.
+$$
+
+The distributive law also expands a factor over a sum:
+
+$$
+k\,(x + y) = k\,x + k\,y.
+$$
+
+<Callout type="why">
+A machine-learning model is, at heart, a giant expression in many variables (the weights). Simplifying and combining like
+terms is exactly what libraries do to evaluate those expressions efficiently — fewer operations, same value, faster
+training.
+</Callout>
+
+## The same idea, four different worlds
+
+A variable is just a placeholder for "the amount that can change." That shows up everywhere.
+
+<ExampleCard domain="Phone data plans" icon="📱">
+A plan costs $20 + 5g$ dollars, where $g$ is gigabytes of overage. The variable lets one formula price *every* customer
+and every month. Plug in $g = 3$ to get \$35; plug in $g = 7$ to get \$55.
+</ExampleCard>
+
+<ExampleCard domain="Road trips" icon="🚗">
+Fuel for a trip of $d$ miles in a car doing 30 mpg, with gas at \$4/gallon, is $\tfrac{4}{30}\,d$ dollars. Drive twice as
+far and the expression doubles — the variable $d$ carries the "how far."
+</ExampleCard>
+
+<ExampleCard domain="Gardening" icon="🌻">
+Fertilizer for $r$ rows at 2 scoops each, plus 3 scoops for the herb pots, is $2r + 3$. Add a second batch of $4r$ and you
+collect like terms: $2r + 4r + 3 = 6r + 3$ — same scoops, tidier formula.
+</ExampleCard>
+
+<ExampleCard domain="Music streaming" icon="🎧">
+A playlist's total minutes is $3.5s + 4a$, where $s$ is the number of short songs (3.5 min each) and $a$ the number of
+long ones (4 min each). Different variables, so the terms stay separate — you can't merge songs of different length.
+</ExampleCard>
+
+<Callout type="note">
+In every case the variable is "the part that varies." Writing the relationship once, with a letter, beats rewriting a new
+sum for every situation.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Simplify 4a + 2a + 7.',
+      options: ['6a + 7', '13a', '6a7', '8a + 7'],
+      answer: 0,
+      explain: '4a and 2a are like terms: 4a + 2a = 6a. The 7 has no variable, so it stays: 6a + 7.',
+    },
+    {
+      q: 'Using the plan 20 + 5g, what is the bill when g = 6?',
+      options: ['$26', '$50', '$120', '$150'],
+      answer: 1,
+      explain: 'Multiply first (PEMDAS): 5 × 6 = 30, then 20 + 30 = 50.',
+    },
+    {
+      q: 'Why can you NOT combine 5x and 4y into one term?',
+      options: [
+        'Because 5 and 4 are different',
+        'Because they have different variables — they are not like terms',
+        'Because addition is not allowed with variables',
+        'You can: it equals 9xy',
+      ],
+      answer: 1,
+      explain: 'Like terms must share the same variable. x and y are different quantities, so the terms stay separate.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>variable</strong> is a letter standing for a number that is unknown or changing.',
+    'An <strong>expression</strong> combines variables and numbers with operations, read using the same PEMDAS rules as before.',
+    'A <strong>term</strong> is a piece separated by + or −; its <strong>coefficient</strong> is the number multiplying the variable.',
+    '<strong>Like terms</strong> (same variable) combine: a·x + b·x = (a + b)·x; unlike terms stay separate.',
+    'The <strong>distributive law</strong> k(x + y) = kx + ky both expands and (in reverse) collects terms.',
+  ]}
+/>
+
+Next up: **Linear Equations & Inequalities** — once an expression is set *equal* to something, we can solve for the
+unknown using a balance scale.

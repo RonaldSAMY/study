@@ -1,0 +1,370 @@
+/* ============================================================
+   Single source of truth for the whole curriculum.
+   - Sidebar, the /path page, and the landing-page graph all read this.
+   - `status: 'ready'` means a matching MDX lesson exists in
+     src/content/lessons/<slug>.mdx and will be rendered.
+   - `status: 'soon'` lessons still appear in the nav/path (so the
+     full learning journey is visible) but render a "coming soon" page.
+   The slug is "<trackId>/<lessonId>" and is the URL path.
+   ============================================================ */
+
+export type LessonStatus = 'ready' | 'soon';
+
+export interface LessonMeta {
+  id: string;          // lesson id within the track
+  title: string;
+  summary: string;
+  status: LessonStatus;
+}
+
+export interface Track {
+  id: string;          // also the Tailwind color key
+  title: string;
+  stage: 'Foundations' | 'Core';
+  icon: string;        // emoji glyph used in nav/cards
+  blurb: string;
+  lessons: LessonMeta[];
+}
+
+const soon = (id: string, title: string, summary: string): LessonMeta => ({
+  id,
+  title,
+  summary,
+  status: 'soon',
+});
+
+export const TRACKS: Track[] = [
+  // ---------------- FOUNDATIONS ----------------
+  {
+    id: 'algebra-1',
+    title: 'Algebra 1',
+    stage: 'Foundations',
+    icon: '🔤',
+    blurb: 'The language of math: variables, equations and the coordinate plane.',
+    lessons: [
+      soon('numbers-operations', 'Numbers & Operations', 'Integers, fractions, order of operations — the rules of the game.'),
+      soon('variables-expressions', 'Variables & Expressions', 'Letters that stand for numbers, and how to simplify them.'),
+      soon('linear-equations', 'Linear Equations & Inequalities', 'Solving for the unknown and reasoning about ranges.'),
+      soon('coordinate-plane', 'The Coordinate Plane', 'Turning pairs of numbers into points and pictures.'),
+      soon('intro-functions', 'Intro to Functions', 'Machines that take an input and return one output.'),
+      soon('slope-linear', 'Slope & Linear Functions', 'Steepness, rate of change, and the equation of a line.'),
+    ],
+  },
+  {
+    id: 'algebra-2',
+    title: 'Algebra 2',
+    stage: 'Foundations',
+    icon: '🧮',
+    blurb: 'Curves, growth and decay: quadratics, polynomials, exponentials and logs.',
+    lessons: [
+      soon('quadratics', 'Quadratics & Factoring', 'Parabolas, roots, and completing the square.'),
+      soon('polynomials', 'Polynomials', 'Adding, multiplying and breaking apart higher-degree expressions.'),
+      soon('exponents-radicals', 'Exponents & Radicals', 'Powers, roots and the rules that govern them.'),
+      soon('exp-log', 'Exponential & Logarithmic Functions', 'Explosive growth and its inverse — the logarithm.'),
+      soon('rational-expressions', 'Rational Expressions', 'Fractions where the numerator and denominator are polynomials.'),
+      soon('systems-equations', 'Systems of Equations', 'Finding values that satisfy several equations at once.'),
+      soon('sequences-series-basics', 'Sequences & Series', 'Patterns of numbers and their running totals.'),
+    ],
+  },
+  {
+    id: 'geometry',
+    title: 'Geometry',
+    stage: 'Foundations',
+    icon: '📐',
+    blurb: 'Shape, space and distance — the visual backbone of vectors.',
+    lessons: [
+      soon('points-lines-angles', 'Points, Lines & Angles', 'The atoms of geometry and how they relate.'),
+      soon('pythagoras', 'Triangles & the Pythagorean Theorem', 'The most useful equation about right triangles.'),
+      soon('similarity-congruence', 'Similarity & Congruence', 'When are two shapes "the same"?'),
+      soon('circles', 'Circles', 'Radius, circumference, area and the number π.'),
+      soon('area-volume', 'Area & Volume', 'Measuring flat regions and solid space.'),
+      soon('coordinate-geometry', 'Coordinate Geometry & Distance', 'Geometry meets algebra: the distance formula.'),
+      soon('transformations', 'Transformations', 'Sliding, rotating and scaling shapes — a first look at vectors.'),
+    ],
+  },
+  {
+    id: 'trigonometry',
+    title: 'Trigonometry',
+    stage: 'Foundations',
+    icon: '🌀',
+    blurb: 'Angles and waves: the math of anything that repeats.',
+    lessons: [
+      soon('angles-radians', 'Angles & Radians', 'Two ways to measure rotation, and why radians win.'),
+      soon('right-triangle-ratios', 'Right-Triangle Ratios', 'SOH-CAH-TOA: sine, cosine and tangent.'),
+      // FLAGSHIP
+      { id: 'unit-circle', title: 'The Unit Circle', summary: 'The single picture that ties together every trig function.', status: 'ready' },
+      soon('trig-graphs', 'Graphs of Trig Functions', 'How sine and cosine become smooth, endless waves.'),
+      soon('identities', 'Trig Identities', 'Equations that are always true, and how to use them.'),
+      soon('inverse-trig', 'Inverse Trig Functions', 'Going from a ratio back to the angle.'),
+      soon('laws-sines-cosines', 'Law of Sines & Cosines', 'Solving triangles that are not right-angled.'),
+    ],
+  },
+  {
+    id: 'precalculus',
+    title: 'Pre-Calculus',
+    stage: 'Foundations',
+    icon: '📈',
+    blurb: 'The bridge to calculus: functions in depth and a first taste of limits.',
+    lessons: [
+      soon('transformations-composition', 'Transformations & Composition', 'Shifting, stretching and chaining functions together.'),
+      soon('poly-rational-functions', 'Polynomial & Rational Functions', 'Behavior, asymptotes and end behavior.'),
+      soon('exp-log-depth', 'Exponentials & Logs in Depth', 'Modeling growth, decay and scale.'),
+      soon('intro-limits', 'Intro to Limits', 'What value does a function approach? The idea behind calculus.'),
+      soon('sequences-series', 'Sequences & Series', 'Convergence, divergence and infinite sums.'),
+      soon('parametric-polar', 'Parametric & Polar', 'Describing curves with a parameter or an angle.'),
+      soon('conic-sections', 'Conic Sections', 'Circles, ellipses, parabolas and hyperbolas.'),
+    ],
+  },
+  {
+    id: 'complex-numbers',
+    title: 'Complex Numbers',
+    stage: 'Foundations',
+    icon: '𝑖',
+    blurb: 'A second dimension for numbers — and the language of waves and rotation.',
+    lessons: [
+      soon('imaginary-unit', 'The Imaginary Unit', 'What is √−1? Meet i and how complex numbers add and multiply.'),
+      soon('complex-plane', 'The Complex Plane', 'Every complex number is a point — and an arrow — on the Argand plane.'),
+      soon('polar-form', 'Polar Form & Multiplication', 'Multiplying complex numbers rotates and scales.'),
+      soon('eulers-formula', "Euler's Formula", 'The most beautiful equation: e^{iθ} = cos θ + i·sin θ.'),
+    ],
+  },
+  {
+    id: 'discrete-math',
+    title: 'Discrete Math & Logic',
+    stage: 'Foundations',
+    icon: '🔗',
+    blurb: 'The rigorous toolkit: sets, logic, proofs and structures.',
+    lessons: [
+      soon('sets', 'Sets & Set Operations', 'Collections of things, unions, intersections and Venn diagrams.'),
+      soon('logic', 'Logic & Truth Tables', 'AND, OR, NOT, implication — the algebra of true and false.'),
+      soon('proofs-induction', 'Proofs & Induction', 'How we know something is true for all numbers.'),
+      soon('relations-graphs', 'Relations, Functions & Graphs', 'Mappings between sets and the networks they form.'),
+    ],
+  },
+
+  // ---------------- CORE (ML MATH) ----------------
+  {
+    id: 'calculus-1',
+    title: 'Calculus 1',
+    stage: 'Core',
+    icon: '∂',
+    blurb: 'Change and accumulation: derivatives and integrals.',
+    lessons: [
+      soon('limits-continuity', 'Limits & Continuity', 'Making the idea of "approaching" precise.'),
+      // FLAGSHIP
+      { id: 'derivative', title: 'The Derivative', summary: 'The instantaneous rate of change — the slope of a curve at a point.', status: 'ready' },
+      soon('differentiation-rules', 'Differentiation Rules & Chain Rule', 'Fast recipes for derivatives, including composition.'),
+      soon('applications-derivatives', 'Applications of Derivatives', 'Optimization, related rates and curve sketching.'),
+      soon('integrals-ftc', 'Integrals & the Fundamental Theorem', 'Accumulation and the deep link between area and slope.'),
+    ],
+  },
+  {
+    id: 'calculus-2',
+    title: 'Calculus 2',
+    stage: 'Core',
+    icon: '∫',
+    blurb: 'Integration mastery and infinite series.',
+    lessons: [
+      soon('integration-techniques', 'Integration Techniques', 'Substitution, by parts, and partial fractions.'),
+      soon('applications-integrals', 'Applications of Integrals', 'Areas, volumes, averages and probability.'),
+      soon('sequences-series-2', 'Sequences & Series', 'Convergence tests and power series.'),
+      soon('taylor-series', 'Taylor Series', 'Approximating any function with polynomials.'),
+    ],
+  },
+  {
+    id: 'calculus-3',
+    title: 'Calculus 3',
+    stage: 'Core',
+    icon: '∇',
+    blurb: 'Multivariable calculus — the gradient that powers learning.',
+    lessons: [
+      soon('multivariable-functions', 'Functions of Several Variables', 'Surfaces and contour maps.'),
+      soon('partial-derivatives', 'Partial Derivatives', 'Rate of change in one direction at a time.'),
+      soon('gradient', 'The Gradient & Directional Derivatives', 'The direction of steepest ascent.'),
+      soon('chain-rule-jacobian', 'Multivariable Chain Rule & Jacobian', 'Composing vector-valued functions.'),
+      soon('hessian', 'The Hessian', 'Curvature in many dimensions.'),
+      soon('multiple-integrals', 'Multiple Integrals', 'Volume under a surface.'),
+      soon('vector-calculus-ml', 'Vector Calculus for ML', 'The math behind backpropagation.'),
+    ],
+  },
+  {
+    id: 'differential-equations',
+    title: 'Differential Equations',
+    stage: 'Core',
+    icon: '🌱',
+    blurb: 'Equations that describe how things change over time.',
+    lessons: [
+      soon('intro-odes', 'Intro to ODEs', 'Equations involving a function and its derivatives.'),
+      soon('first-order', 'First-Order ODEs', 'Separable and linear equations.'),
+      soon('second-order', 'Second-Order Linear ODEs', 'Oscillations, springs and resonance.'),
+      soon('applications-de', 'Applications', 'Growth, decay, cooling and motion.'),
+      soon('numerical-euler', "Numerical Methods (Euler)", 'Solving equations a computer can handle.'),
+    ],
+  },
+  {
+    id: 'linear-algebra',
+    title: 'Linear Algebra',
+    stage: 'Core',
+    icon: '⬚',
+    blurb: 'Vectors, matrices and transformations — the data structures of ML.',
+    lessons: [
+      // FLAGSHIP (reference implementation)
+      { id: 'vectors', title: 'Vectors', summary: 'Arrows with direction and length — and lists of numbers that describe anything.', status: 'ready' },
+      soon('vector-ops-dot', 'Vector Operations & Dot Product', 'Adding, scaling and measuring similarity.'),
+      soon('span', 'Linear Combinations & Span', 'Every place you can reach with a set of vectors.'),
+      soon('matrices', 'Matrices', 'Grids of numbers that store and transform data.'),
+      soon('matrix-multiplication', 'Matrix Multiplication', 'Composing transformations.'),
+      soon('gaussian-elimination', 'Systems & Gaussian Elimination', 'Solving many equations at once.'),
+      soon('inverse-determinant', 'Inverse & Determinant', 'Undoing transformations and measuring how they scale space.'),
+      soon('vector-spaces', 'Vector Spaces, Basis & Rank', 'The structure underneath all of linear algebra.'),
+      soon('linear-transformations', 'Linear Transformations', 'Functions that keep grids straight and evenly spaced.'),
+      soon('eigenvectors', 'Eigenvalues & Eigenvectors', 'The directions a transformation does not turn.'),
+      soon('orthogonality-projections', 'Orthogonality & Projections', 'Right angles and shadows — the heart of least squares.'),
+      soon('inner-product-functions', 'Inner Product of Functions', 'Treating whole functions as vectors you can project and compare.'),
+      soon('decompositions', 'Matrix Decompositions (LU/QR/SVD)', 'Factoring matrices into simpler pieces.'),
+      soon('pca', 'PCA', 'Finding the directions that matter most in data.'),
+    ],
+  },
+  {
+    id: 'combinatorics',
+    title: 'Combinatorics',
+    stage: 'Core',
+    icon: '🔢',
+    blurb: 'The art of counting — the foundation under every probability.',
+    lessons: [
+      soon('counting-principles', 'Counting Principles', 'The multiplication and addition rules for counting possibilities.'),
+      soon('permutations', 'Permutations', 'Counting ordered arrangements.'),
+      soon('combinations', 'Combinations', 'Counting selections where order does not matter.'),
+      soon('binomial-theorem', 'Binomial Theorem & Pascal’s Triangle', 'Expanding (a+b)ⁿ and the pattern of the coefficients.'),
+    ],
+  },
+  {
+    id: 'probability',
+    title: 'Probability',
+    stage: 'Core',
+    icon: '🎲',
+    blurb: 'Reasoning about uncertainty — the language of machine learning.',
+    lessons: [
+      soon('sample-spaces', 'Sample Spaces & Events', 'Listing what can happen, and assigning chances.'),
+      soon('conditional-bayes', 'Conditional Probability & Bayes', 'Updating beliefs when new evidence arrives.'),
+      // FLAGSHIP
+      { id: 'random-variables', title: 'Random Variables', summary: 'Turning random outcomes into numbers we can compute with.', status: 'ready' },
+      soon('discrete-distributions', 'Discrete Distributions', 'Bernoulli, Binomial and Poisson.'),
+      soon('continuous-distributions', 'Continuous Distributions', 'Uniform, Exponential and the Gaussian.'),
+      soon('expectation-variance', 'Expectation & Variance', 'The center and the spread of randomness.'),
+      soon('joint-covariance', 'Joint Distributions & Covariance', 'How two random quantities move together.'),
+      soon('clt', 'The Central Limit Theorem', 'Why the bell curve appears everywhere.'),
+      soon('conjugacy-exponential-family', 'Conjugacy & the Exponential Family', 'The distributions that make Bayesian updates clean.'),
+      soon('change-of-variables', 'Change of Variables', 'How a probability density transforms when you reshape the variable.'),
+    ],
+  },
+  {
+    id: 'statistics',
+    title: 'Statistics',
+    stage: 'Core',
+    icon: '📊',
+    blurb: 'Learning from data: estimation, testing and regression.',
+    lessons: [
+      soon('descriptive-stats', 'Descriptive Statistics', 'Summarizing data with a few numbers.'),
+      soon('mle-map', 'Estimation (MLE & MAP)', 'Choosing the parameters that best explain the data.'),
+      soon('confidence-intervals', 'Confidence Intervals', 'Quantifying how sure we are.'),
+      soon('hypothesis-testing', 'Hypothesis Testing', 'Deciding whether an effect is real.'),
+      soon('regression', 'Regression', 'Fitting lines and curves to data.'),
+    ],
+  },
+  {
+    id: 'optimization',
+    title: 'Optimization',
+    stage: 'Core',
+    icon: '🎯',
+    blurb: 'The capstone: how machines actually learn by minimizing error.',
+    lessons: [
+      soon('gradient-descent', 'Gradient Descent', 'Rolling downhill to the best answer.'),
+      soon('convexity', 'Convexity', 'When downhill always leads to the global best.'),
+      soon('constrained-optimization', 'Constrained Optimization', 'Optimizing with rules you must obey.'),
+      soon('ml-capstone', 'Capstone: Learning as Optimization', 'Linear regression trained by gradient descent — every idea, together.'),
+    ],
+  },
+  {
+    id: 'information-theory',
+    title: 'Information Theory',
+    stage: 'Core',
+    icon: 'ℹ️',
+    blurb: 'Measuring surprise and information — the source of ML loss functions.',
+    lessons: [
+      soon('entropy', 'Information & Entropy', 'How many bits does a surprise carry?'),
+      soon('cross-entropy-kl', 'Cross-Entropy & KL Divergence', 'Measuring the distance between two distributions — and the loss that trains classifiers.'),
+      soon('mutual-information', 'Mutual Information', 'How much knowing one variable tells you about another.'),
+      soon('info-theory-ml', 'Information Theory in ML', 'Cross-entropy loss, decision-tree splits and the bottleneck principle.'),
+    ],
+  },
+  {
+    id: 'fourier',
+    title: 'Fourier & Signals',
+    stage: 'Core',
+    icon: '〜',
+    blurb: 'Every signal is a sum of waves — the transform behind audio, images and attention.',
+    lessons: [
+      soon('sinusoids-frequency', 'Sinusoids, Frequency & Phase', 'The building blocks: amplitude, frequency and phase.'),
+      soon('fourier-series', 'Fourier Series', 'Building any repeating signal from sines and cosines.'),
+      soon('fourier-transform', 'The Fourier Transform', 'Decomposing any signal into its frequencies.'),
+      soon('dft-fft', 'DFT & FFT', 'How computers compute the spectrum — fast.'),
+      soon('convolution-theorem', 'The Convolution Theorem', 'Why filtering is just multiplication in frequency space.'),
+      soon('fourier-applications', 'Fourier in the Real World & ML', 'Audio, images, spectrograms and positional encodings.'),
+    ],
+  },
+  {
+    id: 'ml-methods',
+    title: 'ML Methods (from the Book)',
+    stage: 'Core',
+    icon: '🤖',
+    blurb: "The book's four central ML problems, where all the math comes together.",
+    lessons: [
+      soon('when-models-meet-data', 'When Models Meet Data', 'Empirical risk, training vs testing, overfitting and model selection.'),
+      soon('gaussian-mixture-models', 'Gaussian Mixture Models', 'Soft clustering and density estimation with the EM algorithm.'),
+      soon('support-vector-machines', 'Support Vector Machines', 'Maximum-margin classifiers and the kernel trick.'),
+    ],
+  },
+];
+
+// ---- Derived helpers -------------------------------------------------
+
+export interface FlatLesson extends LessonMeta {
+  slug: string;        // "<trackId>/<lessonId>"
+  trackId: string;
+  trackTitle: string;
+  trackIcon: string;
+  stage: Track['stage'];
+}
+
+export const ALL_LESSONS: FlatLesson[] = TRACKS.flatMap((t) =>
+  t.lessons.map((l) => ({
+    ...l,
+    slug: `${t.id}/${l.id}`,
+    trackId: t.id,
+    trackTitle: t.title,
+    trackIcon: t.icon,
+    stage: t.stage,
+  })),
+);
+
+export function getLessonBySlug(slug: string): FlatLesson | undefined {
+  return ALL_LESSONS.find((l) => l.slug === slug);
+}
+
+export function getTrack(id: string): Track | undefined {
+  return TRACKS.find((t) => t.id === id);
+}
+
+/** Previous / next lesson across the whole linear curriculum. */
+export function getNeighbors(slug: string): { prev?: FlatLesson; next?: FlatLesson } {
+  const i = ALL_LESSONS.findIndex((l) => l.slug === slug);
+  if (i === -1) return {};
+  return {
+    prev: i > 0 ? ALL_LESSONS[i - 1] : undefined,
+    next: i < ALL_LESSONS.length - 1 ? ALL_LESSONS[i + 1] : undefined,
+  };
+}
+
+export const READY_COUNT = ALL_LESSONS.filter((l) => l.status === 'ready').length;
+export const TOTAL_COUNT = ALL_LESSONS.length;

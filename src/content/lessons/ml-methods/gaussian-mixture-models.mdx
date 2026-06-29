@@ -1,0 +1,195 @@
+---
+title: Gaussian Mixture Models
+track: ml-methods
+summary: Soft clustering and density estimation by mixing Gaussians, learned with the Expectation–Maximization algorithm.
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - ml-methods/when-models-meet-data
+  - probability/continuous-distributions
+leadsTo:
+  - ml-methods/support-vector-machines
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import EMClusteringLab from '../../../components/demos/EMClusteringLab.tsx';
+
+## The hook: who are your customers, really?
+
+You run an online store. Nobody labeled your shoppers — there is no column that says "bargain hunter"
+or "premium loyalist." Yet plotting spending against visit frequency, you *see* clumps. Some buyers
+sit firmly in one clump; others hover on a boundary, half one type and half another. You want to
+discover these groups **and** express that in-between feeling honestly, rather than forcing every
+person into a single box.
+
+That honest, soft grouping is what a **Gaussian Mixture Model** delivers — and it is our first taste
+of *unsupervised* learning, where the data has no labels at all.
+
+<Callout type="intuition" title="The one-sentence idea">
+A Gaussian Mixture Model assumes your data was produced by a few overlapping bell-shaped clusters, and
+it learns each cluster's center, shape, and weight — giving every point a **probability** of belonging
+to each group rather than a hard label.
+</Callout>
+
+## Intuition: a recipe with hidden choices
+
+Picture how each data point was *born*. First nature secretly rolls a weighted die to pick a cluster
+$k$ (cluster $k$ comes up with probability $\pi_k$). Then it draws the point from that cluster's
+**Gaussian** — the bell curve you met in continuous distributions, now in 2D with a center
+$\boldsymbol{\mu}_k$ and a spread described by a covariance $\boldsymbol{\Sigma}_k$.
+
+We see the points but **not** the die rolls. Those hidden choices are *latent variables*. The whole
+challenge is a chicken-and-egg loop:
+
+- If we knew which cluster each point came from, estimating each Gaussian would be easy (just average
+  its points).
+- If we knew the Gaussians, guessing each point's cluster would be easy (whichever bell is tallest
+  there).
+
+We know neither. The **EM algorithm** breaks the loop by alternating: guess the assignments, update
+the Gaussians, repeat — and it provably never makes things worse.
+
+## Play with it
+
+Three blobs of customers, three Gaussians that start badly placed. Press **E-step**, then **M-step**,
+and repeat (or use **E + M**). Watch the points recolor as they share themselves between clusters, and
+the ellipses glide into place.
+
+<EMClusteringLab client:visible />
+
+<Callout type="tip">
+After an <strong>E-step</strong>, a point's color is a *blend* — a point between two clusters is part
+indigo, part sky. That blend is its <strong>responsibilities</strong>. Hard clustering would paint it
+one flat color and throw that nuance away.
+</Callout>
+
+## The formal definition
+
+A GMM models the probability of a point $\mathbf{x}$ as a weighted sum of $K$ Gaussian densities:
+
+$$
+p(\mathbf{x}) = \sum_{k=1}^{K} \pi_k \, \mathcal{N}(\mathbf{x} \mid \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k), \qquad \sum_{k=1}^{K} \pi_k = 1, \quad \pi_k \ge 0.
+$$
+
+The **mixing weights** $\pi_k$ are how often each cluster is chosen; each $\mathcal{N}$ is one bell.
+We fit the parameters by maximizing the (log-)likelihood of the data — the same MLE principle from
+estimation, now with a sum *inside* the log that has no closed-form solution. EM solves it by
+iterating two steps.
+
+**E-step (Expectation).** Given the current parameters, compute the **responsibility** of cluster $k$
+for point $\mathbf{x}_n$ — the posterior probability it came from that cluster:
+
+$$
+r_{nk} = \frac{\pi_k \, \mathcal{N}(\mathbf{x}_n \mid \boldsymbol{\mu}_k, \boldsymbol{\Sigma}_k)}{\sum_{j=1}^{K} \pi_j \, \mathcal{N}(\mathbf{x}_n \mid \boldsymbol{\mu}_j, \boldsymbol{\Sigma}_j)}.
+$$
+
+**M-step (Maximization).** Treat those soft responsibilities as fractional memberships and re-estimate
+each Gaussian. With $N_k = \sum_{n} r_{nk}$ the effective number of points in cluster $k$:
+
+$$
+\boldsymbol{\mu}_k = \frac{1}{N_k} \sum_{n=1}^{N} r_{nk}\, \mathbf{x}_n, \qquad
+\boldsymbol{\Sigma}_k = \frac{1}{N_k} \sum_{n=1}^{N} r_{nk}\, (\mathbf{x}_n - \boldsymbol{\mu}_k)(\mathbf{x}_n - \boldsymbol{\mu}_k)^{\top},
+$$
+
+$$
+\pi_k = \frac{N_k}{N}.
+$$
+
+Alternate E and M until the log-likelihood stops climbing. Each round can only **increase** (or hold)
+the likelihood, so EM is guaranteed to converge — though to a *local* optimum, which is why the
+starting guess and re-runs matter.
+
+<Callout type="why">
+GMMs are the soft cousin of $k$-means. In fact $k$-means is the special case where you force each
+responsibility to 0 or 1 and make every Gaussian a perfect circle. The mixture model keeps the
+probabilities, so it can capture stretched, tilted, overlapping clusters — which is what real data
+actually looks like.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Customer segmentation" icon="🛍️">
+Plot each shopper by spend and frequency, fit a GMM, and out fall groups like "occasional splurgers"
+and "frequent savers." A shopper on the edge gets, say, 0.6 to one segment and 0.4 to another — so
+marketing can target the *blend* instead of pretending everyone is one type.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="🔭">
+A telescope survey records stars' colors and brightness. Different stellar populations form
+overlapping clouds in that space. A GMM separates them softly, and a star straddling two clouds keeps a
+fair probability for each — exactly the uncertainty astronomers want to preserve.
+</ExampleCard>
+
+<ExampleCard domain="Speech & audio" icon="🎙️">
+Classic speaker-recognition systems modeled each voice as a mixture of Gaussians over sound features.
+A new clip is scored under every speaker's GMM, and the highest density wins. The mixture captures that
+one voice produces many different sounds.
+</ExampleCard>
+
+<ExampleCard domain="Anomaly detection" icon="🚨">
+Fit a GMM to normal sensor readings from a machine. Because the model gives a *density* everywhere, a
+new reading that lands where every bell is tiny — low $p(\mathbf{x})$ — is flagged as an anomaly. The
+mixture defines "normal" as a smooth landscape, not a hard boundary.
+</ExampleCard>
+
+<Callout type="note">
+The recurring power is the word <strong>soft</strong>: GMMs hand back probabilities, not verdicts. That
+lets the model say "I am 70% sure" — priceless when the cost of a confident mistake is high.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the E-step of the EM algorithm compute?',
+      options: [
+        'New cluster means and covariances',
+        'The responsibilities: each point’s probability of belonging to each cluster',
+        'The number of clusters K',
+        'The learning rate',
+      ],
+      answer: 1,
+      explain: 'The E-step fixes the current Gaussians and computes r_nk, the soft (posterior) assignment of every point to every cluster. The M-step then uses those to update the parameters.',
+    },
+    {
+      q: 'How does a Gaussian Mixture Model differ from hard k-means clustering?',
+      options: [
+        'GMM requires labeled data',
+        'GMM gives each point a probability of membership in every cluster, not a single hard label',
+        'GMM can only use one cluster',
+        'GMM never converges',
+      ],
+      answer: 1,
+      explain: 'GMM is soft clustering: a point can be 60% cluster A and 40% cluster B. k-means forces a single 0/1 assignment and assumes round, equal clusters.',
+    },
+    {
+      q: 'A point sits roughly halfway between two well-separated clusters. After an E-step, its responsibilities are most likely:',
+      options: [
+        'About 0.5 and 0.5',
+        '1.0 and 0.0',
+        '0.0 and 0.0',
+        'Greater than 1 each',
+      ],
+      answer: 0,
+      explain: 'Responsibilities are probabilities that sum to 1 across clusters. A point equidistant from two clusters gets a near-even split, reflecting genuine uncertainty.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>Gaussian Mixture Model</strong> represents data as a weighted sum of Gaussians, learning each cluster’s center, shape, and weight.',
+    'It performs <strong>soft clustering</strong>: every point gets a probability (responsibility) for each cluster instead of a hard label.',
+    'The <strong>EM algorithm</strong> alternates an <strong>E-step</strong> (compute responsibilities) and an <strong>M-step</strong> (update Gaussians).',
+    'EM maximizes the data likelihood and is guaranteed to converge, though only to a <strong>local optimum</strong> — initialization matters.',
+    'GMMs generalize <strong>k-means</strong> and also give a full density, powering segmentation, recognition, and anomaly detection.',
+  ]}
+/>
+
+Next up: **Support Vector Machines** — we swap soft groups for a sharp decision and ask a sharper
+question: of all the lines that separate two classes, which one is the *best*?

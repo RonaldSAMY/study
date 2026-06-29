@@ -1,0 +1,162 @@
+---
+title: Binomial Theorem & Pascal’s Triangle
+track: combinatorics
+summary: Expanding any power of (a+b) using "n choose r" counts — the same numbers that fill Pascal's triangle.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - combinatorics/combinations
+leadsTo:
+  - probability/sample-spaces
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PascalTriangleExplorer from '../../../components/demos/PascalTriangleExplorer.tsx';
+
+## The hook: expanding a power without the grind
+
+Multiplying $(a+b)^2 = a^2 + 2ab + b^2$ is easy. But $(a+b)^5$? Multiplying it out term by term is
+tedious and error-prone. There's a pattern hiding in the coefficients — $1, 5, 10, 10, 5, 1$ — and it is
+exactly the **combinations** you just learned. The binomial theorem turns "expand this power" into "count
+how many ways each term appears", and arranges every answer into the elegant staircase of **Pascal's
+triangle**.
+
+<Callout type="intuition" title="The one-sentence idea">
+In $(a+b)^n$, the coefficient of the term with $r$ copies of $b$ is $\binom{n}{r}$ — the number of ways to
+choose which $r$ of the $n$ factors hand over a $b$.
+
+</Callout>
+
+## Intuition: every term is a counting question
+
+Write $(a+b)^n$ as $n$ identical factors multiplied together:
+
+$$
+(a+b)^n = \underbrace{(a+b)(a+b)\cdots(a+b)}_{n \text{ factors}}.
+$$
+
+To build a term, each factor donates either an $a$ or a $b$. A term like $a^{n-r}b^r$ comes from choosing
+$r$ of the factors to give a $b$ (the rest give $a$). **How many ways** can you choose those $r$ factors?
+Exactly $\binom{n}{r}$ — a combination. So that's the coefficient.
+
+Stacking these coefficients row by row builds **Pascal's triangle**: each row $n$ is the list
+$\binom{n}{0}, \binom{n}{1}, \dots, \binom{n}{n}$, and — beautifully — every interior number is the sum of
+the two directly above it.
+
+## Play with it
+
+Slide to highlight a row $n$ and read off the coefficients of $(a+b)^n$. Then tap any number: the two
+cells above it light up green, showing the **addition rule** $\binom{n-1}{r-1} + \binom{n-1}{r} = \binom{n}{r}$
+that grows the whole triangle.
+
+<PascalTriangleExplorer client:visible />
+
+<Callout type="tip">
+The numbers in each row always add up to $2^n$ — the total number of ways every factor can independently
+choose $a$ or $b$. Row 3 ($1, 3, 3, 1$) sums to $8 = 2^3$.
+</Callout>
+
+## The formal definition
+
+The **binomial theorem** states that for any non-negative integer $n$,
+
+$$
+(a+b)^n = \sum_{r=0}^{n} \binom{n}{r} a^{\,n-r} b^{\,r}
+= \binom{n}{0}a^n + \binom{n}{1}a^{n-1}b + \cdots + \binom{n}{n}b^n.
+$$
+
+The coefficients $\binom{n}{r}$ are called **binomial coefficients**, and Pascal's triangle tabulates them.
+Its growth rule is **Pascal's rule**:
+
+$$
+\binom{n}{r} = \binom{n-1}{r-1} + \binom{n-1}{r}.
+$$
+
+For example, row 4 reads $1, 4, 6, 4, 1$, so
+
+$$
+(a+b)^4 = a^4 + 4a^3b + 6a^2b^2 + 4ab^3 + b^4.
+$$
+
+<Callout type="why">
+Set $a = b = 1$ and the theorem gives $\sum_r \binom{n}{r} = 2^n$ — the count of all subsets of an
+$n$-element set. Set $a$ and $b$ to a success/failure probability and the same expansion becomes the
+**binomial distribution**, the bridge from counting into probability and the next track.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Probability" icon="🪙">
+Flip a fair coin 4 times. The number of ways to get exactly 2 heads is $\binom{4}{2} = 6$ — row 4's
+middle coefficient. The whole row $1, 4, 6, 4, 1$ counts the ways to get $0,1,2,3,4$ heads, and they sum
+to $2^4 = 16$ equally likely sequences.
+</ExampleCard>
+
+<ExampleCard domain="Climate" icon="🌧️">
+A forecaster models 5 independent days, each "rain" or "dry". The number of ways exactly 3 of the 5 days
+are rainy is $\binom{5}{3} = 10$ — straight from row 5. Expanding $(\text{rain} + \text{dry})^5$ organizes
+every possible weather week at once.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+On a line where each item is "pass" or "fail", the chance of exactly $k$ failures in $n$ items is weighted
+by $\binom{n}{k}$. Quality engineers lean on these coefficients to predict how often a given number of
+defects slips through a batch.
+</ExampleCard>
+
+<ExampleCard domain="Product testing" icon="🧪">
+Running an A/B test on 6 users, each either "converts" or "doesn't", the number of ways to see exactly 4
+conversions is $\binom{6}{4} = 15$. The binomial expansion lays out the full spread of outcomes a small
+experiment can produce.
+</ExampleCard>
+
+<Callout type="note">
+The pattern $a^{n-r}b^r$ means exponents always sum to $n$: as the power of $b$ climbs $0,1,2,\dots,n$, the
+power of $a$ falls $n, n-1, \dots, 0$. If a term's exponents don't add to $n$, something went wrong.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the coefficient of the a²b² term in the expansion of (a + b)⁴?',
+      options: ['4', '6', '12', '1'],
+      answer: 1,
+      explain: 'It is C(4,2) = 6, the middle number of Pascal’s row 4: 1, 4, 6, 4, 1.',
+    },
+    {
+      q: 'In Pascal’s triangle, how is each interior number formed?',
+      options: [
+        'Multiply the two numbers above it',
+        'Add the two numbers directly above it',
+        'Double the number to its left',
+        'Subtract the row number',
+      ],
+      answer: 1,
+      explain: 'Pascal’s rule: C(n,r) = C(n−1,r−1) + C(n−1,r), the sum of the two cells above.',
+    },
+    {
+      q: 'What do the entries of row n of Pascal’s triangle add up to?',
+      options: ['n', 'n!', '2ⁿ', 'n²'],
+      answer: 2,
+      explain: 'Setting a = b = 1 in the binomial theorem gives the sum of the coefficients = 2ⁿ.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>binomial theorem</strong>: (a+b)ⁿ = Σ C(n, r) aⁿ⁻ʳ bʳ, summed over r = 0 to n.',
+    'Each coefficient <strong>C(n, r)</strong> counts the ways to pick which r factors contribute a b — combinations again.',
+    '<strong>Pascal’s triangle</strong> tabulates these coefficients, one row per power n.',
+    '<strong>Pascal’s rule</strong>: every interior entry is the sum of the two above it, C(n,r) = C(n−1,r−1) + C(n−1,r).',
+    'Each row sums to <strong>2ⁿ</strong>, and with success/failure values the expansion becomes the binomial distribution.',
+  ]}
+/>
+
+Next up: **sample spaces & events** — turning these counts of possibilities into actual probabilities.

@@ -1,0 +1,65 @@
+---
+import Layout from '../components/Layout.astro';
+import { TRACKS } from '../data/curriculum';
+import { getReadySlugs } from '../lib/lessons';
+
+const stages = ['Foundations', 'Core'] as const;
+const ready = await getReadySlugs();
+---
+
+<Layout title="Learning Path · Maths for ML" description="The complete beginner-to-advanced learning path for the mathematics of machine learning.">
+  <header class="animate-fade-up">
+    <h1 class="text-3xl font-extrabold sm:text-4xl">The complete learning path</h1>
+    <p class="mt-3 max-w-2xl text-lg text-muted">
+      Follow it top to bottom. Each lesson builds on the ones before it — so by the time you reach
+      machine-learning topics, every piece already makes sense.
+    </p>
+  </header>
+
+  {stages.map((stage) => (
+    <section class="mt-10">
+      <div class="mb-4 flex items-center gap-3">
+        <h2 class="text-2xl font-extrabold">{stage}</h2>
+        <span class="h-px flex-1 bg-border"></span>
+      </div>
+
+      <div class="space-y-6">
+        {TRACKS.filter((t) => t.stage === stage).map((track, ti) => (
+          <div class="relative rounded-2xl border border-border bg-surface p-5">
+            <div class="flex items-start gap-3">
+              <div class="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-surface-2 text-2xl">{track.icon}</div>
+              <div class="min-w-0">
+                <h3 class="text-lg font-bold">{track.title}</h3>
+                <p class="text-sm text-muted">{track.blurb}</p>
+              </div>
+            </div>
+
+            <ol class="mt-4 grid gap-2 sm:grid-cols-2">
+              {track.lessons.map((lesson, li) => {
+                const slug = `${track.id}/${lesson.id}`;
+                return (
+                  <li>
+                    <a
+                      href={`/${slug}`}
+                      data-lesson-slug={slug}
+                      class="group flex items-center gap-3 rounded-lg border border-border bg-surface-2 px-3 py-2 transition hover:border-brand"
+                    >
+                      <span class="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-surface text-xs font-bold text-muted">{li + 1}</span>
+                      <span class="min-w-0 flex-1">
+                        <span class="block truncate text-sm font-semibold group-hover:text-brand">{lesson.title}</span>
+                      </span>
+                      <span data-check class="text-calculus opacity-0 transition-opacity">✓</span>
+                      {ready.has(slug)
+                        ? <span class="rounded bg-calculus/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-calculus">ready</span>
+                        : <span class="rounded bg-surface px-1.5 py-0.5 text-[10px] font-bold uppercase text-muted">soon</span>}
+                    </a>
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        ))}
+      </div>
+    </section>
+  ))}
+</Layout>

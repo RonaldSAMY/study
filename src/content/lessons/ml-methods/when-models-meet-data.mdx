@@ -1,0 +1,201 @@
+---
+title: When Models Meet Data
+track: ml-methods
+summary: Empirical risk, training vs testing, overfitting and the cross-validation that helps you pick the right model.
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - statistics/mle-map
+  - optimization/gradient-descent
+leadsTo:
+  - ml-methods/gaussian-mixture-models
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import OverfittingPolynomialLab from '../../../components/demos/OverfittingPolynomialLab.tsx';
+
+## The hook: the student who memorized the answer key
+
+Imagine two students preparing for a chemistry exam. One understands the *reactions*; the other
+memorizes last year's answer key, question by question. On the practice paper they have already seen,
+the memorizer scores higher. On the real exam — new questions — they fall apart. The first student
+**generalizes**; the second merely **memorized**.
+
+This is the central drama of machine learning. A model that fits its training data perfectly may be
+the memorizer in disguise. Everything in this lesson is about telling the two apart — and building
+models that understand rather than memorize.
+
+<Callout type="intuition" title="The one-sentence idea">
+Learning means finding a model that does well on **data it has never seen** — so we judge models by
+their error on a held-out **test set**, not on the data they were trained on.
+</Callout>
+
+## Intuition: three ingredients and one goal
+
+Every supervised learning problem has the same skeleton:
+
+1. **Data** — example pairs $(\mathbf{x}_n, y_n)$: an input (an email's word counts) and a label
+   (spam or not).
+2. **Models** — a family of candidate functions $f(\cdot, \boldsymbol{\theta})$ controlled by
+   parameters $\boldsymbol{\theta}$. Choosing the family (a line? a degree-9 polynomial? a neural net?)
+   is *model selection*.
+3. **Learning** — using an optimizer (you already know **gradient descent**) to tune
+   $\boldsymbol{\theta}$ so predictions match the labels, and using estimation ideas like **MLE**
+   to say what "match" even means.
+
+The goal is **generalization**: low error on *future* data. We can't see the future, so we **simulate**
+it by hiding some data from the model during training and scoring on it afterwards.
+
+## Play with it
+
+The blue points are the **training set**; the hollow green points are a **test set** the model never
+sees while fitting. Slide the **degree** of the polynomial and watch both error curves on the right.
+
+<OverfittingPolynomialLab client:visible />
+
+<Callout type="tip">
+Push the degree to its maximum. The indigo curve threads every training point (training error → near
+zero) yet wiggles violently between them — and the test error shoots up. That gap *is* overfitting.
+</Callout>
+
+## The formal definition
+
+We measure how wrong a single prediction is with a **loss function** $\ell(y, \hat{y})$ — for
+regression, the squared error $\ell(y, \hat{y}) = (y - \hat{y})^2$. Averaging the loss over the
+training set gives the **empirical risk**:
+
+$$
+R_{\text{emp}}(\boldsymbol{\theta}) = \frac{1}{N} \sum_{n=1}^{N} \ell\big(y_n,\, f(\mathbf{x}_n, \boldsymbol{\theta})\big).
+$$
+
+Training a model is **empirical risk minimization (ERM)** — finding the parameters that make this as
+small as possible:
+
+$$
+\boldsymbol{\theta}^\star = \arg\min_{\boldsymbol{\theta}} \; R_{\text{emp}}(\boldsymbol{\theta}).
+$$
+
+But low *empirical* risk is not the goal. What we truly want is small **expected risk** over the whole
+data-generating distribution $p(\mathbf{x}, y)$:
+
+$$
+R_{\text{true}}(\boldsymbol{\theta}) = \mathbb{E}_{(\mathbf{x},y) \sim p}\big[\ell(y,\, f(\mathbf{x}, \boldsymbol{\theta}))\big].
+$$
+
+Since $p$ is unknown, we estimate $R_{\text{true}}$ by the **test error**: the average loss on a fresh,
+held-out set. The shortfall splits into two opposing forces — the **bias–variance trade-off**:
+
+$$
+\underbrace{\text{error}}_{\text{test}} \;\approx\; \underbrace{\text{bias}^2}_{\text{too simple}} \;+\; \underbrace{\text{variance}}_{\text{too sensitive}} \;+\; \underbrace{\text{noise}}_{\text{irreducible}}.
+$$
+
+A model too simple (low degree) has high **bias** — it can't capture the pattern. A model too flexible
+(high degree) has high **variance** — it changes wildly with the particular noise in the sample. The
+sweet spot lives between them, which is exactly the U-shape in the demo.
+
+<Callout type="why">
+This is why a model that scores 100% on its training data should make you *nervous*, not happy. In
+machine learning the only score that counts is the one on data the model has never met — because that
+is the only honest preview of how it behaves in the wild.
+</Callout>
+
+### Cross-validation: making the most of scarce data
+
+Setting aside a single test set wastes data and the estimate is noisy. **$k$-fold cross-validation**
+splits the data into $k$ equal parts, trains on $k-1$ of them, validates on the one left out, and
+rotates so every part serves as validation once:
+
+$$
+\text{CV}_k = \frac{1}{k} \sum_{i=1}^{k} R_{\text{val}}^{(i)}.
+$$
+
+You pick the model (the degree, the regularization strength) with the best cross-validated score, then
+report the final number on a test set you touched only once.
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Email security" icon="✉️">
+A spam filter trained to flag every quirk of *yesterday's* spam — a specific misspelling, one sender's
+address — scores beautifully on old mail and then misses *today's* fresh campaign. The fix is the same
+as the demo: hold out recent emails, and prefer the simpler filter whose held-out error is lowest.
+</ExampleCard>
+
+<ExampleCard domain="Medicine" icon="🩺">
+A model that diagnoses disease from a hospital's scans can secretly learn that hospital's *scanner
+artifacts* rather than the disease. It shines on internal data and fails at a new clinic. Validating on
+a *different* hospital's data is cross-validation done right — testing true generalization.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💳">
+A credit-scoring model tuned to perfectly explain past defaults may be fitting the noise of one
+economic year. Banks **back-test** on held-out years: if the error balloons out of sample, the model
+was memorizing history, not learning risk.
+</ExampleCard>
+
+<ExampleCard domain="Weather" icon="🌦️">
+Fit a high-degree curve through this week's temperatures and it nails every reading — then predicts a
+heatwave at midnight. Meteorologists prefer simpler models with lower *forecast* error, judged on days
+that haven't happened yet. Smooth and slightly wrong beats jagged and overfit.
+</ExampleCard>
+
+<Callout type="note">
+Notice the common thread: in every domain, success on seen data is cheap and misleading. The
+discipline of <strong>holding data out</strong> is what turns curve-fitting into learning.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'As you increase model flexibility (e.g. polynomial degree), what typically happens to training error and test error?',
+      options: [
+        'Both keep falling forever',
+        'Training error falls; test error falls then rises (U-shape)',
+        'Both rise immediately',
+        'Training error rises; test error falls',
+      ],
+      answer: 1,
+      explain: 'Training error keeps dropping as the model can bend to fit every point, but test error bottoms out and then climbs as the model starts fitting noise — the signature of overfitting.',
+    },
+    {
+      q: 'A model with very high bias is best described as:',
+      options: [
+        'Too flexible, chasing the noise',
+        'Too simple to capture the real pattern (underfitting)',
+        'Perfectly tuned',
+        'Memorizing the training set',
+      ],
+      answer: 1,
+      explain: 'High bias means the model family is too rigid — like fitting a straight line to a curve. That is underfitting. High variance is the opposite, over-flexible failure.',
+    },
+    {
+      q: 'Why do we use k-fold cross-validation instead of a single train/test split?',
+      options: [
+        'It makes training faster',
+        'It guarantees zero test error',
+        'It uses all the data for validation in turn, giving a more reliable error estimate',
+        'It removes the need for a test set entirely',
+      ],
+      answer: 2,
+      explain: 'Each fold serves as validation once, so every example contributes to the estimate. The averaged score is less noisy than relying on one arbitrary split — valuable when data is scarce.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Every ML problem is <strong>data + models + learning</strong>, and the real goal is <strong>generalization</strong> — low error on unseen data.',
+    'Training is <strong>empirical risk minimization</strong>: minimizing average loss on the training set — but that is a means, not the goal.',
+    '<strong>Overfitting</strong> is a low training error paired with a high test error; the model memorized noise instead of the pattern.',
+    'The <strong>bias–variance trade-off</strong> explains the U-shaped test error: too simple = high bias, too flexible = high variance.',
+    'Use a <strong>held-out test set</strong> and <strong>cross-validation</strong> to estimate generalization and to choose the model.',
+  ]}
+/>
+
+Next up: **Gaussian Mixture Models** — instead of predicting labels, we'll let the data reveal its own
+hidden groups, and meet the elegant EM algorithm that learns them.

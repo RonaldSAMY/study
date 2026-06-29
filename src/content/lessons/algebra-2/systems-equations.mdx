@@ -1,0 +1,173 @@
+---
+title: Systems of Equations
+track: algebra-2
+summary: When two relationships must hold at once — and the single point where both are satisfied.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - algebra-2/rational-expressions
+  - algebra-1/slope-linear
+leadsTo:
+  - algebra-2/sequences-series-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import LinearSystemIntersection from '../../../components/demos/LinearSystemIntersection.tsx';
+
+## The hook: which phone plan should you pick?
+
+Plan A charges \$30 a month flat. Plan B charges \$10 plus \$0.20 per GB of data. Which is cheaper?
+It *depends* on how much data you use — and there is one exact usage where the two plans cost the same.
+Below that you'd pick one plan, above it the other. Finding that break-even point means solving **two
+equations at the same time**, demanding a single answer that makes *both* true. That's a **system of
+equations**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **system of equations** is two (or more) equations that must all hold at once; its **solution** is the
+set of values satisfying every equation simultaneously — graphically, the point where the lines cross.
+</Callout>
+
+## Intuition: one equation, many answers; two equations, one answer
+
+A single line like $y = 2x + 1$ has *infinitely* many solutions — every point on the line works. Pin a
+second equation onto it, and you suddenly demand a point that lies on **both** lines at once. Two
+different straight lines can only do that in **one** place: their intersection.
+
+There are three possible outcomes, and the graph tells you which instantly:
+
+- **One solution** — the lines cross at a single point (the usual case).
+- **No solution** — the lines are **parallel** (same slope, different intercepts) and never meet.
+- **Infinitely many** — the two equations are secretly the *same* line, lying exactly on top of each other.
+
+Graphing is the picture, but you also need exact answers. Two algebraic methods deliver them:
+
+- **Substitution** — solve one equation for a variable, then plug that expression into the other.
+- **Elimination** — add or subtract the equations so one variable cancels, leaving one to solve directly.
+
+## Play with it
+
+Drag the dots to reshape each line and watch the **solution** (green dot) chase the intersection. Make the
+slopes equal and see the solution vanish — that's the "no solution," parallel case.
+
+<LinearSystemIntersection client:visible />
+
+<Callout type="tip">
+The solution point is special because it lies on <em>both</em> lines — its coordinates satisfy line 1's
+equation and line 2's equation at the same time. Slide a line until they're parallel and the readout flips
+to "none": equal slopes can never meet.
+</Callout>
+
+## The formal definition
+
+A **linear system in two variables** looks like
+
+$$
+\begin{aligned}
+a_1 x + b_1 y &= c_1 \\
+a_2 x + b_2 y &= c_2
+\end{aligned}
+$$
+
+A **solution** is a pair $(x, y)$ that satisfies **both** equations.
+
+**Substitution** — from the first equation express one variable, say $y = \tfrac{c_1 - a_1 x}{b_1}$, then
+substitute it into the second so only $x$ remains.
+
+**Elimination** — scale the equations so a variable's coefficients match, then subtract. For example:
+
+$$
+\begin{aligned}
+2x + 3y &= 12 \\
+2x -\ \ y &= 4
+\end{aligned}
+\quad\xrightarrow{\ \text{subtract}\ }\quad 4y = 8 \ \Rightarrow\ y = 2,\ \ x = 3.
+$$
+
+The graph of each equation is a line; the solution is exactly where they intersect. Whether a system has
+one, none, or infinitely many solutions is decided by the slopes and intercepts — the same picture you
+explored in the demo.
+
+<Callout type="why">
+Systems of equations are the foundation of **linear algebra**, the engine room of machine learning.
+Fitting a model means solving a system for the best parameters; with thousands of variables we no longer
+draw lines but use matrices and elimination at scale. Every "least-squares" fit is a giant, organized
+version of the crossing point you just dragged.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Consumer choice" icon="📱">
+Plan A: $y = 30$. Plan B: $y = 10 + 0.2x$ for $x$ gigabytes. Setting them equal, $30 = 10 + 0.2x$ gives
+$x = 100$ GB — the **break-even** usage. Use less and the flat plan loses; use more and it wins. One
+intersection settles the whole decision.
+</ExampleCard>
+
+<ExampleCard domain="Economics" icon="📊">
+Markets balance where **supply meets demand**. Demand falls with price, $q = 100 - 2p$; supply rises,
+$q = 10 + 3p$. Solving the system gives the **equilibrium** price and quantity — the single $(p, q)$ where
+buyers and sellers agree. That crossing point is the market price.
+</ExampleCard>
+
+<ExampleCard domain="Chemistry" icon="🧪">
+Mixing a 20% saline solution with a 50% one to make 10 L of 30% solution sets up two equations: total
+volume $x + y = 10$ and total salt $0.2x + 0.5y = 3$. Elimination reveals exactly how many liters of each
+to pour — a system solved in the lab every day.
+</ExampleCard>
+
+<ExampleCard domain="Travel" icon="🚆">
+A freight train leaves at 40 mph; two hours later an express chases at 60 mph. Writing each train's
+distance as a function of time gives two equations; their **intersection** is the moment and place the
+express catches up — the classic "when do they meet?" puzzle, solved by a system.
+</ExampleCard>
+
+<Callout type="note">
+Phones, markets, beakers, trains — each becomes two equations that must hold together. The solution is
+always the one set of values where every condition is satisfied at once.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Graphically, what does the solution of a two-equation linear system represent?',
+      options: [
+        'The slope of each line',
+        'The point where the two lines intersect',
+        'The y-intercepts added together',
+        'The area between the lines',
+      ],
+      answer: 1,
+      explain: 'The solution is the single point lying on both lines at once — their intersection.',
+    },
+    {
+      q: 'Solve: x + y = 10 and x − y = 2. What is (x, y)?',
+      options: ['(6, 4)', '(4, 6)', '(5, 5)', '(8, 2)'],
+      answer: 0,
+      explain: 'Add the equations: 2x = 12, so x = 6. Then y = 10 − 6 = 4.',
+    },
+    {
+      q: 'Two lines have the same slope but different y-intercepts. How many solutions does the system have?',
+      options: ['Exactly one', 'None', 'Infinitely many', 'Exactly two'],
+      answer: 1,
+      explain: 'Equal slopes with different intercepts means the lines are parallel — they never meet, so there is no solution.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>system of equations</strong> demands values that satisfy every equation simultaneously.',
+    'Graphically, the solution is the <strong>intersection</strong> of the lines.',
+    'Outcomes: <strong>one</strong> solution (lines cross), <strong>none</strong> (parallel), or <strong>infinitely many</strong> (same line).',
+    'Solve exactly with <strong>substitution</strong> (plug one into the other) or <strong>elimination</strong> (cancel a variable).',
+    'Scaled up to many variables, systems become <strong>linear algebra</strong> — the backbone of model fitting.',
+  ]}
+/>
+
+Next up: **sequences & series** — ordered patterns of numbers and their running totals, from stadium seats
+to viral shares.

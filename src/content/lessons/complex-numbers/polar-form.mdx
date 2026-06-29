@@ -1,0 +1,184 @@
+---
+title: Polar Form & Multiplication
+track: complex-numbers
+summary: In polar form r·e^{iθ}, multiplying complex numbers means multiplying lengths and adding angles — rotate and scale.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - complex-numbers/complex-plane
+  - trigonometry/unit-circle
+leadsTo:
+  - complex-numbers/eulers-formula
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ComplexRotationMultiplier from '../../../components/demos/ComplexRotationMultiplier.tsx';
+
+## The hook: why does multiplying feel like spinning?
+
+In rectangular form, multiplying $(a + bi)(c + di)$ is a fiddly FOIL with a sign flip. It works, but
+it hides something magical. Rewrite the same numbers by their **length and angle**, and the messy
+product collapses into one sentence: *multiply the lengths, add the angles.* That is why complex
+multiplication is the cleanest way ever invented to rotate things — robot joints, radio beams, and
+spiraling fractals all ride on it.
+
+<Callout type="intuition" title="The one-sentence idea">
+Writing $z = r(\cos\theta + i\sin\theta)$, multiplying two complex numbers **multiplies their moduli
+and adds their arguments** — a scale and a rotation in one stroke.
+</Callout>
+
+## Intuition: the angle does the work
+
+From the complex-plane lesson, every $z$ has a length $r = \lvert z \rvert$ and an angle
+$\theta = \arg(z)$. Using the unit-circle definitions of $\cos$ and $\sin$ you already know, the
+horizontal part is $r\cos\theta$ and the vertical part is $r\sin\theta$. So
+
+$$
+z = r(\cos\theta + i\sin\theta).
+$$
+
+Now multiply two of these and group the trig with the angle-addition formulas (the same identities
+from trigonometry):
+
+$$
+r_1(\cos\theta_1 + i\sin\theta_1)\cdot r_2(\cos\theta_2 + i\sin\theta_2)
+= r_1 r_2\bigl(\cos(\theta_1+\theta_2) + i\sin(\theta_1+\theta_2)\bigr).
+$$
+
+Read it off: the new length is $r_1 r_2$, the new angle is $\theta_1 + \theta_2$. Multiplying by a
+number of length 1 is a **pure rotation**; multiplying by a real number (angle 0) is a **pure
+scaling**. Everything else is a blend of both.
+
+## Play with it
+
+Set each number's length and angle, then watch the green product. Notice $w$ getting *carried*
+around: multiplying by $z$ rotates $w$ by $\arg(z)$ and stretches it by $\lvert z \rvert$.
+
+<ComplexRotationMultiplier client:visible />
+
+<Callout type="tip">
+Fix $\lvert z \rvert = 1$ and sweep $\arg(z)$. The product rides around a circle without changing
+length — a clean rotation. Now nudge $\lvert z \rvert$ above 1 and it spirals outward. That is
+scale-and-rotate, live.
+</Callout>
+
+## The formal definition
+
+The **polar form** of a nonzero complex number is
+
+$$
+z = r(\cos\theta + i\sin\theta), \qquad r = \lvert z \rvert,\ \ \theta = \arg(z).
+$$
+
+The product and quotient rules are
+
+$$
+z_1 z_2 = r_1 r_2\,\bigl(\cos(\theta_1+\theta_2) + i\sin(\theta_1+\theta_2)\bigr),
+$$
+
+$$
+\frac{z_1}{z_2} = \frac{r_1}{r_2}\,\bigl(\cos(\theta_1-\theta_2) + i\sin(\theta_1-\theta_2)\bigr).
+$$
+
+Raising to a power repeats the rotation, giving **De Moivre's theorem**:
+
+$$
+z^n = r^n\bigl(\cos(n\theta) + i\sin(n\theta)\bigr).
+$$
+
+This is also how you find roots: the $n$ solutions of $w^n = z$ are spaced evenly by
+$360°/n$ around a circle — the **roots of unity** when $z = 1$.
+
+<Callout type="why">
+This rotate-and-scale view is the bridge to the Fourier transform at the heart of modern ML for
+audio and images: a signal is decomposed into rotating complex exponentials, and multiplying by one
+shifts its phase. Polar form makes that phase arithmetic trivial.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="AC circuits" icon="⚡">
+Electrical engineers represent voltages and impedances as phasors in polar form. To combine them
+they just multiply moduli and add the phase angles — no calculus, no FOIL. The dreaded "phase shift"
+of a circuit is literally an added argument.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🤖">
+A planar robot arm that turns $25°$ and then another $40°$ has rotated $65°$ total. Encode each turn
+as a unit complex number and *multiply* them — the arguments add automatically. Composing rotations
+becomes one multiplication, with no risk of the gimbal headaches that plague other methods.
+</ExampleCard>
+
+<ExampleCard domain="Radio & antennas" icon="📡">
+In a phased-array antenna, each element's signal is multiplied by a unit complex number to nudge its
+phase. Choosing those angles steers the combined beam across the sky — all electronically, with no
+moving parts. The "steering" is addition of arguments.
+</ExampleCard>
+
+<ExampleCard domain="Fractal art" icon="🎆">
+Repeatedly multiplying a point by a fixed complex number with modulus slightly above 1 traces a
+**logarithmic spiral**: each step scales by the same factor and turns by the same angle. The
+hypnotic spirals in generative art are just De Moivre's theorem on loop.
+</ExampleCard>
+
+<Callout type="note">
+Addition lives in rectangular form; multiplication lives in polar form. Choosing the right
+representation for the job is half of being fluent with complex numbers.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'When you multiply two complex numbers in polar form, what happens to their moduli and arguments?',
+      options: [
+        'Moduli add, arguments multiply',
+        'Moduli multiply, arguments add',
+        'Both add',
+        'Both multiply',
+      ],
+      answer: 1,
+      explain: 'The product has modulus r₁·r₂ and argument θ₁ + θ₂ — lengths multiply, angles add.',
+    },
+    {
+      q: 'You multiply z (modulus 2, argument 30°) by w (modulus 3, argument 50°). What is z·w?',
+      options: [
+        'Modulus 6, argument 80°',
+        'Modulus 5, argument 1500°',
+        'Modulus 6, argument 20°',
+        'Modulus 5, argument 80°',
+      ],
+      answer: 0,
+      explain: 'Multiply moduli: 2·3 = 6. Add arguments: 30° + 50° = 80°.',
+    },
+    {
+      q: 'What does multiplying a complex number by one of modulus 1 do geometrically?',
+      options: [
+        'Scales it without rotating',
+        'Rotates it without changing its length',
+        'Reflects it across the real axis',
+        'Sends it to the origin',
+      ],
+      answer: 1,
+      explain: 'Modulus 1 means lengths are unchanged (×1), so only the argument changes — a pure rotation.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Polar form</strong> writes z = r(cos θ + i sin θ), using length r and angle θ.',
+    'Multiplying complex numbers <strong>multiplies moduli and adds arguments</strong> — scale plus rotation.',
+    'Multiplying by a number of <strong>modulus 1 is a pure rotation</strong>; by a real number, a pure scaling.',
+    "<strong>De Moivre's theorem</strong> zⁿ = rⁿ(cos nθ + i sin nθ) turns powers and roots into repeated rotation.",
+    'Use <strong>rectangular form to add</strong> and <strong>polar form to multiply</strong>.',
+  ]}
+/>
+
+Next up: **Euler's formula** — the breathtaking shortcut $e^{i\theta} = \cos\theta + i\sin\theta$
+that explains *why* angles add when complex numbers multiply.

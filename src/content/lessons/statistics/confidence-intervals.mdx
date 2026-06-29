@@ -1,0 +1,172 @@
+---
+title: Confidence Intervals
+track: statistics
+summary: Wrapping an estimate in a band of plausible values — and what "95% confident" really means.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - statistics/mle-map
+  - probability/clt
+leadsTo:
+  - statistics/hypothesis-testing
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ConfidenceIntervalSampler from '../../../components/demos/ConfidenceIntervalSampler.tsx';
+
+## The hook: the number after the poll
+
+"Candidate Reyes leads with **54%**, *plus or minus 3 points*." That little "± 3" is doing heavy lifting.
+A single poll surveyed maybe 1,000 of millions of voters; the 54% is an estimate that would wobble if you
+re-ran the poll tomorrow. The margin of error is an admission: *we are not sure of the exact number, but
+we are fairly sure the truth lives in this band.*
+
+In the last lesson we produced a single best estimate. But a point with no uncertainty is dangerous — it
+hides how much it could be wrong. A **confidence interval** attaches honesty to the estimate.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **confidence interval** is a range built from your sample that, if you repeated the whole study many
+times, would contain the true value about 95% of the time.
+</Callout>
+
+## Intuition: the interval is the random thing
+
+Here is the mental flip that trips everyone up. The true value (Reyes's real support) is a **fixed
+number** — it isn't random. What *is* random is your **sample**, and therefore the interval you compute
+from it. Each new poll gives a slightly different center and a slightly different band.
+
+So "95% confidence" is **not** "there's a 95% chance the truth is in *this* interval." The truth either is
+or isn't in your one interval. Rather, it's a statement about the **procedure**: the recipe you used
+produces intervals that capture the truth 95% of the time across many repetitions.
+
+Why 95%, and why does it work? Because of the **Central Limit Theorem** from the probability track: sample
+means and proportions are approximately **normally distributed** around the truth, and 95% of a normal
+distribution lies within about $1.96$ standard errors of its center. That fixed multiplier is where the
+band's width comes from.
+
+## Play with it
+
+Each bar below is one election poll's 95% interval. The indigo line is the true support — fixed, but
+"unknown" to any single poll. Click **poll once** a few times, then **+20 polls**. Watch the bars land in
+different places, and count: about **1 in 20 misses** the true line (shown in red). The running coverage
+settles near 95%.
+
+<ConfidenceIntervalSampler client:visible />
+
+<Callout type="tip">
+Want a tighter interval? Collect more data. The width shrinks like $1/\sqrt{n}$ — so to **halve** your
+margin of error you need **four times** the sample size. Precision is expensive.
+</Callout>
+
+## The formal definition
+
+Suppose we estimate a quantity with a statistic $\hat{\theta}$ whose **standard error** (its standard
+deviation across samples) is $\text{SE}$. By the CLT, $\hat{\theta}$ is approximately normal around the
+true $\theta$, so a confidence interval at level $1-\alpha$ is
+
+$$
+\hat{\theta} \;\pm\; z_{\alpha/2}\,\cdot\,\text{SE},
+$$
+
+where $z_{\alpha/2}$ is the normal critical value — $z_{0.025} = 1.96$ for 95% confidence. For a
+proportion $\hat{p}$ from $n$ observations the standard error is
+
+$$
+\text{SE} = \sqrt{\frac{\hat{p}\,(1-\hat{p})}{n}}, \qquad \text{CI}_{95\%} = \hat{p} \pm 1.96\sqrt{\frac{\hat{p}(1-\hat{p})}{n}}.
+$$
+
+The interpretation is the subtle part:
+
+$$
+P\big(\,\text{the random interval covers } \theta\,\big) = 0.95,\quad\text{not}\quad P(\theta \in [\text{this interval}]) = 0.95.
+$$
+
+<Callout type="why">
+In machine learning you never report a single accuracy number from one test set without a confidence
+interval — a model scoring 91% on 100 examples versus 91% on 100,000 examples carry very different
+certainty. Confidence intervals are how you tell whether a leaderboard improvement is real or noise.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Election polling" icon="🗳️">
+The "margin of error" printed beside every poll *is* a 95% confidence interval half-width. A poll of 1,000
+voters has a margin around ±3 points; that's why a 51%–49% "lead" is often called a statistical tie — the
+intervals overlap heavily.
+</ExampleCard>
+
+<ExampleCard domain="Clinical trials" icon="💊">
+A drug lowers blood pressure by "8 mmHg, 95% CI [5, 11]." Because the entire interval sits above zero,
+regulators can be confident the effect is real and positive. If the interval were [−1, 17], the same point
+estimate would be far less convincing.
+</ExampleCard>
+
+<ExampleCard domain="Quality control" icon="🏭">
+A factory samples 200 chips and finds a 2% defect rate with a 95% CI of [0.4%, 3.6%]. If the contract
+demands "under 5% defects," the whole interval clears the bar — strong evidence the batch is acceptable
+without inspecting all 50,000 chips.
+</ExampleCard>
+
+<ExampleCard domain="Crop science" icon="🌾">
+A new seed variety yields "0.6 t/ha more, 95% CI [0.1, 1.1]." The lower bound is just above zero, so the
+gain is statistically supported but possibly small — telling a farmer both the *best guess* and the
+*plausible worst case* for the season.
+</ExampleCard>
+
+<Callout type="note">
+A confidence interval reports three things at once: the **estimate** (center), the **uncertainty**
+(width), and a **plausible range**. Whether the interval excludes a meaningful value — like zero — is often
+the whole point, which leads straight to hypothesis testing.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a 95% confidence interval actually mean?',
+      options: [
+        'There is a 95% probability the true value lies in this specific interval',
+        'The procedure produces intervals that capture the true value about 95% of the time over many repetitions',
+        '95% of the data falls inside the interval',
+        'We are 95% sure the sample is correct',
+      ],
+      answer: 1,
+      explain: 'Confidence is a property of the method across repeated samples. Any single interval either contains the fixed true value or it does not.',
+    },
+    {
+      q: 'To halve the width of a confidence interval, roughly how much more data do you need?',
+      options: ['Twice as much', 'Four times as much', 'The same amount', 'Ten times as much'],
+      answer: 1,
+      explain: 'Width scales like 1/√n, so cutting it in half requires about 4× the sample size.',
+    },
+    {
+      q: 'A drug trial reports a blood-pressure reduction with 95% CI [−2, 9] mmHg. What can you conclude?',
+      options: [
+        'The drug definitely works',
+        'The drug definitely does not work',
+        'The effect is not clearly different from zero, since the interval includes 0',
+        'The sample size was too large',
+      ],
+      answer: 2,
+      explain: 'Because the interval contains 0, a true effect of zero is plausible, so the result is not statistically convincing at the 95% level.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>confidence interval</strong> wraps a point estimate in a band of plausible values for the true parameter.',
+    'The <strong>interval</strong> is random, the true value is fixed — "95% confident" describes the method, not one interval.',
+    'The width comes from the <strong>Central Limit Theorem</strong>: estimate ± 1.96 × standard error for 95%.',
+    'Precision improves only like <strong>1/√n</strong> — halving the margin of error costs four times the data.',
+    'Whether the interval <strong>excludes a key value</strong> (like zero) is often the real decision — the bridge to hypothesis testing.',
+  ]}
+/>
+
+Next up: **hypothesis testing** — turning "does the interval exclude zero?" into a formal yes/no decision
+with a controlled error rate.

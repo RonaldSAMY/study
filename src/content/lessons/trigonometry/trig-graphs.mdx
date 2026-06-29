@@ -1,0 +1,158 @@
+---
+title: Graphs of Trig Functions
+track: trigonometry
+summary: How amplitude, period and phase stretch, squeeze and slide sine and cosine into the wave you need.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - trigonometry/unit-circle
+leadsTo:
+  - trigonometry/identities
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TrigWaveShaper from '../../../components/demos/TrigWaveShaper.tsx';
+
+## The hook: predicting the tide six hours from now
+
+A harbour master needs to know whether a cargo ship will clear the seabed at 3 p.m. The water rises and
+falls about twice a day in a smooth, repeating swell — and a single equation predicts it weeks ahead:
+$h(t) = A\sin(Bt + C) + D$. Pick the right four knobs and the curve hugs the real tide chart almost
+perfectly. Those knobs — **amplitude, period, phase and midline** — are the entire vocabulary for shaping a
+wave, and once you can read them you can model anything that cycles.
+
+<Callout type="intuition" title="The one-sentence idea">
+Every sine wave is the plain $\sin x$ after three edits: **A** stretches it tall, **B** squeezes it
+sideways (sets the period), and **C** slides it left or right (the phase).
+</Callout>
+
+## Intuition: one wave, three knobs
+
+From the unit circle you know that plotting the height of a spinning point against its angle gives the
+endless wave $y = \sin x$: it oscillates between $-1$ and $1$ and repeats every $2\pi$. Real-world cycles are
+rarely that tidy — they can be taller, faster, and shifted in time. We reshape the basic wave with three
+parameters in
+
+$$
+y = A\,\sin(Bx + C).
+$$
+
+- **$A$ — amplitude.** Multiplying the output stretches the wave vertically. It now swings between $-A$ and
+  $+A$. Bigger $A$, taller wave.
+- **$B$ — controls the period.** Multiplying the *input* squeezes the wave horizontally. It completes a full
+  cycle when $Bx$ advances by $2\pi$, so the **period** is $\frac{2\pi}{B}$. Bigger $B$, more cycles crammed in.
+- **$C$ — phase.** Adding to the input shifts the whole wave sideways by $-\frac{C}{B}$. Positive $C$ slides it
+  *left* (the wave starts "ahead").
+
+Add a constant $D$ at the end and you also lift the whole curve to a new midline — handy for tides that
+oscillate around mean sea level rather than zero.
+
+## Play with it
+
+Slide **A**, **B** and **C** and watch the indigo wave reshape against the faint grey reference $\sin x$.
+Track how the **period** and **phase shift** readouts respond to each knob.
+
+<TrigWaveShaper client:visible />
+
+<Callout type="tip">
+Change <strong>B</strong> alone and notice the wave keeps the same height but fits more cycles on screen — the period
+<strong>shrinks as B grows</strong>. Change <strong>C</strong> alone and the shape is identical, just slid sideways.
+</Callout>
+
+## The formal definition
+
+For $y = A\sin(Bx + C) + D$ with $B > 0$:
+
+$$
+\text{amplitude} = |A|, \qquad
+\text{period} = \frac{2\pi}{B}, \qquad
+\text{phase shift} = -\frac{C}{B}, \qquad
+\text{midline } y = D.
+$$
+
+Cosine is the same wave shifted by a quarter period: $\cos x = \sin\!\left(x + \frac{\pi}{2}\right)$, so
+everything above applies to $A\cos(Bx + C)$ too. The **frequency** — cycles per unit of $x$ — is the
+reciprocal of the period, $f = \frac{B}{2\pi}$, and $B$ itself is called the **angular frequency**.
+
+<Callout type="why">
+Decomposing a signal into sines of different amplitudes and frequencies is the **Fourier transform**, the
+workhorse behind audio models, image compression, and the spectral features fed to many networks. The three
+knobs here — amplitude, frequency, phase — are exactly the numbers a Fourier analysis reports for each
+component. Reading a wave fluently is reading the language of signals.
+</Callout>
+
+## The same idea, four different worlds
+
+Wherever a quantity rises and falls on a steady cycle, these three knobs describe it.
+
+<ExampleCard domain="Oceanography" icon="🌊">
+A semidiurnal tide is modelled as $h(t) = A\sin(Bt) + D$ with a period of about 12.4 hours, so
+$B = \frac{2\pi}{12.4} \approx 0.51$ per hour. The amplitude $A$ is half the tidal range and $D$ is mean sea
+level. Harbour software solves for these from past readings, then predicts safe docking windows.
+</ExampleCard>
+
+<ExampleCard domain="Human physiology" icon="🫁">
+Quiet breathing is nearly sinusoidal: lung volume cycles roughly every 4 seconds, so $B \approx \frac{2\pi}{4}
+\approx 1.57$ per second. The amplitude is your tidal volume (how deep each breath is). Ventilators and
+sleep-tracking apps fit exactly this $A\sin(Bt)$ shape to detect irregular breaths.
+</ExampleCard>
+
+<ExampleCard domain="Electrical power" icon="⚡">
+Wall-socket voltage is a pure sine: in Europe $v(t) = 325\sin(100\pi t)$ volts. Here $A = 325$ V (the peak),
+and $B = 100\pi$ gives a period of $\frac{2\pi}{100\pi} = 0.02$ s — that is the 50 Hz mains frequency. Phase
+differences between voltage and current are central to how power is delivered.
+</ExampleCard>
+
+<ExampleCard domain="Maritime safety" icon="🗼">
+A lighthouse beam sweeping at a constant rate makes its apparent brightness rise and fall like
+$A\sin(Bt) + D$. Each lighthouse has a signature **period** between flashes; sailors identify it by timing
+the cycle — reading $B$ straight off the wave to know which light they are seeing.
+</ExampleCard>
+
+<Callout type="note">
+Tides, breaths, mains voltage and a lighthouse flash are governed by completely different physics, yet each
+is captured by the same $A\sin(Bx + C) + D$. To model a cycle you only ever need: how tall, how fast, how
+shifted, around what midline.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In y = A·sin(Bx + C), which parameter sets how tall the wave is?',
+      options: ['A', 'B', 'C', 'x'],
+      answer: 0,
+      explain: 'A is the amplitude: the wave oscillates between −|A| and +|A|, so larger A means a taller wave.',
+    },
+    {
+      q: 'A wave is y = 3·sin(2x). What is its period?',
+      options: ['2π', 'π', '3', '6π'],
+      answer: 1,
+      explain: 'Period = 2π / B = 2π / 2 = π. The factor B = 2 squeezes the wave so each cycle is half as wide.',
+    },
+    {
+      q: 'Increasing B in A·sin(Bx + C) does what to the wave?',
+      options: ['Makes it taller', 'Slides it sideways', 'Fits more cycles into the same width (shorter period)', 'Lifts the midline'],
+      answer: 2,
+      explain: 'B multiplies the input, compressing the wave horizontally. Larger B → shorter period → more cycles.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Every sinusoid is <strong>A·sin(Bx+C)+D</strong>: A = amplitude, B sets the period, C the phase, D the midline.',
+    'The <strong>period is 2π/B</strong> and the <strong>phase shift is −C/B</strong> — larger B squeezes the wave into more cycles.',
+    'Cosine is just sine shifted a quarter period: <strong>cos x = sin(x + π/2)</strong>.',
+    'Frequency is the reciprocal of the period; B is the <strong>angular frequency</strong>.',
+    'Tides, breathing, mains voltage and lighthouse flashes are all read off these same few knobs — the language of <strong>Fourier analysis</strong>.',
+  ]}
+/>
+
+Next up: **trig identities** — the equations relating sine and cosine that let you simplify and rewrite these
+waves with confidence.

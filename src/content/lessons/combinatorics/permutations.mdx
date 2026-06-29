@@ -1,0 +1,159 @@
+---
+title: Permutations
+track: combinatorics
+summary: Counting ordered arrangements, where every pick removes an option and order changes everything.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - combinatorics/counting-principles
+leadsTo:
+  - combinatorics/combinations
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PermutationArranger from '../../../components/demos/PermutationArranger.tsx';
+
+## The hook: who stands on the podium?
+
+Eight sprinters line up for a 100 m final. Only three will take gold, silver, and bronze — and the
+*order* is the whole story. Gold-then-silver for two runners is a different result than silver-then-gold.
+How many possible podiums are there? The rule of product gets us started, but there's a twist: once a
+runner takes gold, they can't also take silver. Each choice **removes** an option. That shrinking-choice
+pattern is a **permutation**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **permutation** counts **ordered** arrangements where items aren't reused: the first slot has all
+options, the next has one fewer, and so on.
+</Callout>
+
+## Intuition: the choices count down
+
+From **counting principles** you know that independent steps multiply. Permutations are the same rule of
+product — with one new wrinkle: the steps aren't independent, because each pick uses up an item.
+
+Filling the podium: gold has 8 candidates, then silver has only 7 left, then bronze has 6. So
+
+$$
+8 \times 7 \times 6 = 336 \text{ podiums.}
+$$
+
+If instead you arranged **all** $n$ items in a row, you'd multiply every count down to 1:
+
+$$
+n \times (n-1) \times \cdots \times 2 \times 1 = n! \quad (\text{``}n\text{ factorial''}).
+$$
+
+Factorials are the natural language of "in how many orders?" — and they grow shockingly fast.
+
+## Play with it
+
+Set $n$ (how many items you have) and $r$ (how many positions you fill in order). Each box shows the
+choices still available for that slot. Watch the running product, and the formula $n!/(n-r)!$ giving the
+same answer. For small cases, every arrangement is listed.
+
+<PermutationArranger client:visible />
+
+<Callout type="tip">
+Push $r$ all the way up to $n$: filling every slot gives exactly $n!$, and the denominator becomes
+$0! = 1$. By definition there is one way to arrange zero leftover items.
+</Callout>
+
+## The formal definition
+
+The number of **permutations of $n$ distinct items taken $r$ at a time** — ordered, no repeats — is
+
+$$
+P(n, r) = \frac{n!}{(n-r)!} = \underbrace{n \times (n-1) \times \cdots \times (n-r+1)}_{r \text{ factors}}.
+$$
+
+The factorial form just writes the shrinking product compactly: the $(n-r)!$ in the denominator cancels
+all the tail factors you never used. Special cases worth memorizing:
+
+$$
+P(n, n) = n!, \qquad P(n, 1) = n, \qquad P(n, 0) = 1, \qquad 0! = 1.
+$$
+
+<Callout type="why">
+Ordering matters constantly in computation: the number of ways to sequence tasks, to order layers, or to
+arrange a dataset all scale like factorials. That explosive growth is exactly why brute-forcing every
+ordering (for example, every route in the traveling-salesman problem) becomes impossible even for modest
+$n$.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Live events" icon="🎤">
+A music festival must order 6 bands into 6 time slots for one stage. Every distinct line-up is an
+arrangement of all 6, so there are $6! = 720$ possible schedules. Swap any two bands' slots and you have
+a genuinely different evening.
+</ExampleCard>
+
+<ExampleCard domain="Hospitality" icon="🪑">
+Seating 5 guests along one side of a dinner table is a permutation of all 5: $5! = 120$ seating charts.
+If only the 3 chairs nearest the host matter, you instead arrange 5 people into 3 ordered seats:
+$P(5,3) = 5 \times 4 \times 3 = 60$.
+</ExampleCard>
+
+<ExampleCard domain="Security" icon="🔑">
+A 4-character code drawn from 26 letters **with no repeats** is a permutation, not a free product:
+$P(26, 4) = 26 \times 25 \times 24 \times 23 = 358{,}800$. Forbidding repeats actually *reduces* the count
+versus the $26^4$ you'd get if letters could repeat.
+</ExampleCard>
+
+<ExampleCard domain="Language" icon="🔤">
+The word "LISTEN" has 6 distinct letters, so it has $6! = 720$ rearrangements (anagrams), including
+"SILENT" and "TINSEL". Order is the entire point of a word — the same letters in a new order make a new
+string.
+</ExampleCard>
+
+<Callout type="note">
+Two flags tell you it's a permutation: <strong>order matters</strong> and <strong>no repeats</strong>.
+If repeats are allowed (like a PIN), go back to the plain rule of product instead.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In how many orders can 4 runners finish a race (no ties)?',
+      options: ['4', '16', '24', '256'],
+      answer: 2,
+      explain: 'Arranging all 4 in order is 4! = 4 × 3 × 2 × 1 = 24.',
+    },
+    {
+      q: 'A club picks a President then a Vice-President from 10 members (different people). How many ways?',
+      options: ['100', '90', '45', '20'],
+      answer: 1,
+      explain: 'Order matters and no repeat: P(10,2) = 10 × 9 = 90.',
+    },
+    {
+      q: 'Which situation is a permutation rather than a plain product?',
+      options: [
+        'A 3-digit code where digits may repeat',
+        'Arranging 5 different books in a row on a shelf',
+        'Choosing a topping that can be doubled',
+        'Picking any size of drink',
+      ],
+      answer: 1,
+      explain: 'Arranging distinct books is ordered with no reuse — a permutation (5! ways). Repeats allowed means use the product rule instead.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>permutation</strong> counts ordered arrangements with no reuse — the available choices count down each step.',
+    'Arranging all n distinct items gives <strong>n!</strong> (n factorial), which grows extremely fast.',
+    'Taking r from n in order: <strong>P(n, r) = n! / (n − r)!</strong>, the product of r shrinking factors.',
+    'By convention <strong>0! = 1</strong> and P(n, 0) = 1 — there is exactly one way to arrange nothing.',
+    'Spot a permutation when <strong>order matters</strong> and <strong>repeats are not allowed</strong>.',
+  ]}
+/>
+
+Next up: **combinations** — what changes when order *stops* mattering, and why we then divide the
+permutation count to remove the duplicates.

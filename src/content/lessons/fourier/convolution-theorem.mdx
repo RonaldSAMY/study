@@ -1,0 +1,187 @@
+---
+title: The Convolution Theorem
+track: fourier
+summary: The messy sliding-and-summing of convolution becomes plain multiplication once you switch to the frequency domain.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - fourier/dft-fft
+leadsTo:
+  - fourier/fourier-applications
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ConvolutionForge from '../../../components/demos/ConvolutionForge.tsx';
+
+## The hook: the one identity that ties the whole subject together
+
+Blurring a photo, smoothing noisy sensor data, adding reverb to a vocal, running a convolutional layer in
+a neural net — these all do the same operation: **convolution**, the slide-multiply-add that mixes a
+signal with a small pattern called a *kernel*. Done directly it's fiddly and, for big inputs, slow. Then
+comes one of the most satisfying results in mathematics: in the frequency domain, that whole tangle
+collapses into ordinary **multiplication**, point by point. This is the bridge between everything you've
+learned — series, transform, FFT — and why the Fourier transform earns its place at the center of signal
+processing and deep learning.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Convolution in time = multiplication in frequency.** Transform both signals, multiply their spectra,
+transform back — and you've filtered.
+
+</Callout>
+
+## Intuition: filtering is just scaling each frequency
+
+Recall what a Fourier transform gives you: a signal broken into its frequencies. Now think about what a
+**filter** does. A blur kernel smooths things out — it *keeps* slow, low-frequency variation and *throws
+away* fast, high-frequency detail. A sharpening kernel does the opposite. So really, **a filter is a rule
+for how much to keep of each frequency.** That rule is the kernel's own spectrum, called its **frequency
+response**.
+
+Once you see filtering that way, the convolution theorem is almost obvious. Each frequency in the signal
+is independent of the others, and the filter simply turns each one up or down. "Turning frequency $f$ up
+or down by a factor" is multiplication. So filtering the whole signal = multiplying its spectrum by the
+filter's response, frequency by frequency. The awkward sliding sum in the time domain is the *same
+operation* seen from the harder side.
+
+This also explains the **speed** story. Direct convolution of an $N$-sample signal with an $N$-sample
+kernel costs $O(N^2)$. But: FFT both ($O(N\log N)$), multiply the spectra ($O(N)$), inverse-FFT
+($O(N\log N)$) — total $O(N\log N)$. For large kernels, going through frequency space is dramatically
+faster.
+
+## Play with it
+
+Below, a noisy signal is convolved with a **blur kernel** whose width you control. Up top: the original
+(faint) versus the smoothed result (bold). Down below: the signal's spectrum, the result's spectrum, and
+the kernel's dashed **frequency response**. Watch the result spectrum equal the signal spectrum times that
+response.
+
+<ConvolutionForge client:visible />
+
+<Callout type="tip">
+Widen the kernel and the dashed response curve squeezes down over the high-frequency bins — so those bins
+in the result spectrum shrink toward zero, and the jagged noise vanishes from the waveform. Blurring in
+time <em>is</em> low-pass filtering in frequency.
+</Callout>
+
+## The formal definition
+
+The **convolution** of two signals is the slide-multiply-integrate operation
+
+$$
+(x * h)(t) = \int_{-\infty}^{\infty} x(\tau)\, h(t - \tau)\,d\tau,
+$$
+
+and its discrete version sums instead of integrates. The **convolution theorem** states that the Fourier
+transform turns this into a plain product:
+
+$$
+\mathcal{F}\{x * h\} = \mathcal{F}\{x\}\cdot \mathcal{F}\{h\} = X(f)\,H(f).
+$$
+
+To filter a signal, you therefore have two equivalent routes:
+
+$$
+y = x * h \qquad\Longleftrightarrow\qquad Y(f) = X(f)\,H(f).
+$$
+
+There is a dual statement too — multiplying in time corresponds to **convolving** in frequency, which is
+exactly why cutting a signal into a finite window (multiplying by a rectangle) smears its spectrum and why
+we apply tapered **window functions** before an FFT. The function $H(f)$ — the transform of the kernel — is
+the filter's frequency response: where $|H|$ is near $1$ those frequencies pass through, where it's near
+$0$ they're removed.
+
+<Callout type="why">
+Convolutional neural networks are built on this operation, and several modern architectures exploit the
+theorem directly: <strong>FFT-based convolution</strong> speeds up large kernels, and <strong>Fourier
+Neural Operators</strong> learn filters as weights *in the frequency domain*, multiplying spectra to solve
+PDEs faster than any grid method. The theorem is not a footnote — it's a design tool.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Photography & JPEG" icon="📷">
+A Gaussian blur in your photo editor is a convolution with a bell-shaped kernel — equivalently, a
+multiplication that suppresses high spatial frequencies. JPEG compression leans on the same domain: it
+transforms 8×8 image blocks, then discards the high-frequency coefficients your eye barely notices.
+</ExampleCard>
+
+<ExampleCard domain="Concert acoustics" icon="🎚️">
+The "reverb" of a cathedral is captured as an **impulse response** — what you'd hear from a single
+hand-clap. To make a dry studio vocal sound like it was sung in that cathedral, engineers *convolve* the
+vocal with that impulse response, almost always via FFT multiplication for speed.
+</ExampleCard>
+
+<ExampleCard domain="Noise-cancelling headphones" icon="🎧">
+Adaptive filters estimate the frequency response of the unwanted ambient noise and apply an
+equal-and-opposite filter — designed in the frequency domain — so the residual sound cancels. It's
+convolution-as-multiplication working in real time against the roar of a jet engine.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+Searching a genome for patterns, or scoring how well a motif matches across millions of base pairs, is a
+correlation — a cousin of convolution. Bioinformatics tools use the FFT to perform these scans in
+$O(N\log N)$ instead of brute force, turning hours into seconds.
+</ExampleCard>
+
+<Callout type="note">
+Blur, reverb, noise-cancelling, DNA search — all are "slide a pattern across data and combine." The
+convolution theorem says: don't slide, transform. Multiply the spectra, come back. The same shortcut, over
+and over.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'According to the convolution theorem, convolving two signals in time corresponds to what in the frequency domain?',
+      options: [
+        'Adding their spectra',
+        'Multiplying their spectra point by point',
+        'Convolving their spectra',
+        'Subtracting their spectra',
+      ],
+      answer: 1,
+      explain: 'Convolution in time becomes pointwise multiplication of the Fourier transforms: F{x*h} = X(f)·H(f).',
+    },
+    {
+      q: 'A blur (smoothing) kernel acts as which kind of filter in the frequency domain?',
+      options: [
+        'A high-pass filter (keeps fast detail)',
+        'A low-pass filter (keeps slow variation, removes high frequencies)',
+        'A filter that boosts all frequencies',
+        'No filtering at all',
+      ],
+      answer: 1,
+      explain: 'Blurring keeps low frequencies and suppresses high ones, so its frequency response is a low-pass filter.',
+    },
+    {
+      q: 'Why is FFT-based convolution faster than direct convolution for large signals?',
+      options: [
+        'Direct convolution is O(N²) while FFT, multiply, inverse-FFT is O(N log N)',
+        'The FFT skips most of the data',
+        'Multiplication is always exact',
+        'It avoids using the kernel',
+      ],
+      answer: 0,
+      explain: 'Transforming (O(N log N)), multiplying spectra (O(N)), and inverse-transforming (O(N log N)) beats the O(N²) direct sum.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>convolution theorem</strong>: convolution in time equals pointwise <strong>multiplication</strong> of spectra.',
+    'A <strong>filter</strong> is just a rule for scaling each frequency — its spectrum is the <strong>frequency response</strong> H(f).',
+    'Blurring/smoothing is <strong>low-pass filtering</strong>: it multiplies away the high-frequency components.',
+    'FFT → multiply → inverse-FFT turns an <strong>O(N²)</strong> convolution into <strong>O(N log N)</strong>.',
+    'This powers JPEG, reverb, noise cancellation, CNNs, and Fourier Neural Operators that learn filters in frequency space.',
+  ]}
+/>
+
+Next up: the **finale** — putting it all together in the real world and in machine learning, from audio
+equalizers and spectrograms to the sinusoidal positional encodings inside Transformers.

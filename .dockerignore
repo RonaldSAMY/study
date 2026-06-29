@@ -1,0 +1,25 @@
+# dependencies & build artifacts (rebuilt inside the image)
+node_modules
+dist
+.astro
+
+# version control & editor
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# the source book PDF (17 MB, not needed in the image)
+mml-book.pdf
+
+# logs & local env
+*.log
+npm-debug.log*
+.env
+.env.*
+!.env.example
+
+# docs / scratch not needed at build time
+AUTHORING_GUIDE.md
+DEPLOY.md

@@ -1,0 +1,175 @@
+---
+title: Sequences & Series
+track: algebra-2
+summary: Ordered patterns of numbers — arithmetic and geometric — and the running totals they build.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - algebra-2/systems-equations
+  - algebra-2/exp-log
+leadsTo:
+  - precalculus/poly-rational-functions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SequenceSeriesBuilder from '../../../components/demos/SequenceSeriesBuilder.tsx';
+
+## The hook: counting the seats in a stadium
+
+The front row of a stadium section has 20 seats. Each row behind it adds 4 more: 20, 24, 28, 32… That
+orderly list is a **sequence**. Now the practical question: how many seats are in the whole section of 30
+rows? Adding them one by one is tedious — but the running total of a sequence, called a **series**, has a
+beautiful shortcut. Patterns and their totals are everywhere: savings plans, loan payments, viral shares,
+even the pixels of a fractal.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **sequence** is an ordered list of numbers following a rule; a **series** is what you get when you add
+those numbers up — and two patterns, *adding* and *multiplying*, cover an astonishing amount of the world.
+</Callout>
+
+## Intuition: two ways to make a pattern
+
+Almost every simple number pattern grows in one of two ways:
+
+- **Arithmetic** — you **add** the same amount, the *common difference* $d$, each step. The stadium rows
+  ($+4$ each time) are arithmetic. Plotted, the terms march up in a straight line.
+- **Geometric** — you **multiply** by the same factor, the *common ratio* $r$, each step. A rumor that
+  doubles, or a savings account that grows by 5% a year, is geometric. This is the discrete cousin of the
+  exponential growth you met earlier — the same "multiply every step" engine.
+
+The distinction is exactly addition versus multiplication, the two moves you've been building on all
+track. Arithmetic sequences relate to **lines**; geometric ones relate to **exponentials**.
+
+A **series** is the cumulative sum: $S_n = a_1 + a_2 + \cdots + a_n$. Watching it grow tells you the *total
+so far* — total seats, total saved, total reach.
+
+## Play with it
+
+Switch between **arithmetic** and **geometric**, set the first term and the difference/ratio, and slide the
+number of terms. The bars are individual terms; the green line is the **running total**. Notice how an
+arithmetic total ramps steadily while a geometric one bends sharply.
+
+<SequenceSeriesBuilder client:visible />
+
+<Callout type="tip">
+In <strong>geometric</strong> mode, set the ratio between −1 and 1: the terms shrink toward zero and the
+running total <em>levels off</em> at a finite value even as you add more terms. That surprising "infinite
+sum that stays finite" is the seed of calculus.
+</Callout>
+
+## The formal definition
+
+An **arithmetic sequence** has a constant difference $d$:
+
+$$
+a_n = a_1 + (n-1)\,d.
+$$
+
+Its series — the sum of the first $n$ terms — pairs the first and last term ($n$ terms, average
+$\frac{a_1 + a_n}{2}$ each):
+
+$$
+S_n = \frac{n}{2}\,(a_1 + a_n).
+$$
+
+A **geometric sequence** has a constant ratio $r$:
+
+$$
+a_n = a_1\,r^{\,n-1}, \qquad S_n = a_1\,\frac{1 - r^{\,n}}{1 - r}\quad (r \neq 1).
+$$
+
+And the showstopper: when $|r| < 1$, the terms shrink fast enough that even an **infinite** sum converges:
+
+$$
+S_\infty = \frac{a_1}{1 - r}.
+$$
+
+So $1 + \tfrac12 + \tfrac14 + \tfrac18 + \cdots = \dfrac{1}{1 - \frac12} = 2$ — infinitely many positive
+numbers adding to a finite total.
+
+<Callout type="why">
+Series are how the discrete becomes the continuous. The infinite geometric sum is the simplest
+**convergent series**, and the same idea — adding infinitely many shrinking pieces — defines integrals,
+Taylor approximations of functions, and the discounted future rewards a reinforcement-learning agent sums
+when it plans ahead.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Stadium design" icon="🏟️">
+Rows of 20, 24, 28, … (an arithmetic sequence with $d = 4$). For 30 rows the last row has
+$20 + 29\cdot4 = 136$ seats, and the section total is $S_{30} = \tfrac{30}{2}(20 + 136) = 2340$ seats —
+counted in one line instead of thirty.
+</ExampleCard>
+
+<ExampleCard domain="Saving up" icon="🐖">
+You stash \$50 the first month and add \$25 more each month than the last (\$50, \$75, \$100, …) — an
+arithmetic plan. The series tells you the **total saved** after a year at a glance, so you know exactly
+when you'll hit your goal.
+</ExampleCard>
+
+<ExampleCard domain="Social media" icon="📣">
+You share a post with 3 friends; each shares with 3 more, and so on — a geometric sequence with $r = 3$.
+The series $3 + 9 + 27 + \cdots$ is the **total reach**, exploding so fast that a handful of rounds can
+blanket a whole network. This is the discrete twin of viral exponential growth.
+</ExampleCard>
+
+<ExampleCard domain="Physics of play" icon="🏀">
+A dropped ball rebounds to 70% of its previous height each bounce: $h, 0.7h, 0.49h, \ldots$ — geometric
+with $r = 0.7$. Because $|r| < 1$, the **total vertical distance** it ever travels is a finite
+$S_\infty$, even though it technically bounces forever.
+</ExampleCard>
+
+<Callout type="note">
+Adding the same amount (stadium, savings) is arithmetic and grows like a line; multiplying by the same
+factor (shares, bounces) is geometric and grows — or shrinks — like an exponential. Recognizing which one
+you have tells you instantly which sum formula to reach for.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'The sequence 5, 8, 11, 14, … is which kind, and what is its rule?',
+      options: [
+        'Geometric, multiply by 3',
+        'Arithmetic, add 3',
+        'Geometric, multiply by 8/5',
+        'Neither',
+      ],
+      answer: 1,
+      explain: 'Each term adds a constant 3, so it is arithmetic with common difference d = 3.',
+    },
+    {
+      q: 'Find the sum of the first 5 terms of the geometric sequence 2, 6, 18, 54, 162.',
+      options: ['162', '242', '200', '486'],
+      answer: 1,
+      explain: 'Add them: 2 + 6 + 18 + 54 + 162 = 242 (or use a₁(1 − rⁿ)/(1 − r) = 2(1 − 243)/(1 − 3) = 242).',
+    },
+    {
+      q: 'What is the infinite sum 1 + 1/3 + 1/9 + 1/27 + …?',
+      options: ['Infinity', '3/2', '2', '3'],
+      answer: 1,
+      explain: 'With a₁ = 1 and r = 1/3, S∞ = a₁/(1 − r) = 1/(1 − 1/3) = 1/(2/3) = 3/2.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>sequence</strong> is an ordered list following a rule; a <strong>series</strong> is the sum of its terms.',
+    '<strong>Arithmetic</strong> sequences ADD a constant d (line-like); <strong>geometric</strong> ones MULTIPLY by a constant r (exponential-like).',
+    'Sum shortcuts: arithmetic Sₙ = (n/2)(a₁ + aₙ); geometric Sₙ = a₁(1 − rⁿ)/(1 − r).',
+    'When <strong>|r| &lt; 1</strong>, even an infinite geometric series converges to a₁/(1 − r).',
+    'Adding infinitely many shrinking pieces is the seed of <strong>calculus</strong> — integrals and Taylor series.',
+  ]}
+/>
+
+You've reached the end of Algebra 2 — curves, growth, and patterns are now in your toolkit. Next up:
+**Pre-Calculus**, where polynomial & rational functions get the deeper treatment that bridges you into
+calculus.

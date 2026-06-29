@@ -1,0 +1,166 @@
+---
+title: Applications of Integrals
+track: calculus-2
+summary: Use integration to measure areas between curves, the volume of spun solids, and the average value of a changing quantity.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - calculus-2/integration-techniques
+leadsTo:
+  - calculus-2/sequences-series-2
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SolidOfRevolutionLab from '../../../components/demos/SolidOfRevolutionLab.tsx';
+
+## The hook: how do you find the volume of a wine glass?
+
+A wine glass, a vase, a rocket nozzle, a turned wooden bowl — none of these have a tidy formula like
+"length × width × height." But they all share a secret: they are made by spinning a **curve** around an
+axis. If you can describe the profile with a function $y = f(x)$, calculus can hand you the exact volume,
+no matter how curvy.
+
+This is the payoff of the previous lesson. Once you can *evaluate* integrals, you can *measure* things
+that have no elementary formula: the area trapped between two curves, the volume of a solid, the average
+of a quantity that never stops changing.
+
+<Callout type="intuition" title="The one-sentence idea">
+An integral is an **infinite sum of infinitely thin pieces** — thin strips give area, thin disks give
+volume, and the integral divided by the width gives the average. Slice, sum, shrink.
+</Callout>
+
+## Intuition: slice it thin, then add it up
+
+Every application here follows the same three-step recipe you already know from Riemann sums:
+
+1. **Slice** the region into many thin pieces.
+2. **Approximate** each piece by something simple (a rectangle, a disk).
+3. **Sum and shrink** — let the slices get infinitely thin, and the sum becomes an integral.
+
+For **area between two curves** $f$ (top) and $g$ (bottom), each thin strip has height $f(x) - g(x)$ and
+width $dx$:
+
+$$
+A = \int_a^b \big(f(x) - g(x)\big)\,dx.
+$$
+
+For a **volume of revolution**, spin the curve $y = f(x)$ around the $x$-axis. Each thin slice is a
+**disk** of radius $f(x)$ and thickness $dx$, so its volume is $\pi f(x)^2\,dx$. Add them up:
+
+$$
+V = \int_a^b \pi\,f(x)^2\,dx.
+$$
+
+## Play with it
+
+Pick a profile curve and watch it spin into a solid. The slider sets how many **disks** approximate the
+solid — each is a circle of radius $f(x_i)$, drawn edge-on. With few disks the estimate is rough; crank
+it up and the disk-sum $\sum \pi f(x_i)^2\,\Delta x$ converges on the exact volume $\int \pi f(x)^2\,dx$.
+
+<SolidOfRevolutionLab client:visible />
+
+<Callout type="tip">
+Watch the <strong>error %</strong> as you add disks. This is the disk method *being* the definition of
+an integral: the Riemann sum of disk volumes literally becomes the integral as the slices thin out.
+</Callout>
+
+## The formal definition
+
+**Area between curves** (with $f \ge g$ on $[a,b]$):
+
+$$
+A = \int_a^b \big(f(x) - g(x)\big)\,dx.
+$$
+
+**Volume by disks** (revolving $y=f(x)$ about the $x$-axis):
+
+$$
+V = \int_a^b \pi\,\big[f(x)\big]^2\,dx.
+$$
+
+**Average value** of a function over $[a,b]$ — the constant height that would enclose the same area:
+
+$$
+\bar f = \frac{1}{b-a}\int_a^b f(x)\,dx.
+$$
+
+<Callout type="why">
+The **average value** formula is the continuous version of "add them up and divide by how many." In
+machine learning, the *expected value* of a continuous random variable is exactly this idea: an integral
+of the value weighted by its probability density. Volume integrals reappear whenever you integrate a
+density over a region.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Glassblowing" icon="🍷">
+A wine glass bowl is the curve $y=\sqrt{x}$ spun about its axis. Its volume is
+$\int_0^4 \pi(\sqrt{x})^2\,dx = \int_0^4 \pi x\,dx = 8\pi \approx 25.1$. The glassmaker never integrates,
+but the shape obeys the math exactly.
+</ExampleCard>
+
+<ExampleCard domain="Estimating π" icon="🥧">
+The area of a quarter circle of radius 1 is $\int_0^1 \sqrt{1-x^2}\,dx = \frac{\pi}{4}$. Multiply by 4
+and you have **estimated π by measuring an area** — the same principle behind Monte-Carlo "throw darts at
+a circle" methods used to benchmark computers.
+</ExampleCard>
+
+<ExampleCard domain="Climate" icon="🌡️">
+Yesterday's temperature changed every minute. The **average temperature** isn't found by listing values —
+it's $\frac{1}{24}\int_0^{24} T(t)\,dt$, the area under the temperature curve divided by the length of
+the day. Every "daily average" you read is secretly an integral.
+</ExampleCard>
+
+<ExampleCard domain="Hydroelectric power" icon="🌊">
+The energy a turbine harvests over a day is the area under its power curve, $\int_0^{24} P(t)\,dt$. Two
+plants with the same *peak* output can deliver wildly different *total* energy — the integral, not the
+peak, is what fills the grid.
+</ExampleCard>
+
+<Callout type="note">
+The disk method has cousins: <strong>washers</strong> (a hole in the middle, $\pi(R^2 - r^2)$) and
+<strong>shells</strong> (cylindrical layers). They all come from the same "slice, sum, shrink" idea —
+only the shape of the slice changes.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Spinning y = f(x) about the x-axis, the volume of one thin slice is…',
+      options: ['f(x) · dx (a rectangle)', 'π f(x)² · dx (a disk)', '2π f(x) · dx (a ring)', 'f(x)² · dx (a square)'],
+      answer: 1,
+      explain: 'Each cross-section perpendicular to the axis is a circle of radius f(x) and area π f(x)²; thickness dx makes it a disk of volume π f(x)² dx.',
+    },
+    {
+      q: 'The average value of f on [a, b] is…',
+      options: ['∫ₐᵇ f dx', '(1/(b−a)) ∫ₐᵇ f dx', 'f(b) − f(a)', '(b − a) ∫ₐᵇ f dx'],
+      answer: 1,
+      explain: 'Average value = total accumulation divided by the length of the interval: (1/(b−a)) ∫ₐᵇ f(x) dx.',
+    },
+    {
+      q: 'Rotating y = ½x on [0, 4] about the x-axis gives a cone. Its volume ∫₀⁴ π(½x)² dx equals…',
+      options: ['16π/3 ≈ 16.8', '8π', '4π', '64π'],
+      answer: 0,
+      explain: '∫₀⁴ π(x²/4) dx = (π/4)(x³/3)|₀⁴ = (π/4)(64/3) = 16π/3 ≈ 16.8 — matching the cone formula ⅓πr²h with r = 2, h = 4.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Every application uses one recipe: <strong>slice thin, approximate, sum, then shrink</strong> the slices to an integral.',
+    '<strong>Area between curves</strong> integrates the gap (top − bottom): ∫ₐᵇ (f − g) dx.',
+    '<strong>Volume of revolution</strong> stacks disks of radius f(x): V = ∫ₐᵇ π f(x)² dx.',
+    'The <strong>average value</strong> ̄f = (1/(b−a)) ∫ₐᵇ f dx is the continuous "add up and divide" — the seed of expected value.',
+    'These integrals measure real things with <strong>no elementary formula</strong>: glass volumes, π itself, daily averages, total energy.',
+  ]}
+/>
+
+Next up: **Sequences & Series** — what happens when we add *infinitely many* terms, and how to tell when
+that endless sum still lands on a finite number.

@@ -1,0 +1,49 @@
+---
+// Shows "builds on" (prereqs) and "leads to" (next) lessons, powering the
+// progressive flow. Slugs are resolved against the curriculum data.
+import { getLessonBySlug } from '../data/curriculum';
+
+interface Props {
+  prereqs?: string[];
+  leadsTo?: string[];
+}
+const { prereqs = [], leadsTo = [] } = Astro.props;
+
+const resolve = (slugs: string[]) =>
+  slugs.map((s) => ({ slug: s, meta: getLessonBySlug(s) })).filter((x) => x.meta);
+
+const before = resolve(prereqs);
+const after = resolve(leadsTo);
+---
+{(before.length > 0 || after.length > 0) && (
+  <div class="not-prose my-6 grid gap-3 sm:grid-cols-2">
+    {before.length > 0 && (
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <p class="mb-2 text-xs font-bold uppercase tracking-wide text-muted">↩ Builds on</p>
+        <ul class="space-y-1.5">
+          {before.map(({ slug, meta }) => (
+            <li>
+              <a href={`/${slug}`} class="text-sm font-semibold text-brand hover:underline">
+                {meta!.trackIcon} {meta!.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+    {after.length > 0 && (
+      <div class="rounded-xl border border-border bg-surface p-4">
+        <p class="mb-2 text-xs font-bold uppercase tracking-wide text-muted">↪ Leads to</p>
+        <ul class="space-y-1.5">
+          {after.map(({ slug, meta }) => (
+            <li>
+              <a href={`/${slug}`} class="text-sm font-semibold text-brand hover:underline">
+                {meta!.trackIcon} {meta!.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+  </div>
+)}

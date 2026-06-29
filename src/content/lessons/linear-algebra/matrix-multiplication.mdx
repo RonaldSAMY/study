@@ -1,0 +1,168 @@
+---
+title: Matrix Multiplication
+track: linear-algebra
+summary: Multiplying matrices composes their transformations — do one, then the other, in a single grid.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - linear-algebra/matrices
+leadsTo:
+  - linear-algebra/gaussian-elimination
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import MatrixTransformDemo from '../../../components/demos/MatrixTransformDemo.tsx';
+
+## The hook: rotate, then scale — in one step
+
+A game character spins to face a new direction, then the camera zooms in. That's two transformations
+applied in order. The astonishing thing about matrices is that you can **pre-combine** them: multiply
+the rotation matrix by the scale matrix once, and the single result does *both* moves at the same
+cost as one. Graphics cards, robot controllers, and neural networks all rely on this — chaining
+transformations by multiplying their matrices instead of redoing the work every frame.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Matrix multiplication is function composition**: the product $AB$ is the single matrix that does
+"apply $B$ first, then $A$."
+</Callout>
+
+## Intuition: a matrix is a verb
+
+In the matrices lesson, a matrix's columns told you **where the basis vectors land**. So a matrix is an
+*action* — a verb that relocates every point in space.
+
+What if you want to do two actions in a row? Apply $B$, then apply $A$. The combined effect is itself a
+linear transformation, so it must be *some* matrix — and that matrix is exactly the product $AB$.
+
+The mechanical rule for one entry: the entry in row $i$, column $j$ of $AB$ is the **dot product of
+row $i$ of $A$ with column $j$ of $B$**. The dot product from two lessons ago is the atom of matrix
+multiplication.
+
+A vector is just a one-column matrix, so applying a matrix $A$ to a vector $\mathbf{x}$ (written
+$A\mathbf{x}$) is the same operation: each output coordinate is a **row of $A$ dotted with $\mathbf{x}$**.
+
+Two warnings that surprise everyone:
+
+- **Order matters.** $AB \neq BA$ in general. Rotating then scaling differs from scaling then rotating.
+- **Shapes must line up.** An $m\times n$ times an $n\times p$ gives $m\times p$; the inner dimensions
+  must match or the product doesn't exist.
+
+## Play with it
+
+Edit the four entries of the $2\times 2$ matrix — or hit a preset (rotate, scale, shear, flip) — and
+watch the "F" and grid transform. The colored arrows are the matrix's columns: where $\hat{\imath}$ and
+$\hat{\jmath}$ land. The panel shows a sample point being moved by **row · point** dot products.
+
+<MatrixTransformDemo client:visible />
+
+<Callout type="tip">
+Hit <strong>rotate</strong>, then imagine following it with <strong>scale</strong>. Composing those two
+is one matrix multiply. The columns of that product tell you instantly where the basis vectors end up.
+</Callout>
+
+## The formal definition
+
+If $A$ is $m\times n$ and $B$ is $n\times p$, then $C = AB$ is $m\times p$ with entries
+
+$$
+c_{ij} = \sum_{k=1}^{n} a_{ik}\,b_{kj}
+= (\text{row } i \text{ of } A) \cdot (\text{column } j \text{ of } B).
+$$
+
+For a $2\times 2$ worked out in full:
+
+$$
+\begin{bmatrix} a & b \\ c & d \end{bmatrix}
+\begin{bmatrix} e & f \\ g & h \end{bmatrix}
+=
+\begin{bmatrix} ae+bg & af+bh \\ ce+dg & cf+dh \end{bmatrix}.
+$$
+
+Key properties:
+
+- **Associative:** $(AB)C = A(BC)$ — you can regroup a chain of transformations freely.
+- **Not commutative:** $AB \neq BA$ in general — order is meaning.
+- **Identity:** $AI = IA = A$ — multiplying by $I$ changes nothing.
+
+<Callout type="why">
+A deep neural network is a stack of matrix multiplies separated by nonlinear functions. Each layer
+transforms its input; composing them is repeated matrix multiplication. The entire forward pass of a
+model is, at heart, this one operation done billions of times.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="3D game graphics" icon="🎮">
+To draw a model the GPU multiplies a chain of matrices — model → world → camera → projection. Each is
+a transformation; their product is one matrix that maps a 3D vertex straight to a screen pixel. Order
+is sacred: swap two and the character ends up inside the floor.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🦾">
+A robot arm's joints chain together. Each joint contributes a transformation matrix from one link to
+the next; multiplying them down the arm gives a single matrix locating the gripper in world space —
+the heart of **forward kinematics**.
+</ExampleCard>
+
+<ExampleCard domain="Web search" icon="🔗">
+Page-ranking models the web as a transition matrix: where a random surfer goes next. Multiplying that
+matrix by the current distribution of surfers gives the next step's distribution; repeating the
+multiply settles into the importance scores that rank pages.
+</ExampleCard>
+
+<ExampleCard domain="Image processing" icon="🎞️">
+A photo pipeline might rotate, then crop, then color-correct. Each stage is a matrix; the GPU folds
+them into one product so the whole pipeline is a single pass over the pixels instead of three.
+</ExampleCard>
+
+<Callout type="note">
+Sanity-check shapes before you multiply: writing the dimensions as (m × <strong>n</strong>)(<strong>n</strong> × p)
+makes the rule obvious — the inner numbers must match and they cancel, leaving m × p.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You multiply a 3×2 matrix by a 2×5 matrix. What is the shape of the result?',
+      options: ['3 × 5', '2 × 2', '5 × 3', 'The product does not exist'],
+      answer: 0,
+      explain: 'Inner dimensions (2 and 2) match and cancel; the outer dimensions give 3 × 5.',
+    },
+    {
+      q: 'Compute the top-left entry of [[1,2],[3,4]] · [[5,6],[7,8]].',
+      options: ['19', '5', '23', '12'],
+      answer: 0,
+      explain: 'Row 1 of A · column 1 of B = (1)(5) + (2)(7) = 5 + 14 = 19.',
+    },
+    {
+      q: 'Why is AB generally different from BA?',
+      options: [
+        'Because addition is not commutative',
+        'Because matrix multiplication composes transformations, and order of operations matters',
+        'Because matrices must be square',
+        'They are actually always equal',
+      ],
+      answer: 1,
+      explain: 'AB means "do B, then A." Doing two transformations in the opposite order usually lands somewhere else, so AB ≠ BA.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Matrix multiplication is <strong>composition</strong>: AB applies B first, then A.',
+    'Each entry of AB is a <strong>row · column dot product</strong>, the same dot product from earlier.',
+    'Shapes must align: <strong>(m × n)(n × p) = (m × p)</strong>; inner dimensions must match.',
+    'It is <strong>associative but not commutative</strong> — you can regroup a chain, but never reorder it.',
+    'Composing transformations by multiplying matrices powers graphics, robotics, and every layer of a neural network.',
+  ]}
+/>
+
+Next up: **systems of equations and Gaussian elimination** — turning $A\mathbf{x}=\mathbf{b}$ around to
+solve for the unknown vector $\mathbf{x}$.

@@ -1,0 +1,169 @@
+---
+title: Vector Operations & Dot Product
+track: linear-algebra
+summary: One number that measures how much two vectors agree — the engine behind similarity, angle, and projection.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - linear-algebra/vectors
+leadsTo:
+  - linear-algebra/span
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DotProductLab from '../../../components/demos/DotProductLab.tsx';
+
+## The hook: how does a video game know a wall is lit?
+
+In a 3D game, a surface looks bright when it **faces** the light and dark when it turns away. The
+renderer doesn't "see" anything — it computes a single number from two vectors: the direction the
+surface points and the direction to the light. When those two arrows agree, the number is large and
+the pixel is bright. When they're perpendicular, the number is zero and the surface goes dark. That
+"how much do these agree?" number is the **dot product**, and it runs millions of times per frame.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **dot product** takes two vectors and returns one number that says **how much they point the same
+way** — large and positive when aligned, zero when perpendicular, negative when opposed.
+</Callout>
+
+## Intuition: from "two lists" to "one verdict"
+
+You already know a vector is an arrow *and* a list of numbers. Addition and scaling combine vectors
+into new vectors. The dot product is different: it eats two vectors and spits out a **single number**
+(a *scalar*). That number compresses everything about their relationship into one verdict.
+
+There are two equivalent ways to read it:
+
+1. **Algebraically** — multiply matching components and add them up. Pure arithmetic.
+2. **Geometrically** — it equals $\lVert\mathbf{u}\rVert\,\lVert\mathbf{v}\rVert\cos\theta$, where
+   $\theta$ is the angle between the arrows. So the dot product secretly knows the angle.
+
+Setting those two views equal is what lets a computer find the angle between two arrows **without ever
+drawing them** — just from the numbers.
+
+A close cousin is **projection**: the "shadow" one vector casts along another. If you shine a light
+straight down onto vector $\mathbf{u}$, the length of $\mathbf{v}$'s shadow tells you how much of
+$\mathbf{v}$ goes in the $\mathbf{u}$ direction.
+
+## Play with it
+
+Drag the tips of **u** and **v**. Watch the dot product, the angle, and **v**'s shadow (the emerald
+projection) update together. Try making the two arrows perpendicular and notice what the dot product does.
+
+<DotProductLab client:visible />
+
+<Callout type="tip">
+Square the corner: when **u** and **v** meet at 90°, the dot product snaps to <strong>0</strong>. That
+single fact is how algorithms detect "completely unrelated" — perpendicular means no overlap.
+</Callout>
+
+## The formal definition
+
+For two vectors in $\mathbb{R}^n$, the **dot product** is the sum of component-wise products:
+
+$$
+\mathbf{u} \cdot \mathbf{v} = u_1 v_1 + u_2 v_2 + \cdots + u_n v_n = \sum_{i=1}^{n} u_i v_i .
+$$
+
+The geometric identity ties it to length and angle:
+
+$$
+\mathbf{u} \cdot \mathbf{v} = \lVert \mathbf{u} \rVert \, \lVert \mathbf{v} \rVert \cos\theta .
+$$
+
+Solving for the angle gives **cosine similarity**, the workhorse of comparing vectors:
+
+$$
+\cos\theta = \frac{\mathbf{u} \cdot \mathbf{v}}{\lVert \mathbf{u} \rVert \, \lVert \mathbf{v} \rVert} .
+$$
+
+And the **projection** of $\mathbf{v}$ onto $\mathbf{u}$ — the shadow vector — is
+
+$$
+\operatorname{proj}_{\mathbf{u}} \mathbf{v} = \frac{\mathbf{u} \cdot \mathbf{v}}{\mathbf{u} \cdot \mathbf{u}}\; \mathbf{u} .
+$$
+
+<Callout type="why">
+Cosine similarity is *the* default way machine-learning systems ask "are these two things alike?" —
+two documents, two faces, two users. Because it divides out length, it compares **direction only**, so
+a long document and a short one about the same topic still score as similar.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="3D game graphics" icon="🎮">
+A flat surface has a **normal** vector pointing straight out of it. To shade a pixel, the engine takes
+the dot product of that normal with the direction to the light. Facing the light → near 1 → fully lit.
+Edge-on → 0 → dark. This one multiply-and-add is the heart of real-time lighting.
+</ExampleCard>
+
+<ExampleCard domain="Social networks" icon="🕸️">
+Represent each person by a vector of the groups they belong to (1 = member, 0 = not). The dot product
+of two people's vectors **counts the groups they share** — an instant "how connected are you?" score
+that suggestion engines use to recommend new friends.
+</ExampleCard>
+
+<ExampleCard domain="Image filters" icon="🖼️">
+A blur or edge-detector slides a small grid of weights (a *kernel*) over the image. At each spot it
+flattens the pixels and the kernel into vectors and takes their dot product to make one output pixel.
+A whole filtered photo is millions of dot products.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🤖">
+A robot arm wants to know how much of its motor's push actually moves the gripper toward a target.
+Project the motion vector onto the target direction: the dot product gives the **useful component**,
+while the leftover is wasted sideways motion the controller can trim.
+</ExampleCard>
+
+<Callout type="note">
+Sign tells the story: positive dot product = acute angle = "broadly agree," negative = obtuse angle =
+"work against each other," zero = perpendicular = "independent." You'll see those three cases
+everywhere from physics to recommendation.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Compute the dot product of u = [3, 4] and v = [2, -1].',
+      options: ['2', '5', '10', '-1'],
+      answer: 0,
+      explain: '(3)(2) + (4)(-1) = 6 - 4 = 2.',
+    },
+    {
+      q: 'Two vectors are perpendicular. What is their dot product?',
+      options: ['Equal to their lengths multiplied', 'Always 1', 'Exactly 0', 'Always negative'],
+      answer: 2,
+      explain: 'cos(90°) = 0, so u·v = ‖u‖‖v‖·0 = 0. A zero dot product is the test for perpendicularity.',
+    },
+    {
+      q: 'Why does cosine similarity divide the dot product by both lengths?',
+      options: [
+        'To make the numbers bigger',
+        'To compare direction only, ignoring how long each vector is',
+        'Because dot products are always negative',
+        'To convert the answer to degrees',
+      ],
+      answer: 1,
+      explain: 'Dividing by both magnitudes cancels length, leaving cos θ — a pure measure of alignment between -1 and 1.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>dot product</strong> turns two vectors into one number: u·v = Σ uᵢvᵢ.',
+    'Geometrically u·v = <strong>‖u‖‖v‖cos θ</strong>, so it secretly encodes the angle between the arrows.',
+    '<strong>Sign matters</strong>: positive = aligned, zero = perpendicular, negative = opposed.',
+    '<strong>Cosine similarity</strong> divides out length to compare pure direction — the standard "are these alike?" score in ML.',
+    'The <strong>projection</strong> of v onto u is the shadow it casts, scaled by (u·v)/(u·u).',
+  ]}
+/>
+
+Next up: **linear combinations and span** — what happens when you add and scale a *set* of vectors,
+and exactly which points you can build from them.

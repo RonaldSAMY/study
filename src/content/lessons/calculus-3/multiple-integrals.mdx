@@ -1,0 +1,186 @@
+---
+title: Multiple Integrals
+track: calculus-3
+summary: Add up a function over a whole region to get the volume beneath a surface — the continuous cousin of summing over data.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - calculus-3/hessian
+leadsTo:
+  - calculus-3/vector-calculus-ml
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import RiemannBoxSummer from '../../../components/demos/RiemannBoxSummer.tsx';
+
+## The hook: how much rain fell on the valley?
+
+A storm drops rain unevenly across a watershed — a downpour over the ridge, a drizzle in the basin. The
+rainfall *rate* is a function of location, $r(x, y)$. To get the **total volume** of water collected, you
+cannot just multiply one number by the area; the rate changes everywhere. Instead you chop the valley into
+tiny patches, multiply each patch's area by the rainfall right there, and add it all up. Shrink the patches
+to nothing and that sum becomes a **double integral** — the same "accumulate over a region" move that, in
+probability, turns a density into a probability.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **multiple integral** adds up the value of a function over every point of a region — geometrically, the
+**volume trapped between the surface $z = f(x, y)$ and the ground**.
+
+</Callout>
+
+## Intuition: a Riemann sum in two dimensions
+
+You already know the single integral $\int_a^b f(x)\,dx$ as the **area** under a curve, built from thin
+rectangles. A double integral repeats the idea one dimension up. Instead of thin rectangles under a curve we
+stack thin **boxes** under a surface: each box sits on a small tile of the region, its height is the
+function's value there, and its volume is
+
+$$
+\text{height} \times \text{area} = f(x_i, y_j)\,\Delta x \,\Delta y.
+$$
+
+Sum the boxes and you get a **Riemann sum** — a blocky, staircase approximation of the volume. Make the
+tiles smaller and the staircase hugs the smooth surface ever more tightly. In the limit of infinitely many
+infinitely small tiles, the approximation becomes exact:
+
+$$
+\iint_R f(x, y)\,dA = \lim_{\Delta x, \Delta y \to 0} \sum_{i, j} f(x_i, y_j)\,\Delta x \,\Delta y.
+$$
+
+The deep point: integration is just **summation taken to the continuous limit**. That is why expectations,
+total probability, and average loss over a data distribution are all integrals in disguise.
+
+## Play with it
+
+The map shows rainfall intensity over a watershed (darker = heavier). Each tile samples the rate at its
+center and treats the whole tile as that one height — a box. Raise the resolution and watch the blocky
+**Riemann sum** converge to the true double integral, the error shrinking toward zero.
+
+<RiemannBoxSummer client:visible />
+
+<Callout type="tip">
+At $n = 1$ the entire region is one giant box — a wild over- or under-estimate. Each time you double the
+resolution the error roughly quarters, because you are refining in <em>both</em> directions at once. That is
+the 2D version of "more rectangles, better integral."
+</Callout>
+
+## The formal definition
+
+Over a rectangular region $R = [a, b] \times [c, d]$, a double integral can be computed as an **iterated
+integral** — integrate one variable at a time, holding the other fixed (the reverse of a partial
+derivative):
+
+$$
+\iint_R f(x, y)\,dA = \int_a^b \!\left( \int_c^d f(x, y)\,dy \right) dx.
+$$
+
+**Fubini's theorem** says the order does not matter for nice functions: you may integrate $x$ first or $y$
+first and get the same answer. When you change to better-suited coordinates (say polar), the **Jacobian
+determinant** from the chain-rule lesson reappears as the area-scaling factor:
+
+$$
+\iint f \, dx\,dy = \iint f \,\lvert \det J \rvert \, du\,dv .
+$$
+
+The idea extends to any dimension — triple integrals for mass and charge, and $n$-fold integrals over a
+probability space:
+
+$$
+\mathbb{E}[g(\mathbf{x})] = \int_{\mathbb{R}^n} g(\mathbf{x})\, p(\mathbf{x})\, d\mathbf{x}.
+$$
+
+<Callout type="why">
+Machine learning is awash in integrals. The "true" loss is the **expected** loss over the whole data
+distribution — an integral $\int \ell(\mathbf{x})\,p(\mathbf{x})\,d\mathbf{x}$. We can't compute it exactly,
+so training estimates it with a finite sum over a mini-batch: a Riemann-sum-style sample of the integral.
+The grid above is a picture of exactly that approximation.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Hydrology" icon="🌧️">
+The demo's watershed is the real use case: total runoff is the double integral of rainfall rate over the
+basin's area. Flood planners integrate predicted rainfall maps to size reservoirs and storm drains before
+the next storm arrives.
+</ExampleCard>
+
+<ExampleCard domain="3D printing" icon="🧱">
+The amount of plastic in a printed part is the integral of its height profile over the base — volume under a
+surface, literally. Slicing software sums material layer by layer, a 3D Riemann sum that predicts spool
+usage and print time.
+</ExampleCard>
+
+<ExampleCard domain="Medical imaging" icon="🩻">
+A CT scanner reconstructs tissue density $\rho(x, y)$ across a slice. The total mass or contrast within an
+organ is the double integral of density over that organ's region — accumulating a function over an area to
+get a clinically meaningful total.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="🌌">
+A galaxy's total brightness is the integral of its surface-brightness map over the sky. Astronomers sum
+light across every pixel of the image — a Riemann sum over the telescope's grid — to measure how much energy
+the galaxy pours out.
+</ExampleCard>
+
+<Callout type="warning">
+For non-rectangular regions the inner integral's limits can depend on the outer variable (e.g. integrating
+over a triangle or disk). Sketch the region first and read the limits off the picture — swapping the order
+of integration then often turns a hard integral into an easy one.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Geometrically, what does the double integral ∬_R f(x, y) dA represent when f ≥ 0?',
+      options: [
+        'The slope of the surface',
+        'The volume between the surface z = f(x, y) and the region R',
+        'The length of a contour line',
+        'The gradient of f',
+      ],
+      answer: 1,
+      explain: 'Just as a single integral is area under a curve, a double integral of a non-negative function is the volume trapped between the surface and its base region.',
+    },
+    {
+      q: 'In the demo, raising the grid resolution n made the Riemann-sum estimate do what?',
+      options: [
+        'Diverge from the true value',
+        'Stay exactly the same',
+        'Converge toward the true double integral',
+        'Become negative',
+      ],
+      answer: 2,
+      explain: 'Smaller tiles make the blocky staircase hug the smooth surface more closely, so the sum converges to the exact integral as n grows.',
+    },
+    {
+      q: 'What does Fubini’s theorem let you do with an iterated double integral over a rectangle?',
+      options: [
+        'Ignore one of the variables',
+        'Integrate in either order (dx then dy, or dy then dx) and get the same result',
+        'Replace it with a derivative',
+        'Only integrate along the diagonal',
+      ],
+      answer: 1,
+      explain: 'For well-behaved functions, Fubini’s theorem guarantees the order of integration does not change the answer, so you can pick whichever order is easier.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>multiple integral</strong> accumulates a function over a region — the volume under a surface.',
+    'It is built as a <strong>Riemann sum</strong> of tiny boxes (height × area) that converges as tiles shrink.',
+    'An <strong>iterated integral</strong> evaluates it one variable at a time; <strong>Fubini’s theorem</strong> lets you swap the order.',
+    'Changing variables brings in the <strong>Jacobian determinant</strong> as the area/volume scaling factor.',
+    'In ML, the true loss is an <strong>expectation (an integral)</strong> that mini-batch training approximates by sampling.',
+  ]}
+/>
+
+Next up: we tie the whole track together — **vector calculus for ML**, where gradients, Jacobians, and the
+chain rule become the machinery of **backpropagation**.

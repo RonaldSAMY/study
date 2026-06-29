@@ -1,0 +1,202 @@
+---
+title: Conic Sections
+track: precalculus
+summary: Circles, ellipses, parabolas and hyperbolas.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - precalculus/parametric-polar
+leadsTo:
+  - calculus-1/limits-continuity
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ConicMorphLab from '../../../components/demos/ConicMorphLab.tsx';
+
+## The hook: one cut of a cone, four different shapes
+
+Point a flashlight straight at a wall and you get a **circle** of light. Tilt it a little — the
+circle stretches into an **ellipse**. Tilt it until the cone of light runs parallel to the wall and
+the edge never closes up: that's a **parabola**. Tilt it further still and you slice *two* pieces out
+of the beam — a **hyperbola**. You just made all four **conic sections** with a single light, simply
+by changing the angle. Planets, satellite dishes, GPS, and even the contour lines a neural network
+descends all turn out to be these same four curves.
+
+<Callout type="intuition" title="The one-sentence idea">
+The four conics — circle, ellipse, parabola, hyperbola — are really **one family**, and a single dial
+called the **eccentricity** $e$ morphs smoothly from one to the next.
+</Callout>
+
+## Intuition: curves you already half-know
+
+You have met pieces of this before. In **quadratics** you graphed $y = x^2$ and called it a parabola —
+that's a conic. In the **parametric and polar** lesson you learned to trace a curve by sweeping an
+angle $\theta$ and reading off a radius $r$; the slickest description of *all* conics is exactly such a
+polar equation. And every circle you have ever drawn, $x^2 + y^2 = r^2$, is the simplest conic of all.
+
+So instead of memorizing four unrelated formulas, picture **one cone of light** and a knob you turn.
+At one extreme the slice is a tidy closed loop; turn the knob and the loop stretches, then bursts open.
+That knob is the eccentricity $e$, and it is the through-line of this whole lesson.
+
+## Play with it
+
+Drag the **eccentricity** slider from $0$ upward and watch a *single* curve become a circle, then an
+ellipse, then a parabola, then a hyperbola. The focus (indigo dot) never moves — only the shape does.
+
+<ConicMorphLab client:visible />
+
+<Callout type="tip">
+Watch the moment $e$ crosses $1$: the closed loop "tears open" into a parabola and then into the two
+branches of a hyperbola. The directrix line (sky dashed) is the partner the curve is always measured
+against.
+</Callout>
+
+## The formal definition
+
+Each conic has a clean **Cartesian** equation when it sits nicely on the axes.
+
+A **circle** of radius $r$ centred at the origin:
+
+$$
+x^2 + y^2 = r^2.
+$$
+
+An **ellipse** with semi-axes $a$ and $b$ — a circle stretched by different amounts in $x$ and $y$:
+
+$$
+\frac{x^2}{a^2} + \frac{y^2}{b^2} = 1.
+$$
+
+A **parabola** opening upward, with focal distance $p$:
+
+$$
+y = \frac{x^2}{4p}.
+$$
+
+A **hyperbola**, the "minus" cousin of the ellipse, with two opening branches:
+
+$$
+\frac{x^2}{a^2} - \frac{y^2}{b^2} = 1.
+$$
+
+**The unifying idea — eccentricity.** Every conic can be described by one point (the **focus**), one
+line (the **directrix**), and a single number $e \ge 0$: the curve is the set of points whose distance
+to the focus is $e$ times the distance to the directrix. That one rule produces all four shapes:
+
+$$
+e = 0 \;\Rightarrow\; \text{circle}, \quad
+0 < e < 1 \;\Rightarrow\; \text{ellipse}, \quad
+e = 1 \;\Rightarrow\; \text{parabola}, \quad
+e > 1 \;\Rightarrow\; \text{hyperbola}.
+$$
+
+In **polar** form, with the focus at the origin, the whole family collapses into the single equation the
+demo draws:
+
+$$
+r = \frac{l}{1 + e\cos\theta},
+$$
+
+where $l$ is the **semi-latus rectum** (the curve's size). Geometrically, this is the **slicing-a-cone**
+picture: tilt the cutting plane and you sweep $e$ from $0$ (a level cut → circle) through $1$ (parallel
+to the cone's side → parabola) and beyond (steep cut through both nappes → hyperbola).
+
+<Callout type="why">
+Conics are everywhere in science and machine learning. Newton proved orbits are conics: bound planets
+trace ellipses, one-shot comets trace parabolas or hyperbolas. In **optimization**, the level-sets
+(contours) of a quadratic loss are **ellipses**, and their eccentricity tells you how badly conditioned
+the problem is — fat round contours mean fast gradient descent, thin stretched ones mean slow zig-zags.
+The contours of a 2-D **Gaussian** are ellipses too, with the covariance matrix setting their shape.
+Reading a conic is reading the geometry of learning.
+</Callout>
+
+## The same idea, four different worlds
+
+The conics aren't a textbook curiosity — each shape earns its keep because of a special **focusing**
+property.
+
+<ExampleCard domain="Astronomy" icon="🪐">
+Every body orbiting the Sun follows a conic with the Sun at one **focus**. Earth's orbit is an ellipse
+with eccentricity $e \approx 0.017$ — nearly a circle. Halley's Comet is a long, thin ellipse,
+$e \approx 0.97$. Some interstellar visitors arrive with $e > 1$: they whip once around the Sun on a
+**hyperbolic flyby** and leave forever. Same equation, different $e$.
+</ExampleCard>
+
+<ExampleCard domain="Engineering" icon="📡">
+A satellite dish and a car headlight are both **parabolas** (rotated into a paraboloid). A parabola has
+the magic property that every ray arriving parallel to its axis bounces to a single **focus** — so the
+dish concentrates a faint signal onto the receiver. Run it backwards: put a bulb at the focus of a
+headlight reflector and every ray leaves in a tight parallel beam.
+</ExampleCard>
+
+<ExampleCard domain="Navigation" icon="🛰️">
+Older **LORAN** systems (and the math inside **GPS**) locate you using **hyperbolas**. If two stations
+send a pulse and you measure the *difference* in arrival times, that fixes your distance-difference to
+the pair — and "constant difference of distances to two foci" is exactly the definition of a hyperbola.
+Cross two such hyperbolas and the intersection is your position.
+</ExampleCard>
+
+<ExampleCard domain="Medicine" icon="🩺">
+A **lithotripter** destroys kidney stones without surgery using the two **foci** of an **ellipse**. An
+ellipse reflects any ray from one focus straight to the *other* focus. Doctors place a shock-wave source
+at one focus and the patient's stone at the other; the scattered energy reconverges precisely on the
+stone. The same acoustic trick makes "whispering galleries" carry a murmur across a dome.
+</ExampleCard>
+
+<Callout type="note">
+Notice the pattern: the parabola focuses *parallel rays to a point*, the ellipse focuses *one focus to
+the other*, and the hyperbola encodes a *difference of distances*. Each application is just a focusing
+property of one conic, picked for the job.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A comet is measured to have orbital eccentricity e = 1.4. What shape is its path?',
+      options: ['A circle', 'An ellipse', 'A parabola', 'A hyperbola'],
+      answer: 3,
+      explain: 'Eccentricity e > 1 means a hyperbola — the comet makes a single open flyby and never returns.',
+    },
+    {
+      q: 'Which equation is a hyperbola?',
+      options: [
+        'x²/9 + y²/4 = 1',
+        'x²/9 − y²/4 = 1',
+        'x² + y² = 9',
+        'y = x²/8',
+      ],
+      answer: 1,
+      explain: 'The minus sign between the squared terms is the signature of a hyperbola. The plus sign gives an ellipse, equal terms give a circle, and a single squared term gives a parabola.',
+    },
+    {
+      q: 'In the unifying focus–directrix view, why is a circle the case e = 0?',
+      options: [
+        'Because a circle has no focus at all',
+        'Because every point is equidistant from the centre, so there is no stretching toward a directrix',
+        'Because a circle is not really a conic',
+        'Because its radius must be zero',
+      ],
+      answer: 1,
+      explain: 'At e = 0 the distance-to-focus no longer scales with distance-to-directrix; the focus collapses to the centre and every point sits the same distance away — a perfect circle.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The four <strong>conic sections</strong> — circle, ellipse, parabola, hyperbola — are slices of a cone and members of one family.',
+    'A single number, the <strong>eccentricity</strong> e, selects the shape: e = 0 circle, 0 &lt; e &lt; 1 ellipse, e = 1 parabola, e &gt; 1 hyperbola.',
+    'The polar form <strong>r = l / (1 + e·cosθ)</strong> draws every conic from one equation by varying e.',
+    'Each conic has a <strong>focusing property</strong> — parabolas gather parallel rays to a point, ellipses send one focus to the other, hyperbolas fix a difference of distances.',
+    'Conics describe <strong>orbits, dishes, GPS, and the elliptical contours</strong> of quadratic losses and Gaussians in machine learning.',
+  ]}
+/>
+
+Next up: **Calculus — Limits & Continuity**, where we stop asking what a curve *is* and start asking
+what it *does* as we zoom in infinitely close to a single point.

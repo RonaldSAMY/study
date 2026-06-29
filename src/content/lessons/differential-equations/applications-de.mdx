@@ -1,0 +1,174 @@
+---
+title: Applications
+track: differential-equations
+summary: Turn ODE-solving into a modeling superpower — epidemics, predator-prey cycles, falling bodies, and drug doses all run on the same machinery.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - differential-equations/second-order
+leadsTo:
+  - differential-equations/numerical-euler
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ODEScenarioSimulator from '../../../components/demos/ODEScenarioSimulator.tsx';
+
+## The hook: one toolkit, a thousand stories
+
+A disease tearing through a city. Foxes and rabbits locked in an endless boom-and-bust. A skydiver
+reaching a speed she cannot exceed. A pill rising and fading in your bloodstream. These look like four
+unrelated stories — yet each is captured by writing down *how its quantities change* and letting the
+differential equation tell the rest. **Modeling** is the art of translating a situation into an ODE; this
+lesson is where that art pays off.
+
+<Callout type="intuition" title="The one-sentence idea">
+To model anything, write one differential equation per quantity that says "rate of change = what adds in −
+what leaves" — then solve (or simulate) to watch the story unfold.
+</Callout>
+
+## Intuition: the bookkeeping of change
+
+Every model in this lesson is built by the same move: for each quantity, balance the **inflows** against
+the **outflows**.
+
+- **Decay/clearance:** something leaves in proportion to how much is there → $-k\,y$.
+- **Interaction:** two populations meet at a rate proportional to the *product* of their sizes → $\pm b\,xy$.
+- **Saturation:** a force or rate that grows until it cancels another → terminal velocity, charging.
+
+When two quantities influence each other, you get a **system** of coupled ODEs. The predator equation
+needs the prey count; the prey equation needs the predator count. They must be solved *together*, and the
+result is often a rhythm no single equation could produce — like the eternal cycle of foxes chasing rabbits.
+
+## Play with it
+
+Pick a scenario and press **play**. Each curve is the live solution of that model's ODE, revealed left to
+right as the clock runs. Notice how different the *shapes* are — a single peak for an epidemic, endless
+loops for predator-prey, a flattening ceiling for the skydiver, a rise-then-fall for a drug.
+
+<ODEScenarioSimulator client:visible />
+
+<Callout type="tip">
+Compare **Epidemic** and **Skydiver**. The epidemic's infected curve rises and *falls* (susceptibles run
+out); the skydiver's speed rises and *levels off* (drag catches gravity). Same idea — competing terms — but
+the balance points produce completely different endings.
+</Callout>
+
+## The formal definition
+
+A **system** of first-order ODEs evolves a state vector $\mathbf{y}(t)$ by a rule $\mathbf{y}' = \mathbf{f}(\mathbf{y})$.
+Four classics:
+
+**Exponential / logistic growth** (single quantity, saturating):
+$$
+\frac{dP}{dt} = rP\left(1 - \frac{P}{K}\right).
+$$
+
+**SIR epidemic** (three coupled compartments):
+$$
+S' = -\beta S I, \qquad I' = \beta S I - \gamma I, \qquad R' = \gamma I.
+$$
+
+**Lotka–Volterra predator–prey** (two coupled populations):
+$$
+R' = aR - bRF, \qquad F' = -cF + dRF.
+$$
+
+**Newtonian motion with drag** (terminal velocity):
+$$
+m\frac{dv}{dt} = mg - k v^2.
+$$
+
+Each is just "rate of change = inflow − outflow," written once per quantity. The **equilibrium** of any
+model is where every rate is zero — the epidemic's burnout, the skydiver's terminal speed, the
+predator-prey balance point.
+
+<Callout type="why">
+These exact systems are training data and architecture in modern ML. Epidemic and ecological models are
+fit to data with **neural ODEs**; reinforcement-learning agents are trained inside physics simulators that
+integrate equations of motion; pharmacokinetic ODEs power AI dosing recommendations.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Epidemiology" icon="🤒">
+The **SIR** model splits a population into Susceptible, Infected, and Recovered. Infections occur when the
+two groups mix ($\beta S I$), recoveries drain the infected pool ($\gamma I$). The ratio
+$R_0 = \beta S_0/\gamma$ predicts whether an outbreak explodes or fizzles — the number every public-health
+agency watched in 2020.
+</ExampleCard>
+
+<ExampleCard domain="Ecology" icon="🦊">
+Foxes and rabbits follow Lotka–Volterra. Rabbits breed freely but are eaten; foxes starve without rabbits
+but thrive when prey is plentiful. The coupling produces self-sustaining **cycles** — a population boom is
+always followed, with a lag, by a predator boom and then a crash.
+</ExampleCard>
+
+<ExampleCard domain="Environmental science" icon="🌊">
+A pollutant entering a lake and flushing out with the outflow obeys $\frac{dC}{dt} = \frac{Q}{V}(C_{\text{in}} - C)$.
+Stop the source ($C_{\text{in}}=0$) and the concentration decays exponentially with time constant $V/Q$ —
+the lake's natural flushing time, which tells regulators how long a cleanup will take.
+</ExampleCard>
+
+<ExampleCard domain="Aerospace" icon="🚀">
+A rocket or falling body with quadratic drag obeys $m\dot v = mg - kv^2$. Set $\dot v = 0$ and you get
+terminal velocity $v_\infty = \sqrt{mg/k}$ straight from the equation — no solving required. Equilibrium
+analysis reveals the ending before you ever integrate.
+</ExampleCard>
+
+<Callout type="note">
+Every scenario was built by the same recipe: name the quantities, write a rate equation for each, identify
+inflows and outflows, then find equilibria. Master that recipe and you can model almost anything that
+changes over time.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why must the SIR equations be solved together as a system?',
+      options: [
+        'To make the math harder',
+        'Each equation depends on the others’ variables — infections need both S and I',
+        'Because they are second-order',
+        'They can actually be solved completely independently',
+      ],
+      answer: 1,
+      explain: 'The compartments are coupled: the infection term βSI appears in both S′ and I′, so the equations must evolve simultaneously.',
+    },
+    {
+      q: 'For a falling body m v′ = mg − k v², what is the terminal velocity?',
+      options: ['0', '√(mg/k)', 'mg', 'k/m'],
+      answer: 1,
+      explain: 'Terminal velocity is where acceleration stops: set mg − kv² = 0, giving v = √(mg/k).',
+    },
+    {
+      q: 'What is true at an equilibrium of any ODE model?',
+      options: [
+        'The quantity is at its maximum',
+        'Every rate of change equals zero, so the state stops moving',
+        'Time stops',
+        'The solution becomes random',
+      ],
+      answer: 1,
+      explain: 'Equilibrium means all derivatives are zero — inflows balance outflows — so the system holds steady.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Modeling means writing <strong>rate of change = inflow − outflow</strong> for each quantity, then solving.',
+    'Quantities that influence each other form a <strong>coupled system</strong> that must be solved together.',
+    '<strong>Equilibria</strong> (all rates = 0) reveal endings — epidemic burnout, terminal velocity — often without solving.',
+    'The <strong>same machinery</strong> models epidemics (SIR), ecosystems (Lotka–Volterra), motion with drag, and drug dosing.',
+    'These very systems are fit and simulated inside modern ML — neural ODEs, RL simulators, and AI dosing tools.',
+  ]}
+/>
+
+Next up: **numerical methods** — most real models have no tidy formula, so we approximate them step by
+step with Euler's method, the simplest way to make a computer solve any ODE.

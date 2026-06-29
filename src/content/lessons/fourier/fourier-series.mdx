@@ -1,0 +1,185 @@
+---
+title: Fourier Series
+track: fourier
+summary: Any repeating signal — even a sharp-cornered square wave — is a sum of sines and cosines at multiples of one base frequency.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - fourier/sinusoids-frequency
+  - calculus-2/integration-techniques
+leadsTo:
+  - fourier/fourier-transform
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import HarmonicBuilder from '../../../components/demos/HarmonicBuilder.tsx';
+
+## The hook: how can smooth waves make a sharp corner?
+
+A square wave is all hard edges — it sits flat, then jumps, then sits flat again. A sine wave is the
+smoothest curve there is. So here is something that should feel impossible: if you add up enough sine
+waves, of just the right sizes, those gentle curves conspire to build the square wave's vertical cliffs.
+This was Joseph Fourier's outrageous claim in 1807 — that *any* repeating shape, however jagged, is
+secretly a stack of pure tones. He was right, and that idea now underlies how a synthesizer makes a buzzy
+sawtooth, how an organ pipe gets its timbre, and how MP3 throws away what you can't hear.
+
+<Callout type="intuition" title="The one-sentence idea">
+A periodic signal is a sum of a **fundamental** sine wave plus its **harmonics** — sinusoids at $2\times$,
+$3\times$, $4\times$ the base frequency — each weighted by its own amount.
+</Callout>
+
+## Intuition: a recipe of harmonics
+
+In the last lesson you summed *two* waves. A Fourier series just keeps going. Pick a signal that repeats
+with period $T$, so its **fundamental frequency** is $f_1 = 1/T$. The only sinusoids allowed in the recipe
+are the fundamental and its **harmonics**: $2f_1, 3f_1, 4f_1, \dots$ — whole-number multiples. Each
+harmonic gets a weight (its amplitude), and the right set of weights reproduces the signal exactly.
+
+Why only whole-number multiples? Because those are precisely the waves that *also* repeat over the same
+period $T$ — a wave at $2.3 f_1$ would drift out of step and ruin the periodicity. The harmonics are the
+exact set of building blocks that "fit" cleanly into one period.
+
+The shape of a signal is encoded entirely in **how much of each harmonic** it contains:
+
+- A **square wave** needs only the odd harmonics ($1f, 3f, 5f, \dots$), each shrinking like $1/k$.
+- A **sawtooth** uses *every* harmonic, shrinking like $1/k$.
+- A **triangle** uses odd harmonics shrinking much faster, like $1/k^2$, which is why it looks so smooth.
+
+That list of weights is the signal's **spectrum** — its fingerprint in frequency.
+
+## Play with it
+
+Start with one harmonic, then slide the count upward. Watch the partial sum (indigo) snap toward the
+target (sky). Switch between square, sawtooth, and triangle to see different recipes at work.
+
+<HarmonicBuilder client:visible />
+
+<Callout type="tip">
+Look closely at the corners of the square wave as you add harmonics: a little overshoot refuses to go
+away, it just gets thinner. That stubborn ringing is the <strong>Gibbs phenomenon</strong>, and it is why
+hard edges are "expensive" — they need very high harmonics to render cleanly.
+</Callout>
+
+## The formal definition
+
+A periodic function $x(t)$ with period $T$ (fundamental angular frequency $\omega_0 = 2\pi/T$) can be
+written as a **Fourier series**:
+
+$$
+x(t) = a_0 + \sum_{k=1}^{\infty} \Big[\, a_k \cos(k\omega_0 t) + b_k \sin(k\omega_0 t) \,\Big].
+$$
+
+The constant $a_0$ is the signal's average (its "DC" level). The weights are recovered by **integrating
+the signal against each harmonic** over one period — projecting the signal onto that wave, just like a dot
+product, but for functions:
+
+$$
+a_k = \frac{2}{T}\int_0^T x(t)\cos(k\omega_0 t)\,dt, \qquad
+b_k = \frac{2}{T}\int_0^T x(t)\sin(k\omega_0 t)\,dt.
+$$
+
+This works because the harmonics are **orthogonal**: the integral of $\sin(k\omega_0 t)\cos(m\omega_0 t)$
+over a period is zero unless the frequencies match. Each integral therefore picks out one harmonic's
+weight and ignores all the others. In the cleaner **complex form**, every harmonic is a rotating
+exponential and the pair $(a_k, b_k)$ collapses into one complex coefficient:
+
+$$
+x(t) = \sum_{k=-\infty}^{\infty} c_k\, e^{i k \omega_0 t}, \qquad
+c_k = \frac{1}{T}\int_0^T x(t)\, e^{-i k \omega_0 t}\,dt.
+$$
+
+<Callout type="why">
+That integral-against-a-basis-wave is *exactly* the inner product of functions you met in linear algebra.
+Fourier series are nothing more than expressing a signal in an **orthonormal basis** of sinusoids — the
+same move as writing a vector in coordinates. The coefficients $c_k$ are the coordinates, and this is the
+mental model that makes the Fourier transform and even attention's positional encodings click.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Musical timbre" icon="🎺">
+Why does a trumpet sound different from a flute playing the same note? Same fundamental, **different
+harmonic recipe**. A trumpet is rich in high harmonics (bright, buzzy); a flute is nearly a pure
+fundamental (mellow). The list of harmonic amplitudes *is* the instrument's tone color.
+</ExampleCard>
+
+<ExampleCard domain="Synthesizers" icon="🎛️">
+Classic analog synths offer exactly the waveshapes from the demo — sawtooth, square, triangle — because
+each is a known harmonic series. A "low-pass filter" sweep then removes the upper harmonics one by one,
+which is literally undoing the sum you just built up. Subtractive synthesis is Fourier series in reverse.
+</ExampleCard>
+
+<ExampleCard domain="Mechanical engineering" icon="⚙️">
+A spinning engine or pump produces vibration that repeats every revolution. Engineers expand that
+vibration into a Fourier series; a spike at the $2\times$ harmonic might mean a misaligned shaft, a spike
+at the blade-count harmonic a damaged fan. The harmonic fingerprint diagnoses the fault.
+</ExampleCard>
+
+<ExampleCard domain="Power grids" icon="🔋">
+Ideal grid power is a single $50/60$ Hz sine, but cheap electronics inject **harmonic distortion** —
+extra energy at $3\times$, $5\times$, $7\times$. Utilities measure "total harmonic distortion" (a Fourier
+series in action) because those harmonics overheat transformers and must be filtered out.
+</ExampleCard>
+
+<Callout type="note">
+Across all four, the *frequency* is shared and the *harmonic weights* tell the story — the instrument, the
+fault, the distortion. Fourier series turns "what does this repeating signal look like?" into "how much
+of each harmonic does it contain?"
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A signal repeats with period T. Which frequencies are allowed in its Fourier series?',
+      options: [
+        'Any real frequency',
+        'Only whole-number multiples of the fundamental f₁ = 1/T',
+        'Only frequencies below 20 kHz',
+        'Only the single frequency 1/T',
+      ],
+      answer: 1,
+      explain: 'Only the fundamental and its integer harmonics share the period T, so the series uses f₁, 2f₁, 3f₁, …',
+    },
+    {
+      q: 'An ideal square wave is built from which harmonics?',
+      options: [
+        'All harmonics equally',
+        'Only the even harmonics',
+        'Only the odd harmonics, shrinking like 1/k',
+        'Only the fundamental',
+      ],
+      answer: 2,
+      explain: 'A square wave contains the odd harmonics (1f, 3f, 5f, …) with amplitudes proportional to 1/k.',
+    },
+    {
+      q: 'What makes the formula for each coefficient pick out just one harmonic and ignore the rest?',
+      options: [
+        'The harmonics are orthogonal — their integrals against each other are zero',
+        'The signal is always positive',
+        'High harmonics are too small to matter',
+        'It only works for square waves',
+      ],
+      answer: 0,
+      explain: 'Different harmonics are orthogonal over a period, so integrating the signal against one harmonic isolates that single coefficient.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>Fourier series</strong> writes any periodic signal as a fundamental sine/cosine plus its integer <strong>harmonics</strong>.',
+    'The signal’s identity is captured by <strong>how much of each harmonic</strong> it contains — its spectrum.',
+    'Coefficients come from <strong>integrating the signal against each harmonic</strong>, which works because the harmonics are orthogonal.',
+    'Sharp features need high harmonics; the leftover ringing at jumps is the <strong>Gibbs phenomenon</strong>.',
+    'This is just choosing an <strong>orthonormal basis of sinusoids</strong> — the same coordinate idea as in linear algebra.',
+  ]}
+/>
+
+Next up: the **Fourier transform** — what happens when the period stretches to infinity and the discrete
+harmonics blur into a continuous spectrum that works for *any* signal, not just repeating ones.

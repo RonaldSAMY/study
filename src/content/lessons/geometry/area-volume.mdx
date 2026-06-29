@@ -1,0 +1,156 @@
+---
+title: Area & Volume
+track: geometry
+summary: Area measures flat space in square units; volume measures solid space in cubic units — and dimensions multiply, so volume grows fast.
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - geometry/circles
+leadsTo:
+  - geometry/coordinate-geometry
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SolidDimensionsExplorer from '../../../components/demos/SolidDimensionsExplorer.tsx';
+
+## The hook: how much concrete fills a column?
+
+A builder pouring a cylindrical concrete column needs to order the right amount — too little and the
+pour fails halfway, too much and money hardens uselessly on the truck. The column is $0.4$ m across and
+$3$ m tall, so its **volume** is $\pi \times 0.2^2 \times 3 \approx 0.38$ cubic meters. Get the formula
+wrong and a whole crew stands idle. Measuring **how much flat surface** to paint and **how much solid
+space** to fill is everyday geometry — and the two questions have very different answers.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Area** counts how many unit squares cover a flat region (square units); **volume** counts how many unit
+cubes fill a solid (cubic units) — and because you multiply one more dimension, volume grows much faster
+than area as a shape gets bigger.
+
+</Callout>
+
+## Intuition: stacking what you already know
+
+You can already find a circle's area. Now we stack flat shapes into solids.
+
+- **Area** is two-dimensional: length × width gives **square** units (m², ft²). A rectangle is
+  $l \times w$; a circle is $\pi r^2$; any flat region is "how much paint to cover it."
+- **Volume** is three-dimensional: it's an area swept through a height. A box is its base area times
+  height, $l \times w \times h$, giving **cubic** units (m³, ft³). A cylinder is a *circle* swept up:
+  base $\pi r^2$ times height $h$.
+
+There's also **surface area** — the total area of all the faces of a solid, which is what you'd paint or
+wrap. It's still measured in square units even though the object is 3D.
+
+The big idea: each extra dimension means one more factor of length. That's why doubling every dimension
+of a box multiplies its **area** by $4$ but its **volume** by $8$ ($2^3$).
+
+## Play with it
+
+Switch between a box and a cylinder, then drag the dimension sliders. Watch surface area (square units)
+and volume (cubic units) update — and notice how much faster **volume** climbs.
+
+<SolidDimensionsExplorer client:visible />
+
+<Callout type="tip">
+On the box, set every side to $2$, then to $4$. Surface area goes from $24$ to $96$ (×4), but volume
+jumps from $8$ to $64$ (×8). One more dimension, one more factor — that's the whole story of why volume
+explodes.
+</Callout>
+
+## The formal definition
+
+Common flat **areas** (square units):
+
+$$
+A_{\text{rectangle}} = l\,w, \qquad A_{\text{triangle}} = \tfrac{1}{2} b\,h, \qquad A_{\text{circle}} = \pi r^2.
+$$
+
+Common **volumes** (cubic units) — base area times height:
+
+$$
+V_{\text{box}} = l\,w\,h, \qquad V_{\text{cylinder}} = \pi r^2 h.
+$$
+
+And the **surface area** of those solids (square units):
+
+$$
+SA_{\text{box}} = 2(lw + lh + wh), \qquad SA_{\text{cylinder}} = 2\pi r^2 + 2\pi r h.
+$$
+
+In general, if you scale every dimension by $k$: lengths grow by $k$, areas by $k^2$, and volumes by
+$k^3$.
+
+<Callout type="why">
+The pattern "each dimension multiplies in another factor" is your first encounter with how things grow
+in **higher dimensions** — the central drama of machine learning. In hundreds or thousands of
+dimensions, "volume" balloons so absurdly fast that data becomes sparse and distances behave strangely.
+That's the famous *curse of dimensionality*, and it starts right here with $k^3$.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="DIY painting" icon="🪣">
+To paint a room you need its <em>surface area</em>: add up the wall rectangles. A 4 m × 5 m room with
+2.5 m walls has $2(4 + 5)\times 2.5 = 45$ m² of wall. One liter covers about 10 m², so you buy 5 liters —
+volume never enters the paint calculation.
+</ExampleCard>
+
+<ExampleCard domain="Deep-dish pizza" icon="🍕">
+A deep-dish pie is a short cylinder. A 12-inch one (r = 6) that's 1 inch deep holds
+$\pi \times 6^2 \times 1 \approx 113$ in³ of toppings — far more than a thin crust of the same width.
+Volume, not area, measures how much dinner you actually get.
+</ExampleCard>
+
+<ExampleCard domain="Shipping & logistics" icon="📦">
+Couriers charge by <em>volumetric weight</em>: a box's volume $l \times w \times h$ stands in for how
+much truck space it eats. A light but bulky 40 × 40 × 40 cm box bills as 64,000 cm³ — which is why empty
+packaging costs real money to ship.
+</ExampleCard>
+
+<ExampleCard domain="Architecture" icon="🏛️">
+A cylindrical water tank 2 m across and 3 m tall holds $\pi \times 1^2 \times 3 \approx 9.4$ m³ — about
+9,400 liters. Engineers size tanks, silos, and reservoirs with $V = \pi r^2 h$ before a single brick is
+laid.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A box is 2 × 3 × 4. What is its volume?',
+      options: ['9', '24', '26', '52'],
+      answer: 1,
+      explain: 'V = l·w·h = 2 × 3 × 4 = 24 cubic units.',
+    },
+    {
+      q: 'You triple every dimension of a solid. Its volume becomes…',
+      options: ['×3', '×9', '×27', '×6'],
+      answer: 2,
+      explain: 'Volume scales by k³, and 3³ = 27.',
+    },
+    {
+      q: 'You want to know how much wrapping paper covers a box. Which quantity do you need?',
+      options: ['Volume', 'Surface area', 'The diagonal', 'The base perimeter'],
+      answer: 1,
+      explain: 'Wrapping covers the outside faces, so you need surface area (in square units), not volume.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Area</strong> measures flat space in <strong>square units</strong>; rectangle = l·w, circle = πr².',
+    '<strong>Volume</strong> measures solid space in <strong>cubic units</strong>; box = l·w·h, cylinder = πr²h (base area × height).',
+    '<strong>Surface area</strong> is the total of all faces — still square units — what you paint or wrap.',
+    'Scaling every dimension by k changes lengths by <strong>k</strong>, areas by <strong>k²</strong>, volumes by <strong>k³</strong>.',
+    'That runaway growth previews the <strong>curse of dimensionality</strong> in high-dimensional machine learning.',
+  ]}
+/>
+
+Next up: put shapes back on the grid and use coordinates to measure exact distances and midpoints —
+**coordinate geometry**.

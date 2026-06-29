@@ -1,0 +1,175 @@
+---
+title: Functions of Several Variables
+track: calculus-3
+summary: When the output depends on many inputs at once — surfaces, contour maps, and the landscapes machine learning lives on.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - calculus-2/taylor-series
+  - calculus-1/differentiation-rules
+leadsTo:
+  - calculus-3/partial-derivatives
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TerrainContourMap from '../../../components/demos/TerrainContourMap.tsx';
+
+## The hook: reading a mountain from a flat map
+
+A hiker's topographic map is a flat sheet of paper, yet you can *feel* the mountain in it. Bunched-up
+rings mean a cliff; widely spaced rings mean a gentle meadow. Somehow two numbers — your east–west and
+north–south position — decide a third: your **elevation**. That single relationship, "two inputs in, one
+height out," is a **function of several variables**, and it is the exact shape of every problem in
+machine learning, where dozens or millions of knobs decide one number: how wrong the model is.
+
+<Callout type="intuition" title="The one-sentence idea">
+A function of several variables takes **more than one input** and returns **one output** —
+$z = f(x, y)$ turns every point on the ground into a height, carving out a **surface**.
+</Callout>
+
+## Intuition: from a curve to a landscape
+
+In single-variable calculus you studied $y = f(x)$: feed in one number, get one number, draw a **curve**.
+Multivariable calculus makes one small-sounding change with enormous consequences — the input becomes a
+**point**, not a number:
+
+$$
+z = f(x, y).
+$$
+
+Now the graph is no longer a curve but a **surface** floating above the $xy$-plane, like a sheet draped
+over hills and valleys. The trouble is, a surface needs three dimensions to draw and your screen has two.
+So we borrow the cartographer's trick: a **contour map**. Pick a height, find every $(x, y)$ that reaches
+exactly that height, and trace it as a line. Stack several of these "equal-height" lines and the flat
+picture suddenly reads as terrain — the same way you already read a weather map's pressure lines or a
+heat map's color bands.
+
+This connects straight back to what you know: a single slice of the surface (hold $y$ fixed, let $x$ vary)
+is just an ordinary $f(x)$ curve again. A surface is a whole *family* of the curves you already understand.
+
+## Play with it
+
+Hover across the terrain below. The readout shows the input point $(x, y)$ and the output height
+$z = f(x, y)$. Watch the bright **contour rings**: where they crowd together the land is steep, where
+they spread out it is nearly flat.
+
+<TerrainContourMap client:visible />
+
+<Callout type="tip">
+Trace one bright ring with your eye. Every point on it has the **same height** — that is precisely what a
+contour line means. Crossing many rings in a short distance is what "steep" looks like on a flat map.
+</Callout>
+
+## The formal definition
+
+A real-valued function of $n$ variables assigns one number to each input point:
+
+$$
+f : \mathbb{R}^n \to \mathbb{R}, \qquad z = f(x_1, x_2, \ldots, x_n).
+$$
+
+For $n = 2$ we can picture it as a **surface** $\{(x, y, f(x,y))\}$ in 3D. A **level set** (contour) is the
+set of inputs sharing one output value $c$:
+
+$$
+L_c = \{\,(x, y) : f(x, y) = c\,\}.
+$$
+
+For our terrain, the elevation was a sum of bell-shaped bumps:
+
+$$
+f(x, y) = \sum_k A_k \, e^{-\frac{(x - x_k)^2 + (y - y_k)^2}{s_k}},
+$$
+
+each term a smooth hill of height $A_k$ centered at $(x_k, y_k)$. Add and subtract a few and you can sculpt
+almost any landscape.
+
+<Callout type="why">
+A neural network's **loss** is a function of *all* its weights at once: $L(w_1, w_2, \ldots, w_m)$. Training
+is nothing but searching this gigantic landscape for its lowest valley. Everything in this track is about
+how to read and move across surfaces like the one above — just with millions of input axes instead of two.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Meteorology" icon="🌡️">
+A weather map's temperature is $T(\text{lat}, \text{long})$ — two inputs, one output. The colored bands you
+see on the forecast are **contours of equal temperature** (isotherms). Where the bands squeeze together, a
+cold front is sweeping in: temperature changes fast over a short distance.
+</ExampleCard>
+
+<ExampleCard domain="3D printing" icon="🖨️">
+A printer lays down material at a height $h(x, y)$ for every point on the bed. The whole printed object is
+literally the surface defined by that function. A flat-topped region is a contour plateau; a steep wall is
+contour lines packed tight against each other.
+</ExampleCard>
+
+<ExampleCard domain="Acoustics" icon="🔊">
+Stand in a concert hall and the loudness depends on where you are: $V(x, y)$. Sound engineers print
+**coverage maps** whose contours mark equal-decibel zones, so every seat lands inside a comfortable band —
+a function of two variables shaping a real audience's experience.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+A chip fab tracks **yield** as a function of two dials, say temperature and pressure: $Y(T, P)$. The
+contour map reveals a sweet-spot "island" of high yield. Engineers literally hike toward the peak of this
+surface — the same search a learning algorithm performs automatically.
+</ExampleCard>
+
+<Callout type="note">
+Two inputs let us *draw* the surface, but the math never cared about being drawable. Swap in 50 inputs and
+$f$ still assigns one number to each point — you just can't sketch it. That leap is exactly why we build
+intuition in 2D first.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'On a contour map, what does it mean when the contour lines are packed very close together?',
+      options: [
+        'The surface is flat there',
+        'The surface is changing rapidly (steep) there',
+        'The function is undefined there',
+        'The output is negative there',
+      ],
+      answer: 1,
+      explain: 'Close contours mean you cross many height levels over a short distance — a steep slope. Widely spaced contours mean gentle, slow change.',
+    },
+    {
+      q: 'A function f(x, y) = x² + y² is graphed as a surface. What shape are its contour lines (level sets)?',
+      options: ['Straight lines', 'Circles centered at the origin', 'Parabolas', 'A single point'],
+      answer: 1,
+      explain: 'Setting x² + y² = c gives a circle of radius √c. The surface is a bowl (paraboloid), and slicing it at constant heights gives circles.',
+    },
+    {
+      q: 'Why do we say a neural network’s loss is a function of several variables?',
+      options: [
+        'Because it outputs many numbers',
+        'Because it has one input weight',
+        'Because one loss value depends on all the network’s weights at once',
+        'Because it is always two-dimensional',
+      ],
+      answer: 2,
+      explain: 'The loss is a single number, but it depends on every weight simultaneously: L(w₁, …, w_m). That makes it a real-valued function of many variables — a surface in a very high-dimensional space.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>function of several variables</strong> takes a point as input and returns one number, carving out a <strong>surface</strong>.',
+    'A <strong>contour (level set)</strong> joins all inputs that give the same output — the topographic-map view of a surface.',
+    '<strong>Crowded contours</strong> mean steep change; <strong>spread-out contours</strong> mean gentle change.',
+    'Holding all but one variable fixed recovers an ordinary single-variable <strong>curve</strong> — the bridge to what you already know.',
+    'Machine-learning <strong>loss surfaces</strong> are exactly this idea scaled to millions of input axes.',
+  ]}
+/>
+
+Next up: **partial derivatives** — what "slope" means on a surface, when you can only walk one direction at
+a time.

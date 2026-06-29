@@ -1,0 +1,172 @@
+---
+title: The Derivative
+track: calculus-1
+summary: The instantaneous rate of change — the slope of a curve at a single point.
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - calculus-1/limits-continuity
+  - precalculus/intro-limits
+leadsTo:
+  - calculus-1/differentiation-rules
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TangentLineExplorer from '../../../components/demos/TangentLineExplorer.tsx';
+
+## The hook: how fast are you going *right now*?
+
+You drive 120 km in 2 hours, so your **average** speed was 60 km/h. But that number hides everything
+interesting — the stops, the overtakes, the moment you hit 110 on the open road. Your speedometer
+ignores the average entirely. It answers a sharper question: *how fast are you going at this exact
+instant?* Shrink the time window down — one minute, one second, a sliver of a second — until "average
+speed over an interval" collapses into "speed at a point." That collapse, that act of zooming in until
+an interval becomes an instant, is the **derivative**, and it is the engine of all of calculus.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **derivative** of a function at a point is the **slope of the curve right there** — found by
+measuring the slope between two nearby points and sliding them together until they touch.
+</Callout>
+
+## Intuition: from secant to tangent
+
+Pick a point on a curve. Pick a second point a little distance $h$ away. The straight line joining them
+is a **secant**, and its slope is just rise over run — an *average* rate of change across that gap.
+
+Now slide the second point toward the first. The gap $h$ shrinks, and the secant pivots. When the two
+points are almost on top of each other, the secant has become the **tangent** — the line that grazes
+the curve at that single spot. Its slope is the *instantaneous* rate of change. The derivative is
+nothing more than the slope of that tangent line, defined as the **limit** of secant slopes as $h \to 0$.
+
+## Play with it
+
+Drag the point **P** along the curve, then drag the slider to shrink the gap **h** toward zero. Watch
+the sky-blue **secant** rotate until it lands exactly on the emerald **tangent** — and watch the two
+slope readouts converge.
+
+<TangentLineExplorer client:visible />
+
+<Callout type="tip">
+Switch to $f(x)=\sin(x)$ and park <strong>P</strong> at the very top of a hump. The tangent goes flat —
+slope $0$ — because for an instant the curve is neither rising nor falling. Flat tangents are how
+calculus finds peaks and valleys.
+</Callout>
+
+## The formal definition
+
+Let $f$ be a function and $a$ a point in its domain. The **secant slope** over a gap of size $h$ is
+
+$$
+\frac{f(a + h) - f(a)}{h}.
+$$
+
+The **derivative of $f$ at $a$** is the limit of that ratio as the gap closes:
+
+$$
+f'(a) = \lim_{h \to 0} \frac{f(a + h) - f(a)}{h}.
+$$
+
+If this limit exists, we say $f$ is **differentiable** at $a$, and $f'(a)$ is the slope of the tangent
+line there. Letting $a$ vary turns the derivative into a brand-new function, $f'(x)$, that reports the
+slope at *every* point. The same idea wears a second outfit, **Leibniz notation**, which keeps the
+"rise over run" flavor in view:
+
+$$
+\frac{dy}{dx} = \lim_{\Delta x \to 0} \frac{\Delta y}{\Delta x}.
+$$
+
+For example, with $f(x) = x^2$ we get $f'(x) = 2x$, so the slope at $x = 3$ is $f'(3) = 6$ — exactly the
+number the demo creeps toward as $h \to 0$.
+
+<Callout type="why">
+Training a model means rolling downhill on a **loss curve**. The derivative of the loss with respect to
+each weight is its **slope** — it tells gradient descent which direction is downhill and how steep the
+ground is. No derivative, no gradient, no learning. Every step of training is this one idea, repeated
+billions of times.
+</Callout>
+
+## The same idea, four different worlds
+
+A derivative is always "the rate at which one thing changes as another nudges." Here is that single move
+showing up in wildly different places.
+
+<ExampleCard domain="Motion" icon="🚗">
+Position over time is $s(t)$. Its derivative is **velocity**: $v(t) = s'(t)$. Average speed over a trip
+is a secant slope; the **speedometer** reading is the tangent slope at this instant. Differentiate once
+more and you get acceleration, $a(t) = v'(t)$ — the rate the speedometer needle itself is moving.
+</ExampleCard>
+
+<ExampleCard domain="Economics" icon="💸">
+If $C(q)$ is the total cost of producing $q$ units, the derivative $C'(q)$ is the **marginal cost** —
+roughly what the *next* unit costs to make. Firms set output where marginal cost meets marginal revenue,
+so this one slope quietly governs how much of almost everything gets produced.
+</ExampleCard>
+
+<ExampleCard domain="Everyday physics" icon="☕">
+A hot coffee cools fast when it's scalding and slowly once it's near room temperature. Newton's law of
+cooling says the rate of cooling is proportional to the temperature gap: $T'(t) = -k\,(T - T_{\text{room}})$.
+The derivative $T'(t)$ *is* the cooling rate at each moment — steep at first, gently flattening out.
+</ExampleCard>
+
+<ExampleCard domain="Machine learning" icon="🤖">
+Gradient descent updates a weight by $w \leftarrow w - \eta\, L'(w)$, where $L'(w)$ is the slope of the
+**loss curve**. A steep negative slope means "step right, hard"; a slope near $0$ means "you're at the
+bottom — stop." The derivative is literally the compass the optimizer follows downhill.
+</ExampleCard>
+
+<Callout type="note">
+Four domains, one object. Whether it's a speedometer, a price tag, a cooling cup, or a learning algorithm,
+"derivative" always means the same thing: the slope of the tangent — the instantaneous rate of change.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the derivative f′(a) measure?',
+      options: [
+        'The area under the curve up to a',
+        'The slope of the tangent line at the point a',
+        'The average value of f near a',
+        'The height f(a) of the curve at a',
+      ],
+      answer: 1,
+      explain: 'The derivative at a point is the slope of the tangent line there — the instantaneous rate of change.',
+    },
+    {
+      q: 'In the limit definition, what happens to the secant line as h → 0?',
+      options: [
+        'It becomes vertical',
+        'It rotates into the tangent line at the point',
+        'It moves far away from the curve',
+        'It disappears entirely',
+      ],
+      answer: 1,
+      explain: 'As the gap h shrinks, the two points merge and the secant pivots until it becomes the tangent line — its slope is the derivative.',
+    },
+    {
+      q: 'For f(x) = x², the derivative is f′(x) = 2x. What is the slope of the curve at x = 3?',
+      options: ['3', '6', '9', '12'],
+      answer: 1,
+      explain: 'Plug in: f′(3) = 2 · 3 = 6. That is exactly the value the secant slope converges to as h → 0.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>derivative</strong> is the instantaneous rate of change — the slope of the tangent line at a point.',
+    'It is defined as a <strong>limit of secant slopes</strong>: f′(a) = lim<sub>h→0</sub> [f(a+h) − f(a)] / h.',
+    'As the gap <strong>h → 0</strong>, the secant rotates into the tangent; that limit is the whole idea.',
+    'Letting the point vary turns the derivative into a new <strong>function</strong> f′(x), also written dy/dx.',
+    'In machine learning the derivative of the <strong>loss curve</strong> is the slope gradient descent follows downhill.',
+  ]}
+/>
+
+Next up: **Differentiation Rules & the Chain Rule** — instead of taking a limit by hand every time, you'll
+learn fast recipes (power, product, quotient, chain) that compute derivatives in seconds.

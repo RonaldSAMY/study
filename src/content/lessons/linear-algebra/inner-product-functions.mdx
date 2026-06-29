@@ -1,0 +1,212 @@
+---
+title: Inner Product of Functions
+track: linear-algebra
+summary: Treating whole functions as vectors you can project, compare, and break into orthogonal pieces.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - linear-algebra/orthogonality-projections
+  - calculus-2/integration-techniques
+leadsTo:
+  - linear-algebra/decompositions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import FunctionInnerProductLab from '../../../components/demos/FunctionInnerProductLab.tsx';
+
+## The hook: how a radio finds one station in the noise
+
+A radio antenna picks up a chaotic sum of every broadcast at once. To lock onto a single station, the
+receiver **multiplies** the incoming signal by a reference wave at that station's frequency and **adds up
+the result over time**. If the signal contains that frequency, the products reinforce and the sum is
+large; if it doesn't, the products cancel to nearly zero. That "multiply, then sum" move is doing
+something you already know in disguise — it's a **dot product**, but between *waves* instead of arrows.
+
+You learned that the dot product of two vectors, $\sum_i a_i b_i$, measures how much they agree, and that
+a zero dot product means **orthogonal** — perpendicular, sharing nothing. The leap of this lesson is that
+a **function is just a vector with infinitely many components** (one per input value), and the sum
+becomes an **integral**. With that single move, every tool from orthogonality and projections carries
+over to functions — and opens the door to Fourier analysis.
+
+<Callout type="intuition" title="The one-sentence idea">
+Treat a function as a vector whose components are its values; then the **inner product** is
+$\langle f, g\rangle = \int f(x)\,g(x)\,dx$, and two functions are **orthogonal** when that integral is
+zero.
+</Callout>
+
+## Intuition: from sums to integrals
+
+For vectors $\mathbf{a}, \mathbf{b} \in \mathbb{R}^n$, the dot product pairs up matching components and
+sums them:
+
+$$
+\langle \mathbf{a}, \mathbf{b}\rangle = \sum_{i=1}^{n} a_i\,b_i.
+$$
+
+Now imagine the index $i$ getting finer and finer until it becomes a continuous input $x$. The list of
+components $a_i$ turns into a function $f(x)$, the list $b_i$ into $g(x)$, and the discrete sum becomes a
+continuous one — an **integral**:
+
+$$
+\langle f, g\rangle = \int_a^b f(x)\,g(x)\,dx.
+$$
+
+This is a genuine **inner product**: it's symmetric, linear in each slot, and $\langle f, f\rangle =
+\int f(x)^2\,dx \ge 0$ gives a notion of *length* (the function's energy). Everything you know about
+right angles and shadows now applies. The **norm** of a function is $\lVert f\rVert = \sqrt{\langle f,
+f\rangle}$, and the **angle** between two functions is defined through the same cosine formula as for
+arrows. Best of all, $\langle f, g\rangle = 0$ means $f$ and $g$ are **orthogonal** — they overlap to
+nothing across the interval, even though both may be wildly nonzero pointwise.
+
+The crown jewel: on $[-\pi, \pi]$, the sines and cosines of different frequencies are **mutually
+orthogonal**. For integers $m \ne n$,
+
+$$
+\int_{-\pi}^{\pi} \sin(mx)\sin(nx)\,dx = 0,
+\qquad
+\int_{-\pi}^{\pi} \sin(mx)\cos(nx)\,dx = 0.
+$$
+
+Positive lobes of the product exactly cancel negative ones. That orthogonal family is the basis of the
+**Fourier series**.
+
+## Play with it
+
+Pick two functions and watch their product $f(x)\,g(x)$ shaded beneath them — **green** where positive,
+**rose** where negative. The inner product is the signed area: when green and rose cancel, you get
+$\langle f, g\rangle = 0$ and the functions are **orthogonal**.
+
+<FunctionInnerProductLab client:visible />
+
+<Callout type="tip">
+Compare <strong>sin x</strong> with <strong>cos x</strong>: the shaded lobes cancel perfectly and the
+integral reads $0$ — orthogonal. Now pair <strong>sin x</strong> with <strong>sin x</strong>: every
+product is positive (it's a square), the area is large, and you're reading the function's squared
+<em>length</em>.
+</Callout>
+
+## The formal definition
+
+A real **inner product space** of functions on $[a, b]$ equips them with
+
+$$
+\langle f, g\rangle = \int_a^b f(x)\,g(x)\,w(x)\,dx,
+$$
+
+often with a weight $w(x) \ge 0$ (take $w \equiv 1$ for the plain case). From it follow length and
+orthogonality just as in finite dimensions:
+
+$$
+\lVert f\rVert = \sqrt{\langle f, f\rangle},
+\qquad
+f \perp g \iff \langle f, g\rangle = 0.
+$$
+
+Given an **orthogonal basis** of functions $\{\phi_k\}$, you can **project** any function onto it — the
+exact analog of dropping a vector onto coordinate axes. The coefficient along $\phi_k$ is
+
+$$
+c_k = \frac{\langle f, \phi_k\rangle}{\langle \phi_k, \phi_k\rangle},
+\qquad
+f(x) \approx \sum_k c_k\,\phi_k(x).
+$$
+
+Each coefficient is computed **independently** precisely because the basis is orthogonal — no
+coupled system to solve, just one integral per coefficient. With $\phi_k$ the sines and cosines, these
+$c_k$ are the **Fourier coefficients**, and the sum is the Fourier series.
+
+<Callout type="why">
+This is where linear algebra and analysis fuse into the toolkit of machine learning and signal
+processing. <strong>Fourier and wavelet transforms</strong>, the <strong>kernel trick</strong> (a kernel
+is an inner product in a function space), <strong>Gaussian processes</strong>, and spectral methods for
+graphs all rest on inner products of functions. "Project onto an orthogonal basis" is the same idea that
+gives you <strong>PCA</strong> for data — coming next in matrix decompositions.
+</Callout>
+
+## The same idea, four different worlds
+
+Once functions are vectors, "multiply and integrate" measures overlap everywhere.
+
+<ExampleCard domain="Signal processing" icon="📡">
+A <strong>matched filter</strong> detects a known pulse buried in noise by computing the inner product of
+the incoming signal with a stored copy of the pulse. A large value means strong overlap — the pulse is
+present. This same correlation integral underlies radar, GPS lock-on, and sonar.
+</ExampleCard>
+
+<ExampleCard domain="Music & acoustics" icon="🎵">
+The <strong>harmonics</strong> of a vibrating string — its fundamental and overtones — are sine waves at
+multiples of one frequency, and they are mutually <strong>orthogonal</strong>. That independence is why a
+single note decomposes cleanly into a pure spectrum, and why a tuner can read off one harmonic's strength
+without the others bleeding in.
+</ExampleCard>
+
+<ExampleCard domain="Numerical approximation" icon="📐">
+To approximate a complicated function, project it onto an orthogonal family — <strong>Legendre</strong> or
+<strong>Chebyshev</strong> polynomials, or sines and cosines. Because the basis is orthogonal, each
+coefficient is one independent integral, and truncating the sum gives the best low-order fit in the
+energy ($L^2$) sense.
+</ExampleCard>
+
+<ExampleCard domain="Image compression" icon="🖼️">
+JPEG slices an image into blocks and projects each onto an orthogonal basis of <strong>cosine
+patterns</strong> (the discrete cosine transform). Most coefficients turn out tiny and are thrown away —
+orthogonality guarantees that discarding one barely disturbs the rest, so the image survives with a
+fraction of the data.
+</ExampleCard>
+
+<Callout type="note">
+Detection, music, approximation, compression — all are "compute $\langle f, \phi\rangle$ against an
+orthogonal family." The function-as-vector view is what unifies them.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the inner product of two functions f and g on an interval [a, b]?',
+      options: [
+        'The product f(b)·g(b) at the endpoint',
+        'The integral of f(x)·g(x) over [a, b]',
+        'The maximum of f minus the maximum of g',
+        'The derivative of f times the derivative of g',
+      ],
+      answer: 1,
+      explain: 'The dot-product sum Σ aᵢbᵢ becomes the integral ∫ f(x)g(x) dx — pairing values at each x and summing continuously.',
+    },
+    {
+      q: 'Two functions are ORTHOGONAL on an interval when their inner product is:',
+      options: ['As large as possible', 'Exactly zero', 'Equal to 1', 'Negative'],
+      answer: 1,
+      explain: 'Just like perpendicular vectors, orthogonal functions have inner product 0 — their product integrates to zero over the interval.',
+    },
+    {
+      q: 'Why can each Fourier coefficient be computed with a single independent integral?',
+      options: [
+        'Because the sines and cosines form an orthogonal basis',
+        'Because integrals are always easy',
+        'Because functions only have finitely many values',
+        'Because the coefficients are all equal',
+      ],
+      answer: 0,
+      explain: 'Orthogonality makes the cross terms vanish, so projecting onto each basis function is decoupled: cₖ = ⟨f, φₖ⟩ / ⟨φₖ, φₖ⟩.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>function is a vector</strong> with one component per input; the dot-product sum becomes the integral ⟨f, g⟩ = ∫ f(x)g(x) dx.',
+    'This integral is a true <strong>inner product</strong>, giving functions a length ‖f‖ = √⟨f, f⟩ and an angle between them.',
+    'Functions are <strong>orthogonal</strong> when ⟨f, g⟩ = 0 — their product\'s positive and negative areas cancel.',
+    'Sines and cosines of different frequencies are <strong>mutually orthogonal</strong> on [−π, π], the foundation of the <strong>Fourier series</strong>.',
+    'Projecting onto an orthogonal basis gives each coefficient as <strong>one independent integral</strong> — the engine of Fourier/wavelet transforms, kernels, and compression.',
+  ]}
+/>
+
+Next up: **matrix decompositions** — LU, QR, and SVD — where this same "project onto an orthogonal
+basis" idea becomes the workhorse behind least squares, PCA, and dimensionality reduction.

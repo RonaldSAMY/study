@@ -1,0 +1,154 @@
+---
+title: Circles
+track: geometry
+summary: One radius rules everything — circumference, area, and the never-ending constant π that ties them together.
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - geometry/similarity-congruence
+leadsTo:
+  - geometry/area-volume
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CircleUnrollDemo from '../../../components/demos/CircleUnrollDemo.tsx';
+
+## The hook: why every pizza price hides a secret
+
+A 10-inch pizza costs \$12; the 14-inch costs \$18. The big one is only $40\%$ wider — surely it's
+overpriced? Not even close. A circle's area depends on the radius **squared**, so going from a 5-inch
+radius to a 7-inch radius nearly *doubles* the pizza. The shop is quietly relying on a number that has
+fascinated humans for four thousand years: $\pi$, the constant that links a circle's edge and its
+interior to its radius.
+
+<Callout type="intuition" title="The one-sentence idea">
+A circle is the set of all points the same distance — the **radius** $r$ — from a center; and from that
+single $r$, the constant $\pi \approx 3.14159$ produces both the distance around it
+($C = 2\pi r$) and the space inside it ($A = \pi r^2$).
+</Callout>
+
+## Intuition: the most "similar" shape there is
+
+In the last lesson, every shape had its own proportions. Circles are special: **all circles are
+similar.** A coin and the Moon are the same shape scaled by some factor $k$. That's exactly why a single
+constant can describe every circle at once.
+
+Take **any** circle and divide its circumference (the distance once around) by its diameter (all the way
+across). You always get the same number — about $3.14159$. We call it $\pi$. It never settles into a
+repeating pattern and never ends; it is **irrational**. Because $\pi$ is fixed:
+
+- the **circumference** is just a bit more than $3$ diameters: $C = \pi d = 2\pi r$;
+- the **area** turns out to be $\pi r^2$ — radius squared, scaled by $\pi$.
+
+That squared radius is why doubling a circle's size *quadruples* its area — the $k^2$ rule from
+similarity, made famous.
+
+## Play with it
+
+Drag the rim to change the radius, then press **Roll it out**. The circle rolls exactly one full turn,
+and the green track it leaves is its circumference. Count the diameter marks: it's always about
+$3.14$ diameters long. That ratio *is* $\pi$.
+
+<CircleUnrollDemo client:visible />
+
+<Callout type="tip">
+Watch the <strong>C ÷ d</strong> readout as you drag the radius: it never budges from
+<strong>3.14159…</strong>. Big circle or tiny one, the ratio of edge to diameter is locked. That
+constancy is the whole reason π is useful.
+</Callout>
+
+## The formal definition
+
+For a circle of radius $r$ (so diameter $d = 2r$):
+
+$$
+C = 2\pi r = \pi d, \qquad A = \pi r^2.
+$$
+
+The defining property of $\pi$ is the ratio itself:
+
+$$
+\pi = \frac{C}{d} \approx 3.14159265\ldots
+$$
+
+A useful relative: an **arc** is a slice of the circumference, and a **sector** is a slice of the area.
+A fraction $\theta/360°$ of the full turn gives an arc of $\frac{\theta}{360°}\,C$ and a sector of
+$\frac{\theta}{360°}\,A$.
+
+<Callout type="why">
+$\pi$ escapes geometry entirely. It shows up in the bell-curve formula at the heart of probability and
+statistics, in every wave and oscillation, and in the math of rotations that powers computer graphics.
+Meeting it here, as a humble ratio, is meeting one of the most important constants in all of science.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Pizza value" icon="🍕">
+A 16-inch pizza has area $\pi \times 8^2 \approx 201$ in², while two 8-inch pizzas total only
+$2 \times \pi \times 4^2 \approx 101$ in². One large genuinely beats two smalls — the $r^2$ in the area
+formula is the deal-hunter's best friend.
+</ExampleCard>
+
+<ExampleCard domain="GPS & delivery" icon="📍">
+A courier app promises delivery within a 3 km radius. The area it can serve is $\pi \times 3^2 \approx
+28$ km². Bump the radius to 4 km and coverage jumps to $\approx 50$ km² — almost double the city for one
+extra kilometer, thanks again to $r^2$.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="🪐">
+Earth's radius is about $6{,}371$ km, so a trip around the equator is $2\pi r \approx 40{,}030$ km. The
+same $C = 2\pi r$ that sizes a coin sizes a planet — circles don't care how big they get.
+</ExampleCard>
+
+<ExampleCard domain="Athletics" icon="🏃">
+A running track's inside lane hugs two semicircle ends. Outer lanes have a larger radius, so their
+circumference is longer by $2\pi \,\Delta r$ per lane. That's precisely why sprinters in outer lanes get
+a staggered head start — the math of $C = 2\pi r$ keeps the race fair.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A circle has radius 5. What is its circumference (use π ≈ 3.14)?',
+      options: ['15.7', '31.4', '78.5', '10'],
+      answer: 1,
+      explain: 'C = 2πr = 2 × 3.14 × 5 = 31.4.',
+    },
+    {
+      q: 'If you double a circle’s radius, its area becomes…',
+      options: ['twice as big', 'three times as big', 'four times as big', 'unchanged'],
+      answer: 2,
+      explain: 'Area is πr². Doubling r multiplies the area by 2² = 4.',
+    },
+    {
+      q: 'What exactly is π?',
+      options: [
+        'The area of any circle',
+        'The ratio of a circle’s circumference to its diameter',
+        'A whole number close to 3',
+        'The radius of a unit circle',
+      ],
+      answer: 1,
+      explain: 'π is defined as circumference ÷ diameter — the same value (≈3.14159) for every circle.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>circle</strong> is all points a fixed distance — the <strong>radius r</strong> — from its center.',
+    '<strong>π</strong> is the ratio of circumference to diameter, ≈ 3.14159, the same for every circle (it is irrational).',
+    'Circumference <strong>C = 2πr</strong>; area <strong>A = πr²</strong>.',
+    'Because area uses <strong>r²</strong>, doubling the radius <strong>quadruples</strong> the area.',
+    '<strong>π</strong> reaches far beyond circles — into the Gaussian curve, waves, and rotations across ML and science.',
+  ]}
+/>
+
+Next up: lift these flat measurements into three dimensions — **area and volume** of boxes, cylinders,
+and the solids around you.

@@ -1,0 +1,199 @@
+---
+title: Intro to Limits
+track: precalculus
+summary: What value does a function approach? The idea behind calculus.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - precalculus/exp-log-depth
+leadsTo:
+  - calculus-1/limits-continuity
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import LimitZoomExplorer from '../../../components/demos/LimitZoomExplorer.tsx';
+
+## The hook: where is the function *heading*?
+
+Point a phone camera at a faraway sign and tap zoom. 2×, 5×, 20× — with every step the blur
+sharpens and the letters settle toward something definite, even before you can read them perfectly.
+You're not asking *"what is the picture AT infinite zoom?"* (you never get there). You're asking
+*"what is it clearly **heading toward**?"*
+
+That single shift in question — from *"what is the value here?"* to *"what value is the function
+**approaching**?"* — is the seed of all of calculus. The tool for asking it precisely is the
+**limit**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **limit** is the value a function **heads toward** as its input creeps toward some point — and that
+target can exist even when the function has no value (or a different value) exactly at that point.
+</Callout>
+
+## Intuition: a value can have a destination it never reaches
+
+You already know that a **function** is a machine: feed in $x$, get out $f(x)$. And from rational
+functions you've met two kinds of trouble spots:
+
+- a **hole**, where a factor cancels — like $\dfrac{x^2-1}{x-1}$, which is just $x+1$ *everywhere
+  except* $x=1$, where plugging in gives the undefined $\tfrac{0}{0}$;
+- an **asymptote**, where the graph shoots off as $x$ nears a forbidden input.
+
+At a hole the graph looks like an unbroken line with one point *poked out*. Walk along it from the
+left and you sail toward the missing point's height; walk in from the right and you arrive at the
+same height. The function never actually *lands* on that point — but its **destination** is crystal
+clear. A limit is just a careful name for that destination.
+
+The key mental move: **the value the function HEADS toward is not necessarily its value AT the
+point.** Limits care about the journey approaching $x=c$, not about what (if anything) sits exactly
+at $c$.
+
+## Play with it
+
+Below is $f(x) = \dfrac{x^2-1}{x-1}$. It has an open **hole** at $x=1$. Drag the indigo marker
+toward $x=1$ and crank the **zoom**: watch the readout for $f(x)$ home in on $2$, from the left and
+from the right, even though the point at $x=1$ stays empty.
+
+<LimitZoomExplorer client:visible />
+
+<Callout type="tip">
+Use <strong>step ½ closer to 1</strong> a few times, then zoom in. Notice the distance
+<strong>|x − 1|</strong> shrinks toward 0 while <strong>f(x)</strong> shrinks toward 2. That pairing —
+input approaching <em>c</em>, output approaching <em>L</em> — <em>is</em> the limit.
+</Callout>
+
+## The formal definition
+
+We write the statement *"as $x$ approaches $c$, $f(x)$ approaches $L$"* like this:
+
+$$
+\lim_{x \to c} f(x) = L.
+$$
+
+Read it aloud as *"the limit of $f$ of $x$, as $x$ goes to $c$, equals $L$."* It says nothing about
+$f(c)$ itself — only about the **approach**.
+
+Often we sneak up from one side at a time. The **one-sided limits** are:
+
+$$
+\lim_{x \to c^-} f(x) \quad\text{(from the left)} \qquad\text{and}\qquad \lim_{x \to c^+} f(x) \quad\text{(from the right)}.
+$$
+
+The full (two-sided) limit exists **only when both sides agree**:
+
+$$
+\lim_{x \to c} f(x) = L \iff \lim_{x \to c^-} f(x) = \lim_{x \to c^+} f(x) = L.
+$$
+
+We can also let the input run off to the horizon. A **limit at infinity** asks where the function
+settles as $x$ grows without bound:
+
+$$
+\lim_{x \to \infty} f(x) = L,
+$$
+
+meaning $f(x)$ levels off toward $L$ as $x$ gets huge (think of a graph flattening into a
+horizontal asymptote).
+
+Back to the demo's **removable hole**. Even though substitution gives the undefined $\tfrac{0}{0}$ at
+$x=1$, cancelling the shared factor reveals the destination:
+
+$$
+\frac{x^2-1}{x-1} = \frac{(x-1)(x+1)}{x-1} = x+1 \;\longrightarrow\; 2 \quad\text{as } x \to 1.
+$$
+
+So $\displaystyle\lim_{x\to 1}\frac{x^2-1}{x-1} = 2$, cleanly — the limit fills in the hole that the
+formula left empty.
+
+<Callout type="why">
+This is the foundation of machine learning. A **derivative** — the slope that tells a model which way
+to nudge its weights — is *defined* as a limit: $f'(x)=\lim_{h\to 0}\frac{f(x+h)-f(x)}{h}$. Every
+**gradient** in gradient descent, the engine that trains neural networks, is built from limits like
+this. Master "approaching," and optimization stops being magic.
+</Callout>
+
+## The same idea, four different worlds
+
+Limits aren't a graph-paper curiosity. The "value something heads toward" shows up everywhere.
+
+<ExampleCard domain="Photography" icon="📷">
+Digital zoom keeps magnifying a point in the frame. With each step the region homes in on one spot,
+the way the marker homes in on $x=1$. You never reach "infinite zoom," but the framing clearly
+**approaches a target** — exactly $\lim$ behavior, lens edition.
+</ExampleCard>
+
+<ExampleCard domain="Driving" icon="🚗">
+A speedometer shows your **instantaneous speed** — but speed is distance over time, and at a single
+instant the time window is zero. The trick: average your speed over a shrinking window of seconds.
+As the window $\to 0$, the average **approaches** the number the needle shows. That's
+$\lim_{\Delta t \to 0}$, and it's literally a derivative.
+</ExampleCard>
+
+<ExampleCard domain="Skydiving" icon="🪂">
+A falling skydiver speeds up, but air resistance grows with speed until it cancels gravity. Velocity
+then **levels off** at a **terminal velocity** $v_T$ it gets ever closer to but never quite exceeds:
+$\lim_{t\to\infty} v(t) = v_T$. A limit at infinity describing a real, physical ceiling.
+</ExampleCard>
+
+<ExampleCard domain="Displays" icon="🖥️">
+Cram more and more pixels into the same screen and the staircased edges smooth out. As pixel density
+$\to\infty$, the rendered image **approaches** a perfectly continuous picture. No finite screen is
+truly smooth, but the sequence of ever-denser screens has a clear limit: the ideal continuous image.
+</ExampleCard>
+
+<Callout type="note">
+Two flavors hide in these examples: approaching a <em>finite point</em> (zoom, speedometer) and
+approaching <em>infinity</em> (terminal velocity, pixel density). Same question every time — "what is
+it heading toward?"
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the limit of a function as x → c actually describe?',
+      options: [
+        'The value of the function exactly at x = c',
+        'The value the function heads toward as x approaches c',
+        'The largest value the function ever reaches',
+        'The slope of the function at x = c',
+      ],
+      answer: 1,
+      explain: 'A limit is about the destination of the approach, not the value at the point — which may be undefined or even different.',
+    },
+    {
+      q: 'For f(x) = (x² − 1)/(x − 1), what is the limit as x → 1?',
+      options: ['0', '1', '2', 'It is undefined, so no limit exists'],
+      answer: 2,
+      explain: 'Cancel the shared factor: (x−1)(x+1)/(x−1) = x + 1, which heads to 1 + 1 = 2 as x → 1. The hole does not stop the limit from existing.',
+    },
+    {
+      q: 'A function approaches 3 from the left of x = 2 but approaches 5 from the right. What is lim(x→2) f(x)?',
+      options: [
+        'It equals 4, the average',
+        'It equals 3, the left value',
+        'It does not exist, because the one-sided limits disagree',
+        'It equals 5, the right value',
+      ],
+      answer: 2,
+      explain: 'The two-sided limit exists only when the left and right limits agree. Here they differ (3 vs 5), so the limit does not exist.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>limit</strong> is the value a function <strong>heads toward</strong> as the input approaches a point — written <strong>lim<sub>x→c</sub> f(x) = L</strong>.',
+    'The limit is about the <strong>approach, not the value AT the point</strong>: it can exist even where f is undefined (a removable hole).',
+    'The two-sided limit exists <strong>only when the left and right one-sided limits agree</strong> (x → c⁻ and x → c⁺).',
+    'A <strong>limit at infinity</strong> (x → ∞) captures the value a function levels off toward, like a terminal velocity or horizontal asymptote.',
+    'Limits are the <strong>seed of calculus</strong>: derivatives and the gradients that train ML models are all defined as limits.',
+  ]}
+/>
+
+Next up, in **Calculus: Limits & Continuity**, we make "approaching" fully precise — pinning down
+exactly when a function is continuous and turning these pictures into rules you can compute with.

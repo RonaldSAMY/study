@@ -1,0 +1,178 @@
+---
+title: Linear Transformations
+track: linear-algebra
+summary: Functions that move every point at once while keeping grid lines straight, parallel, and evenly spaced.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - linear-algebra/vector-spaces
+leadsTo:
+  - linear-algebra/eigenvectors
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import GridWarpStudio from '../../../components/demos/GridWarpStudio.tsx';
+
+## The hook: how does a photo filter tilt a whole image at once?
+
+When an app skews a photo into a 3-D-looking card, or a game leans a sprite as it turns, it isn't
+nudging pixels one by one. It applies a single rule to **every point in the plane simultaneously**.
+Crucially, the rule keeps the image *coherent*: straight edges stay straight, parallel borders stay
+parallel, and the spacing stays even. That special, well-behaved kind of transformation — the only
+kind that a matrix can perform — is a **linear transformation**, and it is the verb to the matrix's
+noun.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **linear transformation** is a function that moves all of space at once while keeping the origin
+fixed and grid lines straight, parallel, and evenly spaced — and it is completely described by where
+it sends the basis vectors.
+</Callout>
+
+## Intuition: track the basis, and you've tracked everything
+
+Here's the beautiful shortcut. You met a **basis** in the last lesson — say $\hat{\imath} = [1,0]$ and
+$\hat{\jmath} = [0,1]$. Every vector is a combination of these two: $[3,2] = 3\hat{\imath} +
+2\hat{\jmath}$.
+
+A transformation is **linear** when it respects combinations — it doesn't matter whether you combine
+first and then transform, or transform first and then combine. So if you know only *two* things —
+where $\hat{\imath}$ lands and where $\hat{\jmath}$ lands — you know where **every** point lands:
+
+$$
+T([3, 2]) = 3\,T(\hat{\imath}) + 2\,T(\hat{\jmath}).
+$$
+
+That is why a 2×2 **matrix** is enough to describe the whole warp: its two columns are simply the new
+homes of $\hat{\imath}$ and $\hat{\jmath}$. Reshaping the basis reshapes all of space, and because the
+combination rule is preserved, grid lines can only stay straight and evenly spaced. (This builds
+directly on matrix multiplication from earlier in the track — multiplying a matrix by a vector *is*
+applying the transformation.)
+
+## Play with it
+
+Drag $\hat{\imath}$ (indigo) and $\hat{\jmath}$ (sky) — the **columns** of the matrix — and the entire
+grid follows. Hit **Animate** to watch space morph from the identity into your matrix. Notice the grid
+lines never bend.
+
+<GridWarpStudio client:visible />
+
+<Callout type="tip">
+Send $\hat{\imath}$ and $\hat{\jmath}$ to the <em>same</em> line and the green flag squashes flat — the
+determinant hits 0 and 2-D collapses to 1-D (a rank drop, just like last lesson). Cross them over and
+the determinant goes negative: space gets <strong>mirror-flipped</strong>.
+</Callout>
+
+## The formal definition
+
+A function $T : \mathbb{R}^n \to \mathbb{R}^m$ is a **linear transformation** if it preserves addition
+and scalar multiplication:
+
+$$
+T(\mathbf{u} + \mathbf{v}) = T(\mathbf{u}) + T(\mathbf{v}),
+\qquad
+T(c\,\mathbf{v}) = c\,T(\mathbf{v}).
+$$
+
+These two rules force $T(\mathbf{0}) = \mathbf{0}$ and guarantee the "straight, even grid" behavior.
+Every such $T$ is a matrix multiplication. In 2-D, with $T(\hat{\imath}) = \begin{bmatrix} a \\ c
+\end{bmatrix}$ and $T(\hat{\jmath}) = \begin{bmatrix} b \\ d \end{bmatrix}$,
+
+$$
+T(\mathbf{x}) = A\mathbf{x}, \qquad
+A = \begin{bmatrix} a & b \\ c & d \end{bmatrix}, \qquad
+A\begin{bmatrix} x \\ y \end{bmatrix}
+= \begin{bmatrix} ax + by \\ cx + dy \end{bmatrix}.
+$$
+
+Composing transformations corresponds to **multiplying** their matrices, and the **determinant** of
+$A$ tells you the factor by which areas scale (negative = orientation flipped, zero = collapsed).
+
+<Callout type="why">
+Every layer of a neural network does an *affine* step — a linear transformation $A\mathbf{x}$ plus a
+shift — before a nonlinear squashing function. Understanding what a matrix does geometrically (rotate,
+stretch, shear, project) is understanding the literal machinery inside deep learning.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Computer graphics" icon="🎮">
+Every rotation, scale, and shear of a 3-D model is a matrix applied to its vertices. A spinning
+character is just its vertex vectors multiplied by a rotation matrix each frame — straight edges stay
+straight, which is why polygons never crumple.
+</ExampleCard>
+
+<ExampleCard domain="Economics" icon="📈">
+An input–output model multiplies a vector of this year's production by a matrix of inter-industry
+demands to get next year's. Doubling demand doubles the result, and combined demands add — the system
+is **linear**, so a single matrix forecasts the whole economy's next state.
+</ExampleCard>
+
+<ExampleCard domain="Seismology" icon="🌐">
+A strain matrix describes how the ground deforms during an earthquake: it maps each tiny
+displacement vector to its stretched, sheared version. Because rock deforms linearly for small
+motions, one 3×3 matrix captures the whole local distortion field.
+</ExampleCard>
+
+<ExampleCard domain="Typography" icon="✍️">
+Italic fonts are often a plain font run through a **shear** matrix $\begin{bmatrix} 1 & 0.2 \\ 0 & 1
+\end{bmatrix}$ — it slides each point sideways in proportion to its height. Verticals tilt, but every
+straight stroke stays straight and parallel, which is exactly why the slanted text still reads
+cleanly.
+</ExampleCard>
+
+<Callout type="note">
+Rotate, scale, shear, reflect, project — these are the verbs of linear algebra. The next lessons ask a
+deeper question: for a given transformation, are there special directions that barely change at all?
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What information completely determines a 2-D linear transformation?',
+      options: [
+        'The image’s color palette',
+        'Where it sends the two basis vectors î and ĵ',
+        'The area of the original shape',
+        'A single number',
+      ],
+      answer: 1,
+      explain: 'Knowing T(î) and T(ĵ) is enough: every other vector is a combination of those two, and linearity carries the combination through. Those two images are the matrix columns.',
+    },
+    {
+      q: 'Apply A = [[2, 0], [0, 3]] to the vector [1, 1]. Where does it land?',
+      options: ['[2, 3]', '[3, 2]', '[2, 2]', '[1, 1]'],
+      answer: 0,
+      explain: 'Row by row: (2·1 + 0·1, 0·1 + 3·1) = (2, 3). This matrix stretches x by 2 and y by 3.',
+    },
+    {
+      q: 'A transformation’s matrix has determinant 0. What happened to space?',
+      options: [
+        'It rotated without changing size',
+        'It was flipped like a mirror but kept its area',
+        'It was collapsed onto a lower-dimensional space (a line or point)',
+        'Nothing — determinant 0 means identity',
+      ],
+      answer: 2,
+      explain: 'Zero determinant means the columns are dependent, so the output spans fewer dimensions — area is crushed to zero as the plane flattens onto a line.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>linear transformation</strong> moves all of space while keeping the origin fixed and grid lines straight, parallel, and evenly spaced.',
+    'It is fully described by where it sends the basis vectors — those images are the <strong>columns of its matrix</strong>.',
+    'Applying the transformation is just <strong>matrix-times-vector</strong>; composing them is matrix multiplication.',
+    'The <strong>determinant</strong> gives the area-scaling factor: negative flips orientation, zero collapses a dimension.',
+    'These warps — rotate, stretch, shear, project — are the core operation inside graphics and every neural-network layer.',
+  ]}
+/>
+
+Next up: **eigenvalues and eigenvectors** — the rare directions a transformation refuses to turn, only
+stretch.

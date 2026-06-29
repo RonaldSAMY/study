@@ -1,0 +1,176 @@
+---
+title: First-Order ODEs
+track: differential-equations
+summary: Separable and linear first-order equations — the two solvable workhorses, and how one rate constant bends the whole solution family.
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - differential-equations/intro-odes
+leadsTo:
+  - differential-equations/second-order
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import FirstOrderRateExplorer from '../../../components/demos/FirstOrderRateExplorer.tsx';
+
+## The hook: why a lump of carbon is a clock
+
+A fragment of charcoal from an ancient fire is quietly losing carbon-14 atoms. The rule is breathtakingly
+simple: *the number that decay each year is a fixed fraction of however many are left.* That one sentence
+is a first-order differential equation, and solving it turns the charcoal into a clock accurate across
+tens of thousands of years. Last lesson we learned to *read* such rules from a slope field. Now we learn
+to **solve** them — to get an honest formula for the answer.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **first-order ODE** involves only the first derivative. The two kinds you can almost always crack are
+**separable** (group $y$ on one side, $x$ on the other, integrate) and **linear** (a tidy
+$y' + p(x)y = q(x)$ form with a standard recipe).
+</Callout>
+
+## Intuition: separate, then integrate
+
+The most common first-order equation in nature is
+
+$$
+\frac{dy}{dt} = k\,y,
+$$
+
+"change in proportion to current amount." It is **separable**: shuffle all the $y$'s left and all the
+$t$'s right, then integrate both sides — using exactly the integration skills from Calculus 1:
+
+$$
+\frac{1}{y}\,dy = k\,dt \;\Longrightarrow\; \int \frac{1}{y}\,dy = \int k\,dt \;\Longrightarrow\; \ln|y| = kt + C.
+$$
+
+Exponentiating gives the famous answer $y = y_0 e^{kt}$. The sign of $k$ decides the destiny: $k>0$ is
+explosive growth, $k<0$ is decay toward zero. The constant $k$ is the single dial that controls how
+sharply the whole family bends.
+
+A close cousin, the **linear** first-order ODE $\frac{dy}{dt} = k(C - y)$, describes something *filling
+toward a ceiling* — a capacitor charging, a cup warming, a drug saturating. Its solutions all curve up
+and flatten out at the target $C$, fast when $k$ is large.
+
+## Play with it
+
+Slide the **rate constant $k$** and watch every curve in the family respond at once. In growth/decay mode,
+positive $k$ flares upward and negative $k$ melts toward zero; switch to charging mode to see curves race
+up to a shared ceiling. The green curve is one highlighted member so you can track it.
+
+<FirstOrderRateExplorer client:visible />
+
+<Callout type="tip">
+In decay mode, find the value of $k$ where the highlighted curve halves over one time unit. That moment
+is the **half-life**, $t_{1/2} = \ln 2 / |k|$ — the heartbeat of every decay process.
+</Callout>
+
+## The formal definition
+
+A first-order ODE is **separable** if it can be written
+
+$$
+\frac{dy}{dx} = g(x)\,h(y) \quad\Longrightarrow\quad \int \frac{dy}{h(y)} = \int g(x)\,dx.
+$$
+
+It is **linear** if it fits the standard form
+
+$$
+\frac{dy}{dx} + p(x)\,y = q(x),
+$$
+
+which is solved by multiplying through by the **integrating factor** $\mu(x) = e^{\int p(x)\,dx}$, turning
+the left side into the derivative of a product:
+
+$$
+\frac{d}{dx}\big[\mu(x)\,y\big] = \mu(x)\,q(x) \quad\Longrightarrow\quad y = \frac{1}{\mu(x)}\int \mu(x)\,q(x)\,dx.
+$$
+
+For the pure-decay case $y' = -ky$ both methods agree on $y = y_0 e^{-kt}$.
+
+<Callout type="why">
+Exponential decay is everywhere in ML: learning-rate schedules decay as $\eta_t = \eta_0 e^{-\lambda t}$,
+weight decay shrinks parameters toward zero, and exponential moving averages (the backbone of Adam and
+momentum) are the discrete echo of $\frac{dy}{dt} = k(\text{new} - y)$.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Archaeology" icon="🪨">
+Carbon-14 decays by $\frac{dN}{dt} = -\lambda N$, giving $N = N_0 e^{-\lambda t}$ with a half-life of
+5,730 years. Measure how much $^{14}\!C$ remains in a bone or charcoal, invert the formula, and you read
+off its age. A first-order ODE is literally a clock.
+</ExampleCard>
+
+<ExampleCard domain="Electronics" icon="⚡">
+Charging a capacitor through a resistor obeys $\frac{dV}{dt} = \frac{1}{RC}(V_s - V)$. The voltage rises
+and levels off at the supply $V_s$, with the product $RC$ setting the pace — small $RC$ snaps full almost
+instantly, large $RC$ eases up gently. This is the "charging" curve in the demo.
+</ExampleCard>
+
+<ExampleCard domain="Pharmacology" icon="💊">
+After an injection, a drug clears at $\frac{dc}{dt} = -k_e\,c$, an exponential decay. The clearance rate
+$k_e$ tells doctors how often to redose so the concentration stays inside the safe-yet-effective window —
+dosing schedules are first-order ODEs solved on a whiteboard.
+</ExampleCard>
+
+<ExampleCard domain="Chemistry" icon="🧪">
+Brine flows into a stirred tank and the well-mixed solution flows out. The salt mass follows the *linear*
+ODE $\frac{dS}{dt} = r_{\text{in}} - \frac{r_{\text{out}}}{V}S$. The integrating factor handles it cleanly,
+and the concentration drifts toward the inflow concentration — a classic mixing problem.
+</ExampleCard>
+
+<Callout type="note">
+Decay, charging, dosing, mixing — different units, one mathematical skeleton. Spotting that a problem is
+"separable" or "linear first-order" is half the battle; the integral recipes do the rest.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which technique solves dy/dx = x·y directly?',
+      options: [
+        'It is separable: write dy/y = x dx and integrate',
+        'It is impossible to solve',
+        'Differentiate both sides again',
+        'Set y = 0',
+      ],
+      answer: 0,
+      explain: 'It factors as g(x)·h(y) = x · y, so separate variables: ∫dy/y = ∫x dx, giving ln|y| = x²/2 + C.',
+    },
+    {
+      q: 'A sample decays by dN/dt = −kN. After one half-life, how much remains?',
+      options: ['None', 'Half', 'A quarter', 'It depends on k only, not time'],
+      answer: 1,
+      explain: 'By definition the half-life is the time for the amount to drop to one half; t½ = ln2 / k.',
+    },
+    {
+      q: 'In the charging law dV/dt = k(Vₛ − V), what happens as t grows large?',
+      options: [
+        'V grows without bound',
+        'V oscillates forever',
+        'V approaches the ceiling Vₛ and levels off',
+        'V drops to zero',
+      ],
+      answer: 2,
+      explain: 'As V nears Vₛ the rate k(Vₛ − V) shrinks to zero, so the solution flattens out exactly at Vₛ.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>first-order ODE</strong> involves only y′; the two solvable kinds are <strong>separable</strong> and <strong>linear</strong>.',
+    'Separable equations: gather y on one side and x on the other, then <strong>integrate both sides</strong>.',
+    'Linear equations y′ + p(x)y = q(x) are cracked with the <strong>integrating factor</strong> e^{∫p dx}.',
+    'The model dy/dt = ky gives <strong>y = y₀e^{kt}</strong> — growth if k>0, decay if k<0, with half-life ln2/|k|.',
+    'One <strong>rate constant</strong> reshapes the whole solution family, from carbon dating to capacitor charging.',
+  ]}
+/>
+
+Next up: **second-order linear ODEs** — add a second derivative and flat decay turns into springs,
+oscillation, and damping.

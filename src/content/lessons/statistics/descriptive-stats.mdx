@@ -1,0 +1,164 @@
+---
+title: Descriptive Statistics
+track: statistics
+summary: Summarizing a whole dataset with a few honest numbers — center, spread, and shape.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - probability/expectation-variance
+leadsTo:
+  - statistics/mle-map
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DescriptiveStatsDragboard from '../../../components/demos/DescriptiveStatsDragboard.tsx';
+
+## The hook: the salary that lies
+
+A startup brags that its **average salary is $120k**. Sounds great — until you learn the founder pays
+herself $600k and everyone else earns $45k. The "average" was technically true and completely
+misleading. One number tried to stand in for a whole crowd, and a single outlier hijacked it.
+
+Descriptive statistics is the craft of squeezing a pile of numbers down to a few summaries that are
+both small *and* honest. The catch, as that salary shows, is that **which** summary you pick changes the
+story.
+
+<Callout type="intuition" title="The one-sentence idea">
+Descriptive statistics answers two questions about a dataset with a handful of numbers: **where is the
+center?** and **how spread out is it?**
+</Callout>
+
+## Intuition: center and spread
+
+In the probability track you met **expectation** (the long-run average of a random variable) and
+**variance** (its spread). Descriptive statistics is the same idea aimed at *data you actually have in
+hand* rather than a theoretical distribution. We compute the center and spread directly from the numbers.
+
+There are three classic measures of **center**:
+
+- **Mean** — add everything up, divide by how many. Sensitive to every value, including extremes.
+- **Median** — sort the values and take the middle one. It ignores *how* far the extremes are, only
+  *which side* they fall on, so it shrugs off outliers.
+- **Mode** — the value that appears most often. Handy for categories ("most common plan").
+
+And the **spread** tells you how tightly the data clusters: the **range** (max minus min), the
+**standard deviation** (typical distance from the mean), and the **interquartile range** (the width of
+the middle 50%).
+
+## Play with it
+
+Each blue dot is one employee's salary. Drag them around. Watch the **mean** (indigo) and **median**
+(emerald) markers. Now drag a single salary far to the right — like that founder's pay — and notice the
+mean *chase the outlier* while the median barely flinches.
+
+<DescriptiveStatsDragboard client:visible />
+
+<Callout type="tip">
+A quick test for a skewed dataset: if the **mean sits well to the right of the median**, a few large
+values are pulling the average up. That gap is the fingerprint of outliers.
+</Callout>
+
+## The formal definition
+
+For a dataset $x_1, x_2, \dots, x_n$, the **sample mean** is
+
+$$
+\bar{x} = \frac{1}{n}\sum_{i=1}^{n} x_i.
+$$
+
+The **median** is the middle value of the sorted data (or the average of the two middle values when
+$n$ is even). The **sample variance** measures average squared distance from the mean,
+
+$$
+s^2 = \frac{1}{n-1}\sum_{i=1}^{n} (x_i - \bar{x})^2, \qquad s = \sqrt{s^2},
+$$
+
+and $s$ — the **standard deviation** — puts that spread back in the original units. The **quartiles**
+$Q_1$ and $Q_3$ cut off the bottom 25% and 75%, and their gap is the **interquartile range**
+$\text{IQR} = Q_3 - Q_1$.
+
+<Callout type="why">
+Every machine-learning pipeline starts here. Before a model sees your data you **standardize** features
+by subtracting the mean and dividing by the standard deviation, $z = (x - \bar{x})/s$, so that salary
+in dollars and age in years live on the same scale. Get these summaries wrong and every downstream model
+inherits the mistake.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Real estate" icon="🏠">
+News reports quote the **median** home price, never the mean. A handful of $20-million mansions would
+yank the mean upward and make a normal town look unaffordable. The median — the middle house — reflects
+what a typical buyer actually faces.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+A factory fills cereal boxes aiming for 500 g. The **mean** confirms the average is on target, but the
+**standard deviation** is what quality control watches: a small $s$ means every box is close to 500 g; a
+large $s$ means some are badly under-filled even if the average looks fine.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="⚽">
+A striker who scores 0, 0, 0, then 4 has the same **mean** (1 per game) as one who scores 1, 1, 1, 1 —
+but wildly different **spread**. Scouts care about consistency, so they read the standard deviation, not
+just the average.
+</ExampleCard>
+
+<ExampleCard domain="Climate" icon="🌡️">
+"Average global temperature rose 1.1°C" is a mean. But the danger lives in the **spread and the tails**:
+a small shift in the mean pushes the extreme-heat tail of the distribution much further out, turning
+once-rare heatwaves into regular events.
+</ExampleCard>
+
+<Callout type="note">
+Notice the recurring theme: the **mean** is the right tool when data is roughly symmetric, but the
+**median** is safer when outliers or skew are present — and **spread** is often the number that actually
+matters for a decision.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A dataset of house prices has a few extremely expensive mansions. Which measure of center best represents a typical home?',
+      options: ['The mean, because it uses every value', 'The median, because it resists outliers', 'The mode, because prices repeat', 'The range, because it shows the extremes'],
+      answer: 1,
+      explain: 'The median is the middle value and barely moves when a few extreme outliers are added, so it represents a typical home better than the outlier-sensitive mean.',
+    },
+    {
+      q: 'Find the mean and median of 2, 4, 4, 6, 9.',
+      options: ['mean 5, median 4', 'mean 4, median 4', 'mean 5, median 6', 'mean 4.5, median 5'],
+      answer: 0,
+      explain: 'Mean = (2+4+4+6+9)/5 = 25/5 = 5. Sorted, the middle value is 4, so the median is 4.',
+    },
+    {
+      q: 'Two production lines fill bottles to the same mean volume, but line A has a much larger standard deviation. What does that tell you?',
+      options: [
+        'Line A is more consistent',
+        'Line A has more variability — some bottles are much fuller or emptier',
+        'Line A produces more bottles',
+        'Nothing — equal means mean equal quality',
+      ],
+      answer: 1,
+      explain: 'A larger standard deviation means values spread further from the mean, so line A is less consistent even though the averages match.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Descriptive statistics summarize data with two ideas: <strong>center</strong> (mean, median, mode) and <strong>spread</strong> (range, standard deviation, IQR).',
+    'The <strong>mean</strong> uses every value and is pulled by outliers; the <strong>median</strong> is the middle value and resists them.',
+    'When the mean sits far from the median, the data is <strong>skewed</strong> by extreme values.',
+    'The <strong>standard deviation</strong> reports the typical distance from the mean — often the number a decision actually hinges on.',
+    'These summaries power <strong>standardization</strong> (z-scores), the first step in almost every ML pipeline.',
+  ]}
+/>
+
+Next up: **estimation** — instead of just summarizing data, we will ask which underlying *parameter*
+most likely produced it, the leap from description to inference.

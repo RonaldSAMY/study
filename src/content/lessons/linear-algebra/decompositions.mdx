@@ -1,0 +1,177 @@
+---
+title: Matrix Decompositions (LU/QR/SVD)
+track: linear-algebra
+summary: Factoring a matrix into simple, meaningful pieces — and the SVD that reveals what any matrix really does.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - linear-algebra/orthogonality-projections
+leadsTo:
+  - linear-algebra/pca
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SvdEllipseStudio from '../../../components/demos/SvdEllipseStudio.tsx';
+
+## The hook: how does a streaming service store a million ratings cheaply?
+
+A movie service has millions of users and thousands of films, but the giant table of "who rated what"
+is mostly empty and deeply repetitive — taste really comes down to a few hidden themes like *gritty
+crime*, *feel-good rom-com*, or *space opera*. Instead of storing the whole table, the service
+**factors** it into two skinny matrices: one placing each user along those few themes, one placing each
+movie. Multiply them back and you approximately recover every rating — and can even *predict* the
+missing ones. Breaking a matrix into simpler factors like this is **matrix decomposition**, and it is
+how linear algebra turns enormous problems into small, fast, interpretable ones.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **matrix decomposition** rewrites a matrix as a product of simpler matrices — triangular, orthogonal,
+or diagonal — so that solving, projecting, or compressing becomes easy.
+</Callout>
+
+## Intuition: factor a number, factor a matrix
+
+You factor $60 = 2^2 \cdot 3 \cdot 5$ to see its structure at a glance. Matrices factor too, and each
+classic factorization exposes a different truth and powers a different task:
+
+- **LU** — split a matrix into a **lower**-triangular $L$ times an **upper**-triangular $U$. This is
+  just Gaussian elimination, recorded. Triangular systems solve in one sweep, so LU is the workhorse
+  for solving $A\mathbf{x} = \mathbf{b}$ fast and repeatedly.
+- **QR** — split into an **orthonormal** $Q$ (perpendicular unit columns, from the last lesson) times an
+  upper-triangular $R$. Because $Q$'s columns are an orthonormal basis, QR is the clean, stable way to
+  do **least-squares** projections.
+- **SVD** — the crown jewel: **any** matrix becomes $U\Sigma V^{\top}$, a **rotation**, then a pure
+  **scaling**, then another **rotation**. It works for any shape of matrix and reveals exactly how much
+  the matrix stretches space and in which directions.
+
+The SVD is the one to hold in your mind's eye: every linear map, no matter how tangled, is secretly
+just *rotate → stretch → rotate*. Watching that is the best way to feel it.
+
+## Play with it
+
+The unit circle is the "before." Step through $A = U\Sigma V^{\top}$ one factor at a time and watch the
+circle rotate (by $V^{\top}$), stretch into an ellipse (by the singular values $\sigma_1, \sigma_2$),
+then rotate again (by $U$). The semi-axes of the final ellipse are the singular values.
+
+<SvdEllipseStudio client:visible />
+
+<Callout type="tip">
+Slide $\sigma_2$ toward zero: the ellipse squashes to a sliver. A tiny singular value means the matrix
+barely uses that direction — so you can <strong>drop</strong> it and lose almost nothing. That single
+observation is the whole idea of low-rank compression (and PCA, next lesson).
+</Callout>
+
+## The formal definition
+
+For an invertible $n\times n$ matrix, **LU** (with row pivoting) is
+
+$$
+PA = LU,
+$$
+
+with $P$ a permutation, $L$ lower-triangular, $U$ upper-triangular. The **QR** decomposition of an
+$m\times n$ matrix with independent columns is
+
+$$
+A = QR, \qquad Q^{\top}Q = I,\;\; R \text{ upper-triangular},
+$$
+
+where $Q$'s columns are an orthonormal basis for the column space. The **singular value
+decomposition** of *any* $m\times n$ matrix $A$ is
+
+$$
+A = U\,\Sigma\,V^{\top},
+$$
+
+where $U$ ($m\times m$) and $V$ ($n\times n$) are **orthogonal** (rotations/reflections) and $\Sigma$
+is diagonal with the **singular values** $\sigma_1 \ge \sigma_2 \ge \cdots \ge 0$. Keeping only the
+largest $k$ singular values gives the **best rank-$k$ approximation** of $A$ (the Eckart–Young
+theorem) — the optimal compression for a given size.
+
+<Callout type="why">
+The SVD ties this whole track together. The singular values squared are the eigenvalues of $A^{\top}A$;
+the right singular vectors are eigenvectors of that symmetric matrix; truncating the small ones is
+exactly **PCA** and the basis of image compression, recommender systems, and noise reduction. One
+factorization, a dozen applications.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Image compression" icon="🖼️">
+A grayscale photo is a matrix of pixel intensities. Its **SVD** usually has a few large singular values
+and a long tail of tiny ones. Keep the top, say, 30 and you reconstruct a near-perfect image from a
+fraction of the numbers — low-rank approximation as lossy compression you can dial up or down.
+</ExampleCard>
+
+<ExampleCard domain="Recommender systems" icon="🎞️">
+Factoring the user–item rating matrix (a truncated SVD / latent-factor model) discovers hidden
+"taste dimensions." Each user and each movie becomes a short vector in that shared space, and their dot
+product predicts a rating — even for films the user has never seen.
+</ExampleCard>
+
+<ExampleCard domain="Natural language" icon="📚">
+Latent Semantic Analysis runs an SVD on a word–document matrix. The top singular directions capture
+**topics**: documents about the same subject line up, and synonyms end up close together, all from the
+geometry of the decomposition.
+</ExampleCard>
+
+<ExampleCard domain="Weather simulation" icon="🌦️">
+Solving the huge linear systems inside a forecast model relies on **LU**-style factorizations to crank
+through millions of equations efficiently, reusing the factors as the simulation steps forward in time
+instead of re-solving from scratch.
+</ExampleCard>
+
+<Callout type="note">
+LU is for solving, QR is for projecting, SVD is for understanding and compressing. When in doubt about
+"what does this matrix really do?", the SVD answers it: rotate, stretch by the singular values, rotate.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the SVD A = UΣVᵀ, what do the three factors do geometrically?',
+      options: [
+        'Scale, then scale, then scale',
+        'Rotate, then scale by the singular values, then rotate',
+        'Add three matrices together',
+        'Invert the matrix three times',
+      ],
+      answer: 1,
+      explain: 'Vᵀ and U are orthogonal (rotations/reflections) and Σ is a diagonal scaling. So any matrix acts as rotate → stretch → rotate, turning a circle into an ellipse.',
+    },
+    {
+      q: 'Which decomposition gives an orthonormal basis for the column space and is ideal for least squares?',
+      options: ['LU', 'QR', 'The determinant', 'None of them'],
+      answer: 1,
+      explain: 'QR factors A into an orthonormal Q and upper-triangular R; Q’s columns are the orthonormal basis that makes projection (least squares) clean and numerically stable.',
+    },
+    {
+      q: 'A matrix has singular values 9, 7, 0.05, 0.02. What does keeping only the top two suggest?',
+      options: [
+        'You lose almost all the information',
+        'The matrix is nearly rank 2; a rank-2 approximation captures almost everything',
+        'The matrix is not compressible',
+        'The matrix is the identity',
+      ],
+      answer: 1,
+      explain: 'The last two singular values are tiny, so those directions barely matter. The best rank-2 approximation keeps nearly all the matrix’s action — efficient compression.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>decomposition</strong> factors a matrix into simpler pieces, like factoring an integer into primes.',
+    '<strong>LU</strong> (triangular × triangular) solves linear systems fast; it is recorded Gaussian elimination.',
+    '<strong>QR</strong> (orthonormal × triangular) builds an orthonormal basis and powers stable least squares.',
+    '<strong>SVD</strong> writes any matrix as UΣVᵀ — rotate, stretch by singular values, rotate — turning circles into ellipses.',
+    'Dropping small singular values gives the <strong>best low-rank approximation</strong>: the math behind compression and PCA.',
+  ]}
+/>
+
+Next up: **PCA** — using the SVD's biggest directions to find what matters most in real data.

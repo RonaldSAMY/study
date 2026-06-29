@@ -1,0 +1,172 @@
+---
+title: Exponential & Logarithmic Functions
+track: algebra-2
+summary: Explosive growth and decay — and the logarithm, the inverse that tames them.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - algebra-2/exponents-radicals
+leadsTo:
+  - algebra-2/rational-expressions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ExponentialGrowthLogScale from '../../../components/demos/ExponentialGrowthLogScale.tsx';
+
+## The hook: the rumor that ate the school
+
+One person tells two friends a rumor at 8am. Each of them tells two more by 9am, and so on. By lunchtime
+the whole school knows. Nothing was added at a steady rate — instead the *number of new tellers
+multiplied* every hour. That multiplying-not-adding behavior is **exponential growth**, and it is both
+the most powerful and the most deceptive pattern in mathematics. Its inverse, the **logarithm**, is how
+we measure and tame it.
+
+<Callout type="intuition" title="The one-sentence idea">
+An **exponential function** puts the variable *in the exponent* ($y = b^x$) so the output multiplies at a
+steady rate, and a **logarithm** answers the reverse question: *"what exponent produces this number?"*
+</Callout>
+
+## Intuition: when the exponent becomes the variable
+
+In the last lesson the exponent was a fixed number — $x^2$, $x^3$. Now we flip it. In $y = 2^x$ the
+**base is fixed** and the **exponent varies**. That single change transforms the behavior completely:
+
+- A polynomial like $x^2$ adds bigger and bigger *amounts* as $x$ grows.
+- An exponential like $2^x$ *multiplies* by the same factor with every step. Each unit of $x$ doubles the
+  output, then doubles it again.
+
+If the base is bigger than 1, you get **growth** (the rumor). If it's between 0 and 1 — or equivalently
+the exponent is negative — you get **decay**, where the quantity halves repeatedly toward zero
+(radioactivity, a cooling coffee, a fading echo).
+
+The **logarithm** is exponentiation run backwards. Since $2^3 = 8$, we say $\log_2 8 = 3$: *"the power you
+raise 2 to in order to get 8 is 3."* This is exactly the inverse relationship you'll see again and again —
+a log undoes an exponential the way subtraction undoes addition.
+
+## Play with it
+
+Slide the **growth rate** and watch the curve. Then flip the vertical axis to a **log scale**: the same
+runaway curve flattens into a perfectly straight line. That's not a trick — it's *why* scientists plot
+explosive data on log axes.
+
+<ExponentialGrowthLogScale client:visible />
+
+<Callout type="tip">
+On the <strong>log scale</strong> the curve is straight and its steepness is the growth rate $r$. Equal
+vertical steps now stand for equal *multiplications* (×10, ×100, …). A logarithm turns multiplication into
+addition — that's its superpower.
+</Callout>
+
+## The formal definition
+
+An **exponential function** has the form
+
+$$
+f(x) = A\,b^{x}, \qquad b > 0,\ b \neq 1,
+$$
+
+where $A$ is the starting value and $b$ the **base** (growth factor per step). Scientists often write it
+with the natural base $e \approx 2.718$ as $A\,e^{rx}$, where $r$ is the continuous **growth rate**
+($r>0$ grows, $r<0$ decays).
+
+The **logarithm** is its inverse. By definition,
+
+$$
+y = \log_b x \quad\Longleftrightarrow\quad b^{y} = x.
+$$
+
+Because logs undo exponentials, they convert multiplication into addition — captured in three rules that
+mirror the power rules exactly:
+
+$$
+\log_b(xy) = \log_b x + \log_b y, \quad \log_b\!\frac{x}{y} = \log_b x - \log_b y, \quad \log_b(x^k) = k\,\log_b x.
+$$
+
+A handy consequence is the **doubling time / half-life**: for $A\,e^{rt}$, the quantity doubles every
+$\dfrac{\ln 2}{r}$ units of time (and halves every $\dfrac{\ln 2}{|r|}$ when decaying).
+
+<Callout type="why">
+Exponentials and logs are the heartbeat of machine learning. Probabilities are multiplied together over
+huge datasets, so we work with their **logs** to turn impossible products into manageable sums (the
+"log-likelihood"). Learning rates **decay exponentially**, and the sigmoid and softmax that produce model
+outputs are built directly from $e^x$.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Personal finance" icon="🏦">
+Money in a savings account at 6% compounded annually grows as $A(t) = 1000 \cdot 1.06^{t}$. It doesn't add
+a fixed amount each year — it multiplies by 1.06, so the interest itself earns interest. The
+**doubling time** is about $\ln 2 / \ln 1.06 \approx 12$ years, regardless of how much you start with.
+</ExampleCard>
+
+<ExampleCard domain="Microbiology" icon="🦠">
+A bacterial colony that splits every 20 minutes follows $N(t) = N_0 \cdot 2^{t/20}$ (with $t$ in minutes).
+Starting from a single cell, you pass a billion in under 10 hours — the same multiply-every-step engine as
+the rumor, which is why infections and yeast cultures explode so suddenly.
+</ExampleCard>
+
+<ExampleCard domain="Seismology" icon="🌍">
+The Richter scale is a **logarithm** of ground motion. Each whole number up means **ten times** the
+amplitude, so a magnitude 7 quake shakes 100× harder than a magnitude 5. Logs compress an enormous range
+of energies into a tidy 1–10 dial — exactly the log axis from the demo.
+</ExampleCard>
+
+<ExampleCard domain="Audio" icon="🔊">
+Loudness in **decibels** is logarithmic too: $L = 10\log_{10}(I/I_0)$. Every +10 dB is ten times the sound
+intensity, even though it only sounds "about twice as loud." That's why 110 dB at a concert is genuinely
+dangerous while 70 dB conversation is fine — the scale hides a thousand-fold gap.
+</ExampleCard>
+
+<Callout type="note">
+Growth examples (money, bacteria) use the exponential going *forward*; measurement scales (Richter,
+decibels) use the logarithm going *backward* to squeeze huge ranges into readable numbers. Same
+relationship, opposite directions.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What fundamentally distinguishes exponential growth from polynomial growth?',
+      options: [
+        'It adds a fixed amount each step',
+        'It multiplies by a fixed factor each step',
+        'It always decreases',
+        'It is a straight line',
+      ],
+      answer: 1,
+      explain: 'Exponential growth multiplies by a constant factor every step (e.g. doubling), which is why it eventually outpaces any polynomial.',
+    },
+    {
+      q: 'Evaluate log₂ 32.',
+      options: ['4', '5', '6', '16'],
+      answer: 1,
+      explain: 'log₂ 32 asks "2 to what power is 32?" Since 2⁵ = 32, the answer is 5.',
+    },
+    {
+      q: 'On the Richter scale, how much greater is the ground motion of a magnitude 8 quake than a magnitude 6?',
+      options: ['2 times', '20 times', '100 times', '1000 times'],
+      answer: 2,
+      explain: 'Each unit is ×10 (a logarithmic scale), so two units up is 10 × 10 = 100 times the amplitude.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>exponential function</strong> y = A·bˣ puts the variable in the exponent, so output multiplies at a steady rate.',
+    'Base &gt; 1 gives <strong>growth</strong>; base between 0 and 1 (or negative rate) gives <strong>decay</strong>.',
+    'A <strong>logarithm</strong> is the inverse: logb x answers "what exponent gives x?" — it undoes the exponential.',
+    'Log rules turn <strong>multiplication into addition</strong>, the key to handling huge ranges and products.',
+    '<strong>Log scales</strong> (Richter, decibels, pH) straighten exponential data so vast ranges fit on one readable axis.',
+  ]}
+/>
+
+Next up: **rational expressions** — fractions built from polynomials, where dividing introduces forbidden
+values and the curve races toward invisible walls called asymptotes.

@@ -1,0 +1,165 @@
+---
+title: Slope & Linear Functions
+track: algebra-1
+summary: Steepness as a rate of change, and the equation of a line, y = mx + b.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - algebra-1/intro-functions
+leadsTo:
+  - algebra-2/quadratics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SlopeInterceptExplorer from '../../../components/demos/SlopeInterceptExplorer.tsx';
+
+## The hook: how fast is the trip ticking by?
+
+On a road trip your odometer reads 60 miles after 1 hour, 120 after 2 hours, 180 after 3. Every hour adds the same 60
+miles. Plot distance against time and the points fall on a perfectly straight line — and its **steepness is your speed**.
+That constant "amount of change per step" is the single most useful number about a relationship, and it has a name:
+**slope**. Master it here and you've met the workhorse of all of applied math.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **linear function** changes by a constant amount per step; that rate is the **slope** $m$, and the line is described
+completely by $y = mx + b$, where $b$ is its starting height.
+</Callout>
+
+## Intuition: the function whose rate never changes
+
+You just met functions as input → output machines. A **linear** function is the simplest kind: each step in $x$ changes
+$y$ by the *same* amount. That fixed amount is the **slope**
+
+$$
+m = \frac{\text{change in } y}{\text{change in } x} = \frac{\text{rise}}{\text{run}}.
+$$
+
+A slope of $60$ means "$y$ goes up 60 for every 1 step right." Positive slope climbs, negative slope falls, and zero slope
+is flat.
+
+The other number you need is where the line *starts* — its height when $x = 0$. That's the **y-intercept** $b$, the point
+$(0, b)$ where the line crosses the vertical axis. Together they give the famous **slope-intercept form**
+
+$$
+y = m x + b,
+$$
+
+which you've actually been using all along: the phone bill $20 + 5g$ is a line with intercept $20$ and slope $5$.
+
+## Play with it
+
+Drag the **m** (slope) and **b** (intercept) sliders. The line swings and slides; the rise-over-run triangle shows the
+slope and the orange dot marks where it crosses the y-axis. Find the line through $(0, 1)$ that climbs 2 each step.
+
+<SlopeInterceptExplorer client:visible />
+
+<Callout type="tip">
+Set $b$ and watch only the crossing point move up and down. Set $m$ and watch only the tilt change. The two numbers control
+two independent things: <strong>where it starts</strong> and <strong>how steeply it rises</strong>.
+</Callout>
+
+## The formal definition
+
+A **linear function** has the form
+
+$$
+f(x) = m x + b,
+$$
+
+where $m$ is the **slope** and $b$ the **y-intercept**. Given any two points $(x_1, y_1)$ and $(x_2, y_2)$ on the line, the
+slope is
+
+$$
+m = \frac{y_2 - y_1}{x_2 - x_1}.
+$$
+
+For the road trip, two readings $(1, 60)$ and $(3, 180)$ give
+
+$$
+m = \frac{180 - 60}{3 - 1} = \frac{120}{2} = 60 \text{ mph}, \qquad b = 0,
+$$
+
+so $y = 60x$. The defining feature of a line is that this ratio is **the same no matter which two points you choose** — the
+rate of change is constant.
+
+<Callout type="why">
+Linear regression — fitting the best line $y = mx + b$ through data — is the "hello world" of machine learning. The slope
+$m$ is exactly a model's *weight*: how strongly the output responds to the input. Gradient descent's whole job is to find
+good values of $m$ and $b$.
+</Callout>
+
+## The same idea, four different worlds
+
+A constant rate of change plus a starting value describes an enormous range of everyday situations.
+
+<ExampleCard domain="Road trips" icon="🛣️">
+Distance vs. time at steady speed: $y = 60x$. Slope $60$ is your speed in mph, intercept $0$ because you start at mile
+zero. Double the slope and you've doubled your pace.
+</ExampleCard>
+
+<ExampleCard domain="Phone data plans" icon="📱">
+The bill $C = 20 + 5g$ is a line: intercept \$20 (the flat fee, paid even at $g=0$) and slope \$5 per gigabyte. The
+slope is the price of one more GB.
+</ExampleCard>
+
+<ExampleCard domain="Gym membership" icon="🏋️">
+A \$30 sign-up plus \$10 per visit: $\text{cost} = 30 + 10v$. Intercept $30$ is the joining fee; slope $10$ is the
+per-visit rate. Comparing two gyms is just comparing two lines.
+</ExampleCard>
+
+<ExampleCard domain="Gardening" icon="🌿">
+A seedling 4 cm tall growing 2 cm per week: $h = 4 + 2w$. Intercept $4$ is its height today, slope $2$ is the weekly
+growth rate. The line predicts when it reaches the trellis.
+</ExampleCard>
+
+<Callout type="note">
+In every case the intercept $b$ is "the value when nothing has happened yet" and the slope $m$ is "how much it changes per
+step." Spot those two numbers and you've understood the whole relationship.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A line passes through (0, 3) and rises 2 for every 1 step right. What is its equation?',
+      options: ['y = 3x + 2', 'y = 2x + 3', 'y = 2x − 3', 'y = 3x − 2'],
+      answer: 1,
+      explain: 'Slope m = 2 (rise 2 per run 1) and intercept b = 3 (crosses the y-axis at 3): y = 2x + 3.',
+    },
+    {
+      q: 'Find the slope of the line through (1, 60) and (3, 180).',
+      options: ['30', '60', '120', '240'],
+      answer: 1,
+      explain: 'm = (180 − 60) / (3 − 1) = 120 / 2 = 60.',
+    },
+    {
+      q: 'In the gym cost 30 + 10v, what does the slope 10 represent?',
+      options: [
+        'The one-time sign-up fee',
+        'The cost of each additional visit',
+        'The number of visits',
+        'The total cost',
+      ],
+      answer: 1,
+      explain: 'Slope is change in output per step of input — here, $10 of cost added per extra visit. The 30 is the intercept (sign-up fee).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>linear function</strong> changes by a constant amount per step; its graph is a straight line.',
+    '<strong>Slope</strong> m = rise / run is the rate of change: positive climbs, negative falls, zero is flat.',
+    'The <strong>y-intercept</strong> b is the output when x = 0 — where the line crosses the vertical axis.',
+    '<strong>Slope-intercept form</strong> y = mx + b describes any line from just those two numbers.',
+    'Fitting y = mx + b to data is <strong>linear regression</strong>, the foundation of machine learning — the slope is a model weight.',
+  ]}
+/>
+
+Next up: **Quadratics & Factoring** in Algebra 2 — what happens when the rate of change is no longer constant and the
+graph bends into a curve.

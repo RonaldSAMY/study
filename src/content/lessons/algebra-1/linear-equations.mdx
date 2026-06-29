@@ -1,0 +1,168 @@
+---
+title: Linear Equations & Inequalities
+track: algebra-1
+summary: Solving for the unknown by keeping both sides balanced — and reasoning about whole ranges of answers.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - algebra-1/variables-expressions
+leadsTo:
+  - algebra-1/coordinate-plane
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BalanceScaleSolver from '../../../components/demos/BalanceScaleSolver.tsx';
+
+## The hook: how many weeks until the trip?
+
+You have \$3 saved and you add \$2 to a jar every week. The road trip needs \$11. How many weeks, $x$, until you can
+go? In symbols that's $2x + 3 = 11$. You don't have to guess — there's a reliable procedure that *unwinds* the equation
+and hands you the answer. The trick is to picture the equals sign as the pivot of a **balance scale**: as long as you do
+the same thing to both pans, it never tips, and the truth is preserved at every step.
+
+<Callout type="intuition" title="The one-sentence idea">
+An **equation** says two expressions are equal; you **solve** it by applying the same operation to both sides until the
+unknown stands alone — like keeping a scale balanced while you remove weights.
+
+</Callout>
+
+## Intuition: an expression set equal to something
+
+Last lesson we built and simplified expressions like $2x + 3$. An **equation** takes such an expression and asserts it
+equals another value: $2x + 3 = 11$. Solving means finding the variable value that makes the statement true.
+
+The golden rule is **balance**. The two sides are equal *right now*, so any operation you apply to one side you must apply
+to the other to keep them equal:
+
+1. **Undo addition** by subtracting the same amount from both sides.
+2. **Undo multiplication** by dividing both sides by the same number.
+
+You peel operations off in reverse PEMDAS order — strip the added constant first, then divide out the coefficient — until
+only $x$ remains.
+
+An **inequality** ($<, >, \le, \ge$) follows the same moves, with one twist: multiplying or dividing both sides by a
+**negative** number flips the direction of the sign.
+
+## Play with it
+
+The scale below holds your equation. Each indigo box is an $x$; each green square is one unit. Use the buttons to subtract
+from both sides, then divide both sides, and watch it stay perfectly balanced until a single $x$ is left alone.
+
+<BalanceScaleSolver client:visible />
+
+<Callout type="tip">
+For $2x + 3 = 11$: first press <strong>− 1 from both sides</strong> three times (removing the $+3$), leaving $2x = 8$. Then
+press <strong>÷ 2</strong> to get $x = 4$. Four weeks of saving.
+</Callout>
+
+## The formal definition
+
+A **linear equation** in one variable has the form
+
+$$
+a\,x + b = c, \qquad a \neq 0,
+$$
+
+and its solution is found by isolating $x$:
+
+$$
+a\,x + b = c \;\Longrightarrow\; a\,x = c - b \;\Longrightarrow\; x = \frac{c - b}{a}.
+$$
+
+For our example, $a = 2,\ b = 3,\ c = 11$ gives
+
+$$
+x = \frac{11 - 3}{2} = \frac{8}{2} = 4.
+$$
+
+An **inequality** replaces $=$ with a comparison, e.g.
+
+$$
+a\,x + b \le c,
+$$
+
+and the same isolation works — but **reverse the sign** when you multiply or divide by a negative:
+
+$$
+-2x \le 6 \;\Longrightarrow\; x \ge -3.
+$$
+
+<Callout type="why">
+Training a model means solving for the values that make an equation (the gradient set to zero) hold. The balance
+principle — do the same thing to both sides — is the bedrock of every algebraic manipulation that derivation relies on.
+</Callout>
+
+## The same idea, four different worlds
+
+Setting two quantities equal and solving for the unknown is one of the most useful moves in all of practical math.
+
+<ExampleCard domain="Personal budgeting" icon="🏦">
+Saving for a trip: $2x + 3 = 11$, where $x$ is weeks. Subtract the \$3 you already have, divide by the \$2 weekly
+deposit, and $x = 4$ weeks. The balance scale *is* your savings jar.
+</ExampleCard>
+
+<ExampleCard domain="Road trips" icon="⛽">
+A tank holds 12 gallons and you burn 0.4 gallons per mile of hills. How many hill-miles $m$ empties it from full?
+$12 - 0.4m = 0$ gives $m = 30$. Solving tells you when to refuel *before* you're stranded.
+</ExampleCard>
+
+<ExampleCard domain="Fitness" icon="🏃">
+You burn 300 calories at the start plus 8 per minute. To hit a 700-calorie workout: $300 + 8t = 700$, so $t = 50$ minutes.
+Change the goal and the same equation re-solves instantly.
+</ExampleCard>
+
+<ExampleCard domain="Cooking" icon="🧁">
+A bakery needs *at least* 48 cupcakes; each tray holds 12. Trays $t$ must satisfy $12t \ge 48$, so $t \ge 4$. The
+inequality gives a whole **range** — 4 trays or more — not a single number.
+</ExampleCard>
+
+<Callout type="note">
+Equations pin down one exact value; inequalities describe a band of acceptable values. Both are solved by the same
+balance moves — just keep the sign honest when negatives appear.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Solve 3x + 1 = 10.',
+      options: ['x = 3', 'x = 4', 'x = 11/3', 'x = 9'],
+      answer: 0,
+      explain: 'Subtract 1 from both sides: 3x = 9. Divide both sides by 3: x = 3.',
+    },
+    {
+      q: 'Solve the inequality −2x ≤ 6.',
+      options: ['x ≤ −3', 'x ≥ −3', 'x ≤ 3', 'x ≥ 3'],
+      answer: 1,
+      explain: 'Divide both sides by −2 and FLIP the sign: x ≥ −3.',
+    },
+    {
+      q: 'Why must you do the same operation to BOTH sides of an equation?',
+      options: [
+        'To make the equation longer',
+        'To keep the two sides equal — the balance — so the statement stays true',
+        'Because the left side is more important',
+        'Only the side with x needs changing',
+      ],
+      answer: 1,
+      explain: 'Equality means both sides are the same value; an operation applied to only one side would break that balance.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>equation</strong> sets two expressions equal; <strong>solving</strong> finds the variable value that makes it true.',
+    'Keep the <strong>balance</strong>: any operation must be applied to <em>both</em> sides.',
+    'Isolate the unknown by undoing operations in reverse — subtract the constant, then divide by the coefficient.',
+    'A linear equation a·x + b = c has the single solution x = (c − b) / a.',
+    '<strong>Inequalities</strong> solve the same way, but the sign <strong>flips</strong> when you multiply or divide by a negative.',
+  ]}
+/>
+
+Next up: **The Coordinate Plane** — instead of a single answer, we'll plot whole relationships as points and pictures.

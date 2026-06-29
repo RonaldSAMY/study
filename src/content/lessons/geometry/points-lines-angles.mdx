@@ -1,0 +1,159 @@
+---
+title: Points, Lines & Angles
+track: geometry
+summary: The atoms of geometry — points, lines, and the angles they make — plus the magic of parallel lines cut by a transversal.
+difficulty: beginner
+estMinutes: 12
+prereqs:
+  - algebra-1/coordinate-plane
+leadsTo:
+  - geometry/pythagoras
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TransversalAngleExplorer from '../../../components/demos/TransversalAngleExplorer.tsx';
+
+## The hook: how a skyscraper stays straight
+
+Look up at a glass tower. Every floor is a horizontal line, and they are all **parallel** — perfectly
+evenly spaced, never tilting toward each other. The steel braces that run diagonally across the
+facade cut through those floors at an angle. Here is the surprising part: an engineer only has to
+measure **one** of the angles where a brace meets a floor, and the geometry of parallel lines instantly
+tells them *every other* angle in the whole pattern. That single trick keeps buildings square, bridges
+true, and floor tiles aligned.
+
+<Callout type="intuition" title="The one-sentence idea">
+A point marks a place, a line joins places, and the **angle** between two lines measures how much you
+turn from one to the other — and when a line crosses two **parallel** lines, the angles it makes repeat
+in a fixed, predictable pattern.
+</Callout>
+
+## Intuition: from places to turns
+
+You already plot **points** as $(x, y)$ pairs on the coordinate plane. Geometry adds two more atoms:
+
+- A **line** is the straight path through points, extending forever in both directions. A piece of one
+  with two endpoints is a **segment**.
+- An **angle** is the amount of rotation between two lines (or segments) that meet at a point called the
+  **vertex**. We measure it in **degrees**, where a full turn is $360°$.
+
+A few names worth knowing, because the whole subject leans on them:
+
+- **Right angle** — exactly $90°$, the corner of a square.
+- **Acute** — less than $90°$ (a sharp corner). **Obtuse** — between $90°$ and $180°$ (a blunt one).
+- **Straight angle** — $180°$, a flat line.
+- Two angles are **complementary** if they add to $90°$, and **supplementary** if they add to $180°$.
+
+The real fireworks start when a single line — a **transversal** — slices across two **parallel** lines.
+Suddenly the angles come in matched families.
+
+## Play with it
+
+Tilt the transversal below and switch between the angle relationships. Watch how the two highlighted
+angles either stay **equal** or always **add up to 180°**, no matter the tilt.
+
+<TransversalAngleExplorer client:visible />
+
+<Callout type="tip">
+Try <strong>corresponding</strong> and <strong>alternate interior</strong>: the two green angles are
+always equal. Switch to <strong>co-interior</strong> and they instead sum to exactly 180°. That single
+rule is what lets you find every angle from just one.
+</Callout>
+
+## The formal definition
+
+When a transversal crosses two parallel lines, eight angles appear. They split into just two sizes —
+one acute value $\alpha$ and its supplement $180° - \alpha$ — related by these rules:
+
+$$
+\text{Corresponding angles:} \quad \alpha_1 = \alpha_2
+$$
+
+$$
+\text{Alternate (interior or exterior) angles:} \quad \alpha_1 = \alpha_2
+$$
+
+$$
+\text{Co-interior (same-side) angles:} \quad \alpha_1 + \alpha_2 = 180°
+$$
+
+And around any single intersection, angles on a straight line are supplementary while **vertically
+opposite** angles (across the X) are equal:
+
+$$
+\angle\,\text{a} + \angle\,\text{b} = 180°, \qquad \angle\,\text{a} = \angle\,\text{(opposite)}.
+$$
+
+<Callout type="why">
+This is your first taste of a recurring machine-learning theme: **one measured quantity propagating
+into many through fixed rules.** It is exactly how a network "knows" countless values from a few — and
+how the coordinate geometry behind vectors keeps directions consistent.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Architecture" icon="🏛️">
+A staircase stringer is a transversal cutting across the parallel lines of each floor. Because
+corresponding angles are equal, the carpenter cuts <em>every</em> step notch at the same angle — measure
+once, repeat with confidence.
+</ExampleCard>
+
+<ExampleCard domain="Art & perspective" icon="🎨">
+In a one-point perspective drawing, the parallel edges of a tiled floor are crossed by your line of
+sight. Renaissance painters used the equal-angle rule to keep tiles shrinking smoothly toward the
+vanishing point so the room looks convincingly deep.
+</ExampleCard>
+
+<ExampleCard domain="Carpentry & DIY" icon="🔨">
+Cutting crown molding for a corner? The two walls act like a transversal meeting parallel ceiling and
+floor lines. Knowing supplementary angles lets you set the miter saw to the matching angle so the joint
+closes with no gap.
+</ExampleCard>
+
+<ExampleCard domain="Sports fields" icon="🏟️">
+The yard lines on a football field are parallel; a diagonal camera cable or a player's running line
+crosses them as a transversal. Broadcasters use the equal corresponding angles to keep on-screen
+graphics aligned with the field as the camera pans.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Two angles are supplementary. One of them is 115°. What is the other?',
+      options: ['65°', '75°', '85°', '245°'],
+      answer: 0,
+      explain: 'Supplementary angles add to 180°, so the other is 180° − 115° = 65°.',
+    },
+    {
+      q: 'A transversal crosses two parallel lines. One angle is 58°. Its corresponding angle is…',
+      options: ['32°', '58°', '122°', 'impossible to know'],
+      answer: 1,
+      explain: 'Corresponding angles are always equal when the lines are parallel — so it is also 58°.',
+    },
+    {
+      q: 'Which pair of angles is supplementary (adds to 180°) rather than equal?',
+      options: ['Corresponding angles', 'Alternate interior angles', 'Vertically opposite angles', 'Co-interior (same-side interior) angles'],
+      answer: 3,
+      explain: 'Co-interior angles sit on the same side between the parallel lines and always sum to 180°.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>point</strong> marks position, a <strong>line</strong> joins them, and an <strong>angle</strong> measures the turn between two lines at a vertex.',
+    'Key sizes: <strong>right</strong> (90°), <strong>acute</strong> (&lt;90°), <strong>obtuse</strong> (90°–180°); pairs are <strong>complementary</strong> (90°) or <strong>supplementary</strong> (180°).',
+    'A <strong>transversal</strong> across parallel lines makes <strong>corresponding</strong> and <strong>alternate</strong> angles equal.',
+    '<strong>Co-interior</strong> (same-side) angles are supplementary — they sum to 180°.',
+    'One measured angle determines all eight — a first example of <strong>rules propagating a value</strong>, the engine behind later math.',
+  ]}
+/>
+
+Next up: when angles meet sides in a **right triangle**, one of the most useful equations in all of
+math appears — the **Pythagorean theorem**.

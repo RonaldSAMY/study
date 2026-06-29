@@ -1,0 +1,180 @@
+---
+title: Regression
+track: statistics
+summary: Fitting a line through data to predict one quantity from another — by minimizing squared error.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - statistics/hypothesis-testing
+  - calculus-1/applications-derivatives
+leadsTo:
+  - optimization/gradient-descent
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import LeastSquaresFitter from '../../../components/demos/LeastSquaresFitter.tsx';
+
+## The hook: how much yield per bag of fertilizer?
+
+A farmer plots ten fields: on the x-axis how much fertilizer each got, on the y-axis the harvest. The dots
+trend upward but they scatter — weather, soil, luck. She wants one clean line through the cloud so she can
+answer "*if I add one more bag, how many extra tonnes can I expect?*" and predict next year's yield.
+
+That line is **regression**. It is the moment statistics stops summarizing and starts **predicting**: turn
+a relationship between two quantities into a formula you can extrapolate.
+
+<Callout type="intuition" title="The one-sentence idea">
+Regression finds the line (or curve) that comes **closest** to all the data at once — closest meaning the
+**sum of squared vertical gaps** is as small as possible.
+</Callout>
+
+## Intuition: the line that disappoints everyone equally
+
+No straight line can pass through a scattered cloud of points. Every line leaves each point a little
+above or below it — that leftover gap is a **residual**. A good fit is the line that keeps the residuals
+*collectively* small.
+
+But small in what sense? We square each residual before adding them up, for two reasons: squaring makes
+every gap positive (so misses above and below don't cancel), and it **punishes big misses far more than
+small ones** — a point twice as far off contributes four times the penalty. So least-squares regression
+chases the line that avoids large errors above all.
+
+Now connect it to the calculus you know. The total squared error is a function of the line's slope and
+intercept. Minimizing it is exactly **finding where the derivative is zero** — the optimization move from
+*Applications of Derivatives*. Set the partial derivatives with respect to slope and intercept to zero and
+solve; out pops a unique best line.
+
+## Play with it
+
+Each blue dot is a field: fertilizer in, yield out. Drag the two emerald handles to tilt and shift the
+line, trying to shrink the red residuals. The readout sums their squares — the **SSE**. Hunt for the
+minimum by hand, then hit **snap to best fit** to jump to the exact least-squares line and see how close
+you got.
+
+<LeastSquaresFitter client:visible />
+
+<Callout type="tip">
+Notice you can lower the error near one end and accidentally raise it at the other. The least-squares line
+balances <em>all</em> the residuals simultaneously — there is exactly one slope-and-intercept pair that
+can't be improved in any direction.
+</Callout>
+
+## The formal definition
+
+We model the relationship as a line with noise,
+
+$$
+y_i = \beta_0 + \beta_1 x_i + \varepsilon_i,
+$$
+
+and choose $\beta_0$ (intercept) and $\beta_1$ (slope) to minimize the **sum of squared residuals**:
+
+$$
+\text{SSE}(\beta_0, \beta_1) = \sum_{i=1}^{n} \big(y_i - \beta_0 - \beta_1 x_i\big)^2.
+$$
+
+Setting both partial derivatives to zero, $\partial \text{SSE}/\partial \beta_0 = 0$ and $\partial
+\text{SSE}/\partial \beta_1 = 0$, and solving gives the closed-form **least-squares estimates**:
+
+$$
+\hat{\beta}_1 = \frac{\sum (x_i - \bar{x})(y_i - \bar{y})}{\sum (x_i - \bar{x})^2}, \qquad \hat{\beta}_0 = \bar{y} - \hat{\beta}_1 \bar{x}.
+$$
+
+The slope is the **covariance of $x$ and $y$ over the variance of $x$** — the relationship you saw in the
+probability track, now doing predictive work. Quality of fit is summarized by $R^2$, the fraction of the
+variance in $y$ the line explains.
+
+<Callout type="why">
+Linear regression is the "hello world" of machine learning — and its loss function, the mean squared
+error, is the template for nearly all of supervised learning. Swap the line for a neural network and the
+squared-error idea is unchanged; only the way we minimize it has to change.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Crop science" icon="🌾">
+Regressing yield on fertilizer gives a slope of, say, 0.7 t/ha per bag — a direct, actionable prediction.
+But extrapolate too far and the model lies: real yield curves bend and eventually fall as over-fertilizing
+poisons the soil. Lines are local truths.
+</ExampleCard>
+
+<ExampleCard domain="Salary data" icon="💼">
+HR fits salary against years of experience to spot pay anomalies. An employee sitting far **below** the
+regression line — a large negative residual — may be underpaid for their experience, flagging a fairness
+review. The residuals, not the line, are the story.
+</ExampleCard>
+
+<ExampleCard domain="Real estate" icon="🏠">
+Zillow-style price models regress sale price on square footage, bedrooms, and location at once — that's
+**multiple regression**, the same least-squares idea with several slopes. The fitted coefficients say how
+many dollars each extra bedroom is worth, holding the rest fixed.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="🏀">
+A team regresses wins on payroll to ask whether spending buys victories. A near-flat slope with a small
+$R^2$ would say money explains little — the scatter around the line is where the real competitive story
+(coaching, chemistry, luck) lives.
+</ExampleCard>
+
+<Callout type="note">
+The recurring caution: regression captures **association, not causation**, and only over the range of data
+you have. A great fit on past data can still mislead if you push it beyond where the line was learned.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What quantity does ordinary least-squares regression minimize?',
+      options: [
+        'The sum of the residuals',
+        'The sum of the squared residuals',
+        'The largest residual only',
+        'The number of points off the line',
+      ],
+      answer: 1,
+      explain: 'Least squares minimizes the sum of squared vertical residuals, which keeps all errors positive and penalizes large misses most heavily.',
+    },
+    {
+      q: 'Why are residuals squared rather than just added with their signs?',
+      options: [
+        'To make the math harder',
+        'So positive and negative gaps do not cancel, and large errors are penalized more',
+        'Because residuals are always positive anyway',
+        'To make the line steeper',
+      ],
+      answer: 1,
+      explain: 'Squaring removes the sign so opposite-side errors do not cancel, and it grows quadratically, so a point twice as far off contributes four times the penalty.',
+    },
+    {
+      q: 'How is finding the best-fit line connected to calculus?',
+      options: [
+        'It uses integration to add up the points',
+        'It sets the partial derivatives of the squared error to zero to find the minimum',
+        'It has nothing to do with calculus',
+        'It requires solving a differential equation',
+      ],
+      answer: 1,
+      explain: 'The squared error is a function of slope and intercept; minimizing it means setting its partial derivatives to zero, exactly the optimization technique from applications of derivatives.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Regression</strong> fits a line (or curve) through scattered data to predict one quantity from another.',
+    'The best fit minimizes the <strong>sum of squared residuals</strong> (SSE), penalizing large misses most.',
+    'The solution comes from <strong>setting the partial derivatives of SSE to zero</strong> — optimization via calculus.',
+    'The least-squares <strong>slope is covariance(x,y) / variance(x)</strong>, with the intercept passing through the means.',
+    'Regression shows <strong>association, not causation</strong>, and is only trustworthy within the range of the data it learned from.',
+  ]}
+/>
+
+Next up: the closed-form solution works for a line, but most models have millions of parameters and no
+tidy formula. **Gradient descent** minimizes the same squared error by rolling downhill — the engine of
+modern machine learning.

@@ -1,0 +1,179 @@
+---
+title: The Fourier Transform
+track: fourier
+summary: A machine that takes any signal and reports how much of every frequency it contains — turning time into frequency and back.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - fourier/fourier-series
+  - complex-numbers/eulers-formula
+leadsTo:
+  - fourier/dft-fft
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SpectrumScope from '../../../components/demos/SpectrumScope.tsx';
+
+## The hook: hearing the chord inside the sound
+
+Play a three-note chord on a piano and a single, complicated pressure wave reaches your ear — yet you
+effortlessly hear *three separate notes*. Your cochlea is running a Fourier transform: it splits that one
+tangled wave into the amount of energy at each frequency. The Fourier transform is the mathematical
+version of that trick, and it is arguably the most used algorithm idea in all of science and engineering.
+Fourier series handled signals that **repeat**; the transform drops that restriction and works on
+*anything* — a spoken word, a heartbeat, a one-off seismic jolt.
+
+<Callout type="intuition" title="The one-sentence idea">
+The Fourier transform takes a signal in **time** and returns, for **every** frequency, a complex number
+saying how much of that frequency is present and with what phase.
+
+</Callout>
+
+## Intuition: from a comb of harmonics to a continuous spectrum
+
+A Fourier *series* gives a signal a **discrete** spectrum — a comb of spikes at the fundamental and its
+harmonics. But that only works because the signal repeats with some period $T$. What if it never repeats?
+
+Here is the key move: imagine stretching the period $T$ longer and longer. The fundamental frequency
+$f_1 = 1/T$ gets smaller, so the harmonic spikes crowd closer and closer together. In the limit
+$T \to \infty$ — a signal that "repeats" only once, i.e. doesn't repeat at all — the comb of spikes
+merges into a **continuous curve**. That curve $X(f)$ is the Fourier transform: instead of a weight for
+each discrete harmonic, you get a weight for *every* frequency on a continuum.
+
+The recipe is the same as for a series coefficient — multiply the signal by a probe wave $e^{-i 2\pi f t}$
+and add it all up — except the sum over a period becomes an **integral over all time**. The probe wave
+acts like a tuning detector: if the signal contains frequency $f$, the product stays "in step" and the
+integral accumulates a big value; if it doesn't, the product wobbles around zero and cancels out.
+
+## Play with it
+
+Mix a few pure tones with the sliders. The top panel shows the resulting **signal in time**; the bottom
+panel shows its **spectrum** — and a peak appears at exactly each frequency you dial up. The two panels
+are the same information in two languages.
+
+<SpectrumScope client:visible />
+
+<Callout type="tip">
+Try the <strong>Chord</strong> preset: a messy-looking wiggle on top resolves into a handful of clean,
+separated peaks below. That is the whole point — structure that's hidden in time is obvious in frequency.
+Then try <strong>Buzzy</strong> and watch a tall stack of harmonics.
+</Callout>
+
+## The formal definition
+
+For a signal $x(t)$, the **Fourier transform** $X(f)$ and its inverse are
+
+$$
+X(f) = \int_{-\infty}^{\infty} x(t)\, e^{-i 2\pi f t}\,dt, \qquad
+x(t) = \int_{-\infty}^{\infty} X(f)\, e^{\,i 2\pi f t}\,df.
+$$
+
+$X(f)$ is **complex**: its magnitude $|X(f)|$ is how much of frequency $f$ is present (the **amplitude
+spectrum**), and its angle $\arg X(f)$ is the **phase** of that component. The two formulas are a perfect
+round trip — the forward transform analyses the signal into frequencies, the inverse synthesises it back,
+losing nothing.
+
+A few properties do enormous amounts of work:
+
+- **Linearity:** the transform of a sum is the sum of the transforms.
+- **Time–frequency duality:** narrow in time ⟺ wide in frequency. A sharp click contains *all*
+  frequencies; a pure endless tone is a single spike. This is the seed of the uncertainty principle.
+- **Shift:** delaying a signal in time multiplies its spectrum by a phase factor $e^{-i 2\pi f t_0}$ but
+  leaves the magnitude untouched — *when* a sound happens lives in the phase.
+
+<Callout type="why">
+The transform is a **change of basis** to the frequency domain, and many problems are trivial there. A
+denoiser zeroes out unwanted frequencies; a convolutional layer can be analysed by its frequency response;
+and the entire field of signal-based features for ML — spectrograms, MFCCs, Fourier neural operators —
+exists because $X(f)$ exposes structure that $x(t)$ hides.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Medical imaging (MRI)" icon="🧲">
+An MRI scanner does not measure your anatomy directly — it measures the **Fourier transform** of it. The
+machine records spatial frequencies in what radiologists call "k-space," and a computer runs an inverse
+transform to turn that frequency data into the image of your knee or brain. The picture you see is
+literally synthesised back from its spectrum.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="🔭">
+Radio telescope arrays like ALMA can't form an image with a single dish. Each pair of antennas measures
+one Fourier component of the sky's brightness; combining thousands of pairs and inverse-transforming
+reconstructs the image. This is how the first photo of a black hole's shadow was assembled.
+</ExampleCard>
+
+<ExampleCard domain="Seismology" icon="🌎">
+After an earthquake, geophysicists transform the ground-motion recording to see which frequencies were
+strongest. Buildings have natural resonant frequencies; if the quake's spectrum overlaps a tower's
+resonance, the danger is far greater. The spectrum, not the raw wiggle, drives building codes.
+</ExampleCard>
+
+<ExampleCard domain="Speech technology" icon="🗣️">
+Your voice assistant doesn't process the raw microphone waveform. It first Fourier-transforms short
+windows of audio to find the energy in each frequency band — the features that distinguish "cat" from
+"hat." Vowels are essentially patterns of peaks (formants) in the spectrum.
+</ExampleCard>
+
+<Callout type="note">
+In every case the raw measurement and the useful information live in *different domains*. MRI and radio
+telescopes even **measure** in the frequency domain and transform back; speech and seismology measure in
+time and transform forward. The Fourier transform is the door between the two.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'As a periodic signal’s period T grows toward infinity, what happens to its spectrum?',
+      options: [
+        'The harmonic spikes spread further apart',
+        'The discrete harmonic spikes crowd together and merge into a continuous spectrum',
+        'It disappears entirely',
+        'It becomes a single spike',
+      ],
+      answer: 1,
+      explain: 'Larger T means smaller spacing 1/T between harmonics, so in the limit they merge into the continuous Fourier transform.',
+    },
+    {
+      q: 'What does the magnitude |X(f)| of the Fourier transform tell you?',
+      options: [
+        'When in time the signal occurred',
+        'How much of frequency f is present in the signal',
+        'The total length of the signal',
+        'Whether the signal is periodic',
+      ],
+      answer: 1,
+      explain: 'The magnitude is the amplitude spectrum — how much of each frequency the signal contains. Timing lives in the phase.',
+    },
+    {
+      q: 'A very short click in time has what kind of spectrum?',
+      options: [
+        'A single sharp peak',
+        'No spectrum at all',
+        'Energy spread across a very wide band of frequencies',
+        'Only low frequencies',
+      ],
+      answer: 2,
+      explain: 'Time–frequency duality: narrow in time means wide in frequency, so a brief click contains a broad spread of frequencies.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>Fourier transform</strong> reports, for every frequency, how much of it a signal contains — and works on non-repeating signals.',
+    'It is the limit of a Fourier series as the period grows to infinity: a discrete comb becomes a <strong>continuous spectrum</strong>.',
+    '<strong>X(f) is complex</strong>: magnitude is the amount of each frequency, phase is its timing.',
+    'The forward and inverse transforms are a <strong>lossless round trip</strong> between time and frequency.',
+    'Narrow in time ⟺ wide in frequency — the duality behind clicks, the uncertainty principle, and ML time-frequency features.',
+  ]}
+/>
+
+Next up: the **DFT and FFT** — how a computer, which only ever sees a finite list of samples, actually
+computes a spectrum, and the trick that made it fast enough to run billions of times a day.

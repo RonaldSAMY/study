@@ -1,0 +1,173 @@
+---
+title: Sets & Set Operations
+track: discrete-math
+summary: Collections of distinct things — and the union, intersection and complement that combine them.
+difficulty: beginner
+estMinutes: 13
+prereqs: []
+leadsTo:
+  - discrete-math/logic
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import VennRegionExplorer from '../../../components/demos/VennRegionExplorer.tsx';
+
+## The hook: every search box is doing set algebra
+
+Type *"action AND comedy"* into a streaming app and it quietly performs an operation on two
+**collections**: the set of action movies and the set of comedies. It hands back exactly the titles
+in **both**. Switch to *"action OR comedy"* and it returns everything in **either**. Filtering,
+recommendations, database queries, permission checks — under the hood they are all combining
+collections of things. The math of those collections is called **set theory**, and it is the bedrock
+of all of discrete mathematics.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **set** is just an unordered collection of distinct things, and almost everything we want to do with
+data is some combination of **union** (or), **intersection** (and), and **complement** (not).
+</Callout>
+
+## Intuition: a bag with no duplicates and no order
+
+A set is the simplest container in mathematics. It only answers one question: *is this thing in or
+out?* Two consequences follow immediately:
+
+1. **No duplicates.** Listing the same element twice changes nothing — $\{a, a, b\}$ is the same set as
+   $\{a, b\}$.
+2. **No order.** $\{1, 2, 3\}$ and $\{3, 1, 2\}$ are the *same* set. (This is the big difference from a
+   list or a vector, where position mattered.)
+
+We write $x \in A$ for *"x is an element of A"* and $x \notin A$ for *"x is not."* The set with nothing
+in it is the **empty set** $\varnothing$. The big background set that everything lives inside — all
+possible movies, all users, all integers — is the **universe** $U$.
+
+## Play with it
+
+The diagram below shows two sets as overlapping circles inside the universe $U$. Click any region to
+toggle it, or press a set-operation button to light up exactly the region that operation describes.
+Watch which movies end up selected.
+
+<VennRegionExplorer client:visible />
+
+<Callout type="tip">
+Press <strong>A ∩ B</strong> and notice only the overlap lights up — the movies tagged *both* action
+and comedy. Now press <strong>A ∪ B</strong>: everything in either circle. Intersection is strict;
+union is generous.
+</Callout>
+
+## The formal definition
+
+Let $A$ and $B$ be sets inside a universe $U$. The core operations are:
+
+**Union** — everything in $A$ *or* $B$ (or both):
+
+$$
+A \cup B = \{\, x : x \in A \ \text{or}\ x \in B \,\}.
+$$
+
+**Intersection** — everything in $A$ *and* $B$:
+
+$$
+A \cap B = \{\, x : x \in A \ \text{and}\ x \in B \,\}.
+$$
+
+**Complement** — everything in the universe *not* in $A$:
+
+$$
+A^{c} = \{\, x \in U : x \notin A \,\}.
+$$
+
+**Difference** — in $A$ but not in $B$: $A \setminus B = A \cap B^{c}$. The number of elements in a
+set is its **cardinality**, written $\lvert A \rvert$, and the counts add up by the
+*inclusion–exclusion* rule:
+
+$$
+\lvert A \cup B \rvert = \lvert A \rvert + \lvert B \rvert - \lvert A \cap B \rvert.
+$$
+
+We subtract the overlap once because adding both circles counts it twice.
+
+<Callout type="why">
+Machine-learning datasets are sets: your **training set** and **test set** must have empty
+intersection, one-hot vocabularies are sets of tokens, and the *Jaccard similarity*
+$\lvert A \cap B \rvert / \lvert A \cup B \rvert$ measures how alike two groups are. Set thinking is
+everywhere once you look.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Database queries" icon="🗄️">
+A customer table query `country = 'US' AND plan = 'pro'` is an **intersection**: the rows in the
+US-customers set *and* the pro-customers set. Swap `AND` for `OR` and you get the **union**. A `NOT IN`
+clause is a **complement**. SQL is essentially set algebra with keywords.
+</ExampleCard>
+
+<ExampleCard domain="Medicine" icon="🩺">
+A doctor diagnosing overlapping conditions thinks in sets. Let $F$ be patients with a fever and $C$
+those with a cough. $F \cap C$ are the ones with both symptoms; $F \setminus C$ have a fever but no
+cough. Narrowing a diagnosis is repeatedly intersecting symptom sets.
+</ExampleCard>
+
+<ExampleCard domain="Social media" icon="📱">
+An advertiser targets *"followers of page A who do NOT already follow page B."* That is the difference
+$A \setminus B$. Reach (how many people an ad touches) is a union; audience overlap is an intersection.
+Ad platforms literally price these set sizes.
+</ExampleCard>
+
+<ExampleCard domain="Library catalog" icon="📚">
+Tag a book collection by topic. Books tagged *history* form one set, *biography* another. The shelf
+"historical biographies" is their intersection, while "everything that is neither" is the complement
+of their union, $(H \cup B)^{c}$ — the part of the catalog those two tags never touch.
+</ExampleCard>
+
+<Callout type="note">
+Notice the pattern: <em>and</em> means intersection, <em>or</em> means union, <em>not</em> means
+complement. Holding that translation in your head turns plain-English questions into precise math —
+which is exactly what the next lesson on logic formalizes.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which set does A ∩ B describe?',
+      options: [
+        'Everything in A or in B',
+        'Only the elements in both A and B',
+        'Everything not in A',
+        'The elements in A but not B',
+      ],
+      answer: 1,
+      explain: 'Intersection keeps only the elements that belong to both sets at once — the overlap.',
+    },
+    {
+      q: 'If A = {1, 2, 3, 4} and B = {3, 4, 5}, what is A ∪ B?',
+      options: ['{3, 4}', '{1, 2}', '{1, 2, 3, 4, 5}', '{5}'],
+      answer: 2,
+      explain: 'Union collects every element appearing in either set, with no duplicates: {1, 2, 3, 4, 5}.',
+    },
+    {
+      q: 'A class has 18 students who play soccer and 12 who play chess; 5 do both. How many play at least one?',
+      options: ['30', '25', '20', '15'],
+      answer: 1,
+      explain: 'Inclusion–exclusion: 18 + 12 − 5 = 25. We subtract the 5 counted in both groups once.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>set</strong> is an unordered collection of distinct elements — duplicates and order do not matter.',
+    '<strong>Union</strong> (∪) is “or”, <strong>intersection</strong> (∩) is “and”, and <strong>complement</strong> (ᶜ) is “not”.',
+    'The <strong>difference</strong> A ∖ B keeps what is in A but not in B, and equals A ∩ Bᶜ.',
+    'Counts combine by <strong>inclusion–exclusion</strong>: |A ∪ B| = |A| + |B| − |A ∩ B|.',
+    'Sets underpin databases, search, and ML data splits — translating “and/or/not” into ∩/∪/ᶜ is a core skill.',
+  ]}
+/>
+
+Next up: **logic and truth tables** — the same *and / or / not* you just met, made into an exact
+algebra of true and false.

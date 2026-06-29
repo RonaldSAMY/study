@@ -1,0 +1,209 @@
+---
+title: Conjugacy & the Exponential Family
+track: probability
+summary: The distributions that make Bayesian updates clean — where new data just nudges a few numbers.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - probability/conditional-bayes
+  - probability/continuous-distributions
+leadsTo:
+  - probability/change-of-variables
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BetaPosteriorUpdater from '../../../components/demos/BetaPosteriorUpdater.tsx';
+
+## The hook: a trial that updates itself overnight
+
+A hospital is testing a new treatment. Before the first patient, the doctors already hold a belief
+about its success rate — maybe *"probably works about half the time, but we're not sure."* Then results
+arrive: 8 recoveries, 4 setbacks. Tomorrow, more results. Each night they must fold the new numbers into
+yesterday's belief to get today's.
+
+You already know the engine for this from **Bayes' rule**: posterior $\propto$ likelihood $\times$ prior.
+The catch is that, in general, computing the posterior means grinding through a nasty integral to
+re-normalize. But for the right *pairing* of prior and likelihood, the integral vanishes and the update
+collapses to **arithmetic on a handful of numbers**. That magic pairing is called **conjugacy**, and the
+family of distributions that makes it happen is the **exponential family**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A prior is **conjugate** to a likelihood when the posterior comes out in the *same form* as the prior —
+so updating on data just means **adjusting the prior's parameters**, never re-deriving the distribution.
+</Callout>
+
+## Intuition: belief with the same shape, before and after
+
+Recall that Bayes' rule rebuilds your belief about a parameter $\theta$ after seeing data $\mathcal{D}$:
+
+$$
+p(\theta \mid \mathcal{D}) = \frac{p(\mathcal{D} \mid \theta)\, p(\theta)}{p(\mathcal{D})}.
+$$
+
+The denominator $p(\mathcal{D})$ is the troublemaker — it's an integral over all $\theta$, and usually it
+has no clean closed form. **Conjugacy sidesteps it.** If the prior $p(\theta)$ is chosen from a family
+that "matches" the likelihood, then multiplying the two and tidying up gives back the *same* family with
+*updated* parameters. The scary normalizer takes care of itself, because we already know how a
+distribution of that family normalizes.
+
+The headline example is estimating a probability $\theta \in [0, 1]$ — a success rate. The data are
+successes and failures (a **Binomial** likelihood). The conjugate prior is the **Beta distribution**,
+which lives precisely on $[0, 1]$ and is shaped by two positive numbers $\alpha$ and $\beta$:
+
+$$
+\text{Beta}(\theta; \alpha, \beta) \propto \theta^{\alpha - 1}(1 - \theta)^{\beta - 1}.
+$$
+
+Read $\alpha$ as *"prior successes plus one"* and $\beta$ as *"prior failures plus one."* The beautiful
+part: after observing $s$ real successes and $f$ real failures, the posterior is simply
+
+$$
+\text{Beta}(\alpha + s,\ \beta + f).
+$$
+
+No integral. You **count, then add**. Each data point slides one unit of "evidence" into $\alpha$ or
+$\beta$, and the curve sharpens around the rate the data suggest.
+
+## Play with it
+
+Set a Beta **prior** with the two sliders — flat if you're clueless, peaked if you have a strong hunch.
+Then add observed **successes** and **failures** and watch the dashed prior give way to the solid
+**posterior**. The green line marks the posterior mean, your best single guess at the true rate.
+
+<BetaPosteriorUpdater client:visible />
+
+<Callout type="tip">
+Start from a flat prior (α₀ = β₀ = 1) and add a few successes — the posterior swings around wildly. Now
+add <strong>dozens</strong> of observations: the curve narrows into a confident spike, and the prior
+barely matters anymore. <em>Data eventually overwhelms the prior</em> — exactly as it should.
+</Callout>
+
+## The formal definition
+
+A distribution belongs to the **exponential family** if its density can be written in the form
+
+$$
+p(x \mid \theta) = h(x)\,\exp\!\big(\,\eta(\theta)^{\top} T(x) - A(\theta)\,\big),
+$$
+
+where $T(x)$ is the **sufficient statistic** (everything the data tell you about $\theta$, distilled),
+$\eta(\theta)$ is the **natural parameter**, $A(\theta)$ is the **log-partition** function that makes it
+all integrate to $1$, and $h(x)$ is a base measure. The Bernoulli, Binomial, Poisson, Gaussian,
+Exponential, Gamma, and Beta distributions are all members.
+
+Why this form matters: for **any** exponential-family likelihood there is a **conjugate prior**, also in
+exponential-family form, and the Bayesian update reduces to *adding the data's sufficient statistics to
+the prior's parameters*. Concretely, with $n$ Bernoulli trials giving $s$ successes, the likelihood is
+$\theta^{s}(1 - \theta)^{n - s}$. Multiply by a $\text{Beta}(\alpha, \beta)$ prior:
+
+$$
+\underbrace{\theta^{s}(1-\theta)^{n-s}}_{\text{likelihood}} \cdot
+\underbrace{\theta^{\alpha-1}(1-\theta)^{\beta-1}}_{\text{prior}}
+= \theta^{(\alpha + s) - 1}(1 - \theta)^{(\beta + f) - 1},
+$$
+
+with $f = n - s$. That is an *unnormalized* $\text{Beta}(\alpha + s, \beta + f)$ — and since we already
+know how a Beta normalizes, we are done. The posterior **mean** is
+
+$$
+\mathbb{E}[\theta \mid \mathcal{D}] = \frac{\alpha + s}{\alpha + \beta + s + f},
+$$
+
+a smooth blend of the prior and the observed frequency $s/(s+f)$.
+
+<Callout type="why">
+This is the backbone of practical Bayesian ML. Conjugate updates run in **closed form and constant time
+per observation**, so they power online learning, Thompson-sampling bandits, Kalman filters (the
+Gaussian–Gaussian conjugate pair), and the variational-inference updates inside topic models. When you
+*can't* be conjugate, you pay for it with MCMC or variational approximation — so conjugacy is the
+gift you reach for first.
+</Callout>
+
+## The same idea, four different worlds
+
+The "count successes and failures, slide them into $\alpha$ and $\beta$" pattern shows up wherever you
+estimate a rate from yes/no outcomes.
+
+<ExampleCard domain="Clinical trials" icon="💊">
+A treatment's recovery rate $\theta$ starts as a cautious $\text{Beta}(2, 2)$ — centered on $0.5$, but
+open-minded. After $8$ recoveries and $4$ setbacks the posterior is $\text{Beta}(10, 6)$, mean
+$10/16 = 0.625$. As the trial enrolls more patients the curve tightens, and the team can quote a
+credible interval for the true rate instead of a single fragile percentage.
+</ExampleCard>
+
+<ExampleCard domain="Email spam filtering" icon="📧">
+What fraction of mail from a new sender is spam? Begin with a weak prior and update one message at a
+time: each flagged message bumps $\alpha$, each legitimate one bumps $\beta$. Because the update is
+$O(1)$, the filter learns **online**, never re-scanning the whole inbox — and a brand-new sender with no
+history sensibly defaults to the prior.
+</ExampleCard>
+
+<ExampleCard domain="Online advertising" icon="🖱️">
+An ad's **click-through rate** is a probability begging for a Beta posterior. With almost no impressions
+the posterior is wide, so the system is *uncertain*. A bandit algorithm samples a plausible rate from
+each ad's posterior and shows whichever sampled highest — exploring uncertain ads while exploiting proven
+ones. That's Thompson sampling, running on conjugacy.
+</ExampleCard>
+
+<ExampleCard domain="Reliability engineering" icon="⚙️">
+A factory line's defect probability is tracked as a Beta posterior updated each shift. Because old
+evidence already lives inside $\alpha$ and $\beta$, the team stores just **two numbers** instead of the
+entire inspection log — and can still report the full distribution of the defect rate at any moment.
+</ExampleCard>
+
+<Callout type="note">
+Different domains, identical machinery: a Beta belief about a rate, nudged by Binomial counts. That
+reuse is exactly what conjugacy buys you — one closed-form update, deployed everywhere.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does it mean for a prior to be CONJUGATE to a likelihood?',
+      options: [
+        'The prior and likelihood are independent',
+        'The posterior belongs to the same family as the prior, with updated parameters',
+        'The prior has no effect on the posterior',
+        'The likelihood integrates to 1',
+      ],
+      answer: 1,
+      explain: 'Conjugacy means the posterior keeps the prior\'s functional form — only its parameters change — so the update is closed-form arithmetic.',
+    },
+    {
+      q: 'You start with a Beta(2, 3) prior on a success rate, then observe 5 successes and 1 failure. What is the posterior?',
+      options: ['Beta(7, 4)', 'Beta(5, 1)', 'Beta(2, 3)', 'Beta(10, 3)'],
+      answer: 0,
+      explain: 'Add successes to α and failures to β: Beta(2 + 5, 3 + 1) = Beta(7, 4).',
+    },
+    {
+      q: 'Why is the exponential family special for Bayesian updating?',
+      options: [
+        'Its members can only be discrete',
+        'Every exponential-family likelihood has a conjugate prior, so updates reduce to adding sufficient statistics',
+        'It removes the need for a prior entirely',
+        'It guarantees the data are normally distributed',
+      ],
+      answer: 1,
+      explain: 'The exp-family form exposes sufficient statistics and natural parameters; the conjugate update just adds the data\'s statistics to the prior\'s parameters.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A prior is <strong>conjugate</strong> to a likelihood when the posterior stays in the same family — turning Bayesian updating into parameter arithmetic, no integral required.',
+    'The <strong>Beta distribution</strong> is conjugate to the <strong>Binomial</strong>: observing s successes and f failures sends Beta(α, β) → <strong>Beta(α + s, β + f)</strong>.',
+    'The posterior mean (α + s)/(α + β + s + f) is a <strong>blend</strong> of prior and data; with enough data, the data dominates and the prior fades.',
+    'The <strong>exponential family</strong> writes a density as h(x)·exp(η·T(x) − A(θ)); every such likelihood has a conjugate prior, and updates just add <strong>sufficient statistics</strong>.',
+    'Conjugacy gives <strong>closed-form, constant-time</strong> updates — the engine behind online learning, Thompson-sampling bandits, and Kalman filters.',
+  ]}
+/>
+
+Next up: **change of variables** — what happens to a probability density when you *reshape* the random
+variable itself, and the Jacobian factor that keeps the total probability equal to one.

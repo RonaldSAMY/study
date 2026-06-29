@@ -1,0 +1,179 @@
+---
+title: The Gradient & Directional Derivatives
+track: calculus-3
+summary: Bundle every partial derivative into one vector — and it points exactly uphill, the single idea that powers machine learning.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - calculus-3/partial-derivatives
+  - linear-algebra/vectors
+leadsTo:
+  - calculus-3/chain-rule-jacobian
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import GradientFieldExplorer from '../../../components/demos/GradientFieldExplorer.tsx';
+
+## The hook: which way is up?
+
+You are standing on a foggy hillside and can only see one step in every direction. You want to reach the
+summit as fast as possible. Which way do you step? Not north, not east — but the one specific direction
+where the ground rises *most steeply*. Remarkably, the partial derivatives from the last lesson, when
+gathered into a single **vector**, point in exactly that direction. That vector is the **gradient**, and
+training a neural network is just walking the *opposite* way — downhill — over and over.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **gradient** $\nabla f$ is the vector of all partial derivatives; it **points in the direction of
+steepest ascent**, and its length tells you **how steep** that climb is.
+</Callout>
+
+## Intuition: from a list of slopes to a single arrow
+
+A partial derivative answers a narrow question — slope along $x$, or slope along $y$. But on a real hillside
+you can step in *any* direction, not just along the axes. The gradient solves this by packing the partials
+into one vector (the **list-of-numbers** view from the vectors lesson, now doing real work):
+
+$$
+\nabla f = \begin{bmatrix} \partial f / \partial x \\[2pt] \partial f / \partial y \end{bmatrix}.
+$$
+
+Two facts make this object special, and they are the heart of the whole track:
+
+1. **It aims uphill.** Among all directions you could step, $\nabla f$ is the one of steepest *increase*.
+   Flip its sign and $-\nabla f$ is steepest *decrease* — the direction you slide a ball, or a loss.
+2. **It is perpendicular to the contour.** Along a contour line the height does not change at all, so the
+   fastest-change direction must cross it at a right angle. Uphill is always square to the level curves.
+
+To measure the slope in *some other* direction $\mathbf{u}$ (a unit vector), you do not need a new
+derivative — you just project the gradient onto it with a **dot product**. That is the **directional
+derivative**:
+
+$$
+D_{\mathbf{u}} f = \nabla f \cdot \mathbf{u}.
+$$
+
+This is why the gradient deserves its fame: one vector secretly contains the slope in *every* direction.
+
+## Play with it
+
+Drag the handle around the terrain. The green arrow is $\nabla f$. Notice two things: it always crosses the
+bright contour at a **right angle**, and it grows **longer where the land is steeper**. The faint blue arrow
+is $-\nabla f$ — the steepest way down, the path of gradient descent.
+
+<GradientFieldExplorer client:visible />
+
+<Callout type="tip">
+Park the handle on a hilltop or in a basin. The arrow shrinks toward nothing: $\nabla f = \mathbf{0}$. Flat
+spots are exactly where the gradient vanishes — and exactly where optimization wants to stop.
+</Callout>
+
+## The formal definition
+
+For $f : \mathbb{R}^n \to \mathbb{R}$, the gradient is the vector of partial derivatives:
+
+$$
+\nabla f = \left[ \frac{\partial f}{\partial x_1}, \frac{\partial f}{\partial x_2}, \ldots, \frac{\partial f}{\partial x_n} \right]^{\!\top}.
+$$
+
+The directional derivative along a **unit vector** $\mathbf{u}$ is
+
+$$
+D_{\mathbf{u}} f = \nabla f \cdot \mathbf{u} = \lVert \nabla f \rVert \, \cos\theta,
+$$
+
+where $\theta$ is the angle between $\nabla f$ and $\mathbf{u}$. This formula proves both special facts at
+once: the value is **largest when $\theta = 0$** (step *with* the gradient → steepest ascent) and **zero
+when $\theta = 90^\circ$** (step along a contour → no change in height).
+
+<Callout type="why">
+This is the bridge to all of machine learning. Training minimizes a loss $L(\mathbf{w})$ by repeatedly
+stepping <em>against</em> its gradient:
+$$ \mathbf{w} \leftarrow \mathbf{w} - \eta \, \nabla L(\mathbf{w}). $$
+That single line — "take a small step $\eta$ in the steepest-downhill direction" — is **gradient descent**,
+the engine inside essentially every model you have heard of. Everything before this lesson was preparation
+for this one vector.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Mountain rescue" icon="⛰️">
+A drone searching a hillside for the fastest route to a stranded hiker reads the terrain gradient at its
+position and flies along $-\nabla f$ to descend most quickly into the valley — or $+\nabla f$ to gain a
+vantage point. Steepest direction, computed on the fly.
+</ExampleCard>
+
+<ExampleCard domain="Heat diffusion" icon="🔥">
+Heat flows **down** the temperature gradient: from hot to cold, in the direction $-\nabla T$. The steeper
+the temperature change, the faster the flow. Fourier's law of conduction is literally a statement about a
+gradient vector — physics obeying the same geometry.
+</ExampleCard>
+
+<ExampleCard domain="Photography" icon="📷">
+Edge-detection filters compute the **image gradient**: where brightness changes fastest. The gradient's
+magnitude lights up edges, and its direction points across them — perpendicular to the line of the edge,
+exactly like the arrow crossing a contour.
+</ExampleCard>
+
+<ExampleCard domain="Wildfire modeling" icon="🛰️">
+Fire climbs fastest straight up the steepest slope. Models estimate the terrain gradient at the fire's edge
+to predict the direction of most rapid spread, guiding where crews cut firebreaks — steepest ascent with
+real stakes.
+</ExampleCard>
+
+<Callout type="note">
+The gradient lives in the **input space**, not on the surface. For a hill $f(x,y)$, $\nabla f$ is a 2D arrow
+drawn on the flat map — it tells you which way to step on the ground, not a direction in 3D space. Keep that
+straight and the perpendicular-to-contours fact feels obvious.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In which direction does the gradient ∇f point?',
+      options: [
+        'The direction of steepest descent',
+        'Along the contour line',
+        'The direction of steepest ascent',
+        'Always toward the origin',
+      ],
+      answer: 2,
+      explain: 'The gradient points toward steepest increase. Its negative, −∇f, points toward steepest decrease — the direction gradient descent follows.',
+    },
+    {
+      q: 'For f(x, y) = x² + y², what is the gradient at the point (1, 2)?',
+      options: ['[2, 4]', '[1, 2]', '[2, 2]', '[0, 0]'],
+      answer: 0,
+      explain: '∂f/∂x = 2x and ∂f/∂y = 2y. At (1, 2) that is [2(1), 2(2)] = [2, 4].',
+    },
+    {
+      q: 'Why is the gradient always perpendicular to a contour line?',
+      options: [
+        'Because contours are always straight',
+        'Because along a contour the function does not change, so the direction of fastest change must be at right angles to it',
+        'Because the gradient is always zero',
+        'It is actually parallel to the contour',
+      ],
+      answer: 1,
+      explain: 'Moving along a contour keeps f constant (directional derivative zero), so the direction of maximum change — the gradient — must be orthogonal to the contour.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>gradient</strong> ∇f stacks all partial derivatives into one vector pointing toward steepest ascent.',
+    'Its <strong>length</strong> ‖∇f‖ is the steepness; the gradient is <strong>zero</strong> at peaks, valleys, and saddles.',
+    'The gradient is always <strong>perpendicular to the contour lines</strong> (level sets).',
+    'The <strong>directional derivative</strong> Dᵤf = ∇f · u recovers the slope in any direction with a dot product.',
+    'Stepping along <strong>−∇L</strong> is <strong>gradient descent</strong> — the core training loop of machine learning.',
+  ]}
+/>
+
+Next up: the **multivariable chain rule** and the **Jacobian** — how gradients pass cleanly through one
+function after another, the rule that makes backprop possible.

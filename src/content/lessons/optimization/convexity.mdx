@@ -1,0 +1,181 @@
+---
+title: Convexity
+track: optimization
+summary: When every downhill path leads to the same bottom — the property that makes optimization easy, and whose absence makes deep learning hard.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - optimization/gradient-descent
+leadsTo:
+  - optimization/constrained-optimization
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ConvexityLandscapeExplorer from '../../../components/demos/ConvexityLandscapeExplorer.tsx';
+
+## The hook: one valley, or a mountain range?
+
+In the last lesson you rolled a ball downhill and it found the bottom. But *which* bottom? If the
+landscape is a single smooth bowl, there is only one place to land and you are guaranteed to reach it.
+If instead the landscape is a rugged mountain range with many dips, the ball stops in whatever pit
+happens to be nearest the start — which may be far worse than the deepest valley elsewhere.
+
+This distinction has a name. A bowl-shaped landscape is **convex**, and convex problems are the ones we
+can solve with total confidence. The difference between "easy" and "hard" optimization is, to a first
+approximation, the difference between convex and non-convex.
+
+<Callout type="intuition" title="The one-sentence idea">
+A function is **convex** if it curves up like a bowl everywhere — and on a convex function, any local
+minimum you find is automatically the **global** minimum.
+</Callout>
+
+## Intuition: the stretched-rubber-band test
+
+Here is the picture that captures convexity. Pick any two points on the graph and stretch a straight
+string between them. If the string never dips below the curve — the curve always sits **on or under**
+the chord — the function is convex.
+
+A convex function has exactly one "down" to find. There are no false valleys, no traps. Gradient
+descent, started anywhere, slides into the same global minimum. That is why you saw in the last lesson
+that the ball "just works" on a bowl: the bowl was convex.
+
+A **non-convex** function breaks this. It has bumps, so a chord can cut below the curve, and it can
+have several local minima of different depths. Gradient descent is short-sighted — it only feels the
+slope right under the ball — so it settles into the nearest dip and stops, even if a deeper one exists
+a hill away.
+
+## Play with it
+
+Toggle between the **convex bowl** and the **non-convex (bumpy)** landscape. Drag anywhere to set the
+starting point, then roll the ball downhill. On the bowl, every start reaches the orange global
+minimum. On the bumpy curve, try several starts — some lead to the global best, others get **stuck**.
+
+<ConvexityLandscapeExplorer client:visible />
+
+<Callout type="tip">
+On the bumpy landscape, place the start just to the left of a bump and then just to the right. The two
+runs end in different valleys despite starting close together — that sensitivity to initialization is
+exactly why training deep networks involves random restarts and careful initial values.
+</Callout>
+
+## The formal definition
+
+A function $f$ is **convex** on an interval if, for any two points $x_1, x_2$ and any blend
+$\lambda \in [0, 1]$,
+
+$$
+f\big(\lambda x_1 + (1-\lambda) x_2\big) \;\le\; \lambda f(x_1) + (1-\lambda) f(x_2).
+$$
+
+The left side is the curve; the right side is the straight chord. "Curve $\le$ chord" is the
+rubber-band test written in symbols.
+
+For a twice-differentiable function there is a quick check: $f$ is convex exactly when its second
+derivative is non-negative everywhere,
+
+$$
+f''(x) \ge 0 \quad \text{for all } x,
+$$
+
+i.e. the curve never stops bending upward. In many dimensions the analogue is that the **Hessian**
+matrix is positive semidefinite. The payoff is a theorem:
+
+$$
+\textbf{On a convex function, every local minimum is a global minimum.}
+$$
+
+<Callout type="why">
+This is the dividing line in machine learning. **Linear and logistic regression** have convex loss
+surfaces, so training reliably finds the one best fit. **Neural networks** are wildly non-convex —
+their loss has countless local minima — which is why training is part science, part craft, and why
+the same network trained twice can land in different solutions.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Portfolio investing" icon="📈">
+Minimizing the risk (variance) of a portfolio for a target return is a <em>convex</em> problem — the
+risk surface is a clean bowl. That convexity is why a fund manager can trust the optimizer to return
+the single best allocation, with no worry about a hidden better answer lurking elsewhere.
+</ExampleCard>
+
+<ExampleCard domain="Drug discovery" icon="🧬">
+Searching for a molecule that binds a target traverses a brutally <em>non-convex</em> energy landscape
+with vast numbers of local minima. A simple downhill search locks onto the nearest stable shape, so
+chemists use many random starts and global-search tricks to escape mediocre valleys.
+</ExampleCard>
+
+<ExampleCard domain="Telecom networks" icon="📡">
+Placing cell towers to maximize coverage at minimum cost is non-convex: many layouts are "locally
+good" but not best overall. Engineers run the optimizer from many seeds and keep the deepest valley
+they find, accepting that a true global guarantee is out of reach.
+</ExampleCard>
+
+<ExampleCard domain="3D printing" icon="🖨️">
+Choosing print settings to minimize material use while meeting a strength requirement can be cast as a
+convex trade-off when the relationships are smooth and bowl-shaped — letting the slicer software
+confidently return one optimal configuration instead of guessing among many.
+</ExampleCard>
+
+<Callout type="note">
+A useful instinct: when a problem is convex, <em>trust the optimizer</em>. When it is non-convex,
+<em>distrust a single run</em> — try multiple starts, and treat "it converged" as "it found <em>a</em>
+minimum," not necessarily <em>the</em> minimum.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the defining visual property of a convex function?',
+      options: [
+        'It always increases',
+        'A straight chord between any two points lies on or above the curve',
+        'It has many local minima',
+        'Its derivative is always zero',
+      ],
+      answer: 1,
+      explain: 'Convex = "curve below the chord" everywhere — the rubber-band test. It bends upward like a bowl.',
+    },
+    {
+      q: 'Why is convexity such good news for gradient descent?',
+      options: [
+        'It makes the learning rate irrelevant',
+        'Any local minimum it finds is guaranteed to be the global minimum',
+        'It removes the need for a gradient',
+        'It guarantees the function has no minimum',
+      ],
+      answer: 1,
+      explain: 'On a convex function there is only one basin, so a local min is the global min — no traps.',
+    },
+    {
+      q: 'Using the second-derivative test, which function is convex everywhere?',
+      options: [
+        'f(x) = x³',
+        'f(x) = x² (since f″ = 2 ≥ 0)',
+        'f(x) = sin(x)',
+        'f(x) = −x²',
+      ],
+      answer: 1,
+      explain: 'f(x)=x² has f″(x)=2 ≥ 0 for all x, so it is convex. The others have regions where f″ < 0.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A function is <strong>convex</strong> when it bowls upward everywhere — the curve stays on or below every chord.',
+    'On a convex function, <strong>every local minimum is the global minimum</strong>, so gradient descent is foolproof.',
+    'The quick test is <strong>f″(x) ≥ 0</strong> (in many dimensions, a positive semidefinite Hessian).',
+    '<strong>Non-convex</strong> landscapes have multiple valleys; gradient descent can get <strong>stuck</strong> in a local one.',
+    'Linear/logistic regression are convex (trust one run); <strong>neural networks are non-convex</strong> (use multiple starts).',
+  ]}
+/>
+
+Next up: **constrained optimization** — finding the best answer when you are not free to roam the whole
+landscape, but must stay on a curve or obey a budget.

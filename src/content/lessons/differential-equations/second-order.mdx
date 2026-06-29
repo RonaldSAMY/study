@@ -1,0 +1,170 @@
+---
+title: Second-Order Linear ODEs
+track: differential-equations
+summary: Add a second derivative and you get oscillation — springs, vibration, and the three faces of damping decided by one discriminant.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - differential-equations/first-order
+leadsTo:
+  - differential-equations/applications-de
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DampedSpringLab from '../../../components/demos/DampedSpringLab.tsx';
+
+## The hook: why your car doesn't bounce down the street
+
+Hit a pothole and your car dips — then settles, smoothly, in about one motion. Remove the shock absorbers
+and the same bump sets the body bouncing for a block. The difference is a single number in a **second-order
+differential equation**. First-order equations gave us growth and decay that only ever head one way. Add a
+*second* derivative — acceleration — and something new appears: the system can **overshoot**, swing back,
+and oscillate.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **second-order linear ODE** $m y'' + c y' + k y = 0$ balances **inertia** (the $y''$ term), **damping**
+(the $y'$ term), and a **restoring force** (the $y$ term) — and their tug-of-war produces wobbling,
+smooth settling, or sluggish creeping.
+</Callout>
+
+## Intuition: three forces in one equation
+
+Picture a mass on a spring. Three things act on it:
+
+1. **Inertia** $m y''$ — the mass resists changes in motion (Newton's $F = ma$).
+2. **Restoring force** $k y$ — the spring always pulls back toward rest, harder the farther you stretch it.
+3. **Damping** $c y'$ — friction or a shock absorber, fighting whichever way it currently moves.
+
+Set the total force to zero and you get the equation $m y'' + c y' + k y = 0$. With **no** damping
+($c = 0$) the mass oscillates forever — pure sine waves. Add damping and the oscillation loses energy.
+*How much* damping changes the character completely, and one quantity decides which of three regimes you
+land in: the **discriminant** $c^2 - 4mk$.
+
+- $c^2 - 4mk < 0$ → **underdamped**: it overshoots and rings down with shrinking wobbles.
+- $c^2 - 4mk = 0$ → **critically damped**: the fastest return home with *no* overshoot.
+- $c^2 - 4mk > 0$ → **overdamped**: it oozes back slowly, never crossing the line.
+
+## Play with it
+
+Drag the **stiffness $k$** and **damping $c$** sliders. The left panel animates the actual mass on its
+spring; the right plots its displacement over time. Watch the label flip between under-, critically-, and
+overdamped as you cross the boundary $c^2 = 4mk$.
+
+<DampedSpringLab client:visible />
+
+<Callout type="tip">
+Set $c = 0$ for a perfect, never-ending sine wave. Then nudge $c$ up a hair: the wave starts shrinking.
+Keep going until the wobbles vanish entirely — you just found critical damping, what every car suspension
+is tuned near.
+</Callout>
+
+## The formal definition
+
+A homogeneous second-order linear ODE with constant coefficients is
+
+$$
+m\,y'' + c\,y' + k\,y = 0.
+$$
+
+Guess $y = e^{rt}$. Substituting gives the **characteristic equation**
+
+$$
+m r^2 + c r + k = 0 \quad\Longrightarrow\quad r = \frac{-c \pm \sqrt{c^2 - 4mk}}{2m}.
+$$
+
+The roots dictate the solution shape:
+
+$$
+\begin{aligned}
+\text{distinct real } r_1, r_2: &\quad y = A e^{r_1 t} + B e^{r_2 t} && (\text{overdamped})\\
+\text{repeated } r: &\quad y = (A + Bt)\,e^{rt} && (\text{critically damped})\\
+\text{complex } \alpha \pm i\omega: &\quad y = e^{\alpha t}\big(A\cos\omega t + B\sin\omega t\big) && (\text{underdamped})
+\end{aligned}
+$$
+
+The two constants $A, B$ are fixed by **two** initial conditions — position $y(0)$ and velocity $y'(0)$
+— because a second-order equation needs two facts to pin down one curve.
+
+<Callout type="why">
+Optimizer dynamics live here. Plain gradient descent is overdamped — it crawls. Adding **momentum** turns
+it into an underdamped system that can overshoot and oscillate, often reaching the minimum far faster. Tuning
+momentum is, mathematically, tuning the damping of a second-order ODE.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Automotive" icon="🚗">
+A car's body, springs, and shock absorbers are exactly $m y'' + c y' + k y = 0$. Engineers tune the dampers
+to be slightly underdamped — one gentle settle after a bump — never overdamped (mushy) or undamped (a pogo
+stick on the freeway).
+</ExampleCard>
+
+<ExampleCard domain="Music" icon="🎸">
+A plucked guitar string is a lightly damped oscillator. The restoring force is string tension, the tiny
+damping is air and internal friction. That's why the note rings as a fading sine wave — underdamped, with
+the pitch set by $\omega = \sqrt{k/m}$ and the sustain by $c$.
+</ExampleCard>
+
+<ExampleCard domain="Structural engineering" icon="🏢">
+Skyscrapers sway in wind and quakes as huge second-order systems. To avoid dangerous resonance, engineers
+add **tuned mass dampers** — giant pendulums that raise $c$ — pushing the building toward critical damping
+so motion dies quickly instead of building up.
+</ExampleCard>
+
+<ExampleCard domain="Timekeeping" icon="⏰">
+A pendulum clock is a near-undamped oscillator with period $T = 2\pi\sqrt{L/g}$. The escapement feeds in
+just enough energy each swing to cancel the small damping, keeping the amplitude — and therefore the
+timekeeping — steady for days.
+</ExampleCard>
+
+<Callout type="note">
+Springs, strings, towers, and clocks obey one equation. Whether something rings, settles, or crawls is not
+about *what* it is made of — it is about where $c^2 - 4mk$ sits relative to zero.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does a second-order ODE need two initial conditions?',
+      options: [
+        'Because it has two variables',
+        'Its general solution has two arbitrary constants, one per order of derivative',
+        'Because damping is always present',
+        'It only needs one',
+      ],
+      answer: 1,
+      explain: 'Each order of differentiation adds one arbitrary constant. Two constants (set by position and velocity) require two conditions.',
+    },
+    {
+      q: 'For m y″ + c y′ + k y = 0 with m=1, k=4, which c gives critical damping?',
+      options: ['c = 0', 'c = 2', 'c = 4', 'c = 8'],
+      answer: 2,
+      explain: 'Critical damping is c² − 4mk = 0, so c² = 16, giving c = 4.',
+    },
+    {
+      q: 'A system overshoots its rest point and rings down with shrinking wobbles. It is:',
+      options: ['Overdamped', 'Critically damped', 'Underdamped', 'Undamped'],
+      answer: 2,
+      explain: 'Overshoot plus decaying oscillation is the signature of underdamping (complex roots, c² − 4mk < 0).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>second-order linear ODE</strong> m y″ + c y′ + k y = 0 balances inertia, damping, and a restoring force.',
+    'Guessing y = e^{rt} yields the <strong>characteristic equation</strong> m r² + c r + k = 0; its roots set the solution shape.',
+    'The <strong>discriminant c² − 4mk</strong> splits behavior into underdamped, critically damped, and overdamped.',
+    '<strong>Critical damping</strong> returns to rest fastest with no overshoot — the goal for suspensions and controllers.',
+    'Two initial conditions (position and velocity) are needed to pin down one solution; the same math powers momentum optimizers.',
+  ]}
+/>
+
+Next up: **applications** — turn these solving skills loose on epidemics, predator-prey cycles, falling
+bodies, and drug doses, and watch their ODEs evolve in real time.

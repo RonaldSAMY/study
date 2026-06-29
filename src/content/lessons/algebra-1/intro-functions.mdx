@@ -1,0 +1,161 @@
+---
+title: Intro to Functions
+track: algebra-1
+summary: Machines that take an input and return exactly one output — and the notation that names them.
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - algebra-1/coordinate-plane
+leadsTo:
+  - algebra-1/slope-linear
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import FunctionMachineGraph from '../../../components/demos/FunctionMachineGraph.tsx';
+
+## The hook: the vending machine never improvises
+
+You press B4 on a vending machine and a granola bar drops. Press B4 again tomorrow — granola bar, every time. It never
+gives you chips for B4 on a whim. Each button (the **input**) is wired to exactly one product (the **output**). That
+dependable input-to-output rule is precisely what mathematicians call a **function** — and once you see it as a machine,
+graphs, formulas, and tables all click into one idea.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **function** is a rule that takes each input and returns **exactly one** output — a reliable machine, written
+$f(x)$, that turns an $x$ into a single $y$.
+</Callout>
+
+## Intuition: from coordinates to a rule that makes them
+
+In the last lesson you plotted points someone handed you. A function is the *machine that generates* those points: feed it
+an input $x$, it returns an output $y = f(x)$, and the pair $(x, y)$ lands on the plane. Sweep through all the inputs and
+the outputs trace a **graph**.
+
+The non-negotiable rule: **one input, one output.** Press B4, get one specific item. If the same input could give two
+different outputs, it isn't a function — that's what the "vertical line test" checks on a graph (no vertical line may hit
+the curve twice).
+
+The notation $f(x)$ reads "f of x" and names the machine $f$ acting on the input $x$. So $f(x) = 2x + 1$ means "double the
+input and add one," and $f(3) = 2(3) + 1 = 7$ is the output for the input $3$.
+
+## Play with it
+
+Pick a rule $f(x)$, slide the input $x$, and the machine shows the output. Press **drop x into the machine** to record the
+$(x, f(x))$ point on the graph — keep dropping different inputs and the points trace out the function's shape.
+
+<FunctionMachineGraph client:visible />
+
+<Callout type="tip">
+Choose $f(x) = x^2$ and drop in both $x = 2$ and $x = -2$. Different inputs, same output ($4$) — that's allowed. A function
+forbids one input giving two outputs, not two inputs sharing one.
+</Callout>
+
+## The formal definition
+
+A **function** $f$ from a set of inputs (the **domain**) to a set of outputs (the **codomain**) assigns to each input
+$x$ exactly one output $f(x)$:
+
+$$
+f : x \longmapsto f(x).
+$$
+
+The defining property, stated precisely:
+
+$$
+x_1 = x_2 \;\Longrightarrow\; f(x_1) = f(x_2).
+$$
+
+The **graph** of $f$ is the set of all input-output pairs plotted on the plane:
+
+$$
+\{\,(x,\, f(x)) \mid x \in \text{domain}\,\}.
+$$
+
+For the linear rule $f(x) = 2x + 1$, evaluating at a few inputs gives $f(0) = 1$, $f(1) = 3$, $f(2) = 5$ — points that lie
+on a straight line.
+
+<Callout type="why">
+A trained machine-learning model *is* a function: features go in, a prediction comes out. "Learning" means adjusting the
+rule inside the box so its outputs match reality. Everything in ML is the search for a good $f$.
+</Callout>
+
+## The same idea, four different worlds
+
+A function is any dependable input → output rule, and those are everywhere.
+
+<ExampleCard domain="Vending machines" icon="🥤">
+The button you press is the input; the snack that drops is the output. One button, one product, every time — a perfect
+finite function from buttons to items.
+</ExampleCard>
+
+<ExampleCard domain="Coffee shop pricing" icon="☕">
+Cup size in ounces is the input; price is the output: $f(\text{oz}) = 0.2\cdot\text{oz} + 1$. Ask for the same size and you
+pay the same price — the menu is a function.
+</ExampleCard>
+
+<ExampleCard domain="Currency exchange" icon="💱">
+Dollars in, euros out: $f(d) = 0.9\,d$. Every dollar amount maps to exactly one euro amount at today's rate. Feed it 100
+and you always get the same 90.
+</ExampleCard>
+
+<ExampleCard domain="Phone data plans" icon="📶">
+Gigabytes used is the input; the monthly bill is the output: $f(g) = 20 + 5g$ from earlier. Same usage, same charge — a
+function quietly running your invoice.
+</ExampleCard>
+
+<Callout type="note">
+Each example is a reliable rule: identical input, identical output. That predictability is the whole point — and the
+reason we can graph, compose, and reason about functions.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'If f(x) = 3x − 2, what is f(4)?',
+      options: ['10', '12', '5', '14'],
+      answer: 0,
+      explain: 'Substitute x = 4: 3(4) − 2 = 12 − 2 = 10.',
+    },
+    {
+      q: 'Which situation is NOT a function?',
+      options: [
+        'Each vending button drops one specific snack',
+        'A button that sometimes drops chips and sometimes a candy bar for the same press',
+        'f(x) = x² mapping each x to its square',
+        'A menu where each cup size has one price',
+      ],
+      answer: 1,
+      explain: 'A function must give exactly one output per input. The same button giving different snacks violates that rule.',
+    },
+    {
+      q: 'For f(x) = x², why is it fine that f(2) and f(−2) are both 4?',
+      options: [
+        'It is not fine — that breaks the function rule',
+        'Because the rule forbids one input giving two outputs, not two inputs sharing one output',
+        'Because 2 and −2 are the same number',
+        'Because squaring is not a function',
+      ],
+      answer: 1,
+      explain: 'Functions forbid a single input mapping to two outputs. Two different inputs landing on the same output is perfectly allowed.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>function</strong> is a rule giving each input <strong>exactly one</strong> output — a reliable machine.',
+    'The notation <strong>f(x)</strong> ("f of x") names the machine f acting on input x; evaluate by substituting.',
+    'The <strong>graph</strong> is all the (x, f(x)) pairs plotted on the coordinate plane.',
+    'Two different inputs may share an output, but one input may never give two outputs (the vertical-line test).',
+    'Every trained ML model is a function: features in, prediction out — learning tunes the rule inside.',
+  ]}
+/>
+
+Next up: **Slope & Linear Functions** — the simplest, most important functions of all, where the graph is a straight line
+and the rule is $y = mx + b$.

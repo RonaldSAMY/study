@@ -1,0 +1,183 @@
+---
+title: Random Variables
+track: probability
+summary: Turning unpredictable outcomes into numbers we can add, average and reason about.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - probability/sample-spaces
+leadsTo:
+  - probability/discrete-distributions
+  - probability/expectation-variance
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DistributionSimulator from '../../../components/demos/DistributionSimulator.tsx';
+
+## The hook: how does a weather app turn a guess into a number?
+
+When your phone says *"70% chance of rain,"* something subtle has happened. The weather is
+**uncertain** — it might rain, it might not — yet the app hands you a crisp **number** you can act on:
+grab an umbrella or don't. Behind that number is a machine that takes every possible tomorrow and
+attaches a quantity to it. That move — turning *"what might happen"* into *"a number we can compute
+with"* — is the whole job of a **random variable**, and it is the foundation of every probability
+model in machine learning.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **random variable** is a rule that assigns a **number** to each random outcome. Once outcomes are
+numbers, we can add them, average them, and reason about them with ordinary math.
+</Callout>
+
+## Intuition: from outcomes to numbers
+
+Raw outcomes are often not numbers. A coin lands **heads** or **tails**; a die shows a **face**; an
+email is **spam** or **not**. A random variable is the translator that pins a number onto each of
+these:
+
+- *Coin:* let $X = 1$ for heads, $X = 0$ for tails.
+- *Die:* let $X$ be the face value, $1$ through $6$.
+- *Two dice:* let $X$ be the **sum**, $2$ through $12$.
+
+Once outcomes are numbers, a new question becomes natural: *how is the probability spread across those
+numbers?* That spread is the variable's **distribution**. Some values are common, some rare — the sum
+$7$ comes up far more often than $12$, because more face-pairs add to $7$.
+
+Random variables come in two flavors. A **discrete** one takes separate, countable values (a die's
+$1\text{–}6$, a count of clicks). A **continuous** one can take any value in a range (a person's exact
+height, a wait time). This lesson lives mostly in the discrete world, where the picture is easiest to
+draw — but the same logic carries over.
+
+## Play with it
+
+Pick an experiment, then roll. Each roll is one observation of the random variable $X$; the **sky
+bars** track how often each value has actually come up, and the **emerald markers** show the *true*
+probabilities. Watch the bars climb toward the markers as the sample grows.
+
+<DistributionSimulator client:visible />
+
+<Callout type="tip">
+Roll just a few times and the bars look ragged and unfair. Hit <strong>Run 1000×</strong> and they
+snap onto the emerald distribution, while the empirical mean drifts toward <strong>E[X]</strong>. That
+settling-down is the <em>law of large numbers</em>, intuitively: more data, truer picture.
+</Callout>
+
+## The formal definition
+
+A random variable is a function from the **sample space** $\Omega$ (the set of all outcomes) to the
+real numbers:
+
+$$
+X : \Omega \to \mathbb{R}.
+$$
+
+For a **discrete** variable, its distribution is captured by the **probability mass function** (pmf),
+which gives the probability of each value:
+
+$$
+p(x) = P(X = x), \qquad p(x) \ge 0, \qquad \sum_x p(x) = 1.
+$$
+
+That last condition is non-negotiable: *something* must happen, so the probabilities of all values add
+to exactly $1$. The variable's **expected value** — its long-run average, the balance point of the
+distribution — is the probability-weighted sum of its values:
+
+$$
+\mathbb{E}[X] = \sum_x x \, p(x).
+$$
+
+For a fair die, $\mathbb{E}[X] = \tfrac{1}{6}(1+2+3+4+5+6) = 3.5$ — exactly the number the simulator's
+empirical mean creeps toward. For a **continuous** variable there is no pmf; instead a *density*
+$f(x)$ describes the spread, and sums become integrals: $\mathbb{E}[X] = \int x\, f(x)\, dx$.
+
+<Callout type="why">
+Machine-learning models *speak* in random variables. A classifier doesn't output "cat" — it outputs a
+**probability distribution** over labels. Training nudges that distribution toward the truth by
+minimizing the **negative log-likelihood** (cross-entropy) of the observed labels. Your data,
+your predictions, and the loss itself are all expectations over random variables.
+</Callout>
+
+## The same idea, four different worlds
+
+The same object — a number attached to an uncertain outcome — shows up everywhere, discrete and
+continuous alike.
+
+<ExampleCard domain="Tabletop games" icon="🎲">
+In a board game your move depends on the **sum of two dice**, $X \in \{2, \dots, 12\}$. It is *not*
+uniform: $P(X = 7) = \tfrac{6}{36}$ while $P(X = 12) = \tfrac{1}{36}$, because six face-pairs total
+$7$ but only one totals $12$. The expected roll is $\mathbb{E}[X] = 7$ — which is why $7$ sits at the
+center of the board's odds.
+</ExampleCard>
+
+<ExampleCard domain="Web analytics" icon="📈">
+Of $1{,}000$ visitors, let $X$ be **how many click the signup button**. $X$ is a discrete count,
+$0$ to $1000$. If each visitor clicks independently with probability $p$, then
+$\mathbb{E}[X] = 1000\,p$. Reporting the *distribution* of $X$, not just one day's number, is how teams
+tell a real lift from random noise.
+</ExampleCard>
+
+<ExampleCard domain="Human biology" icon="🧍">
+Adult **height** is a **continuous** random variable: between $170$ and $171$ cm lie infinitely many
+possible values, so no single height has nonzero probability. Instead a bell-shaped *density* spreads
+the probability, peaking near the mean. We ask $P(165 < X < 175)$ — the area under the curve — rather
+than $P(X = 170)$.
+</ExampleCard>
+
+<ExampleCard domain="Spam filtering" icon="📧">
+Let $X$ be the **count of a trigger word** (say *"free"*) in an email. This count random variable is a
+feature fed straight into a classifier: emails with larger $X$ tend to be spam. The filter learns
+$P(\text{spam} \mid X)$ and turns a raw word-tally into a probability of junk.
+</ExampleCard>
+
+<Callout type="note">
+Three of these are discrete (you can list the values) and one — height — is continuous (you can't).
+The bridge is the same: a number attached to an uncertain outcome, with probability spread over its
+possible values.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which of these is best modeled as a CONTINUOUS random variable?',
+      options: [
+        'The number shown on a rolled die',
+        'The exact time (in seconds) you wait for a bus',
+        'The number of heads in 10 coin flips',
+        'The count of emails in your inbox',
+      ],
+      answer: 1,
+      explain: 'A wait time can take any value in a range (12.473… seconds), so it is continuous. The others are countable, separate values — discrete.',
+    },
+    {
+      q: 'For a fair six-sided die, what is the expected value E[X] = Σ x·p(x)?',
+      options: ['3', '3.5', '6', '21'],
+      answer: 1,
+      explain: 'Each face has probability 1/6, so E[X] = (1+2+3+4+5+6)/6 = 21/6 = 3.5. Note E[X] need not be a value the die can actually show.',
+    },
+    {
+      q: 'A pmf lists p(x) for every value of a discrete random variable. What must the values of p(x) add up to?',
+      options: ['Exactly 1', 'The number of outcomes', '100', 'It depends on E[X]'],
+      answer: 0,
+      explain: 'Because some outcome is certain to occur, the probabilities of all possible values sum to exactly 1: Σ p(x) = 1.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>random variable</strong> is a rule that assigns a number to each random outcome — turning heads/tails or die faces into numbers we can compute with.',
+    'Its <strong>distribution</strong> describes how probability is spread over the values; for discrete variables this is the <strong>pmf</strong> p(x) = P(X = x), with Σ p(x) = 1.',
+    'The <strong>expected value</strong> E[X] = Σ x·p(x) is the long-run average — for a fair die it is 3.5.',
+    'Random variables are either <strong>discrete</strong> (countable values, like a count of clicks) or <strong>continuous</strong> (any value in a range, like height, described by a density).',
+    'With more samples the empirical histogram converges to the true distribution and the sample mean to E[X] — the intuition behind the <strong>law of large numbers</strong>.',
+  ]}
+/>
+
+Next up: we'll meet the famous **discrete distributions** (Bernoulli, Binomial, Poisson) that name the
+patterns you just simulated — and then dig into **expectation and variance**, the two numbers that
+summarize any random variable's center and spread.

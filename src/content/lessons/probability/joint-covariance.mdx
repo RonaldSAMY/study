@@ -1,0 +1,177 @@
+---
+title: Joint Distributions & Covariance
+track: probability
+summary: How two random quantities move together — measured by covariance and the unit-free correlation.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - probability/expectation-variance
+leadsTo:
+  - probability/clt
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CorrelationScatterCloud from '../../../components/demos/CorrelationScatterCloud.tsx';
+
+## The hook: do tall parents have tall kids?
+
+Francis Galton measured hundreds of parent–child height pairs in the 1880s and noticed something: tall
+parents *tend* to have tall children — not always, but on average. The relationship wasn't a clean line;
+it was a **tilted cloud**. Measuring the tilt of that cloud — how strongly two random quantities rise and
+fall together — gave us **covariance** and **correlation**, and with them the entire toolkit behind
+regression, portfolios, and the covariance matrices at the heart of machine learning.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Covariance** measures whether two variables tend to be above their means *together*; **correlation** is
+that same signal rescaled to a clean $[-1, 1]$ so you can compare relationships across any units.
+</Callout>
+
+## Intuition: reading the tilt of a cloud
+
+So far each random variable lived alone. A **joint distribution** describes two of them, $X$ and $Y$,
+*at once* — the probability of each *pair* of values. Plot many samples and you get a cloud of points.
+Its shape tells the story:
+
+- A **round blob** — knowing $X$ tells you nothing about $Y$. They're (close to) independent.
+- A cloud tilted **up to the right** — large $X$ tends to come with large $Y$. **Positive** covariance.
+- A cloud tilted **down to the right** — large $X$ tends to come with small $Y$. **Negative** covariance.
+
+Covariance captures this by asking: when $X$ is above its mean, is $Y$ usually above *its* mean too?
+Multiply the two deviations $(x - \mu_X)(y - \mu_Y)$ — positive when they agree in sign, negative when
+they disagree — and average over all points.
+
+The trouble with covariance: its size depends on units. Heights in centimetres give a bigger covariance
+than the same data in metres, though the relationship is identical. **Correlation** fixes this by dividing
+out both standard deviations, squashing the answer into $[-1, 1]$: $-1$ a perfect downward line, $0$ no
+*linear* link, $+1$ a perfect upward line.
+
+## Play with it
+
+Slide the target correlation $\rho$ and watch the **same** cloud of points tilt — from a round blob at
+$\rho = 0$ to a tight line as $\rho \to \pm 1$. The sample covariance and correlation, measured straight
+from the dots, update with it.
+
+<CorrelationScatterCloud client:visible />
+
+<Callout type="tip">
+Park ρ near <strong>0</strong>: a featureless blob, no tilt. Push it to <strong>+0.95</strong> and the
+cloud collapses toward a rising line. Then go to <strong>−0.95</strong> — same tightness, opposite
+slant. Notice the sample correlation read from the dots stays close to your ρ, but never lands on it
+exactly: that's sampling noise, the subject of the next lesson.
+</Callout>
+
+## The formal definition
+
+The **covariance** of $X$ and $Y$ is the expected product of their deviations, with a familiar shortcut:
+
+$$
+\mathrm{Cov}(X, Y) = \mathbb{E}\big[(X - \mu_X)(Y - \mu_Y)\big] = \mathbb{E}[XY] - \mathbb{E}[X]\,\mathbb{E}[Y].
+$$
+
+The (Pearson) **correlation coefficient** normalizes it by the two standard deviations:
+
+$$
+\rho_{X,Y} = \frac{\mathrm{Cov}(X, Y)}{\sigma_X\,\sigma_Y}, \qquad -1 \le \rho_{X,Y} \le 1.
+$$
+
+Covariance also fixes the variance-of-a-sum formula from the last lesson — the cross term is exactly
+twice the covariance:
+
+$$
+\mathrm{Var}(X + Y) = \mathrm{Var}(X) + \mathrm{Var}(Y) + 2\,\mathrm{Cov}(X, Y).
+$$
+
+When $X$ and $Y$ are **independent**, $\mathrm{Cov}(X,Y) = 0$ and the cross term vanishes — recovering the
+clean "variances add" rule.
+
+<Callout type="warning">
+The arrow goes one way only. <strong>Independent ⟹ zero correlation</strong>, but <strong>zero correlation
+⟱̸ independent</strong>. Points on a perfect parabola y = x² have correlation 0 yet are completely
+dependent — correlation sees only the <em>linear</em> part of a relationship. And correlation is never
+causation.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Finance" icon="📉">
+A portfolio's risk depends on how its assets co-move. Two stocks with **negative** covariance hedge each
+other: when one dips the other tends to rise, so $\mathrm{Var}(X+Y)$ is reduced by the $2\,\mathrm{Cov}$
+term. Diversification is, mathematically, a hunt for low-covariance assets.
+</ExampleCard>
+
+<ExampleCard domain="Climate science" icon="🌊">
+Ocean surface temperature and atmospheric pressure in the Pacific are strongly **negatively** correlated
+— the El Niño signal. A single correlation coefficient compresses millions of paired readings into one
+number forecasters watch closely. Strong correlation, but the causal story underneath is intricate.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="🏀">
+A team's points scored and games won are **positively** correlated — but not perfectly, since defense
+matters too. Analysts use the correlation to decide which stats actually predict winning, weeding out the
+ones that merely look impressive on a highlight reel.
+</ExampleCard>
+
+<ExampleCard domain="Machine learning" icon="🤖">
+A dataset's **covariance matrix** stores the covariance of every feature pair. Highly correlated features
+are redundant; PCA rotates the data to new axes where covariance is zero, keeping the few directions of
+greatest variance. That single matrix is the engine of dimensionality reduction.
+</ExampleCard>
+
+<Callout type="why">
+Covariance generalizes from two variables to a whole <strong>covariance matrix</strong> Σ, the central
+object of multivariate statistics and ML. It defines the shape of a multivariate Gaussian, powers PCA and
+whitening, and appears in Kalman filters and Gaussian processes. Master the 2-variable case here and the
+matrix version is just bookkeeping.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A scatter plot of two variables is a round, untilted blob. What is their correlation?',
+      options: ['Close to +1', 'Close to −1', 'Close to 0', 'Exactly 0.5'],
+      answer: 2,
+      explain: 'A round blob shows no linear tilt: large X is equally likely to pair with large or small Y. The correlation is near 0.',
+    },
+    {
+      q: 'Why do we often prefer correlation over raw covariance?',
+      options: [
+        'Covariance is always negative',
+        'Correlation is unit-free and bounded in [−1, 1], so relationships are comparable',
+        'Correlation can detect any relationship, even nonlinear ones',
+        'Covariance cannot be computed from data',
+      ],
+      answer: 1,
+      explain: 'Dividing by the two standard deviations removes units and forces the value into [−1, 1], making different relationships directly comparable. (It still only captures the LINEAR part.)',
+    },
+    {
+      q: 'X and Y are independent. What is Var(X + Y)?',
+      options: [
+        'Var(X) + Var(Y)',
+        'Var(X) + Var(Y) + 2Cov(X, Y), and the covariance is nonzero',
+        'Var(X) · Var(Y)',
+        '0',
+      ],
+      answer: 0,
+      explain: 'Independence means Cov(X, Y) = 0, so the cross term drops and the variances simply add: Var(X + Y) = Var(X) + Var(Y).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>joint distribution</strong> gives the probability of each pair (X, Y); its scatter cloud reveals how they move together.',
+    '<strong>Covariance</strong> = 𝔼[(X−μₓ)(Y−μ_Y)] is positive when the variables rise together, negative when one rises as the other falls.',
+    '<strong>Correlation</strong> ρ = Cov/(σₓσ_Y) rescales covariance into [−1, 1], making it unit-free and comparable.',
+    'Independence ⟹ zero correlation, but <strong>zero correlation does not imply independence</strong> — ρ sees only linear structure, and correlation ≠ causation.',
+    'Covariance sets the cross term in Var(X+Y) and generalizes to the <strong>covariance matrix</strong> behind PCA, multivariate Gaussians, and more.',
+  ]}
+/>
+
+Next up: the grand finale — why averaging *anything* produces a bell curve. The **Central Limit
+Theorem** ties the whole track together.

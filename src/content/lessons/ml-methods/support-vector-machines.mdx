@@ -1,0 +1,202 @@
+---
+title: Support Vector Machines
+track: ml-methods
+summary: The maximum-margin separating hyperplane, the support vectors that define it, and the kernel trick for curved boundaries.
+difficulty: advanced
+estMinutes: 19
+prereqs:
+  - ml-methods/gaussian-mixture-models
+  - optimization/constrained-optimization
+leadsTo: []
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import MaxMarginSVMLab from '../../../components/demos/MaxMarginSVMLab.tsx';
+
+## The hook: the widest road between two neighborhoods
+
+Two neighborhoods of houses sit on either side of a winding boundary, and you must paint a single
+straight street between them. Many streets would technically keep them apart — but a street that hugs
+one row of houses is fragile: nudge a house and a car would clip it. The *safest* street is the one
+that leaves the **widest possible gap** on both sides. Build that, and a few new houses can appear
+without ever crossing the line.
+
+That is the whole idea of a **Support Vector Machine**: among all the lines that separate two classes,
+choose the one with the largest **margin** — the widest empty road.
+
+<Callout type="intuition" title="The one-sentence idea">
+A Support Vector Machine finds the separating boundary that is as **far as possible** from the nearest
+point of each class; those nearest points — the **support vectors** — are the only ones that matter.
+</Callout>
+
+## Intuition: not just any separator, the safest one
+
+In *When Models Meet Data* you learned that generalization is the real prize. A boundary squeezed up
+against the data is like a memorizer — brittle to the slightest change. By maximizing the margin, an
+SVM bakes robustness directly into what it optimizes: a wide gap is a built-in safety buffer, which
+tends to generalize well to new points.
+
+The beautiful surprise is **sparsity**. Once the widest road is found, only the points *touching* its
+edges hold it in place. These are the **support vectors**. Every other point — no matter how far away —
+could be deleted and the boundary would not budge. The entire classifier is pinned by a handful of
+critical examples.
+
+## Play with it
+
+Drag the red (spam) and blue (ham) points. The solid line is the decision boundary; the dashed lines
+are the margins; points ringed in green are the **support vectors**. Notice that dragging a *far* point
+does nothing — only the support vectors steer the line. Then hit **Ring preset** and switch to
+**Kernel** mode to bend the boundary around data no straight line can split.
+
+<MaxMarginSVMLab client:visible />
+
+<Callout type="tip">
+Drag one class slowly toward the other. The margin <em>narrows</em>, and more points become support
+vectors. Pull them apart and the road widens with just two or three points holding it open. The margin
+width is the SVM's confidence in the separation.
+</Callout>
+
+## The formal definition
+
+A linear classifier predicts with a **hyperplane** $\mathbf{w}^{\top}\mathbf{x} + b = 0$, deciding the
+class by the sign of $\mathbf{w}^{\top}\mathbf{x} + b$. With labels $y_n \in \lbrace +1, -1 \rbrace$,
+the distance from a correctly classified point to the plane is $y_n(\mathbf{w}^{\top}\mathbf{x}_n + b)
+/ \lVert \mathbf{w} \rVert$. Fixing the scale so the closest points satisfy
+$y_n(\mathbf{w}^{\top}\mathbf{x}_n + b) = 1$, the margin width becomes $2 / \lVert \mathbf{w} \rVert$.
+
+Maximizing that margin is the same as **minimizing** $\lVert \mathbf{w} \rVert^2$, giving the classic
+constrained problem (here is where your constrained-optimization tools earn their keep):
+
+$$
+\min_{\mathbf{w},\, b} \; \tfrac{1}{2} \lVert \mathbf{w} \rVert^2 \quad \text{subject to} \quad y_n(\mathbf{w}^{\top}\mathbf{x}_n + b) \ge 1 \;\; \text{for all } n.
+$$
+
+Real data is rarely perfectly separable, so we allow **slack** $\xi_n \ge 0$ for points inside the
+margin and pay for it. This is the **soft-margin SVM**, with $C$ trading margin width against
+violations:
+
+$$
+\min_{\mathbf{w},\, b,\, \boldsymbol{\xi}} \; \tfrac{1}{2} \lVert \mathbf{w} \rVert^2 + C \sum_{n=1}^{N} \xi_n \quad \text{s.t.} \quad y_n(\mathbf{w}^{\top}\mathbf{x}_n + b) \ge 1 - \xi_n, \;\; \xi_n \ge 0.
+$$
+
+Equivalently, it minimizes the **hinge loss** plus a regularizer:
+
+$$
+\min_{\mathbf{w},\, b} \; \tfrac{1}{2}\lVert \mathbf{w} \rVert^2 + C \sum_{n=1}^{N} \max\big(0,\; 1 - y_n(\mathbf{w}^{\top}\mathbf{x}_n + b)\big).
+$$
+
+Solving via Lagrange multipliers reveals that $\mathbf{w}$ is a weighted sum of the inputs, where only
+the support vectors carry nonzero weight — the sparsity you saw in the demo.
+
+### The kernel trick
+
+What if no straight line works — like the ring preset? Map the data into a higher-dimensional **feature
+space** $\boldsymbol{\phi}(\mathbf{x})$ where it *does* become linearly separable. Because the SVM
+depends on the data only through **inner products** $\boldsymbol{\phi}(\mathbf{x}_i)^{\top}
+\boldsymbol{\phi}(\mathbf{x}_j)$, we never need to compute $\boldsymbol{\phi}$ explicitly — we just
+supply a **kernel** that returns those inner products directly:
+
+$$
+k(\mathbf{x}_i, \mathbf{x}_j) = \boldsymbol{\phi}(\mathbf{x}_i)^{\top} \boldsymbol{\phi}(\mathbf{x}_j).
+$$
+
+A common choice is the **RBF (Gaussian) kernel** $k(\mathbf{x}_i, \mathbf{x}_j) = \exp(-\gamma \lVert
+\mathbf{x}_i - \mathbf{x}_j \rVert^2)$. A flat hyperplane in the feature space appears as a smoothly
+**curved** boundary back in the original space — which is precisely what the demo's kernel mode draws.
+
+<Callout type="why">
+The kernel trick is one of the most elegant ideas in machine learning: you gain the power of an
+enormous (even infinite-dimensional) feature space while only ever doing cheap computations on the
+original data. Maximum margin plus kernels made SVMs the dominant classifier for years before deep
+learning.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Email security" icon="✉️">
+Represent each email by its word frequencies and label it spam or ham. An SVM finds the widest gap
+between the two clouds; only the *borderline* emails — the support vectors — define the filter. A clear
+piece of spam far from the boundary contributes nothing to where the line sits.
+</ExampleCard>
+
+<ExampleCard domain="Handwriting recognition" icon="✍️">
+Telling a handwritten "7" from a "1" was a flagship SVM success. Each digit image becomes a vector of
+pixel intensities; an RBF kernel carves a curved boundary between the classes. The few most ambiguous,
+scribbled samples become the support vectors that shape the decision.
+</ExampleCard>
+
+<ExampleCard domain="Medicine" icon="🧬">
+With thousands of gene-expression levels per patient but only a handful of patients, the data lives in
+very high dimensions. SVMs thrive here: the margin controls overfitting even when features vastly
+outnumber samples, separating, say, tumor type A from type B.
+</ExampleCard>
+
+<ExampleCard domain="Image classification" icon="🖼️">
+Before deep nets, "cat vs. dog" pipelines fed image features into a kernel SVM. The kernel let a linear
+margin in feature space become an intricate boundary over images — robust because, again, only the hard
+borderline pictures (the support vectors) anchored it.
+</ExampleCard>
+
+<Callout type="note">
+Across all four: the decision rests on a small set of <strong>support vectors</strong>, the margin
+guards against overfitting, and a <strong>kernel</strong> handles curves. Same three ideas, very
+different data.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a Support Vector Machine maximize?',
+      options: [
+        'The number of correctly classified points only',
+        'The margin — the distance from the boundary to the nearest point of each class',
+        'The total number of support vectors',
+        'The training accuracy at any cost',
+      ],
+      answer: 1,
+      explain: 'An SVM chooses the separating hyperplane with the widest margin. A larger gap is more robust and tends to generalize better to new data.',
+    },
+    {
+      q: 'Which points are the support vectors?',
+      options: [
+        'All the points in the larger class',
+        'The points farthest from the boundary',
+        'The points on or inside the margin that pin the boundary in place',
+        'A random sample of the data',
+      ],
+      answer: 2,
+      explain: 'Only the points touching the margins (or violating them) determine the boundary. Moving or deleting any other point leaves the solution unchanged — this is the sparsity of SVMs.',
+    },
+    {
+      q: 'What problem does the kernel trick solve, and how?',
+      options: [
+        'It speeds up training by deleting data',
+        'It handles non-linearly-separable data by using inner products in a higher-dimensional feature space without computing that space explicitly',
+        'It removes the need for any optimization',
+        'It guarantees the data is always separable by a straight line',
+      ],
+      answer: 1,
+      explain: 'Kernels compute inner products in a richer feature space directly, so a linear (max-margin) boundary there becomes a curved boundary in the original space — enabling non-linear classification cheaply.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>SVM</strong> picks the separating hyperplane with the <strong>maximum margin</strong> — the widest gap between the two classes.',
+    'Maximizing the margin means minimizing <strong>‖w‖²</strong> subject to every point being on the correct side, a constrained optimization problem.',
+    'Only the <strong>support vectors</strong> — points on or inside the margin — define the boundary; the rest are irrelevant (sparsity).',
+    'The <strong>soft margin</strong> (hinge loss with penalty C) tolerates some violations so the method works on messy, overlapping data.',
+    'The <strong>kernel trick</strong> uses inner products in a higher-dimensional space to draw curved boundaries without ever building that space.',
+  ]}
+/>
+
+That completes the ML Methods track: you can now judge a model's honesty (generalization), discover
+hidden structure (mixtures), and draw the safest possible boundary (max margin) — the core math of
+machine learning, working together.

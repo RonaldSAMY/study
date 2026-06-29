@@ -1,0 +1,175 @@
+---
+title: Logic & Truth Tables
+track: discrete-math
+summary: AND, OR, NOT and implication — the exact algebra of true and false that runs every machine.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - discrete-math/sets
+leadsTo:
+  - discrete-math/proofs-induction
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TruthTableBuilder from '../../../components/demos/TruthTableBuilder.tsx';
+
+## The hook: the two-symbol language behind every computer
+
+Strip a computer down to its core and you find one astonishingly simple idea repeated billions of
+times: a wire is either **on** or **off**, **true** or **false**, $1$ or $0$. Stack a few rules for
+combining those wires — *and*, *or*, *not* — and you can add numbers, store memories, and eventually
+train neural networks. Those rules are **propositional logic**, and they are the direct cousins of the
+set operations you just learned.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Logic** is the algebra of statements that are either true or false, built from three operations —
+**AND**, **OR**, **NOT** — whose behavior is captured completely by a **truth table**.
+</Callout>
+
+## Intuition: from sets to statements
+
+In the last lesson, *and / or / not* combined **collections**. Here they combine **statements**. A
+**proposition** is any sentence that is definitely true or false: *"it is raining,"* *"x > 5."* Call
+them $p$ and $q$.
+
+- $p \land q$ (**AND**) is true only when **both** are true — the cousin of intersection.
+- $p \lor q$ (**OR**) is true when **at least one** is true — the cousin of union.
+- $\lnot p$ (**NOT**) flips true to false — the cousin of complement.
+
+The link is exact: if $p$ means *"x is in A"* and $q$ means *"x is in B,"* then $p \land q$ is precisely
+the membership test for $A \cap B$. Logic and sets are two views of one structure.
+
+There is one new operation with no everyday set-name: **implication** $p \to q$, read *"if p then q."*
+It is the engine of every proof, and it has one famous quirk we will meet below.
+
+## Play with it
+
+Pick a connective, then click the gate's input terminals to flip $p$ and $q$. The wire turns green for
+true; the full truth table fills in and your current row lights up. Try to predict the output before
+you flip.
+
+<TruthTableBuilder client:visible />
+
+<Callout type="tip">
+Select <strong>IMPLIES</strong> and set $p$ = false. The output is <em>true</em> no matter what $q$ is!
+A promise like *"if it rains, I'll bring an umbrella"* is never broken on a sunny day. A false premise
+makes an implication **vacuously true** — the one rule that trips everyone up at first.
+</Callout>
+
+## The formal definition
+
+A **truth table** lists every combination of inputs and the resulting output. For two inputs there are
+$2^2 = 4$ rows; for $n$ inputs, $2^n$. The basic connectives:
+
+$$
+\begin{array}{cc|ccc}
+p & q & p \land q & p \lor q & p \to q \\\hline
+\text{T} & \text{T} & \text{T} & \text{T} & \text{T} \\
+\text{T} & \text{F} & \text{F} & \text{T} & \text{F} \\
+\text{F} & \text{T} & \text{F} & \text{T} & \text{T} \\
+\text{F} & \text{F} & \text{F} & \text{F} & \text{T}
+\end{array}
+$$
+
+Two statements are **logically equivalent** ($\equiv$) when their truth tables match column-for-column.
+The most useful equivalences are **De Morgan's laws**, which connect logic right back to set
+complements:
+
+$$
+\lnot (p \land q) \equiv \lnot p \lor \lnot q, \qquad
+\lnot (p \lor q) \equiv \lnot p \land \lnot q.
+$$
+
+Implication can be rewritten purely with the basics: $p \to q \equiv \lnot p \lor q$. A statement that
+is true in *every* row is a **tautology**; one false in every row is a **contradiction**.
+
+<Callout type="why">
+Every comparison in a model — `if loss < threshold`, a ReLU's `max(0, x)`, a decision-tree split — is a
+proposition. Loss functions for classification (cross-entropy) come straight from logic and
+information; and the boolean masks that power attention and padding in transformers are literally
+tables of true/false.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Circuit logic gates" icon="⚡">
+A physical **AND gate** outputs current only when both inputs carry current; an **OR gate** needs just
+one. A **NAND gate** ($\lnot(p \land q)$) is special: you can build *every* other gate from NANDs
+alone. The truth table in the demo is the exact spec a chip designer wires into silicon.
+</ExampleCard>
+
+<ExampleCard domain="Search engines" icon="🔎">
+Advanced search uses **boolean operators**: `cats AND dogs` requires both terms, `cats OR dogs` accepts
+either, and `cats -dogs` is `cats AND NOT dogs`. The engine evaluates a logical expression over each
+page to decide *true (show it)* or *false (hide it)*.
+</ExampleCard>
+
+<ExampleCard domain="Legal contracts" icon="⚖️">
+A clause like *"if payment is late, then a fee applies"* is an implication $p \to q$. Lawyers exploit
+the vacuous-truth rule: if payment is never late ($p$ false), the clause is satisfied regardless. Whole
+contracts are conjunctions of conditions that must *all* hold.
+</ExampleCard>
+
+<ExampleCard domain="Smart home" icon="🏠">
+An automation rule reads *"turn on the porch light if it is dark AND motion is detected."* The hub
+evaluates $p \land q$ every second. Change it to OR and the light triggers far more often — the same
+toggle you feel in the demo, deciding your electricity bill.
+</ExampleCard>
+
+<Callout type="note">
+De Morgan's laws are the bridge back to the previous lesson: <em>not (A and B)</em> equals
+<em>(not A) or (not B)</em>. The complement of an intersection is the union of the complements — set
+theory and logic telling the same story.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'When is p ∧ q (p AND q) true?',
+      options: [
+        'When at least one of p, q is true',
+        'Only when both p and q are true',
+        'When exactly one is true',
+        'Only when both are false',
+      ],
+      answer: 1,
+      explain: 'AND demands both inputs be true; if either is false the whole statement is false.',
+    },
+    {
+      q: 'The implication p → q is FALSE in exactly which case?',
+      options: [
+        'p true, q true',
+        'p false, q true',
+        'p true, q false',
+        'p false, q false',
+      ],
+      answer: 2,
+      explain: 'An implication fails only when the premise holds but the conclusion does not: p true, q false.',
+    },
+    {
+      q: 'By De Morgan’s law, ¬(p ∨ q) is equivalent to which statement?',
+      options: ['¬p ∨ ¬q', '¬p ∧ ¬q', 'p ∧ q', 'p → q'],
+      answer: 1,
+      explain: 'Negating an OR flips it to an AND of the negations: ¬(p ∨ q) ≡ ¬p ∧ ¬q.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>proposition</strong> is a statement that is definitely true or false; logic combines them.',
+    '<strong>AND</strong> (∧), <strong>OR</strong> (∨), and <strong>NOT</strong> (¬) mirror set intersection, union, and complement.',
+    'A <strong>truth table</strong> lists all 2ⁿ input combinations and defines a connective completely.',
+    '<strong>Implication</strong> p → q is false only when p is true and q is false — a false premise is vacuously true.',
+    '<strong>De Morgan’s laws</strong> let you push negations inward, linking logic back to sets.',
+  ]}
+/>
+
+Next up: **proofs and induction** — using these logical rules to show a statement is true not just for
+one case, but for *infinitely* many.

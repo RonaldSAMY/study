@@ -1,0 +1,178 @@
+---
+title: Taylor Series
+track: calculus-2
+summary: Approximate any smooth function with a polynomial — add more terms and the polynomial hugs the curve ever closer.
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - calculus-2/sequences-series-2
+leadsTo:
+  - calculus-3/multivariable-functions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TaylorApproximationBuilder from '../../../components/demos/TaylorApproximationBuilder.tsx';
+
+## The hook: how does a calculator compute sin(0.7)?
+
+Press the $\sin$ key and an answer appears instantly. But a processor has no "sine" hiding inside — its
+only talents are $+$, $-$, $\times$. So how does it find $\sin(0.7)$? It **adds up a polynomial**:
+
+$$
+\sin(0.7) \approx 0.7 - \frac{0.7^3}{6} + \frac{0.7^5}{120} - \cdots
+$$
+
+A few multiplications and additions, and you have all the digits on the screen. This trick — replacing a
+hard function with a polynomial that mimics it — is the **Taylor series**, and it is one of the most
+useful ideas in all of applied mathematics.
+
+This is the previous lesson's power series, with the coefficients chosen on purpose. We pick them so the
+polynomial *matches the function* — same value, same slope, same curvature — at one point, then ripples
+out from there.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **Taylor series** rebuilds a function as an infinite polynomial whose derivatives at one point match
+the function's — so each extra term corrects the approximation and makes the polynomial hug the curve
+over a wider window.
+</Callout>
+
+## Intuition: match value, then slope, then curvature…
+
+Suppose you want a polynomial that behaves like $f$ near $x = 0$. Build it up one demand at a time:
+
+1. **Match the value:** start with the constant $f(0)$. Already correct at $x=0$, but flat.
+2. **Match the slope:** add $f'(0)\,x$. Now it's the *tangent line* — correct value *and* direction.
+3. **Match the curvature:** add $\frac{f''(0)}{2}x^2$. Now it bends the right way too.
+
+Keep going. The $n$-th term uses the $n$-th derivative, divided by $n!$ to keep the bookkeeping straight.
+Each term fixes the next finer feature of the shape, so the polynomial clings to the curve farther and
+farther from the center.
+
+For $e^x$, every derivative at $0$ is $1$, so the pattern is gorgeously simple:
+$e^x = 1 + x + \frac{x^2}{2!} + \frac{x^3}{3!} + \cdots$ — the very series whose convergence we tested
+last lesson.
+
+## Play with it
+
+Pick $\sin x$, $e^x$, or $\cos x$, then slide in more **Taylor terms**. Watch the emerald polynomial peel
+away from a flat line, become a tangent, then bend and wave until it sits right on top of the indigo
+target. Drag the sample point to see the **error collapse** as the degree climbs — and notice the matched
+window keeps widening outward from $0$.
+
+<TaylorApproximationBuilder client:visible />
+
+<Callout type="tip">
+Notice the approximation is best <strong>near the center</strong> (here $x = 0$) and degrades as you move
+away — until you add more terms, which pushes the good region outward. That trade-off between *degree* and
+*range* is the heart of Taylor approximation.
+</Callout>
+
+## The formal definition
+
+The **Taylor series** of $f$ centered at $x = a$ is:
+
+$$
+f(x) = \sum_{n=0}^{\infty} \frac{f^{(n)}(a)}{n!}\,(x-a)^n = f(a) + f'(a)(x-a) + \frac{f''(a)}{2!}(x-a)^2 + \cdots
+$$
+
+When the center is $a = 0$ it is called a **Maclaurin series**. The three you'll meet everywhere:
+
+$$
+e^{x} = \sum_{n=0}^{\infty}\frac{x^n}{n!}, \qquad
+\sin x = \sum_{n=0}^{\infty}\frac{(-1)^n x^{2n+1}}{(2n+1)!}, \qquad
+\cos x = \sum_{n=0}^{\infty}\frac{(-1)^n x^{2n}}{(2n)!}.
+$$
+
+Stopping after a few terms gives a **Taylor polynomial**; the leftover is the **remainder**, and it tells
+you exactly how big the error can be.
+
+<Callout type="why">
+Taylor series are everywhere in machine learning. **Gradient descent** uses the first-order Taylor
+expansion (the tangent plane) to decide which way is downhill; **Newton's method** uses the second-order
+expansion (curvature) to get there faster. Linearizing a complicated model by its first Taylor term is
+one of the most common moves in all of applied math.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Calculators" icon="🧮">
+Your calculator computes $\sin(0.7)$ as $0.7 - \frac{0.7^3}{6} + \frac{0.7^5}{120} - \cdots$. Just three
+terms give $0.64422$, already matching the true $0.64422$ to five places — because the factorials in the
+denominator crush the error almost instantly.
+</ExampleCard>
+
+<ExampleCard domain="Physics" icon="🔗">
+The pendulum equation contains $\sin\theta$, which is nasty to solve. For small swings, the first Taylor
+term gives $\sin\theta \approx \theta$, turning it into the simple harmonic oscillator. Nearly every
+"small-angle" approximation in physics is a one-term Taylor series.
+</ExampleCard>
+
+<ExampleCard domain="Audio compression" icon="🎵">
+Codecs and DSP chips evaluate transcendental functions for filters and transforms by summing short
+Taylor (or related) polynomial expansions — cheap multiply-adds instead of impossible exact formulas,
+fast enough to run on every sample of a song in real time.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="📉">
+Risk desks approximate how a portfolio's value moves using its first two Taylor terms — the
+"delta" (first derivative) and "gamma" (second derivative). A second-order Taylor expansion *is* the
+standard model for option price sensitivity.
+</ExampleCard>
+
+<Callout type="note">
+A subtlety: some functions only equal their Taylor series within a <strong>radius of convergence</strong>
+(remember the ratio test). For $e^x$, $\sin$, and $\cos$ the series works for <em>all</em> $x$; for
+$\frac{1}{1-x}$ it only works for $|x|<1$. Convergence and approximation are two sides of one coin.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'The n-th Taylor coefficient (centered at a) is built from…',
+      options: [
+        'the n-th power of f',
+        'the n-th derivative of f at a, divided by n!',
+        'the value f(n)',
+        'the integral of f from 0 to n',
+      ],
+      answer: 1,
+      explain: 'The coefficient of (x−a)ⁿ is f⁽ⁿ⁾(a)/n! — the n-th derivative at the center, scaled by 1/n! so each term matches one more derivative.',
+    },
+    {
+      q: 'What is the 2-term Taylor (Maclaurin) approximation of eˣ near 0?',
+      options: ['1 + x', 'x + x²/2', '1 + x²', 'x − x³/6'],
+      answer: 0,
+      explain: 'eˣ = 1 + x + x²/2 + …, so the first two terms are 1 + x — the tangent line to eˣ at x = 0.',
+    },
+    {
+      q: 'Why is a Taylor approximation most accurate near its center and worse far away?',
+      options: [
+        'Because polynomials can only be evaluated near 0',
+        'Because it is built to match the function’s derivatives at that one point, so error grows with distance until more terms are added',
+        'Because functions are flat near the center',
+        'It is actually equally accurate everywhere',
+      ],
+      answer: 1,
+      explain: 'The coefficients force a match of value and derivatives at the center only. Away from it the unmatched higher-order behavior shows up as error — adding terms widens the accurate window.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>Taylor series</strong> rebuilds a function as a polynomial whose derivatives match the function’s at one point.',
+    'The coefficient of (x−a)ⁿ is <strong>f⁽ⁿ⁾(a)/n!</strong> — each term matches one more derivative (value, slope, curvature, …).',
+    'A finite <strong>Taylor polynomial</strong> approximates the function best near the center; more terms widen the accurate window.',
+    'This is literally <strong>how calculators and chips compute</strong> sin, eˣ, cos and friends — cheap multiply-adds with factorial-fast convergence.',
+    'First- and second-order Taylor expansions power <strong>gradient descent, Newton’s method, and risk models</strong> across machine learning and beyond.',
+  ]}
+/>
+
+Next up: we leave the single-variable world behind and step into **functions of several variables** —
+surfaces, contour maps, and the multivariable calculus that machine learning runs on.

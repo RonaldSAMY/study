@@ -1,0 +1,149 @@
+---
+title: Counting Principles
+track: combinatorics
+summary: The two rules that power all of counting — multiply choices that combine, add choices that are alternatives.
+difficulty: beginner
+estMinutes: 12
+prereqs:
+  - discrete-math/sets
+leadsTo:
+  - combinatorics/permutations
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import OutfitCounterBuilder from '../../../components/demos/OutfitCounterBuilder.tsx';
+
+## The hook: how many outfits do you really own?
+
+Open your closet: say 5 shirts, 3 pairs of trousers, and 2 pairs of shoes. It *feels* like a small
+wardrobe — but how many distinct outfits can you build? Not 10. Not 5. The honest answer is
+$5 \times 3 \times 2 = 30$. Counting "how many ways" sounds trivial until the numbers explode, and
+almost every probability you will ever compute starts by counting the possibilities. Two simple rules
+do nearly all of the work.
+
+<Callout type="intuition" title="The one-sentence idea">
+When choices **combine** (one of these **and** one of those), you **multiply**; when choices are
+**alternatives** (this **or** that), you **add**.
+</Callout>
+
+## Intuition: "and" multiplies, "or" adds
+
+You already met **sets** — collections of distinct things. Counting principles are about how big the
+set of *possible outcomes* becomes when you make a sequence of decisions.
+
+- **Rule of product (AND).** If a first decision has $m$ options and a second *independent* decision has
+  $n$ options, then making both has $m \times n$ outcomes. Each of the $m$ first choices opens up a full
+  fan of $n$ second choices. Draw it as a tree and the leaves multiply.
+- **Rule of sum (OR).** If you must pick exactly one item from one of two *separate* groups (of sizes
+  $m$ and $n$ that don't overlap), there are $m + n$ choices in total.
+
+The whole skill is reading a problem and asking: *are these steps combined (and) or alternatives (or)?*
+
+## Play with it
+
+Slide the number of choices in each category. In **product** mode you build one complete outfit (one
+from every category) and the tree of possibilities branches wildly. Switch to **sum** mode to see what
+happens when you instead pick just one single item.
+
+<OutfitCounterBuilder client:visible />
+
+<Callout type="tip">
+Watch how adding a single category to the <strong>product</strong> doesn't *add* to the total — it
+*multiplies* it. One more 2-option category doubles every outfit you already had.
+</Callout>
+
+## The formal definition
+
+Suppose a procedure is built from $k$ successive independent steps, where step $i$ can be done in $n_i$
+ways. By the **rule of product**, the number of ways to do the whole procedure is
+
+$$
+N = n_1 \times n_2 \times \cdots \times n_k = \prod_{i=1}^{k} n_i .
+$$
+
+If instead you must choose exactly one outcome from $k$ **disjoint** (non-overlapping) groups of sizes
+$n_1, n_2, \dots, n_k$, the **rule of sum** gives
+
+$$
+N = n_1 + n_2 + \cdots + n_k = \sum_{i=1}^{k} n_i .
+$$
+
+<Callout type="why">
+Counting is the floor that probability is built on. A probability is often
+$\frac{\text{favorable outcomes}}{\text{total outcomes}}$ — and both counts come from exactly these two
+rules. In machine learning, the same arithmetic sizes a model's hypothesis space and the number of
+possible feature combinations.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Food & dining" icon="🍔">
+A build-your-own-burger stall offers 3 buns, 4 patties, and 6 toppings (choose one of each). That is
+$3 \times 4 \times 6 = 72$ different burgers — the rule of product. If they *also* sell 5 ready-made
+salads as an alternative meal, the menu offers $72 + 5 = 77$ distinct orders (product, then a sum).
+</ExampleCard>
+
+<ExampleCard domain="Cybersecurity" icon="🔐">
+A 4-digit PIN allows each position to be any digit 0–9, independently. That is
+$10 \times 10 \times 10 \times 10 = 10^4 = 10{,}000$ possible PINs. Add one more digit and you multiply
+by 10 again — which is exactly why longer codes are so much harder to guess.
+</ExampleCard>
+
+<ExampleCard domain="Genetics" icon="🧬">
+DNA is written with 4 bases (A, C, G, T). A **codon** is a sequence of 3 bases, and order matters, so
+there are $4 \times 4 \times 4 = 64$ possible codons. Those 64 combinations are more than enough to
+encode the 20 amino acids life uses.
+</ExampleCard>
+
+<ExampleCard domain="Travel" icon="✈️">
+To fly from city A to city C through hub B, suppose there are 4 morning flights A→B and 3 afternoon
+flights B→C. Each itinerary pairs one of each, so there are $4 \times 3 = 12$ routes. A direct A→C
+flight would be a separate alternative you'd *add* on.
+</ExampleCard>
+
+<Callout type="note">
+The trap is mixing the rules. "How many outfits?" is a product (you wear a top <em>and</em> a bottom).
+"How many single garments could I grab?" is a sum (a top <em>or</em> a bottom). Read the connective.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A café offers 3 sizes of coffee and 4 syrup flavors. Choosing one size and one syrup, how many drinks are possible?',
+      options: ['7', '12', '34', '81'],
+      answer: 1,
+      explain: 'Size AND syrup combine, so multiply: 3 × 4 = 12.',
+    },
+    {
+      q: 'You will pick exactly one dessert: either one of 5 cakes or one of 3 ice creams. How many choices?',
+      options: ['8', '15', '5', '53'],
+      answer: 0,
+      explain: 'Cake OR ice cream are disjoint alternatives, so add: 5 + 3 = 8.',
+    },
+    {
+      q: 'A license plate has 2 letters (A–Z) followed by 3 digits (0–9), repeats allowed. How many plates?',
+      options: ['26 + 26 + 10 + 10 + 10', '26 × 3 × 10', '26² × 10³', '36⁵'],
+      answer: 2,
+      explain: 'Five independent positions combine: 26 × 26 × 10 × 10 × 10 = 26² × 10³ = 676,000.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>rule of product</strong>: independent choices that combine (this AND that) multiply — n₁ × n₂ × … × nₖ.',
+    'The <strong>rule of sum</strong>: disjoint alternatives (this OR that) add — n₁ + n₂ + … + nₖ.',
+    'The key question for any counting problem is whether steps are <strong>combined (and)</strong> or <strong>alternatives (or)</strong>.',
+    'Counts grow <strong>multiplicatively</strong>: one more independent category multiplies the total, which is why possibilities explode fast.',
+    'These two rules are the <strong>foundation of probability</strong> — most chances are favorable counts over total counts.',
+  ]}
+/>
+
+Next up: **permutations** — what happens when you line things up in order and you can't reuse an item,
+so the number of choices shrinks at every step.

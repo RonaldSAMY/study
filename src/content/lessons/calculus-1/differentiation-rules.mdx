@@ -1,0 +1,171 @@
+---
+title: Differentiation Rules & Chain Rule
+track: calculus-1
+summary: Fast recipes — power, product, quotient and chain — that compute derivatives without taking a limit by hand.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - calculus-1/derivative
+leadsTo:
+  - calculus-1/applications-derivatives
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DerivativeRuleBuilder from '../../../components/demos/DerivativeRuleBuilder.tsx';
+
+## The hook: stop taking limits the slow way
+
+You already know what a derivative *is*: the limit of $\frac{f(a+h) - f(a)}{h}$ as $h \to 0$. Beautiful —
+and exhausting. Grinding that limit by hand for every function would make calculus unusable, like doing
+long multiplication when a times-table exists. Mathematicians did the painful limits once, spotted the
+patterns, and bottled them into a handful of **rules**. Learn four of them and you can differentiate
+almost anything you'll meet — in seconds, no limit required.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **differentiation rules** are shortcut recipes — power, product, quotient, and chain — that turn a
+function into its derivative directly, replacing the limit definition with arithmetic.
+</Callout>
+
+## Intuition: four moves cover almost everything
+
+Every elaborate function is built by *combining* simpler ones, and each way of combining has its own rule:
+
+- **Power rule** — for a plain power $x^n$, slide the exponent down front and reduce it by one.
+- **Product rule** — for two things *multiplied*, the rate is "first's rate times second, plus first times
+  second's rate." Both factors take turns changing.
+- **Quotient rule** — for a *ratio*, a tidy combination of top and bottom rates, all over the bottom squared.
+- **Chain rule** — for a function *inside* another function, multiply the **outer rate** by the **inner
+  rate**. Think nested gears: a fast inner gear spins through a slow outer one, and the rates multiply.
+
+The chain rule is the star. It is the one that powers backpropagation in neural networks, and the one
+worth slowing down for: it says *rates of nested processes multiply.*
+
+## Play with it
+
+Pick a rule, then hit **Reveal next step** to walk through the recipe line by line. The indigo curve is the
+function and the emerald curve is its derivative $f'$ — notice the derivative crosses zero exactly where the
+original curve flattens out. The **Chain rule** tab adds a panel showing the two nested rates multiplying.
+
+<DerivativeRuleBuilder client:visible />
+
+<Callout type="tip">
+On the <strong>Chain rule</strong> tab, read it as "outer rate × inner rate." The tank depth grows like a
+square root (slow outer change) while water pours in at a steady inner rate of 4 — multiply them and you
+get how fast the depth actually rises.
+</Callout>
+
+## The formal definition
+
+Let $u$ and $v$ be functions of $x$, and $c, n$ constants. The four workhorse rules:
+
+**Power rule.**
+$$
+\frac{d}{dx}\,x^{n} = n\,x^{\,n-1}.
+$$
+
+**Product rule.**
+$$
+(u\,v)' = u'\,v + u\,v'.
+$$
+
+**Quotient rule.**
+$$
+\left(\frac{u}{v}\right)' = \frac{u'\,v - u\,v'}{v^{2}}.
+$$
+
+**Chain rule.** If $y = f(g(x))$, write $u = g(x)$; then
+$$
+\frac{dy}{dx} = \frac{dy}{du}\cdot\frac{du}{dx} = f'\!\big(g(x)\big)\cdot g'(x).
+$$
+
+Two helpers make these fly: the derivative of a constant is $0$, and constants slide outside,
+$(c\,u)' = c\,u'$. With $d(t) = \sqrt{4t+1} = (4t+1)^{1/2}$, the chain rule gives outer rate
+$\tfrac{1}{2}(4t+1)^{-1/2}$ times inner rate $4$, i.e. $d'(t) = \dfrac{2}{\sqrt{4t+1}}$ — exactly the
+emerald curve in the demo.
+
+<Callout type="why">
+**Backpropagation is the chain rule, full stop.** A neural network is functions nested dozens of layers
+deep, and training needs the derivative of the final loss with respect to each early weight. The chain
+rule says: multiply the local rate at every layer along the path. Every modern model is trained by chaining
+these rates from output back to input.
+</Callout>
+
+## The same idea, four different worlds
+
+Each rule earns its keep in a different real situation.
+
+<ExampleCard domain="Road safety" icon="🚗">
+A car's braking distance grows like $d(v) = 0.01\,v^2$. The **power rule** gives $d'(v) = 0.02\,v$: the
+distance needed climbs *twice as fast* as your speed. Doubling speed quadruples the stopping distance —
+which is why a small speed increase is a big safety deal.
+</ExampleCard>
+
+<ExampleCard domain="Retail revenue" icon="🛒">
+Revenue is price times units sold, $R(p) = p\,(10 - p)$. The **product rule** (or expanding first) gives
+$R'(p) = 10 - 2p$. Revenue stops rising at $p = 5$, where raising the price loses more customers than the
+extra dollar gains — the product rule splits those two competing effects apart.
+</ExampleCard>
+
+<ExampleCard domain="Pharmacology" icon="💊">
+A drug's concentration follows $C(t) = \dfrac{5t}{t^2 + 1}$. The **quotient rule** yields
+$C'(t) = \dfrac{5(1 - t^2)}{(t^2+1)^2}$, which hits zero at $t = 1$ — the exact moment the drug peaks in the
+bloodstream before the body clears it faster than it absorbs.
+</ExampleCard>
+
+<ExampleCard domain="Water systems" icon="🚰">
+A tank's depth is $d(t) = \sqrt{4t + 1}$ as water streams in. The **chain rule** nests a square root around
+a steady inflow: $d'(t) = \dfrac{2}{\sqrt{4t+1}}$. The depth rises quickly when shallow and creeps once
+deep — the inner rate is constant, but the outer square root tames it.
+</ExampleCard>
+
+<Callout type="note">
+Spot the structure first: a lone power? a product? a ratio? something nested? Name the shape and the right
+rule is automatic. Real functions often stack several rules — peel them from the outside in.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Using the power rule, what is the derivative of f(x) = x⁵?',
+      options: ['5x⁴', 'x⁴', '5x⁶', '4x⁵'],
+      answer: 0,
+      explain: 'Bring the 5 down and reduce the exponent by one: f′(x) = 5x⁴.',
+    },
+    {
+      q: 'For braking distance d(v) = 0.01v², the power rule gives d′(v) = 0.02v. How does stopping distance change as speed grows?',
+      options: [
+        'At a constant rate, independent of speed',
+        'It grows faster the faster you are going',
+        'It shrinks as speed increases',
+        'It stays the same',
+      ],
+      answer: 1,
+      explain: 'Since d′(v) = 0.02v rises with v, the stopping distance grows faster at higher speeds — doubling speed quadruples the distance.',
+    },
+    {
+      q: 'For y = (3x + 1)², the chain rule gives dy/dx = ?',
+      options: ['2(3x + 1)', '6(3x + 1)', '3(3x + 1)²', '6x + 1'],
+      answer: 1,
+      explain: 'Outer rate: 2(3x + 1). Inner rate: derivative of 3x + 1 is 3. Multiply: 2(3x + 1)·3 = 6(3x + 1).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>rules</strong> replace the limit definition with fast arithmetic — you almost never differentiate from scratch again.',
+    '<strong>Power rule:</strong> d/dx xⁿ = n·xⁿ⁻¹ — drop the exponent, reduce it by one.',
+    '<strong>Product</strong> (u·v)′ = u′v + uv′ and <strong>quotient</strong> (u/v)′ = (u′v − uv′)/v² handle multiplied and divided functions.',
+    'The <strong>chain rule</strong> multiplies the outer rate by the inner rate — rates of nested processes multiply.',
+    'The chain rule is exactly what <strong>backpropagation</strong> uses to train every neural network.',
+  ]}
+/>
+
+Next up: **Applications of Derivatives** — now that derivatives are cheap, we use $f'(x) = 0$ to find the
+peaks and valleys that solve real optimization problems.

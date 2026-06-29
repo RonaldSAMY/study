@@ -1,0 +1,172 @@
+---
+title: Discrete Distributions
+track: probability
+summary: The three named patterns — Bernoulli, Binomial and Poisson — behind most counting problems.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - probability/random-variables
+leadsTo:
+  - probability/continuous-distributions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DiscreteDistributionShaper from '../../../components/demos/DiscreteDistributionShaper.tsx';
+
+## The hook: how many people will actually show up?
+
+An airline sells 180 seats but books 190 passengers, betting that some won't show. A call center staffs
+for "about 7 calls a minute." A vaccine trial counts how many of 1,000 volunteers catch the disease.
+None of these can be predicted exactly — but each follows a **named pattern** so reliable it has a
+formula. Learn three of these patterns and you can model a huge share of the counting problems in the
+world. They are the **Bernoulli**, **Binomial**, and **Poisson** distributions.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **discrete distribution** is a reusable recipe for the pmf $p(k) = P(X = k)$ — once you recognize
+which recipe your situation matches, a couple of parameters tell you *everything*.
+</Callout>
+
+## Intuition: build them up from one coin flip
+
+Every distribution in this lesson grows from a single yes/no trial.
+
+1. **Bernoulli($p$)** — one trial with success probability $p$. $X$ is $1$ (success) or $0$ (failure).
+   It's the atom: $\mathbb{E}[X] = p$.
+2. **Binomial($n, p$)** — repeat that *same* trial $n$ **independent** times and count the successes.
+   Now $X \in \{0, 1, \dots, n\}$, and the shape is a hump centered near $np$.
+3. **Poisson($\lambda$)** — what the Binomial *becomes* when $n$ is huge and $p$ is tiny but the average
+   count $\lambda = np$ stays moderate. It models **rare events over a continuum** of time or space —
+   calls per minute, typos per page — where there's no fixed "number of trials."
+
+So they're a family, not three unrelated objects: Bernoulli is one Binomial trial, and Poisson is the
+Binomial's limit for "many chances, each unlikely."
+
+## Play with it
+
+Pick a family and reshape it. For the **Binomial**, slide $n$ and $p$: raising $p$ slides the hump right;
+raising $n$ widens and smooths it. For **Poisson**, slide $\lambda$ and watch a right-skewed count
+distribution stretch out. The reported $\mathbb{E}[X]$ and $\mathrm{Var}(X)$ track the shape.
+
+<DiscreteDistributionShaper client:visible />
+
+<Callout type="tip">
+Set the Binomial to large <strong>n</strong> with small <strong>p</strong> (say n = 40, p = 0.08) and
+note the mean ≈ 3.2. Now switch to Poisson with <strong>λ = 3.2</strong>: the bars are nearly identical.
+You're watching the Poisson approximation happen.
+</Callout>
+
+## The formal definition
+
+A single **Bernoulli** trial:
+
+$$
+P(X = 1) = p, \qquad P(X = 0) = 1 - p, \qquad \mathbb{E}[X] = p, \quad \mathrm{Var}(X) = p(1-p).
+$$
+
+The **Binomial** counts successes in $n$ independent Bernoulli trials. The binomial coefficient
+$\binom{n}{k}$ counts the ways to arrange $k$ successes among $n$ slots:
+
+$$
+P(X = k) = \binom{n}{k} p^k (1-p)^{n-k}, \qquad \mathbb{E}[X] = np, \quad \mathrm{Var}(X) = np(1-p).
+$$
+
+The **Poisson** models the count of independent rare events in a fixed interval, with average rate
+$\lambda$:
+
+$$
+P(X = k) = \frac{\lambda^k e^{-\lambda}}{k!}, \qquad \mathbb{E}[X] = \lambda, \quad \mathrm{Var}(X) = \lambda.
+$$
+
+That last identity — *mean equals variance* — is the Poisson's fingerprint. If real count data has
+variance much larger than its mean, it's "overdispersed" and Poisson is the wrong recipe.
+
+<Callout type="why">
+These pmfs are the **likelihoods** at the heart of classifiers. Logistic regression models each label as
+a Bernoulli whose $p$ depends on the input; its loss is exactly the negative log-likelihood of that
+Bernoulli. Poisson regression predicts counts (clicks, purchases, defects). Knowing the distribution
+*is* knowing the loss function.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Aviation" icon="✈️">
+Each of 190 booked passengers shows up independently with probability $p = 0.92$. The number who arrive
+is **Binomial(190, 0.92)**, with mean $\approx 175$. The airline overbooks 10 seats because
+$P(\text{more than 180 show}) $ is small — a Binomial tail calculation worth millions.
+</ExampleCard>
+
+<ExampleCard domain="Call centers" icon="☎️">
+Calls arrive randomly and independently at about 7 per minute. The count in any given minute is
+**Poisson(7)**. Staffing asks "what's $P(\text{more than 12 calls})$ so we're not swamped?" — a Poisson
+tail. No fixed number of trials exists, which is exactly when Poisson, not Binomial, is the right tool.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="🔧">
+A single weld either holds or fails — a **Bernoulli** trial with failure probability $p = 0.001$. Across
+a bridge with 5,000 welds, the number of failures is Binomial(5000, 0.001), well approximated by
+**Poisson(5)**. Rare-event-over-many-chances is the Poisson sweet spot.
+</ExampleCard>
+
+<ExampleCard domain="Genetics" icon="🧬">
+Each of a couple's 4 children inherits a recessive condition independently with probability $\tfrac14$.
+The number affected is **Binomial(4, 0.25)**, mean $= 1$. The chance that *none* are affected is
+$(0.75)^4 \approx 0.32$ — a direct binomial term genetic counselors actually quote.
+</ExampleCard>
+
+<Callout type="note">
+The decision tree: a fixed number of independent yes/no trials → <strong>Binomial</strong>; a single
+trial → <strong>Bernoulli</strong>; rare events over continuous time or space with no fixed trial count
+→ <strong>Poisson</strong>.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You flip a fair coin 10 times and count heads. Which distribution is this, and what is its mean?',
+      options: [
+        'Poisson(10), mean 10',
+        'Binomial(10, 0.5), mean 5',
+        'Bernoulli(0.5), mean 0.5',
+        'Binomial(10, 0.5), mean 10',
+      ],
+      answer: 1,
+      explain: 'A fixed number n = 10 of independent yes/no trials with p = 0.5 is Binomial(10, 0.5). Its mean is np = 10 × 0.5 = 5.',
+    },
+    {
+      q: 'A website gets on average 4 sign-ups per hour, arriving independently at random. The count in one hour is best modeled as…',
+      options: ['Bernoulli(4)', 'Binomial(4, 0.5)', 'Poisson(4)', 'Uniform on 0–4'],
+      answer: 2,
+      explain: 'Rare-ish independent events over a continuous hour with a known average rate, and no fixed number of trials, is the Poisson signature: Poisson(λ = 4).',
+    },
+    {
+      q: 'A telltale property of the Poisson distribution is that…',
+      options: [
+        'Its mean and variance are equal (both λ)',
+        'Its variance is always larger than its mean',
+        'It can only take the values 0 and 1',
+        'Its mean is np',
+      ],
+      answer: 0,
+      explain: 'For Poisson(λ), E[X] = Var(X) = λ. If data shows variance far exceeding the mean, Poisson is likely the wrong model.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>Bernoulli(p)</strong> is one yes/no trial; its mean is p and variance p(1−p).',
+    'A <strong>Binomial(n, p)</strong> counts successes in n independent trials: P(k) = C(n,k) pᵏ(1−p)ⁿ⁻ᵏ, mean np, variance np(1−p).',
+    'A <strong>Poisson(λ)</strong> counts rare independent events over time/space: P(k) = λᵏe⁻ᵏ/k!, with mean = variance = λ.',
+    'Poisson is the <strong>limit</strong> of the Binomial when n is large, p is small, and np = λ is moderate.',
+    'These pmfs are the <strong>likelihoods</strong> behind logistic and Poisson regression — choosing the distribution chooses the loss.',
+  ]}
+/>
+
+Next up: we leave the world of countable values for the smooth one — **continuous distributions**, where
+probability becomes *area under a curve*.

@@ -1,0 +1,186 @@
+---
+title: Cross-Entropy & KL Divergence
+track: information-theory
+summary: Measuring the extra bits you pay for a wrong model — and why that penalty is the loss that trains classifiers.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - information-theory/entropy
+leadsTo:
+  - information-theory/mutual-information
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CrossEntropyKLDemo from '../../../components/demos/CrossEntropyKLDemo.tsx';
+
+## The hook: the price of being confidently wrong
+
+Imagine an app that predicts tomorrow's headline category and announces *"99% chance: sports."* If it's
+right, fine. But on the day a political scandal breaks, that same overconfidence is expensive — the app
+assigned almost no probability to what actually happened, and a good scoring rule should punish it
+hard. Entropy told us the *irreducible* surprise baked into reality. Now we need a number for the
+**extra** surprise we suffer when our **model** of reality is wrong. That number is **cross-entropy**,
+and the wrongness alone is the **KL divergence**.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Cross-entropy** is the average number of bits you spend encoding outcomes from the true distribution
+$p$ using a code built for your predicted distribution $q$; the **KL divergence** is the *wasted* bits
+above the unavoidable minimum — and it is zero exactly when $q = p$.
+</Callout>
+
+## Intuition: coding with the wrong codebook
+
+From the last lesson, the best possible code spends $H(p)$ bits per symbol when the true distribution
+is $p$ — short codes for likely outcomes, long codes for rare ones. But you never know $p$ exactly; you
+have a **model** $q$. If you build your codebook around $q$ and reality follows $p$, you assign the
+wrong code lengths, and your average cost rises to the **cross-entropy** $H(p, q)$.
+
+The overspend has a name. It is the **Kullback–Leibler divergence** $D_{\mathrm{KL}}(p \,\|\, q)$, the
+gap between what you paid and the best you could have paid:
+
+$$
+\underbrace{H(p, q)}_{\text{bits you spend}} = \underbrace{H(p)}_{\text{unavoidable}} + \underbrace{D_{\mathrm{KL}}(p \,\|\, q)}_{\text{wasted by a wrong } q}.
+$$
+
+Two facts make this useful. First, $D_{\mathrm{KL}} \ge 0$ always (Gibbs' inequality), and it equals
+$0$ **only** when $q = p$. So minimizing cross-entropy drives your model toward the truth. Second, KL
+is **not symmetric**: $D_{\mathrm{KL}}(p \,\|\, q) \ne D_{\mathrm{KL}}(q \,\|\, p)$ in general, so it is
+a *divergence*, not a true distance.
+
+## Play with it
+
+The emerald outline is the fixed true distribution $p$; the indigo bars are your prediction $q$. Drag
+$q$ around and watch cross-entropy and KL respond.
+
+<CrossEntropyKLDemo client:visible />
+
+<Callout type="tip">
+Hit <strong>set q = p</strong>: KL drops to $0$ and the cross-entropy lands exactly on $H(p)$ — the best
+score achievable. Now drag a $q$ bar away from $p$ and the KL gap reopens. The classifier's whole job
+is to push that gap to zero.
+</Callout>
+
+## The formal definition
+
+For distributions $p$ (true) and $q$ (model) over the same outcomes, the **cross-entropy** is
+
+$$
+H(p, q) = -\sum_x p(x)\, \log_2 q(x),
+$$
+
+and the **KL divergence** of $q$ from $p$ is
+
+$$
+D_{\mathrm{KL}}(p \,\|\, q) = \sum_x p(x)\, \log_2 \frac{p(x)}{q(x)} = H(p, q) - H(p) \;\ge\; 0.
+$$
+
+In supervised learning the true label is usually **one-hot**: $p$ puts all its mass on the correct
+class $y$. Then $H(p) = 0$, the sum collapses to a single term, and cross-entropy becomes the
+**negative log-likelihood** of the right answer:
+
+$$
+H(p, q) = -\log_2 q(y) = D_{\mathrm{KL}}(p \,\|\, q).
+$$
+
+This is the categorical cross-entropy loss, the workhorse objective behind logistic regression, image
+classifiers, and language models alike. Predict the truth with high probability and the loss is tiny;
+assign the correct class a sliver of probability and the loss explodes.
+
+<Callout type="why">
+Training a classifier by minimizing cross-entropy is *identical* to minimizing
+$D_{\mathrm{KL}}(p \,\|\, q)$ between the data distribution and the model — and that, by the equation
+above, is the same as **maximum likelihood**. Three ideas you may have met separately — cross-entropy
+loss, KL divergence, and maximum likelihood — are one and the same gradient.
+</Callout>
+
+## The same idea, four different worlds
+
+Any time a model's probabilities are scored against what really happens, cross-entropy is the referee.
+
+<ExampleCard domain="Language models" icon="💬">
+A language model's quality is reported as **perplexity**, which is just $2$ raised to the cross-entropy
+per token: $\text{PPL} = 2^{H(p,q)}$. A perplexity of $20$ means the model is, on average, as unsure as
+if choosing uniformly among $20$ words. Lowering cross-entropy on held-out text is *the* objective of
+training a model like this one.
+</ExampleCard>
+
+<ExampleCard domain="Medical testing" icon="🩺">
+A diagnostic model that outputs a probability of disease is scored by **log loss** — cross-entropy
+against the eventual ground truth. A doctor's tool that says *"5% risk"* about a patient who is in fact
+sick pays a huge penalty, which is why calibration matters: a well-calibrated $q$ minimizes expected
+cross-entropy and earns trust.
+</ExampleCard>
+
+<ExampleCard domain="Sports betting" icon="🎰">
+A bookmaker's odds are an implied distribution $q$ over outcomes. A bettor with a better model $p$
+profits in proportion to the **KL divergence** between them — Kelly betting grows your bankroll at a
+rate equal to $D_{\mathrm{KL}}(p \,\|\, q)$. Being right where the market is wrong is literally measured
+in bits.
+</ExampleCard>
+
+<ExampleCard domain="Neural networks" icon="🤖">
+The final softmax layer of a classifier emits a distribution $q$ over labels; the training label is the
+one-hot $p$. Backpropagation minimizes $-\log q(y)$ for every example. The elegant payoff: the gradient
+of softmax-plus-cross-entropy reduces to the clean residual $q - p$, which is why this pairing is the
+default in deep learning.
+</ExampleCard>
+
+<Callout type="warning">
+KL is directional. Minimizing $D_{\mathrm{KL}}(p \,\|\, q)$ (used in classification) makes $q$ cover
+every outcome $p$ allows — "mean-seeking." Minimizing the *reverse*, $D_{\mathrm{KL}}(q \,\|\, p)$ (used
+in variational inference), lets $q$ lock onto one mode and ignore the rest. Same symbols, very different
+behavior.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'When does the KL divergence D(p‖q) equal exactly zero?',
+      options: [
+        'When q is uniform',
+        'When q = p everywhere',
+        'When p is uniform',
+        'KL can never be zero',
+      ],
+      answer: 1,
+      explain: 'By Gibbs’ inequality KL ≥ 0, with equality only when the two distributions are identical. A perfect model wastes zero extra bits.',
+    },
+    {
+      q: 'The true label is one-hot on the correct class y, and the model gives that class probability q(y). What does the cross-entropy loss reduce to?',
+      options: ['−log q(y)', 'q(y)', '1 − q(y)', 'log q(y)'],
+      answer: 0,
+      explain: 'With a one-hot target, H(p,q) = −log q(y): the negative log-likelihood of the right answer. Higher q(y) → lower loss.',
+    },
+    {
+      q: 'Cross-entropy H(p,q), true entropy H(p), and KL D(p‖q) are related how?',
+      options: [
+        'H(p,q) = H(p) − D(p‖q)',
+        'H(p,q) = H(p) + D(p‖q)',
+        'H(p,q) = D(p‖q) − H(p)',
+        'They are unrelated',
+      ],
+      answer: 1,
+      explain: 'Cross-entropy = unavoidable entropy + wasted bits: H(p,q) = H(p) + D(p‖q). Since KL ≥ 0, cross-entropy is never below H(p).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Cross-entropy</strong> H(p,q) = −Σ p·log q is the average cost of coding true outcomes p with a codebook built for a model q.',
+    '<strong>KL divergence</strong> D(p‖q) = H(p,q) − H(p) ≥ 0 is the wasted bits, and equals zero only when q = p.',
+    'With a <strong>one-hot label</strong>, cross-entropy collapses to −log q(y) — the negative log-likelihood that trains classifiers.',
+    'Minimizing cross-entropy is the same as minimizing KL to the data distribution and the same as <strong>maximum likelihood</strong>.',
+    'KL is <strong>asymmetric</strong>: D(p‖q) ≠ D(q‖p), so it is a divergence, not a distance — and the direction changes the behavior.',
+  ]}
+/>
+
+Next up: instead of comparing a model to the truth, we compare two **variables** to each other.
+**Mutual information** measures how many bits knowing one variable reveals about another — the shared
+information at the heart of feature selection.

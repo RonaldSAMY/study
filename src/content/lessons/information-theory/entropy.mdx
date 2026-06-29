@@ -1,0 +1,182 @@
+---
+title: Information & Entropy
+track: information-theory
+summary: How much surprise a message carries — measured in bits — and why a flat distribution is the most uncertain of all.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - probability/expectation-variance
+  - probability/discrete-distributions
+leadsTo:
+  - information-theory/cross-entropy-kl
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import EntropyDistributionDemo from '../../../components/demos/EntropyDistributionDemo.tsx';
+
+## The hook: which text message actually tells you something?
+
+A friend sends two texts. The first: *"The sun came up this morning."* The second: *"It just snowed
+in the Sahara."* Both are short sentences, but only one makes you sit up. The sunrise was a near
+certainty — you learned almost nothing. The desert snow was wildly unlikely — it carries a flood of
+**information**. Information theory makes this gut feeling exact: the **less probable** an outcome, the
+**more surprise** it delivers when it happens, and the natural unit of that surprise is the **bit**.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Entropy** is the average surprise of a random variable — how many yes/no questions, on average, you
+need to pin down its outcome. It is largest when every outcome is equally likely and zero when the
+result is already certain.
+</Callout>
+
+## Intuition: from surprise to bits
+
+You already know that a random variable spreads probability across its values (the **pmf** from the
+random-variables lesson). Information theory asks a new question about that spread: *how surprising is
+a typical draw?*
+
+Start with one outcome of probability $p$. Its **surprise** (or *information content*) is
+
+$$
+I(x) = \log_2 \frac{1}{p(x)} = -\log_2 p(x).
+$$
+
+Why a logarithm, and why base 2? Two reasons make this the *only* sensible choice:
+
+- **Rarer means more surprising.** As $p \to 1$ the surprise drops to $0$ (no news); as $p \to 0$ it
+  shoots up. A sure thing tells you nothing.
+- **Independent surprises add.** If two independent things happen, probabilities multiply but surprise
+  should *add*. The logarithm is exactly the function that turns multiplication into addition, so
+  $I(x,y) = I(x) + I(y)$. Base $2$ makes the unit a **bit** — the answer to one yes/no question.
+
+**Entropy** is then just the *expected* surprise: average $I(x)$ over the distribution, weighting each
+outcome by how often it occurs. A coin you can predict perfectly has zero entropy; a fair coin has
+exactly one bit; a fair die has $\log_2 6 \approx 2.585$ bits.
+
+## Play with it
+
+Drag the handle on top of each bar to reshape the distribution. The bars always renormalize to sum to
+$1$, and the meter tracks the entropy $H$ live.
+
+<EntropyDistributionDemo client:visible />
+
+<Callout type="tip">
+Flatten the bars onto the dashed <strong>uniform</strong> line: the entropy meter pins to its maximum,
+$\log_2 n$. Now drag one bar sky-high so a single outcome dominates — entropy collapses toward $0$.
+Uncertainty is greatest when no outcome is favored.
+</Callout>
+
+## The formal definition
+
+For a discrete random variable $X$ with pmf $p(x)$, the **Shannon entropy** is the probability-weighted
+average of the surprise:
+
+$$
+H(X) = \sum_x p(x)\, \log_2 \frac{1}{p(x)} = -\sum_x p(x)\, \log_2 p(x).
+$$
+
+Measured with $\log_2$ the unit is **bits**; with the natural log $\ln$ it is **nats**. A few anchors
+worth memorizing:
+
+$$
+H_{\min} = 0 \;\text{(one outcome certain)}, \qquad H_{\max} = \log_2 n \;\text{(uniform over } n \text{ outcomes)}.
+$$
+
+The maximum-at-uniform fact is not an accident: among all distributions on $n$ outcomes, the flat one
+spreads probability as evenly as possible, leaving the most to be resolved. For a two-outcome variable
+with $P(X=1)=p$, entropy is the famous **binary entropy** curve, peaking at $p=\tfrac12$:
+
+$$
+H(p) = -p\log_2 p - (1-p)\log_2 (1-p).
+$$
+
+<Callout type="why">
+Entropy is the floor on **lossless compression**: Shannon's source-coding theorem says you cannot
+encode draws of $X$ in fewer than $H(X)$ bits each on average. Every ML loss built on log-probabilities
+— the cross-entropy that trains classifiers, the perplexity that scores language models — is entropy
+wearing a different hat. Master this and the next three lessons fall into place.
+</Callout>
+
+## The same idea, four different worlds
+
+Surprise-measured-in-bits shows up anywhere a system must deal with uncertainty efficiently.
+
+<ExampleCard domain="Telegraphy" icon="📻">
+**Morse code** is entropy coding done by hand in 1840. The letter *E* (very common in English) gets the
+shortest symbol, a single dot; rare *Q* gets a long dash-dash-dot-dash. Assigning short codes to
+high-probability letters and long codes to rare ones is precisely how you push the average message
+length down toward the entropy of the letter distribution.
+</ExampleCard>
+
+<ExampleCard domain="Word games" icon="🎯">
+In **20 Questions** each yes/no answer can at best halve the remaining possibilities — one bit. To
+single out one item from a million you need about $\log_2(10^6) \approx 20$ questions, which is exactly
+why the game is named for twenty. Wordle players chase the same goal: a good opening guess is the one
+that carries the most **expected bits** of information.
+</ExampleCard>
+
+<ExampleCard domain="File compression" icon="🗜️">
+A **ZIP** archive shrinks a file by replacing frequent byte patterns with short codes. A document that
+is all one repeated character has near-zero entropy and compresses to almost nothing; an already-random
+encrypted file has near-maximal entropy and barely shrinks at all. The compression ratio is a direct
+readout of the data's entropy.
+</ExampleCard>
+
+<ExampleCard domain="Security" icon="🔐">
+**Password strength** is measured in bits of entropy. A truly random 4-digit PIN has $\log_2(10^4)
+\approx 13.3$ bits; a random 12-character passphrase from a large alphabet has $70$-plus bits. Each
+extra bit *doubles* the number of guesses an attacker must try — entropy literally counts the work
+needed to break in.
+</ExampleCard>
+
+<Callout type="note">
+Two of these — Morse and ZIP — use entropy to *spend fewer bits*; two — 20 Questions and passwords —
+use it to *count the bits of uncertainty* to be resolved. Same number, opposite directions.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A fair 8-sided die is rolled. What is the entropy of the outcome, in bits?',
+      options: ['1 bit', '3 bits', '8 bits', '0 bits'],
+      answer: 1,
+      explain: 'For n equally likely outcomes, H = log2(n). Here log2(8) = 3 bits — exactly the three yes/no questions needed to identify one of eight faces.',
+    },
+    {
+      q: 'For a single coin with P(heads) = p, when is the entropy at its MAXIMUM?',
+      options: ['When p = 0', 'When p = 1', 'When p = 0.5', 'Entropy is the same for every p'],
+      answer: 2,
+      explain: 'The binary entropy curve peaks at p = 0.5 (a fair coin = 1 bit). Bias the coin either way and the outcome becomes more predictable, lowering H.',
+    },
+    {
+      q: 'Which statement about the surprise I(x) = log2(1/p) is correct?',
+      options: [
+        'A more probable outcome carries more surprise',
+        'A certain outcome (p = 1) carries zero surprise',
+        'Surprise can be negative',
+        'Surprise does not depend on the probability',
+      ],
+      answer: 1,
+      explain: 'When p = 1, log2(1/1) = 0: a guaranteed event tells you nothing. Surprise grows as probability shrinks and is never negative.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>surprise</strong> of an outcome is I(x) = log₂(1/p(x)): rare events are surprising, certain events carry zero information.',
+    '<strong>Entropy</strong> H(X) = −Σ p(x)·log₂ p(x) is the average surprise — the expected number of yes/no questions to pin down the outcome.',
+    'Entropy is <strong>maximal</strong> for the uniform distribution (H = log₂ n) and <strong>zero</strong> when one outcome is certain.',
+    'Measured with log₂ the unit is the <strong>bit</strong>; the logarithm is what makes independent surprises add up.',
+    'Entropy is the <strong>lower bound on lossless compression</strong> and the seed of every log-probability loss in machine learning.',
+  ]}
+/>
+
+Next up: what happens when your *model* of the distribution is wrong? **Cross-entropy and KL divergence**
+measure the extra bits you pay for a bad guess — and turn out to be the loss function that trains
+classifiers.

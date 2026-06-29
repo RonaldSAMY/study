@@ -1,0 +1,182 @@
+---
+title: PCA
+track: linear-algebra
+summary: Finding the few directions that carry most of the variation in data — the capstone of the whole track.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - linear-algebra/decompositions
+leadsTo:
+  - statistics/regression
+  - optimization/gradient-descent
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PrincipalAxesCloud from '../../../components/demos/PrincipalAxesCloud.tsx';
+
+## The hook: what's the one number that captures a face?
+
+A photo of a face is tens of thousands of pixels, yet faces are not random — they vary in a few
+coordinated ways: lighting, the shape of the jaw, the set of the eyes. Researchers found you can rebuild
+a recognizable face from a small handful of template faces called **eigenfaces**, each a direction of
+greatest variation across a database of portraits. Storing a face becomes storing a few numbers — *how
+much of each template*. That trick of replacing thousands of correlated measurements with a few
+meaningful ones is **Principal Component Analysis**, and it is where every idea in this track finally
+joins forces.
+
+<Callout type="intuition" title="The one-sentence idea">
+**PCA** rotates your data to line up with its directions of greatest spread, then keeps only the top
+few — compressing many correlated features into a handful that capture most of the variation.
+</Callout>
+
+## Intuition: turn the cloud until it's widest
+
+Picture a 2-D cloud of data points stretched into a tilted oval. The two original axes (feature 1,
+feature 2) are an arbitrary choice — the cloud doesn't care about them. PCA asks a better question:
+*along which direction does the data spread the most?* That widest direction is the **first principal
+component (PC1)**; the next-widest direction perpendicular to it is **PC2**, and so on.
+
+Here's how every earlier lesson shows up at once:
+
+- The spread of the data is summarized by its **covariance matrix** — a symmetric matrix.
+- From the eigenvector lesson, a symmetric matrix has **perpendicular eigenvectors** and real
+  eigenvalues. Those eigenvectors *are* the principal components, and each **eigenvalue is the variance
+  along that direction**.
+- Keeping the top components and **projecting** the data onto them (the projection lesson) gives a
+  faithful low-dimensional summary — and this is precisely the **SVD's** best low-rank approximation
+  from the last lesson, applied to centered data.
+
+So PCA is not a new trick; it's the eigen/SVD machinery pointed at the question "where is the
+information?" The answer: in the directions of largest variance.
+
+## Play with it
+
+Shape the point cloud with the sliders. PCA computes the covariance and draws **PC1** and **PC2**
+automatically — PC1 always aligns with the widest spread. The faint lines drop each point onto PC1: the
+1-D summary PCA would keep if it threw the other dimension away.
+
+<PrincipalAxesCloud client:visible />
+
+<Callout type="tip">
+Make the <strong>cross spread</strong> tiny: PC1 then explains nearly 100% of the variance, so squashing
+the cloud onto PC1 loses almost nothing — the points were really 1-D all along. When both spreads are
+equal there is no preferred direction, and PCA can't compress.
+</Callout>
+
+## The formal definition
+
+Given data points stacked as rows of a matrix $X$, first **center** them by subtracting the mean of
+each column. The **covariance matrix** is
+
+$$
+C = \frac{1}{n}\, X^{\top} X \quad (\text{centered}),
+$$
+
+a symmetric $d \times d$ matrix. PCA finds its **eigen-decomposition**
+
+$$
+C = V \Lambda V^{\top},
+$$
+
+where the columns of $V$ are the orthonormal **principal components** $\mathbf{v}_1, \dots,
+\mathbf{v}_d$ and $\Lambda = \operatorname{diag}(\lambda_1 \ge \cdots \ge \lambda_d)$ holds the
+**variance** along each. Equivalently, run the **SVD** $X = U\Sigma V^{\top}$: the same $V$ appears, and
+$\lambda_i = \sigma_i^2 / n$. To reduce to $k$ dimensions, **project** onto the top $k$ components:
+
+$$
+Z = X V_k, \qquad V_k = [\,\mathbf{v}_1 \;\cdots\; \mathbf{v}_k\,].
+$$
+
+The fraction of variance kept is $\dfrac{\lambda_1 + \cdots + \lambda_k}{\lambda_1 + \cdots +
+\lambda_d}$ — your "how much did I preserve?" dial.
+
+<Callout type="why">
+PCA is the most-used dimensionality reducer in ML: it speeds up models, removes correlated noise,
+fights overfitting, and makes high-dimensional data drawable in 2-D. It is the direct payoff of vectors,
+bases, eigenvectors, projections, and the SVD — the entire track in one technique.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Face recognition" icon="🙂">
+**Eigenfaces** are the principal components of a database of portraits. Any face is approximated as a
+mean face plus a few eigenfaces with the right weights, so recognition compares short coefficient
+vectors instead of raw pixels — faster and far more robust to lighting.
+</ExampleCard>
+
+<ExampleCard domain="Population genetics" icon="🧬">
+Run PCA on genetic markers across many people and the top two components reproduce a **map of
+geography** — individuals cluster by ancestral region. The dominant directions of genetic variation
+turn out to encode where populations historically lived and mixed.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💹">
+The daily moves of hundreds of stocks are highly correlated. PCA reveals that the first component is
+essentially "the whole market goes up or down," and the next few are sector rotations — a few factors
+explain most of the chaos, which is how risk models compress thousands of assets.
+</ExampleCard>
+
+<ExampleCard domain="Sports science" icon="🏃">
+Wearable sensors log dozens of correlated gait measurements per stride. PCA collapses them into a few
+**movement signatures** — overall intensity, asymmetry, fatigue — letting coaches track an athlete's
+form with a handful of interpretable numbers instead of raw sensor floods.
+</ExampleCard>
+
+<Callout type="note">
+PCA keeps directions of greatest <em>variance</em>, which is great for compression but not always for
+prediction — sometimes a low-variance direction is the one that matters. That tension is exactly what
+the next tracks, regression and optimization, take on.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the first principal component (PC1) represent?',
+      options: [
+        'The direction of least variance',
+        'The direction along which the data spreads the most',
+        'The average of all data points',
+        'A randomly chosen axis',
+      ],
+      answer: 1,
+      explain: 'PC1 is the direction of maximum variance — the longest axis of the data cloud. Later components capture the most remaining spread, each perpendicular to the rest.',
+    },
+    {
+      q: 'How do the principal components relate to the covariance matrix?',
+      options: [
+        'They are its rows',
+        'They are its eigenvectors, with eigenvalues equal to the variance along each',
+        'They are its determinant',
+        'They are unrelated',
+      ],
+      answer: 1,
+      explain: 'PCA eigen-decomposes the (symmetric) covariance matrix. Its eigenvectors are the principal components and each eigenvalue is the variance captured along that direction.',
+    },
+    {
+      q: 'Variances along the components are 90, 8, 2. What fraction of variance does keeping the top component preserve?',
+      options: ['90%', '50%', '10%', '98%'],
+      answer: 0,
+      explain: 'Total variance is 90 + 8 + 2 = 100. PC1 holds 90, so it preserves 90/100 = 90% — strong compression from 3 dimensions to 1.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>PCA</strong> rotates data onto its directions of greatest spread (principal components) and keeps the top few.',
+    'Center the data, form the <strong>covariance matrix</strong>, and take its <strong>eigenvectors</strong> — those are the components.',
+    'Each <strong>eigenvalue is the variance</strong> along its component; their ratios tell you how much you preserve.',
+    'PCA equals the <strong>SVD</strong> of centered data and a <strong>projection</strong> onto the top components — the whole track at once.',
+    'It powers eigenfaces, genetics maps, risk factors, and visualization, but favors variance over predictive value.',
+  ]}
+/>
+
+That completes the linear-algebra journey — from a single arrow to compressing real data. Next, take
+these tools into **statistics/regression** to fit models, and **optimization/gradient-descent** to
+train them.

@@ -1,0 +1,185 @@
+---
+title: Sequences & Series
+track: calculus-2
+summary: When does adding infinitely many terms land on a finite number? Convergence tests, the ratio test, and power series.
+difficulty: intermediate
+estMinutes: 17
+prereqs:
+  - calculus-2/applications-integrals
+leadsTo:
+  - calculus-2/taylor-series
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PartialSumConvergence from '../../../components/demos/PartialSumConvergence.tsx';
+
+## The hook: an echo that adds up to a finite sound
+
+Clap in a canyon and the echo bounces back, then bounces again, fainter each time — half as loud, then a
+quarter, then an eighth. You're hearing an **infinite sum**: $\tfrac12 + \tfrac14 + \tfrac18 + \cdots$.
+Infinitely many claps, yet the total is *finite* — it lands exactly on $1$. Add infinitely many things
+and sometimes you get a finite answer, and sometimes you get infinity. The whole game is telling which.
+
+This connects straight back to integration. An integral was an infinite sum of infinitely thin pieces.
+A **series** is an infinite sum of discrete terms. Both ask the same question: *does adding endlessly
+many things settle down?*
+
+<Callout type="intuition" title="The one-sentence idea">
+A series **converges** if its running total (the partial sums) homes in on a single finite number, and
+**diverges** if the total runs off to infinity or never settles — and the size of the terms is what
+decides which.
+
+</Callout>
+
+## Intuition: watch the running total
+
+A **sequence** is an ordered list of numbers $a_1, a_2, a_3, \dots$. A **series** is what you get by
+adding them up. The key object is the **partial sum** — the total after $n$ terms:
+
+$$
+S_n = a_1 + a_2 + \cdots + a_n.
+$$
+
+The infinite series $\sum a_n$ *converges* to $L$ if the partial sums $S_n$ approach $L$ as $n \to \infty$.
+This is exactly the **limit** idea from Calculus 1, applied to a staircase of running totals.
+
+A necessary first check: if the terms $a_n$ don't even shrink to zero, the sum has no hope — it diverges.
+But shrinking to zero is *not enough*. The harmonic series $\sum \frac1n$ has terms going to zero, yet its
+total grows without bound. We need sharper tests.
+
+The most useful is the **ratio test**: look at how fast consecutive terms shrink,
+$L = \lim_{n\to\infty}\left|\frac{a_{n+1}}{a_n}\right|$. If $L < 1$ the terms collapse fast enough to
+converge; if $L > 1$ they grow and it diverges; if $L = 1$ the test is silent and you need another tool.
+
+## Play with it
+
+Pick a series and slide in more terms. Watch the partial sums $S_n$ either **settle onto the dashed limit
+line** or **march upward forever**. The badge runs the **ratio test** live: see how $|a_{n+1}/a_n|$
+behaves and what verdict it gives — including the tricky $L=1$ cases where the test can't decide.
+
+<PartialSumConvergence client:visible />
+
+<Callout type="tip">
+Compare <strong>Σ 1/n²</strong> and <strong>Σ 1/n</strong>: both have terms going to zero and both have
+ratio $L=1$, yet one converges and one diverges. That's the lesson — when the ratio test says $L=1$, you
+genuinely cannot tell from the ratio alone.
+</Callout>
+
+## The formal definition
+
+A series $\sum_{n=1}^{\infty} a_n$ **converges** to $S$ if the sequence of partial sums has a finite limit:
+
+$$
+S = \lim_{n\to\infty} S_n, \qquad S_n = \sum_{k=1}^{n} a_k.
+$$
+
+The **geometric series** is the one we can sum exactly. For $|r| < 1$:
+
+$$
+\sum_{n=0}^{\infty} r^{n} = \frac{1}{1-r}.
+$$
+
+The **ratio test**: with $L = \lim_{n\to\infty}\left|\dfrac{a_{n+1}}{a_n}\right|$,
+
+$$
+L < 1 \Rightarrow \text{converges}, \qquad L > 1 \Rightarrow \text{diverges}, \qquad L = 1 \Rightarrow \text{inconclusive}.
+$$
+
+A **power series** lets the terms carry a variable $x$:
+
+$$
+\sum_{n=0}^{\infty} c_n x^{n} = c_0 + c_1 x + c_2 x^2 + \cdots
+$$
+
+The ratio test tells you the **radius of convergence** — the window of $x$ for which the series adds up
+to a finite value. Power series are how we'll represent whole functions in the next lesson.
+
+<Callout type="why">
+Series are the engine inside your devices. A computer can only add, subtract, and multiply — it cannot
+"do" $\sin$, $e^x$, or $\ln$ directly. It evaluates them by summing a few terms of a **power series**.
+Convergence tests guarantee that a handful of terms is enough to hit the accuracy you need.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Acoustics" icon="🔊">
+A canyon echo at half-loudness each bounce sums to $\sum_{n=1}^{\infty}(\tfrac12)^n = 1$ — a finite total
+from infinitely many echoes. Reverb units in audio software use this exact geometric decay to fake a room
+without storing an endless tail of sound.
+</ExampleCard>
+
+<ExampleCard domain="Estimating π" icon="🥧">
+The Basel series $\sum \frac{1}{n^2} = \frac{\pi^2}{6}$ lets you approximate $\pi$ by adding reciprocals
+of squares. It converges slowly — a vivid demonstration that "converges" and "converges *fast*" are very
+different promises.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💰">
+The present value of a bond paying forever, discounted each year, is a geometric series. Because the
+discount ratio is below 1, an *infinite* stream of payments has a *finite* price today — the entire
+theory of perpetuities is one converging series.
+</ExampleCard>
+
+<ExampleCard domain="Computing" icon="🖥️">
+To evaluate $e^x$, a processor sums $\sum \frac{x^n}{n!}$. The ratio of consecutive terms is
+$\frac{x}{n+1} \to 0$, so it converges blazingly fast — a dozen terms give all the digits a calculator
+shows. (That's the bridge to the next lesson.)
+</ExampleCard>
+
+<Callout type="note">
+Beyond the ratio test there's a whole toolbox: the <strong>comparison</strong>, <strong>integral</strong>,
+and <strong>alternating series</strong> tests. Each is a different lens for the same question — does the
+infinite total settle down?
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A series Σ aₙ converges exactly when…',
+      options: [
+        'its terms aₙ get smaller',
+        'its partial sums Sₙ approach a finite limit',
+        'it has infinitely many terms',
+        'all its terms are positive',
+      ],
+      answer: 1,
+      explain: 'Convergence is defined by the partial sums Sₙ approaching a finite number. Shrinking terms are necessary but not sufficient (see the harmonic series).',
+    },
+    {
+      q: 'For the geometric series Σ (1/3)ⁿ starting at n = 0, what does the ratio test give and what is the sum?',
+      options: ['L = 1/3, sum = 3/2', 'L = 3, diverges', 'L = 1, inconclusive', 'L = 1/3, sum = 3'],
+      answer: 0,
+      explain: 'Consecutive terms have ratio 1/3 < 1, so it converges; the sum is 1/(1 − 1/3) = 1/(2/3) = 3/2.',
+    },
+    {
+      q: 'Both Σ 1/n and Σ 1/n² have ratio L = 1. What can you conclude?',
+      options: [
+        'Both converge',
+        'Both diverge',
+        'The ratio test is inconclusive; you need another test (Σ 1/n diverges, Σ 1/n² converges)',
+        'They are the same series',
+      ],
+      answer: 2,
+      explain: 'When L = 1 the ratio test gives no verdict. Other tests show the p-series Σ 1/n^p converges for p > 1 (so 1/n² converges) but diverges for p ≤ 1 (so 1/n diverges).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>series converges</strong> when its partial sums Sₙ approach a finite limit — the same limit idea, applied to running totals.',
+    'Terms shrinking to zero is <strong>necessary but not sufficient</strong>: the harmonic series Σ 1/n diverges anyway.',
+    'The <strong>ratio test</strong> compares consecutive terms: L < 1 converges, L > 1 diverges, L = 1 is inconclusive.',
+    'A <strong>geometric series</strong> Σ rⁿ sums to 1/(1−r) when |r| < 1 — the one infinite sum with a tidy closed form.',
+    '<strong>Power series</strong> Σ cₙ xⁿ converge on a window of x and let us represent whole functions — the topic of the next lesson.',
+  ]}
+/>
+
+Next up: **Taylor Series** — choosing the coefficients of a power series so it *becomes* a function like
+$\sin x$ or $e^x$, which is exactly how your calculator computes them.

@@ -1,0 +1,146 @@
+---
+title: Coordinate Geometry & Distance
+track: geometry
+summary: Geometry meets algebra — pin shapes to a grid and compute exact distances and midpoints with the distance formula.
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - geometry/area-volume
+leadsTo:
+  - geometry/transformations
+  - trigonometry/right-triangle-ratios
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DistanceMidpointGrid from '../../../components/demos/DistanceMidpointGrid.tsx';
+
+## The hook: how your map app knows you're 2.3 km away
+
+Tap a café in a map app and it instantly shows "$2.3$ km away." Behind that number, your phone has two
+pairs of coordinates — your location and the café's — and it does a tiny calculation that turns *pure
+algebra* into a *real distance on the ground*. The trick is to drop a right triangle between the two
+points and let Pythagoras finish the job. This marriage of grid and formula is **coordinate
+geometry**, and it's the bridge from the shapes of geometry to the vectors of machine learning.
+
+<Callout type="intuition" title="The one-sentence idea">
+Put two points on a coordinate grid and the straight-line **distance** between them is the hypotenuse of
+a right triangle whose legs are the horizontal and vertical gaps: $d = \sqrt{(\Delta x)^2 + (\Delta y)^2}$.
+</Callout>
+
+## Intuition: Pythagoras, now with coordinates
+
+You've used the coordinate plane to plot points, and you've proved $a^2 + b^2 = c^2$. Coordinate
+geometry is what happens when those two ideas shake hands.
+
+Take two points $P = (x_1, y_1)$ and $Q = (x_2, y_2)$. To get from $P$ to $Q$ you move $\Delta x =
+x_2 - x_1$ across and $\Delta y = y_2 - y_1$ up. Those two moves are the **legs** of a right triangle,
+and the direct line from $P$ to $Q$ is its **hypotenuse**. So the distance is just Pythagoras applied to
+the coordinate gaps.
+
+The **midpoint** — the exact center of the segment — is even simpler: average the $x$'s and average the
+$y$'s. It's the "balance point" halfway along.
+
+## Play with it
+
+Drag the two points. The orange legs show the horizontal gap $\Delta x$ and vertical gap $\Delta y$; the
+green hypotenuse is the distance. The orange dot marks the midpoint.
+
+<DistanceMidpointGrid client:visible />
+
+<Callout type="tip">
+Put $P$ at $(0,0)$ and $Q$ at $(3,4)$: the legs read $3$ and $4$, and the distance snaps to $5$ — the
+$3$-$4$-$5$ triangle from the Pythagoras lesson, now living on coordinates. The distance formula
+<em>is</em> Pythagoras in disguise.
+</Callout>
+
+## The formal definition
+
+For points $P = (x_1, y_1)$ and $Q = (x_2, y_2)$:
+
+$$
+d = \sqrt{(x_2 - x_1)^2 + (y_2 - y_1)^2}.
+$$
+
+The **midpoint** is the component-wise average:
+
+$$
+M = \left( \frac{x_1 + x_2}{2}, \; \frac{y_1 + y_2}{2} \right).
+$$
+
+This extends seamlessly. In three dimensions you simply add a $z$-term,
+$d = \sqrt{(\Delta x)^2 + (\Delta y)^2 + (\Delta z)^2}$, and the same pattern continues for any number of
+coordinates.
+
+<Callout type="why">
+This formula is, almost word for word, the **length of a vector** and the **Euclidean distance** between
+two data points — the workhorse of $k$-nearest-neighbors, clustering, and similarity search. When a
+recommender asks "which users are closest to you?", it's running exactly this sum of squared
+differences, just with hundreds of coordinates instead of two.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="GPS & maps" icon="🛰️">
+On a small map, two pins at grid tiles $(12, 5)$ and $(15, 9)$ are
+$\sqrt{3^2 + 4^2} = 5$ tiles apart. Scale each tile to real meters and you have the straight-line
+"as-the-crow-flies" distance your navigation app quotes.
+</ExampleCard>
+
+<ExampleCard domain="Video games" icon="🎮">
+A game checks whether an enemy is close enough to attack by computing the distance between the player's
+$(x, y)$ and the enemy's $(x, y)$. To save CPU, engines often compare the <em>squared</em> distance
+(skipping the square root) — the formula, optimized for 60 frames a second.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="⚽">
+Soccer trackers log every player's pitch coordinates 25 times a second. The distance formula turns those
+dots into "kilometers run" and "pass length," the stats that fill match reports and scout databases.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="✨">
+Two stars plotted at $(x_1, y_1)$ and $(x_2, y_2)$ on a sky chart have an angular separation found with
+the very same $\sqrt{(\Delta x)^2 + (\Delta y)^2}$. The midpoint, meanwhile, marks the center of a
+constellation pattern.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the distance between (1, 2) and (4, 6)?',
+      options: ['5', '7', '25', '√7'],
+      answer: 0,
+      explain: 'Δx = 3, Δy = 4, so d = √(3² + 4²) = √25 = 5.',
+    },
+    {
+      q: 'What is the midpoint of (−2, 3) and (4, 7)?',
+      options: ['(1, 5)', '(2, 10)', '(3, 2)', '(6, 4)'],
+      answer: 0,
+      explain: 'Average each coordinate: ((−2+4)/2, (3+7)/2) = (1, 5).',
+    },
+    {
+      q: 'The distance formula is really which earlier theorem in disguise?',
+      options: ['The midpoint rule', 'The Pythagorean theorem', 'The scale-factor rule', 'The area formula'],
+      answer: 1,
+      explain: 'Δx and Δy are the legs of a right triangle and the distance is its hypotenuse — d = √(Δx² + Δy²) is Pythagoras.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Coordinate geometry fuses the <strong>grid</strong> with <strong>algebra</strong>: points become number pairs you can compute with.',
+    'The <strong>distance formula</strong> d = √((Δx)² + (Δy)²) is the Pythagorean theorem applied to coordinate gaps.',
+    'The <strong>midpoint</strong> is the component-wise average ((x₁+x₂)/2, (y₁+y₂)/2).',
+    'It extends to <strong>any number of dimensions</strong> by adding more squared differences.',
+    'This is exactly <strong>Euclidean distance</strong> and <strong>vector length</strong> — central to clustering, kNN, and similarity in ML.',
+  ]}
+/>
+
+Next up: stop measuring static shapes and start *moving* them — **transformations** that slide, turn, and
+resize, and our first real look at vectors.

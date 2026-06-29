@@ -1,0 +1,173 @@
+---
+title: Continuous Distributions
+track: probability
+summary: When outcomes form a continuum, probability becomes area under a density curve — Uniform, Exponential and Gaussian.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - probability/discrete-distributions
+leadsTo:
+  - probability/expectation-variance
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ContinuousDensityShaper from '../../../components/demos/ContinuousDensityShaper.tsx';
+
+## The hook: how long until the next earthquake?
+
+Ask a seismologist *"what's the probability the next quake is exactly 4.7 years away?"* and the honest
+answer is **zero** — because there are infinitely many possible wait times and no single one can carry
+positive probability. Yet *"within the next 5 years"* has a perfectly good answer. That shift — from
+asking about a single value to asking about a **range** — is what separates continuous randomness from
+the counts of the last lesson, and it's why probability becomes **area under a curve**.
+
+<Callout type="intuition" title="The one-sentence idea">
+For a continuous variable, the **density** $f(x)$ has no probability *at* a point; probability is the
+**area** under $f$ over an interval, and the total area is always $1$.
+
+</Callout>
+
+## Intuition: bars become a smooth curve
+
+Take the bar charts from discrete distributions and imagine slicing the values ever finer — minutes into
+seconds, seconds into milliseconds. The bars shrink to slivers and their tops trace a smooth curve: the
+**probability density function** (pdf). The height $f(x)$ is *not* a probability — it can even exceed 1 —
+it's a probability *per unit of $x$*. To get an actual probability you multiply height by width, i.e.
+take **area**:
+
+$$
+P(a < X < b) = \text{area under } f \text{ from } a \text{ to } b.
+$$
+
+Three densities cover most of the continuous world:
+
+- **Uniform($a,b$)** — every value in $[a,b]$ equally likely; a flat rectangle. "I know the range and
+  nothing more."
+- **Exponential($\lambda$)** — the **wait time** until the next random event (the continuous partner of
+  the Poisson). It's **memoryless**: having waited 10 minutes already tells you nothing about how much
+  longer you'll wait.
+- **Gaussian / Normal($\mu,\sigma$)** — the bell curve. It appears whenever many small independent
+  effects add up (the reason why is the Central Limit Theorem, two lessons ahead).
+
+## Play with it
+
+Pick a family, then drag the green **a** and **b** handles to shade an interval — the number below is
+the shaded **area**, $P(a < X < b)$. For the Gaussian, slide $\mu$ to shift the peak and $\sigma$ to
+fatten or pinch it; notice the total area stays exactly 1 no matter the shape.
+
+<ContinuousDensityShaper client:visible />
+
+<Callout type="tip">
+On the Gaussian, set the interval to roughly <strong>μ ± σ</strong> and read the area: about
+<strong>0.68</strong>. Stretch it to μ ± 2σ and you'll get about <strong>0.95</strong>. That
+68–95–99.7 rule is worth memorizing — it's the ruler statisticians reach for constantly.
+</Callout>
+
+## The formal definition
+
+A pdf $f(x)$ must be non-negative and integrate to 1; probabilities are integrals, and the running area
+from the left is the **cumulative distribution function** (cdf):
+
+$$
+P(a < X < b) = \int_a^b f(x)\,dx, \qquad F(x) = P(X \le x) = \int_{-\infty}^{x} f(t)\,dt.
+$$
+
+The three families:
+
+$$
+\text{Uniform: } f(x) = \frac{1}{b-a} \text{ on } [a,b]; \qquad
+\text{Exponential: } f(x) = \lambda e^{-\lambda x},\; x \ge 0.
+$$
+
+$$
+\text{Gaussian: } f(x) = \frac{1}{\sigma\sqrt{2\pi}}\, \exp\!\left(-\frac{(x-\mu)^2}{2\sigma^2}\right).
+$$
+
+The Gaussian's $\mu$ is its center (mean) and $\sigma$ its spread (standard deviation). Because computing
+its area has no elementary formula, we use the cdf — exactly the area the demo shades for you.
+
+<Callout type="why">
+The Gaussian is the workhorse of ML. Least-squares regression secretly assumes Gaussian noise; its
+squared-error loss <em>is</em> the negative log-likelihood of a Normal. Variational autoencoders,
+diffusion models, and Gaussian processes all place Normal densities at their core. The Exponential,
+meanwhile, models the survival and waiting times behind reliability and queueing models.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Ride-hailing" icon="🚕">
+The wait for the next available driver in a busy area follows an **Exponential** distribution. Its
+memorylessness is the surprising part: after waiting 4 minutes, your expected *remaining* wait is the
+same as when you started. Useful and counterintuitive — past waiting earns you no "credit."
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing tolerance" icon="📏">
+The diameter of a machined bolt clusters around its target with **Gaussian** scatter. A part passes if
+it's within μ ± 2σ — about 95% of output. Tightening σ (a better machine) shrinks the reject rate,
+which is why "Six Sigma" literally refers to keeping defects beyond 6 standard deviations.
+</ExampleCard>
+
+<ExampleCard domain="Computer simulation" icon="🎰">
+A random-number generator returns a value **Uniform** on $[0,1]$ — the flat density, every value equally
+likely. It's the raw material of all simulation: feed uniform numbers through the right transform and you
+can manufacture exponential wait times, Gaussian noise, or any distribution you need.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💹">
+Daily returns of a stock are often modeled as **Gaussian** around a small mean. The area in the left
+tail, $P(X < -0.05)$, estimates the chance of a 5% drop — the basis of "Value at Risk." (Markets have
+fatter tails than a true Normal, a caveat that has caused real-world disasters.)
+</ExampleCard>
+
+<Callout type="warning">
+For a continuous variable, $P(X = c) = 0$ for <em>every</em> single value c — a zero-width slice has zero
+area. So $P(X \le c)$ and $P(X < c)$ are equal, and only <em>ranges</em> carry probability. This trips up
+everyone at first.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'For a continuous random variable, what is P(X = 3.5), the probability it equals exactly 3.5?',
+      options: ['Whatever f(3.5) is', '0', '1', 'It depends on σ'],
+      answer: 1,
+      explain: 'A single point has zero width, so zero area: P(X = c) = 0 for any exact value. Probability lives in intervals, found as the area under the density.',
+    },
+    {
+      q: 'X is Uniform on [0, 10]. What is P(2 < X < 5)?',
+      options: ['0.5', '0.3', '0.2', '3'],
+      answer: 1,
+      explain: 'A uniform density is a flat rectangle of height 1/10. The area from 2 to 5 is width × height = 3 × (1/10) = 0.3.',
+    },
+    {
+      q: 'Increasing σ in a Gaussian (keeping μ fixed) does what to the curve?',
+      options: [
+        'Makes it taller and narrower',
+        'Shifts its center to the right',
+        'Makes it shorter and wider, but the total area stays 1',
+        'Increases the total area above 1',
+      ],
+      answer: 2,
+      explain: 'A larger σ spreads probability out, lowering and widening the bell. The total area is always exactly 1, so spreading wider forces the peak lower.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A continuous variable is described by a <strong>density</strong> f(x); probability is <strong>area</strong>, P(a&lt;X&lt;b) = ∫ f, and the total area is 1.',
+    'The density height is a probability <em>per unit</em>, not a probability — so P(X = c) = 0 for any exact value.',
+    '<strong>Uniform</strong> is a flat rectangle; <strong>Exponential</strong> models memoryless wait times; the <strong>Gaussian</strong> is the bell curve set by mean μ and spread σ.',
+    'The <strong>68–95–99.7 rule</strong>: a Gaussian holds ≈68% of its area within μ±σ, ≈95% within μ±2σ, ≈99.7% within μ±3σ.',
+    'The Gaussian underlies least-squares regression and most ML noise models — squared-error loss is its negative log-likelihood.',
+  ]}
+/>
+
+Next up: instead of a whole curve, we'll summarize any distribution with two numbers — its center and
+its spread — in **expectation and variance**.

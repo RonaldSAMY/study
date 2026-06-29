@@ -1,0 +1,169 @@
+---
+title: Vectors
+track: linear-algebra
+summary: Arrows with direction and length — and lists of numbers that can describe almost anything.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - geometry/coordinate-geometry
+leadsTo:
+  - linear-algebra/vector-ops-dot
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import VectorPlayground from '../../../components/demos/VectorPlayground.tsx';
+
+## The hook: how does your phone know which way to go?
+
+When a map app says *"in 200 meters, turn left,"* it is doing arithmetic with **arrows**. Your
+position, your speed, the direction to the next turn — each is a quantity that needs **both a size and
+a direction**. A single number like "200" can't capture "200 meters *to the northeast*." We need a
+richer object. That object is the **vector**, and it is the single most important idea in all of
+machine learning.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **vector** is an arrow: it has a **length** (how much) and a **direction** (which way). Equivalently,
+it's just an ordered **list of numbers** — and that second view is what lets us describe data,
+images, words, and users as vectors.
+</Callout>
+
+## Intuition: two faces of the same thing
+
+There are two ways to picture a vector, and fluency means switching between them effortlessly:
+
+1. **The geometric view** — an arrow from the origin to a point. The arrow $\begin{bmatrix} 3 \\ 1 \end{bmatrix}$
+   means *"go 3 right and 1 up."*
+2. **The list-of-numbers view** — the components $(3, 1)$. This view doesn't care about the picture;
+   it scales to 3, 300, or 3-million dimensions, which is exactly what data needs.
+
+A 2D vector is written $\mathbf{v} = \begin{bmatrix} v_1 \\ v_2 \end{bmatrix}$. The little arrow (or bold
+type) signals "this is a vector, not a single number."
+
+## Play with it
+
+Drag the colored dots below. Watch how the **numbers** and the **arrows** change together — that's the
+two views staying in sync. Switch modes to see vectors **added**, **scaled**, and compared with the
+**dot product**.
+
+<VectorPlayground client:visible />
+
+<Callout type="tip">
+Notice in <strong>a + b</strong> mode: the green result is the diagonal of the parallelogram. Adding
+vectors is just *"do the first journey, then the second."*
+</Callout>
+
+## The formal definition
+
+A vector in $n$ dimensions is an ordered list of $n$ real numbers:
+
+$$
+\mathbf{v} = \begin{bmatrix} v_1 \\ v_2 \\ \vdots \\ v_n \end{bmatrix}, \qquad \mathbf{v} \in \mathbb{R}^n.
+$$
+
+Two operations make vectors useful, and **everything** in linear algebra is built from them:
+
+**Addition** (component by component):
+
+$$
+\mathbf{a} + \mathbf{b} = \begin{bmatrix} a_1 + b_1 \\ a_2 + b_2 \end{bmatrix}.
+$$
+
+**Scalar multiplication** (stretch or shrink by a number $k$):
+
+$$
+k\,\mathbf{a} = \begin{bmatrix} k\,a_1 \\ k\,a_2 \end{bmatrix}.
+$$
+
+The **length** (or *magnitude* / *norm*) comes straight from the Pythagorean theorem:
+
+$$
+\lVert \mathbf{v} \rVert = \sqrt{v_1^2 + v_2^2 + \cdots + v_n^2}.
+$$
+
+<Callout type="why">
+These two operations are the whole game. "A space where you can add things and scale them" is the
+definition of a **vector space** — and neural-network weights, images, and word embeddings all live in
+one.
+</Callout>
+
+## The same idea, four different worlds
+
+Vectors aren't only arrows on graph paper. Here is the *same* mathematical object showing up in
+completely different places.
+
+<ExampleCard domain="Navigation" icon="🧭">
+A drone's **displacement** is the vector $\begin{bmatrix} 400 \\ 300 \end{bmatrix}$ meters (east, north).
+Its length $\sqrt{400^2 + 300^2} = 500$ m is the straight-line distance, and the direction is the bearing
+it must fly. Add the wind's velocity vector and you get the *true* path over the ground.
+</ExampleCard>
+
+<ExampleCard domain="Physics" icon="🍎">
+Two ropes pull a crate. Each pull is a **force vector**. The crate doesn't feel them separately — it
+feels their **vector sum**. If the forces are equal and opposite, the sum is the zero vector and nothing
+moves. This is exactly the *tip-to-tail* addition from the demo.
+</ExampleCard>
+
+<ExampleCard domain="Digital color" icon="🎨">
+Every pixel on your screen is a vector $\begin{bmatrix} R \\ G \\ B \end{bmatrix}$ with three numbers from
+0–255. Pure red is $\begin{bmatrix} 255 \\ 0 \\ 0 \end{bmatrix}$. Averaging two color vectors blends the
+colors — addition and scaling, doing real work.
+</ExampleCard>
+
+<ExampleCard domain="Recommender systems" icon="🎬">
+A streaming service represents your taste as a vector — maybe
+$[\,\text{comedy}, \text{action}, \text{romance}, \dots\,]$. Each movie is a vector too. When your vector
+and a movie's vector **point the same way**, you get a recommendation. (That "same way" test is the
+dot product — the next lesson.)
+</ExampleCard>
+
+<Callout type="note">
+Notice the leap: the first two examples are 2D arrows you can draw; the last lives in *hundreds* of
+dimensions you can't picture. The algebra is identical. That's the power of the list-of-numbers view.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What two pieces of information does a vector carry?',
+      options: ['Only a size', 'A size and a direction', 'Only a direction', 'A color and a size'],
+      answer: 1,
+      explain: 'A vector has magnitude (how much) and direction (which way) — unlike a plain number, which only has size.',
+    },
+    {
+      q: 'You walk a = [3, 0] then b = [0, 4]. What is your total displacement a + b, and how far are you from the start?',
+      options: ['[3, 4], distance 7', '[3, 4], distance 5', '[0, 0], distance 0', '[12, 0], distance 12'],
+      answer: 1,
+      explain: 'Add component-wise: [3,4]. The distance is the length √(3² + 4²) = √25 = 5.',
+    },
+    {
+      q: 'Why can a user’s movie taste be treated as a vector even though you can’t draw it?',
+      options: [
+        'Because it is always 2-dimensional',
+        'Because a vector is just an ordered list of numbers, of any length',
+        'Because taste has a color',
+        'It cannot — vectors must be arrows',
+      ],
+      answer: 1,
+      explain: 'The list-of-numbers view of a vector works in any number of dimensions, so taste across many genres is a perfectly good vector.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>vector</strong> is an arrow with a length and a direction — and equivalently an ordered list of numbers.',
+    'The two core operations are <strong>addition</strong> (component-wise) and <strong>scalar multiplication</strong> (stretch/shrink).',
+    'A vector’s <strong>length</strong> is the Pythagorean √(sum of squares) of its components.',
+    'The list-of-numbers view scales to <strong>any number of dimensions</strong>, letting us turn colors, users, and data into vectors.',
+    'Everything ahead — matrices, transformations, even neural networks — is built on these simple moves.',
+  ]}
+/>
+
+Next up: the **dot product** — a single number that tells you how much two vectors agree, and the key
+to similarity, projections, and the recommender example above.

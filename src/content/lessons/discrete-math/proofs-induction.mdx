@@ -1,0 +1,177 @@
+---
+title: Proofs & Induction
+track: discrete-math
+summary: How we know a statement is true — direct proof, contradiction, and the domino logic of induction.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - discrete-math/logic
+leadsTo:
+  - discrete-math/relations-graphs
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DominoInductionVisualizer from '../../../components/demos/DominoInductionVisualizer.tsx';
+
+## The hook: how do you check infinitely many cases?
+
+Suppose someone claims that the first $n$ whole numbers always add up to $n(n+1)/2$. You could test it:
+$1 = 1$, $1+2 = 3$, $1+2+3 = 6$… and it keeps working. But "I checked a thousand cases" is not the same
+as "it is true for *all* numbers" — and there are infinitely many. A **proof** is an argument that
+settles the question forever, with no exceptions left to test. Building proofs is the moment math turns
+from *computing answers* into *knowing why they are right* — the exact skill behind every theorem you
+will trust later.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **proof** is a chain of logical implications from things we accept to the thing we want; **induction**
+is the special chain that topples an infinite row of dominoes — prove the first falls, and prove each
+one knocks over the next.
+
+</Callout>
+
+## Intuition: three ways to be certain
+
+Using the implications from the last lesson, there are three workhorse proof styles:
+
+1. **Direct proof.** Assume the hypothesis and march straight to the conclusion via $p \to q$ steps.
+   *"If $n$ is even then $n^2$ is even"*: write $n = 2k$, so $n^2 = 4k^2 = 2(2k^2)$, which is even. Done.
+2. **Proof by contradiction.** Assume the statement is **false**, then derive something impossible. The
+   false assumption must have been the problem. This is how we show $\sqrt{2}$ is irrational.
+3. **Proof by induction.** For statements about *every* natural number $n$. Show it holds for the
+   starting case, then show that *if* it holds for some $k$, it must hold for $k+1$. Like dominoes:
+   knock the first, guarantee each topples the next, and the whole infinite line falls.
+
+Induction is the star of this lesson because it is how we prove things about loops, recursion, and
+sums — the structures that fill computer science and machine learning.
+
+## Play with it
+
+Each domino is the claim $P(n)$ for one value of $n$. First press **Base case** to topple $P(1)$. Then
+press **Inductive step** to let each fall knock over the next, or **Run full chain** to watch induction
+sweep through every case at once.
+
+<DominoInductionVisualizer client:visible />
+
+<Callout type="tip">
+A chain needs <em>both</em> parts. If the first domino never falls (no base case), nothing happens —
+even if every domino *would* knock over its neighbor. And if some domino fails to reach the next (a
+broken inductive step), the chain stops dead. Miss either and the proof collapses.
+</Callout>
+
+## The formal definition
+
+To prove a statement $P(n)$ holds for every integer $n \ge 1$ by **mathematical induction**:
+
+$$
+\underbrace{P(1)}_{\text{base case}}
+\quad\text{and}\quad
+\underbrace{\big(P(k) \to P(k+1)\big)\ \text{for all } k \ge 1}_{\text{inductive step}}
+\;\;\Longrightarrow\;\; P(n)\ \text{for all } n \ge 1.
+$$
+
+The assumption $P(k)$ inside the step is the **inductive hypothesis** — you get to *assume* the claim
+at $k$ in order to prove it at $k+1$. Here is the running example, fully proved:
+
+**Claim.** $\displaystyle \sum_{i=1}^{n} i = \frac{n(n+1)}{2}$.
+
+**Base case.** For $n = 1$: the left side is $1$, the right side is $\tfrac{1 \cdot 2}{2} = 1$. ✓
+
+**Inductive step.** Assume $\sum_{i=1}^{k} i = \tfrac{k(k+1)}{2}$. Then
+
+$$
+\sum_{i=1}^{k+1} i = \underbrace{\frac{k(k+1)}{2}}_{\text{hypothesis}} + (k+1)
+= \frac{k(k+1) + 2(k+1)}{2} = \frac{(k+1)(k+2)}{2}.
+$$
+
+That is exactly $P(k+1)$. By induction the formula holds for all $n \ge 1$. $\blacksquare$
+
+<Callout type="why">
+Induction is how we prove **algorithms are correct** and how recurrences are solved. Convergence
+arguments for gradient descent, correctness of recursive code, and bounds in learning theory all lean
+on "it holds at step $k$, therefore at step $k+1$." Master the domino and you can reason about any
+process that builds on itself.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Computer science" icon="💻">
+A recursive function works for an input of size $n$ because it works for the **base case** (say
+$n = 0$) and each call correctly reduces to a smaller one. That argument *is* induction — it is the
+standard way to prove a recursive algorithm returns the right answer for every input size.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💰">
+Compound interest says a balance grows by a factor $(1 + r)$ each year. Prove by induction that after
+$n$ years the balance is $P(1+r)^{n}$: it holds at year $1$, and if it holds at year $k$, multiplying
+by $(1+r)$ once more gives year $k+1$. Each year topples the next.
+</ExampleCard>
+
+<ExampleCard domain="Climbing a ladder" icon="🪜">
+To argue you can reach *every* rung: you can reach the **first** rung (base case), and from any rung you
+can always step to the **next** (inductive step). Together these guarantee you reach arbitrarily high —
+the most physical picture of induction there is.
+</ExampleCard>
+
+<ExampleCard domain="Epidemiology" icon="🦠">
+A rumor (or a virus) that starts with one person and where every informed person tells someone new each
+day reaches a predictable count. Showing "if $k$ people know on day $k$, then more know on day $k+1$"
+is an inductive step — the same logic models cascades in networks.
+</ExampleCard>
+
+<Callout type="warning">
+The inductive hypothesis is a tool, not cheating: you assume $P(k)$ only to derive $P(k+1)$, never the
+final claim outright. And never skip the base case — without a first domino, a perfect chain of
+implications proves nothing at all.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What are the two required parts of a proof by induction?',
+      options: [
+        'A guess and a calculator check',
+        'A base case and an inductive step',
+        'Two separate base cases',
+        'A contradiction and a direct proof',
+      ],
+      answer: 1,
+      explain: 'Induction needs the base case (the first domino) and the inductive step (each one topples the next).',
+    },
+    {
+      q: 'In proof by contradiction, what do you assume at the start?',
+      options: [
+        'That the statement is true',
+        'That the statement is false',
+        'Only the base case',
+        'Nothing at all',
+      ],
+      answer: 1,
+      explain: 'You assume the statement is false and derive an impossibility, forcing the statement to be true.',
+    },
+    {
+      q: 'Using 1 + 2 + … + n = n(n+1)/2, what is the sum of the first 100 numbers?',
+      options: ['5050', '10000', '550', '5000'],
+      answer: 0,
+      explain: 'Plug in n = 100: 100 · 101 / 2 = 5050 — the famous result the formula gives instantly.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>proof</strong> is a chain of logical implications from accepted facts to the claim.',
+    '<strong>Direct proof</strong> argues p → q straight; <strong>contradiction</strong> assumes the claim is false and breaks it.',
+    '<strong>Induction</strong> proves a claim for all n via a <strong>base case</strong> plus an <strong>inductive step</strong> P(k) → P(k+1).',
+    'The <strong>inductive hypothesis</strong> lets you assume the case at k while proving the case at k+1.',
+    'Induction underlies recursion, recurrences, and convergence arguments throughout CS and ML.',
+  ]}
+/>
+
+Next up: **relations, functions and graphs** — the structures that connect the elements of our sets,
+and the networks they form.

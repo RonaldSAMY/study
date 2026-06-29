@@ -1,0 +1,175 @@
+---
+title: Quadratics & Factoring
+track: algebra-2
+summary: Parabolas, roots, and completing the square — the math of every arc and curve.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - algebra-1/slope-linear
+leadsTo:
+  - algebra-2/polynomials
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import QuadraticParabolaExplorer from '../../../components/demos/QuadraticParabolaExplorer.tsx';
+
+## The hook: the perfect free throw
+
+Watch a basketball leave a shooter's hand. It doesn't travel in a straight line — it rises,
+slows, curves over, and drops cleanly through the hoop. That graceful, symmetric arc has a name:
+a **parabola**. The same shape catches water in a fountain, holds up a suspension bridge, and
+focuses sunlight in a solar cooker. Straight lines were the story of Algebra 1; the moment something
+**curves**, you've left lines behind and entered the world of the **quadratic**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **quadratic** is any expression with a squared term, $ax^2 + bx + c$, and its graph is always a
+**parabola** — a single smooth U-shaped curve with one lowest (or highest) point.
+</Callout>
+
+## Intuition: what the squared term does
+
+In Algebra 1 a linear function $y = mx + b$ had a constant slope — every step right changed $y$ by the
+same amount. A quadratic breaks that rule. The $x^2$ term makes the slope *itself* change as you move,
+which is exactly what bends the line into a curve.
+
+Three numbers control everything:
+
+- **$a$** — how sharply it curves and which way it opens. Positive $a$ opens **upward** (a valley);
+  negative $a$ opens **downward** (a hill, like the basketball).
+- **$b$** — slides the curve left/right and tilts where the turning point sits.
+- **$c$** — the **y-intercept**, where the curve crosses the vertical axis ($x = 0$).
+
+The single most important point on a parabola is its **vertex** — the bottom of the valley or the top
+of the hill. Because a parabola is perfectly symmetric, the vertex sits exactly halfway between the two
+points where it crosses the x-axis. Those crossing points are the **roots** (also called *zeros* or
+*solutions*): the $x$-values that make the whole expression equal zero.
+
+## Play with it
+
+Slide $a$, $b$, and $c$ below. Notice how $a$ controls the steepness and direction, how the
+**vertex** glides along, and how the **roots** appear, merge, or vanish entirely.
+
+<QuadraticParabolaExplorer client:visible />
+
+<Callout type="tip">
+Push $a$ toward zero and the curve flattens toward a straight line — a quadratic is what you get when a
+line is allowed to bend. Watch the <strong>discriminant</strong>: when it dips below zero, the parabola
+lifts off the x-axis and the real roots disappear.
+</Callout>
+
+## The formal definition
+
+A **quadratic function** has the standard form
+
+$$
+f(x) = ax^2 + bx + c, \qquad a \neq 0.
+$$
+
+To find its **roots** we solve $ax^2 + bx + c = 0$. There are two classic tools.
+
+**Factoring** rewrites the expression as a product. If
+
+$$
+ax^2 + bx + c = a\,(x - r_1)(x - r_2),
+$$
+
+then the roots are simply $r_1$ and $r_2$, because a product is zero only when one of its factors is
+zero. For example $x^2 - x - 6 = (x-3)(x+2)$, so the roots are $3$ and $-2$.
+
+When factoring isn't obvious, the **quadratic formula** always works:
+
+$$
+x = \frac{-b \pm \sqrt{b^2 - 4ac}}{2a}.
+$$
+
+The piece under the square root, $b^2 - 4ac$, is the **discriminant**. It decides the fate of the roots:
+positive gives **two** real roots, zero gives **one** (a repeated root, where the vertex touches the
+axis), and negative gives **none** that are real.
+
+**Completing the square** rewrites the quadratic to expose its vertex directly:
+
+$$
+f(x) = a\left(x + \tfrac{b}{2a}\right)^2 + \left(c - \tfrac{b^2}{4a}\right),
+$$
+
+so the vertex sits at $x = -\dfrac{b}{2a}$. This *vertex form* is how you read off the peak of an arc at
+a glance.
+
+<Callout type="why">
+Quadratics are the simplest curves that have a **minimum**. Machine learning is, at its heart, the
+search for the minimum of an error function — and the friendliest error functions (like
+mean-squared error) are bowl-shaped quadratics. Finding the vertex *is* learning.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Sports" icon="🏀">
+A free throw leaves the hand at $4.2$ m high and follows $h(x) = -0.45x^2 + 1.9x + 4.2$, where $x$ is the
+horizontal distance in meters. The negative $a$ makes it arc downward; the **vertex** is the peak of the
+shot, and a **root** marks where the ball would hit the floor if it missed the rim.
+</ExampleCard>
+
+<ExampleCard domain="Architecture" icon="🌉">
+The cables of a suspension bridge hang in a parabola. Engineers write the curve as $y = ax^2$ with the
+**vertex** at the lowest point mid-span. Knowing $a$ tells them exactly how tall each support tower must
+be at any distance from the center — pure quadratic geometry holding up tons of traffic.
+</ExampleCard>
+
+<ExampleCard domain="Business" icon="💰">
+A food truck finds its daily profit follows $P(p) = -8p^2 + 240p - 1000$, where $p$ is the price of a meal.
+Because $a < 0$ the profit curve is a hill: the **vertex** reveals the single price that maximizes profit,
+and the **roots** are the break-even prices where profit hits zero.
+</ExampleCard>
+
+<ExampleCard domain="Engineering" icon="⛲">
+Water shooting from a fountain nozzle traces a parabola before gravity pulls it back down. Designers tune
+the launch angle and speed — effectively $b$ and $c$ — so the **roots** (where the water lands) drop the
+stream neatly back into the basin instead of onto passers-by.
+</ExampleCard>
+
+<Callout type="note">
+Every one of these is the *same* equation $ax^2 + bx + c$ wearing a different costume. Learn to read the
+vertex and the roots, and you can describe any arc in nature or engineering.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A parabola opens downward (like a thrown ball). What must be true of the coefficient a?',
+      options: ['a is positive', 'a is negative', 'a is zero', 'a equals b'],
+      answer: 1,
+      explain: 'A negative a flips the U upside-down, so the parabola opens downward with a highest point (a hill).',
+    },
+    {
+      q: 'Factor x² − x − 6. What are its roots?',
+      options: ['1 and 6', '3 and −2', '−3 and 2', '2 and 3'],
+      answer: 1,
+      explain: 'x² − x − 6 = (x − 3)(x + 2), which is zero when x = 3 or x = −2.',
+    },
+    {
+      q: 'The discriminant b² − 4ac of a quadratic comes out negative. How many times does its graph cross the x-axis?',
+      options: ['Twice', 'Once', 'Zero times', 'Infinitely many'],
+      answer: 2,
+      explain: 'A negative discriminant means the square root is imaginary — there are no real roots, so the parabola never touches the x-axis.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>quadratic</strong> ax² + bx + c always graphs as a <strong>parabola</strong> — a single symmetric U-shaped curve.',
+    'The sign of <strong>a</strong> sets the direction (up = valley, down = hill) and how sharply it curves.',
+    'The <strong>roots</strong> are where the curve crosses y = 0; find them by <strong>factoring</strong> or the <strong>quadratic formula</strong>.',
+    'The <strong>discriminant</strong> b² − 4ac counts the real roots: positive → two, zero → one, negative → none.',
+    '<strong>Completing the square</strong> reveals the <strong>vertex</strong> at x = −b/2a — the minimum or maximum of the curve.',
+  ]}
+/>
+
+Next up: **polynomials** — what happens when we go beyond the squared term to cubes, quartics, and
+curves with many twists and turns.

@@ -1,0 +1,191 @@
+---
+title: Information Theory in ML
+track: information-theory
+summary: How entropy, cross-entropy and mutual information become the loss functions and split rules that real models are built on.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - information-theory/mutual-information
+leadsTo:
+  - ml-methods/when-models-meet-data
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import InfoGainSplitDemo from '../../../components/demos/InfoGainSplitDemo.tsx';
+
+## The hook: two very different models, one currency
+
+A deep neural network and a humble decision tree look nothing alike. One is a million-parameter stack of
+matrix multiplies; the other is a flowchart of yes/no questions. Yet both run on the same currency:
+**bits of information**. The network learns by minimizing **cross-entropy**; the tree grows by greedily
+maximizing **information gain**, which is just mutual information in disguise. The three measures from
+the last three lessons aren't abstractions — they are the engines inside the algorithms you actually
+deploy.
+
+<Callout type="intuition" title="The one-sentence idea">
+Training a classifier means **minimizing cross-entropy** between its predictions and the truth, and
+splitting a decision tree means **maximizing the information gain** — the mutual information — between a
+feature and the label.
+</Callout>
+
+## Intuition: the two great appearances
+
+**Appearance one — the loss function.** Every probabilistic classifier outputs a distribution $q$ over
+labels; the data hands you the true label $p$ (one-hot). From the cross-entropy lesson, the cost of
+that prediction is $-\log q(y)$. Average it over the dataset and you have the **cross-entropy loss**,
+the single most common objective in supervised learning. Gradient descent simply slides the model's
+parameters downhill on this surface.
+
+**Appearance two — the split rule.** A decision tree must choose *which question to ask*. Before a
+split, the labels in a node have entropy $H(S)$. After splitting on a feature, each child is purer, with
+lower average entropy. The **information gain** is the drop:
+
+$$
+\mathrm{IG}(S, A) = H(S) - \sum_{v}\frac{|S_v|}{|S|}\, H(S_v).
+$$
+
+Here is the beautiful part: that expression is exactly the **mutual information** $I(\text{label};A)$
+between the label and the feature you split on. The tree, asking *"which question tells me the most
+about the answer?"*, is literally doing greedy mutual-information maximization — the same idea as the
+20-questions game, run automatically.
+
+## Play with it
+
+Each dot is a patient, colored by the true label. Drag the green threshold to split them, and switch the
+feature to compare. The information gain bar shows how good each split is.
+
+<InfoGainSplitDemo client:visible />
+
+<Callout type="tip">
+On the strong feature ("age") there is a threshold that sends the colors cleanly left and right — the
+gain bar nearly fills. Switch to "lab noise" and no threshold separates the classes well; the gain stays
+small. A tree would pick the high-gain feature first. That's the whole learning rule.
+</Callout>
+
+## The formal definition
+
+**Cross-entropy loss** over a dataset of $N$ examples with $C$ classes, true one-hot labels $y_{ic}$
+and predicted probabilities $q_{ic}$:
+
+$$
+\mathcal{L} = -\frac{1}{N}\sum_{i=1}^{N}\sum_{c=1}^{C} y_{ic}\, \log q_{ic}.
+$$
+
+Minimizing $\mathcal{L}$ is identical to **maximum likelihood** and to minimizing the KL divergence to
+the data distribution — the chain of equalities from two lessons ago. For language models the same loss
+is reported as **perplexity** $= e^{\mathcal{L}}$ (using nats), the effective branching factor of the
+model's predictions.
+
+**Information gain** for a tree split is mutual information between the label $Y$ and the split outcome
+$A$:
+
+$$
+\mathrm{IG} = H(Y) - H(Y \mid A) = I(Y; A) \;\ge\; 0.
+$$
+
+A greedy learner (ID3, C4.5, and the entropy criterion in modern libraries) evaluates every candidate
+feature and threshold, computes $\mathrm{IG}$, and keeps the largest — then recurses on each child.
+
+<Callout type="why">
+This is the punchline of the whole track. The "loss" you minimize and the "criterion" a tree splits on
+are not arbitrary engineering choices — they are forced by information theory. Cross-entropy is the only
+loss consistent with treating outputs as probabilities, and information gain is the only split rule that
+measures bits of label uncertainty removed. The math you learned *is* the algorithm.
+</Callout>
+
+## The same idea, four different worlds
+
+From flowcharts to deep space, the same bits do the work.
+
+<ExampleCard domain="Lending" icon="🏦">
+A credit model that approves loans is often a **gradient-boosted tree**. At every node it asks the
+question with the highest information gain — *"is income above a threshold?"*, *"more than two missed
+payments?"* — ranking applicants by how sharply each split separates *repaid* from *defaulted*. The tree
+is choosing the most informative questions, in order.
+</ExampleCard>
+
+<ExampleCard domain="Deep-space communication" icon="🛰️">
+A probe near Saturn whispers data across billions of kilometers through noise. **Shannon's channel
+capacity** $C = \max I(X;Y)$ sets the hard limit on reliable bits per second; **error-correcting codes**
+add just enough redundancy to approach it. The same mutual information that picks tree splits here caps
+how fast the universe lets you talk.
+</ExampleCard>
+
+<ExampleCard domain="Field biology" icon="🦋">
+A naturalist's **identification key** is a hand-built decision tree: *wings or no wings? spotted or
+plain?* A well-designed key orders its questions by information gain so the species is named in the
+fewest steps. Long before computers, biologists were minimizing expected questions — entropy in a field
+notebook.
+</ExampleCard>
+
+<ExampleCard domain="Online advertising" icon="📣">
+Click-through-rate models predict the probability you tap an ad and are trained with **log loss** —
+cross-entropy against whether the click actually happened. A model that confidently predicts a click
+that never comes is penalized hard, so the system learns calibrated probabilities that decide, in
+milliseconds, which ad to show.
+</ExampleCard>
+
+<Callout type="warning">
+Information gain is biased toward features with **many distinct values** (a unique ID would "perfectly"
+split the data with maximal gain yet generalize terribly). Real learners fix this with the **gain
+ratio** or by penalizing high-cardinality splits — a reminder that maximizing bits on the training set
+is not the same as learning.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A decision tree picks the feature to split on by maximizing information gain. Information gain is exactly which quantity?',
+      options: [
+        'The cross-entropy between two features',
+        'The mutual information I(label; feature)',
+        'The entropy of the feature alone',
+        'The KL divergence between two leaves',
+      ],
+      answer: 1,
+      explain: 'IG = H(Y) − H(Y|A) = I(Y;A): the bits of label uncertainty the split removes. Greedy tree growth is greedy mutual-information maximization.',
+    },
+    {
+      q: 'Minimizing the cross-entropy loss of a classifier is equivalent to which classical principle?',
+      options: [
+        'Maximum likelihood estimation',
+        'Maximizing the entropy of the labels',
+        'Minimizing the variance of the features',
+        'Maximizing mutual information between features',
+      ],
+      answer: 0,
+      explain: 'Cross-entropy loss equals the negative log-likelihood, so minimizing it is maximum likelihood — and equivalently minimizing KL to the data distribution.',
+    },
+    {
+      q: 'Why is raw information gain biased toward features with many distinct values?',
+      options: [
+        'Such features always have low entropy',
+        'They can carve the training data into tiny pure pieces, inflating the gain without generalizing',
+        'They reduce the depth of the tree',
+        'They make cross-entropy negative',
+      ],
+      answer: 1,
+      explain: 'A high-cardinality feature (e.g., a unique ID) can split every example into its own pure leaf — maximal apparent gain, zero real signal. Gain ratio corrects for this.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The standard <strong>cross-entropy loss</strong> L = −(1/N)ΣΣ y·log q is the negative log-likelihood — minimizing it is maximum likelihood and KL minimization.',
+    'A decision tree splits on the feature with the highest <strong>information gain</strong> IG = H(Y) − H(Y|A), which is exactly the <strong>mutual information</strong> I(Y;A).',
+    'Language-model quality is cross-entropy reported as <strong>perplexity</strong>, the effective number of choices per token.',
+    'Mutual information also sets <strong>channel capacity</strong> C = max I(X;Y), the ceiling on reliable communication.',
+    'Maximizing gain on training data ≠ learning: high-cardinality features inflate gain, so real learners use <strong>gain ratio</strong> and regularization.',
+  ]}
+/>
+
+That completes the information-theory track: from a single bit of surprise to the loss functions and
+split rules of real models. Next you'll cross into **ML methods** — starting with *When Models Meet
+Data*, where these objectives meet the practical realities of training, testing, and overfitting.

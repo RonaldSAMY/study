@@ -1,0 +1,72 @@
+# Self-contained stack: Traefik (reverse proxy + auto HTTPS) + the static site.
+# Routing is by domain name, so other services can share ports 80/443 by
+# joining the external `web` network and adding their own Host(...) labels.
+#
+# Quick start:
+#   cp .env.example .env   &&   edit DOMAIN and ACME_EMAIL
+#   docker compose up -d --build
+#
+# See DEPLOY.md for adding your existing service to the same router.
+
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      # --- Providers ---
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"   # only labeled containers are exposed
+      - "--providers.docker.network=web"
+      # --- Entry points ---
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      # Redirect all HTTP to HTTPS globally
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.web.http.redirections.entrypoint.permanent=true"
+      # --- Let's Encrypt (ACME HTTP-01 challenge) ---
+      - "--certificatesresolvers.le.acme.httpchallenge=true"
+      - "--certificatesresolvers.le.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.le.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      # For testing without hitting rate limits, uncomment the staging CA:
+      # - "--certificatesresolvers.le.acme.caserver=https://acme-staging-v02.api.letsencrypt.org/directory"
+      # --- Logs (optional) ---
+      - "--log.level=INFO"
+      - "--accesslog=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "letsencrypt:/letsencrypt"
+    networks:
+      - web
+
+  maths-llm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: maths-llm:latest
+    container_name: maths-llm
+    restart: unless-stopped
+    # No published host ports — Traefik reaches it over the `web` network.
+    expose:
+      - "80"
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.maths.rule=Host(`${DOMAIN}`)"
+      - "traefik.http.routers.maths.entrypoints=websecure"
+      - "traefik.http.routers.maths.tls=true"
+      - "traefik.http.routers.maths.tls.certresolver=le"
+      - "traefik.http.services.maths.loadbalancer.server.port=80"
+
+networks:
+  web:
+    name: web   # fixed name so other compose projects can join as `external: true`
+
+volumes:
+  letsencrypt:

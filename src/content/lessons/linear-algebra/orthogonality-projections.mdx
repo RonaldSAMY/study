@@ -1,0 +1,182 @@
+---
+title: Orthogonality & Projections
+track: linear-algebra
+summary: Right angles and shadows — how to find the closest point in a subspace, the engine behind least squares.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - linear-algebra/eigenvectors
+leadsTo:
+  - linear-algebra/decompositions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ProjectionResidualLab from '../../../components/demos/ProjectionResidualLab.tsx';
+
+## The hook: where's the nearest point on the road?
+
+You're standing in a field and want to reach a long straight road as fast as possible. You don't walk
+to some random spot on it — you walk **straight toward it**, meeting the road at a perfect right angle.
+That shortest path is the **perpendicular**, and the point where you hit the road is your
+**projection** onto it. This single picture — drop a perpendicular to find the closest point — is how
+machines fit lines to data, compress signals, and answer "what's the best approximation I can make
+inside a limited space?"
+
+<Callout type="intuition" title="The one-sentence idea">
+The **projection** of a point onto a subspace is its closest point there, and the leftover **residual**
+always meets the subspace at a **right angle**.
+</Callout>
+
+## Intuition: the shadow and the leftover
+
+You already know the **dot product** measures how much two vectors align, and that it's zero exactly
+when they're **perpendicular** (orthogonal). Projection puts that to work.
+
+Take a point $\mathbf{p}$ and a line through the origin in direction $\mathbf{d}$. The **projection**
+$\hat{\mathbf{p}}$ is the shadow $\mathbf{p}$ casts straight down onto the line. Split $\mathbf{p}$ into
+two pieces:
+
+1. the part **along** the line — that's the projection $\hat{\mathbf{p}}$, and
+2. the part **left over**, $\mathbf{r} = \mathbf{p} - \hat{\mathbf{p}}$ — the **residual**.
+
+The key fact: the residual is **perpendicular** to the line. And perpendicular is precisely what makes
+the projection the *closest* point — any other point on the line forms a right triangle with
+$\mathbf{p}$, and the hypotenuse (the distance to that other point) is always longer than the leg
+(the residual). Minimizing distance and demanding a right angle are the *same condition*. That is the
+whole idea of **least squares**: the best fit is the one whose errors are orthogonal to everything you
+could have adjusted.
+
+## Play with it
+
+Drag the point $\mathbf{p}$ and the line direction $\mathbf{d}$. The green shadow is the projection;
+the red dashed segment is the residual. Watch the right-angle marker and the readout $\mathbf{r}\cdot
+\mathbf{d}$.
+
+<ProjectionResidualLab client:visible />
+
+<Callout type="tip">
+Try to make the residual length <strong>smaller</strong> by moving the projection along the line —
+you can't. The perpendicular drop is already the minimum, and the readout <span
+class="font-mono">r · d ≈ 0</span> confirms the right angle is what locks it in place.
+</Callout>
+
+## The formal definition
+
+The **projection** of a vector $\mathbf{p}$ onto the line spanned by $\mathbf{d}$ is
+
+$$
+\hat{\mathbf{p}} = \frac{\mathbf{p} \cdot \mathbf{d}}{\mathbf{d} \cdot \mathbf{d}}\, \mathbf{d}.
+$$
+
+The residual $\mathbf{r} = \mathbf{p} - \hat{\mathbf{p}}$ satisfies the **orthogonality condition**
+
+$$
+\mathbf{r} \cdot \mathbf{d} = 0.
+$$
+
+For a whole subspace spanned by the columns of a matrix $A$, projecting a target $\mathbf{b}$ leads to
+the **normal equations**
+
+$$
+A^{\top} A\, \hat{\mathbf{x}} = A^{\top} \mathbf{b},
+$$
+
+whose solution $\hat{\mathbf{x}}$ gives the **least-squares** best fit — the coefficients that make the
+residual $\mathbf{b} - A\hat{\mathbf{x}}$ orthogonal to every column of $A$. A set of vectors that are
+mutually perpendicular *and* unit length is called **orthonormal**; with an orthonormal basis,
+projecting is just a sequence of dot products — no matrix inverse needed.
+
+<Callout type="why">
+Linear regression *is* a projection. Your data targets live in a high-dimensional space, your model can
+only reach the subspace spanned by its features, and the best fit is the projection of the targets onto
+that subspace. The "least" in least squares is literally the squared length of the orthogonal residual.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="GPS positioning" icon="🛰️">
+A receiver hears noisy distance readings from several satellites — more equations than unknowns, none
+perfectly consistent. It solves a **least-squares** problem, projecting the contradictory measurements
+onto the set of physically possible positions, landing on the spot whose residual error is smallest.
+</ExampleCard>
+
+<ExampleCard domain="Audio engineering" icon="🎧">
+Noise-cancelling headphones estimate the component of incoming sound that lies **along** the unwanted
+noise pattern and subtract it. What's left — the residual, orthogonal to the noise model — is the music
+you actually want to hear.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="⚽">
+To rate teams from lopsided schedules, analysts fit a rating vector so predicted score differences best
+match real ones. It's a least-squares **projection**: ratings whose residual errors are orthogonal to
+the schedule structure, giving the fairest fit the data allows.
+</ExampleCard>
+
+<ExampleCard domain="Medical imaging" icon="🩻">
+A CT scanner collects far more X-ray readings than unknown tissue densities. Reconstruction projects
+those measurements onto the space of consistent images, choosing the density map whose residual
+mismatch is minimized — orthogonality turning a flood of rays into a clean cross-section.
+</ExampleCard>
+
+<Callout type="note">
+Orthonormal bases make everything easy: dot products become coordinates, and projections become
+addition. The next lesson's QR decomposition is exactly the machine that <em>builds</em> such a basis
+from any set of vectors.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why is the perpendicular projection the closest point on a line to a given point?',
+      options: [
+        'Because it is always the origin',
+        'Because the residual forms a right angle, making any other point a longer hypotenuse',
+        'Because projections are always unit length',
+        'It is not — the closest point is random',
+      ],
+      answer: 1,
+      explain: 'With a right-angle residual, any other point on the line creates a right triangle whose hypotenuse to p exceeds the perpendicular leg. So the foot of the perpendicular is closest.',
+    },
+    {
+      q: 'Project p = [0, 4] onto the line through d = [1, 0] (the x-axis). What is the projection and the residual?',
+      options: [
+        'Projection [0, 4], residual [0, 0]',
+        'Projection [0, 0], residual [0, 4]',
+        'Projection [4, 0], residual [0, 4]',
+        'Projection [0, 4], residual [4, 0]',
+      ],
+      answer: 1,
+      explain: 'p·d = 0, so the projection onto the x-axis is the zero vector; the entire p = [0,4] is the residual, which is perpendicular to the x-axis.',
+    },
+    {
+      q: 'In least squares, what is special about the residual vector at the best fit?',
+      options: [
+        'It is as large as possible',
+        'It is parallel to the data',
+        'It is orthogonal to every feature (column) the model can adjust',
+        'It is always zero',
+      ],
+      answer: 2,
+      explain: 'The best fit makes the residual orthogonal to the column space, so no adjustment of the coefficients can reduce the error further — exactly the normal equations.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>projection</strong> drops a point onto a subspace along the perpendicular, giving the closest point in it.',
+    'The <strong>residual</strong> p − p̂ is always <strong>orthogonal</strong> to the subspace: r · d = 0.',
+    'Right angle and minimum distance are the same condition — that is why <strong>least squares</strong> works.',
+    'Projection onto a line is <strong>(p·d / d·d) d</strong>; for subspaces it is the <strong>normal equations</strong> AᵀAx̂ = Aᵀb.',
+    '<strong>Orthonormal</strong> bases turn projection into simple dot products — the goal of QR in the next lesson.',
+  ]}
+/>
+
+Next up: **matrix decompositions** — factoring a matrix into simple, meaningful pieces like LU, QR, and
+the all-powerful SVD.
