@@ -2,11 +2,15 @@
 import { TRACKS, STAGES } from '../data/curriculum';
 import { getReadySlugs } from '../lib/lessons';
 import { url, stripBase } from '../lib/url';
+import Search from './Search.tsx';
 
 const current = stripBase(Astro.url.pathname); // current slug, base removed
 // Only show stages that actually have tracks.
 const stages = STAGES.filter((s) => TRACKS.some((t) => t.stage === s));
 const ready = await getReadySlugs();
+// Which stage/track is currently open? Used to auto-expand the right sections.
+const activeTrackId = TRACKS.find((t) => current.startsWith(t.id))?.id;
+const activeStage = TRACKS.find((t) => t.id === activeTrackId)?.stage;
 ---
 
 <aside
@@ -34,9 +38,17 @@ const ready = await getReadySlugs();
       </a>
     </div>
 
+    <div class="mb-5">
+      <Search client:load />
+    </div>
+
     {stages.map((stage) => (
-      <div class="mb-4">
-        <p class="mb-2 px-1 text-xs font-bold uppercase tracking-wider text-muted">{stage}</p>
+      <details class="mb-2 group/stage" open={stage === activeStage || (!activeStage && stage === stages[0])}>
+        <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg px-1 py-1.5 text-xs font-bold uppercase tracking-wider text-muted hover:text-text">
+          <svg class="h-3.5 w-3.5 transition group-open/stage:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6" /></svg>
+          <span class="flex-1">{stage}</span>
+        </summary>
+        <div class="mt-1">
         {TRACKS.filter((t) => t.stage === stage).map((track) => (
           <details class="group mb-1" open={current.startsWith(track.id)}>
             <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold hover:bg-surface-2">
@@ -69,7 +81,8 @@ const ready = await getReadySlugs();
             </ul>
           </details>
         ))}
-      </div>
+        </div>
+      </details>
     ))}
   </div>
 </aside>

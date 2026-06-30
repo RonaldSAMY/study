@@ -86,3 +86,25 @@ body {
   border-radius: 6px;
   font-size: 0.9em;
 }
+
+/* Fenced code blocks (Shiki). Shiki sets its own dark background via an inline
+   style; here we give the block padding/scroll and, crucially, RESET the inline
+   <code> styling above so it doesn't paint light bands over the dark block. */
+.lesson-prose pre {
+  margin: 1.25rem 0;
+  padding: 1rem 1.1rem;
+  border-radius: 12px;
+  overflow-x: auto;
+  font-size: 0.875rem;
+  line-height: 1.65;
+  border: 1px solid rgb(var(--c-border));
+  -webkit-overflow-scrolling: touch;
+}
+.lesson-prose pre code {
+  background: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  font-size: inherit !important;
+  color: inherit;
+  white-space: pre;
+}
