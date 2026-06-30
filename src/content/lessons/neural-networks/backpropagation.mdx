@@ -1,0 +1,180 @@
+---
+title: Backpropagation
+track: neural-networks
+summary: The chain rule applied layer by layer — one forward pass to predict, one backward pass to assign blame.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - calculus-3/vector-calculus-ml
+  - tensors/automatic-differentiation
+leadsTo:
+  - neural-networks/optimizers
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TwoLayerBackpropTracer from '../../../components/demos/TwoLayerBackpropTracer.tsx';
+
+## The hook: assigning blame down a factory line
+
+A robot arm misses its target by two centimeters. Whose fault is it — the wrist motor, the elbow, the
+shoulder? Each joint contributed, and each contribution passed through the joints downstream of it. To fix
+the miss efficiently you want, for every joint, the answer to *"if I nudge you a little, how much does the
+final error change?"*
+
+That is precisely what **backpropagation** computes for a neural network. After a forward pass produces a
+prediction and a loss, backprop walks the network in reverse and hands every single weight its share of
+the blame — its **gradient** — using nothing more than the chain rule, organized cleverly.
+
+<Callout type="intuition" title="The one-sentence idea">
+Backpropagation is the chain rule applied from the loss backward through the network, reusing shared
+sub-results so every weight gets its gradient in one efficient pass.
+</Callout>
+
+## Intuition: one forward pass, one backward pass
+
+You already know the **chain rule** and the **Jacobian** view of composed functions, and you have seen how
+**automatic differentiation** records operations into a graph. Backprop is the application of those ideas
+to a network.
+
+- **Forward pass:** feed the input through each layer, computing and *storing* every intermediate value
+  (the pre-activations and activations). These stored values are needed for the gradients.
+- **Backward pass:** start with $\partial \mathcal{L}/\partial \mathcal{L} = 1$ at the loss and move
+  leftward. At each operation, multiply the gradient arriving from the right by that operation's *local
+  derivative*. A sum node passes the gradient straight through; a multiply node scales it by the other
+  input; an activation scales it by its own derivative.
+
+The magic is **reuse**. The gradient flowing into a layer is computed once and shared by every weight in
+that layer, so the whole backward pass costs about the same as the forward pass — not exponentially more.
+That efficiency is what makes training billion-parameter models feasible.
+
+## Play with it
+
+This is a tiny two-layer network: a sensor reading feeds two ReLU hidden units, which feed an output
+neuron scored against a target. Toggle **Forward** to watch activations flow right, then **Backward** to
+watch gradients flow left. Drag the weights and see both passes update.
+
+<TwoLayerBackpropTracer client:visible />
+
+<Callout type="tip">
+Set a weight so a hidden unit's input goes negative — its ReLU output becomes 0 and, in
+<strong>Backward</strong> mode, its incoming gradient also becomes 0. A "dead" ReLU passes no blame
+backward, so the weights feeding it stop learning.
+</Callout>
+
+## The formal definition
+
+Write a layer as $\mathbf{z}^{(\ell)} = W^{(\ell)} \mathbf{a}^{(\ell-1)} + \mathbf{b}^{(\ell)}$ and
+$\mathbf{a}^{(\ell)} = \sigma\!\left(\mathbf{z}^{(\ell)}\right)$. Define the **error signal** at layer
+$\ell$ as $\boldsymbol{\delta}^{(\ell)} = \partial \mathcal{L} / \partial \mathbf{z}^{(\ell)}$. The
+backward recursion is:
+
+$$
+\boldsymbol{\delta}^{(L)} = \nabla_{\mathbf{a}} \mathcal{L} \;\odot\; \sigma'\!\left(\mathbf{z}^{(L)}\right),
+$$
+
+$$
+\boldsymbol{\delta}^{(\ell)} = \left( W^{(\ell+1)\top} \boldsymbol{\delta}^{(\ell+1)} \right) \odot \sigma'\!\left(\mathbf{z}^{(\ell)}\right),
+$$
+
+where $\odot$ is element-wise multiplication. Once you have each $\boldsymbol{\delta}^{(\ell)}$, the
+parameter gradients are immediate:
+
+$$
+\frac{\partial \mathcal{L}}{\partial W^{(\ell)}} = \boldsymbol{\delta}^{(\ell)} \, \mathbf{a}^{(\ell-1)\top}, \qquad \frac{\partial \mathcal{L}}{\partial \mathbf{b}^{(\ell)}} = \boldsymbol{\delta}^{(\ell)}.
+$$
+
+```python
+# backward pass through one layer (cached a_prev, z from the forward pass)
+delta = (W_next.T @ delta_next) * sigma_prime(z)   # error signal at this layer
+grad_W = delta @ a_prev.T                           # gradient for the weights
+grad_b = delta                                      # gradient for the bias
+```
+
+<Callout type="why">
+Backprop is just reverse-mode automatic differentiation specialized to layered networks. It computes the
+gradient of one scalar loss with respect to <em>all</em> parameters in a single backward sweep — the
+engine inside every deep-learning framework.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Music generation" icon="🎵">
+A model composing melodies predicts the next note and gets a loss. Backprop traces that error back through
+every layer, telling the early "rhythm" weights and the late "pitch" weights each how to adjust so the next
+attempt sounds a little more musical.
+</ExampleCard>
+
+<ExampleCard domain="Supply chain" icon="📦">
+A demand-forecasting network over-predicts sales and overstocks a warehouse. The chain rule distributes
+that costly error across the seasonality, pricing, and promotion features so each input's weight shifts in
+proportion to how much it caused the miss.
+</ExampleCard>
+
+<ExampleCard domain="Self-driving" icon="🚗">
+A perception network mislabels a pedestrian. Backprop pushes a large error signal back through the
+convolutional layers, sharpening exactly the edge and texture filters that contributed to the mistake —
+not every filter equally.
+</ExampleCard>
+
+<ExampleCard domain="Drug discovery" icon="💊">
+A model predicting whether a molecule binds a protein is wrong on a candidate. Gradients flow back through
+the graph of atomic interactions, nudging the parameters that misjudged the key functional group.
+</ExampleCard>
+
+<Callout type="note">
+The forward pass must <strong>cache</strong> its intermediate activations, because the backward pass
+multiplies by them. This memory cost — storing activations for every layer — is the main reason training
+needs far more memory than inference.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What mathematical rule is backpropagation built on?',
+      options: ['The product rule only', 'The chain rule', 'The quadratic formula', 'Integration by parts'],
+      answer: 1,
+      explain: 'Backprop applies the chain rule repeatedly, from the loss backward through every layer.',
+    },
+    {
+      q: 'At a ReLU unit whose input z was negative, what happens to the gradient flowing backward through it?',
+      options: [
+        'It is doubled',
+        'It passes through unchanged',
+        'It becomes zero, because ReLU′(z) = 0 for z < 0',
+        'It is replaced by the bias',
+      ],
+      answer: 2,
+      explain: 'ReLU has zero slope for negative inputs, so it multiplies the incoming gradient by 0 — a "dead" unit.',
+    },
+    {
+      q: 'Why is backprop efficient rather than exponentially expensive?',
+      options: [
+        'It skips most of the network',
+        'It reuses each shared intermediate gradient instead of recomputing it for every weight',
+        'It uses integer arithmetic',
+        'It never needs the forward values',
+      ],
+      answer: 1,
+      explain: 'The error signal entering a layer is computed once and shared by all that layer’s weights, so the backward pass costs about as much as the forward pass.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Backpropagation</strong> is the chain rule applied from the loss backward through every layer.',
+    'A <strong>forward pass</strong> predicts and caches activations; a <strong>backward pass</strong> assigns each weight its gradient.',
+    'Local rules: a sum passes gradient through, a product scales by the other input, an activation scales by its <strong>derivative</strong>.',
+    'Reusing shared <strong>error signals</strong> makes the backward pass about as cheap as the forward pass.',
+    'It is just <strong>reverse-mode autodiff</strong> for layered networks — the core of every training loop.',
+  ]}
+/>
+
+Next up: **optimizers** — backprop gives every weight its gradient, but how big a step should we take, and
+how do we avoid zig-zagging down narrow valleys?

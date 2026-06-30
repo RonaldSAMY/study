@@ -1,0 +1,192 @@
+---
+title: Variational Autoencoders
+track: generative-models
+summary: Compress data into a smooth latent distribution and decode samples back out — trained by maximizing the ELBO.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - information-theory/cross-entropy-kl
+  - generative-models/reparameterization-trick
+leadsTo:
+  - generative-models/diffusion-models
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import VaeLatentExplorer from '../../../components/demos/VaeLatentExplorer.tsx';
+
+## The hook: a dial that morphs one face into another
+
+Imagine a control panel with two knobs. Turn the first and a generated face slowly ages; turn the second
+and it rotates from looking left to looking right. Every in-between setting produces a *new*, plausible
+face the model has never seen. How can two numbers control something as rich as a face?
+
+The answer is a **latent space**: a compact set of coordinates where nearby points decode to similar
+outputs and every region is meaningful. A Variational Autoencoder (VAE) learns exactly this — it
+squeezes data down to a small, well-organized probability cloud, then decodes points from that cloud
+back into full-blown data. Slide through the cloud and you generate.
+
+<Callout type="intuition" title="The one-sentence idea">
+A VAE learns an **encoder** that maps each input to a small latent *distribution*, and a **decoder**
+that turns latent points back into data — trained so the latent space is smooth enough to sample new
+data from.
+</Callout>
+
+## Intuition: organize the latent space, then sample it
+
+A plain autoencoder compresses each input to a single latent point and reconstructs it. That is great
+for compression but terrible for *generation*: the latent points sit in scattered islands with empty
+gaps between them, so a random latent decodes to garbage.
+
+The VAE fixes this with two changes you already have the tools for:
+
+1. **Encode to a distribution, not a point.** The encoder outputs a mean $\mu$ and spread $\sigma$, so
+   each input becomes a little Gaussian blob $q(z \mid x) = \mathcal{N}(\mu, \sigma^2)$. We then *sample*
+   a latent $z$ from it — using the **reparameterization trick** so gradients still flow.
+2. **Pull every blob toward a shared prior.** A penalty drags each blob toward the standard normal
+   $\mathcal{N}(0, I)$, packing them together with no gaps. That penalty is the **KL divergence** you met
+   in information theory — the cost of using one distribution in place of another.
+
+The result is a latent space that is both *informative* (reconstructs the data) and *tidy* (looks like
+the prior), so sampling $z \sim \mathcal{N}(0, I)$ and decoding produces brand-new, realistic data.
+
+## Play with it
+
+The left panel is a 2D latent space with the prior's contours; drag the point $z$. The right panel is
+the decoder's output, which morphs smoothly as you move — that smoothness is the whole goal. The bars
+track the two competing forces in training.
+
+<VaeLatentExplorer client:visible />
+
+<Callout type="tip">
+Drag $z$ onto the orange <strong>data</strong> point: the reconstruction term drops, but the KL term
+climbs because you have wandered from the origin. Drag $z$ back to the center: KL vanishes but the
+reconstruction worsens. Training settles at the <em>balance</em> of the two — that balance is the ELBO.
+</Callout>
+
+## The formal definition
+
+We would love to maximize the data likelihood $\log p(x)$, but it hides an intractable integral over all
+latents. So we maximize a tractable lower bound instead — the **Evidence Lower BOund (ELBO)**:
+
+$$
+\log p(x) \;\ge\; \mathcal{L}(x) = \underbrace{\mathbb{E}_{z \sim q(z\mid x)}\big[\log p(x \mid z)\big]}_{\text{reconstruction}} \;-\; \underbrace{D_{\mathrm{KL}}\big(q(z\mid x)\,\|\,p(z)\big)}_{\text{regularizer}}.
+$$
+
+The two terms pull in opposite directions:
+
+- **Reconstruction** rewards a latent $z$ that lets the decoder rebuild the input $x$ accurately (in
+  practice a cross-entropy or squared-error term).
+- **KL** penalizes the encoder's distribution for straying from the prior $p(z) = \mathcal{N}(0, I)$,
+  keeping the latent space packed and sampleable.
+
+When both the encoder distribution and the prior are Gaussian, the KL term has a clean closed form (for
+a latent of dimension $d$):
+
+$$
+D_{\mathrm{KL}}\big(\mathcal{N}(\mu, \sigma^2)\,\|\,\mathcal{N}(0, I)\big) = \tfrac{1}{2}\sum_{j=1}^{d}\big(\mu_j^2 + \sigma_j^2 - 1 - \log \sigma_j^2\big).
+$$
+
+Maximizing the ELBO is the same as minimizing $-\mathcal{L}$, and thanks to the reparameterization
+trick the whole thing is one differentiable loss.
+
+```python
+mu, logvar = encoder(x)
+z = mu + (0.5 * logvar).exp() * torch.randn_like(mu)   # reparameterized sample
+recon = bce(decoder(z), x)                              # reconstruction term
+kl = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).sum()
+loss = recon + kl                                       # minimize -ELBO
+```
+
+<Callout type="why">
+The ELBO is the template for almost all of modern generative modeling. Diffusion models, which you meet
+next, can be derived as a VAE with a long chain of latents. Mastering "reconstruction minus KL" here
+pays off across the rest of the track.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Drug discovery" icon="💊">
+Encode molecules into a continuous latent space and you can do chemistry with arithmetic: interpolate
+between two drugs, or nudge a point toward higher predicted potency, then decode to a brand-new candidate
+molecule. VAEs over molecular graphs turn "design a compound" into "move in latent space."
+</ExampleCard>
+
+<ExampleCard domain="Speech & audio" icon="🎙️">
+A voice VAE compresses a speaker's timbre into a latent vector. Decoding a sampled latent synthesizes
+new speech; sliding along a latent direction can morph pitch or accent. The smooth latent space is what
+makes natural-sounding interpolation possible.
+</ExampleCard>
+
+<ExampleCard domain="Fraud detection" icon="🛡️">
+Train a VAE only on legitimate transactions. Normal activity reconstructs well with a low ELBO loss; a
+fraudulent transaction lands in an unlearned corner of latent space and reconstructs poorly. The
+reconstruction error itself becomes an anomaly score.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="🌌">
+With millions of galaxy images, a VAE learns a handful of latent axes that capture shape, brightness, and
+orientation. Astronomers explore and cluster galaxies in that compressed space, and flag oddballs whose
+reconstructions fail — a fast way to mine huge surveys.
+</ExampleCard>
+
+<Callout type="note">
+Molecules, voices, transactions, galaxies — the recipe is identical: encode to a latent distribution,
+regularize it toward a prior, decode to generate, and use reconstruction error to spot the unusual.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the encoder of a VAE output for each input?',
+      options: [
+        'A single latent point',
+        'The parameters (mean and variance) of a latent distribution',
+        'A reconstructed copy of the input',
+        'A class label',
+      ],
+      answer: 1,
+      explain: 'The encoder outputs μ and σ defining q(z|x) = N(μ, σ²); a latent z is then sampled from it via the reparameterization trick.',
+    },
+    {
+      q: 'In the ELBO, what is the role of the KL divergence term?',
+      options: [
+        'It measures reconstruction accuracy',
+        'It pulls each encoded distribution toward the prior, keeping the latent space smooth and sampleable',
+        'It counts the number of latent dimensions',
+        'It maximizes the variance of the decoder',
+      ],
+      answer: 1,
+      explain: 'The KL term regularizes q(z|x) toward the prior p(z) = N(0, I), packing the blobs together so random latents decode to realistic data.',
+    },
+    {
+      q: 'Why maximize the ELBO instead of the data log-likelihood log p(x) directly?',
+      options: [
+        'The ELBO is always larger than log p(x)',
+        'log p(x) involves an intractable integral over latents, while the ELBO is a tractable lower bound',
+        'The ELBO does not require any data',
+        'log p(x) cannot be defined for images',
+      ],
+      answer: 1,
+      explain: 'The marginal likelihood requires integrating over all latent z, which is intractable; the ELBO is a computable lower bound we can optimize instead.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>VAE</strong> pairs an encoder (data → latent distribution) with a decoder (latent → data), learning a smooth, sampleable latent space.',
+    'Encoding to a <strong>distribution</strong> and sampling via the reparameterization trick — not a single point — is what makes generation possible.',
+    'Training maximizes the <strong>ELBO</strong> = reconstruction − KL, a tractable lower bound on log p(x).',
+    'The <strong>KL term</strong> pulls each posterior toward the prior N(0, I) (with a clean closed form for Gaussians), keeping the space gap-free.',
+    'Sampling z ~ N(0, I) and decoding generates new data; high reconstruction error flags <strong>anomalies</strong>.',
+  ]}
+/>
+
+Next up: stack the encode–decode idea into hundreds of tiny steps and you get **diffusion models** —
+generating images by slowly turning pure noise back into data.

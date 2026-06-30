@@ -1,0 +1,187 @@
+---
+title: Optimizers
+track: neural-networks
+summary: SGD, momentum, RMSprop and Adam — smarter ways to turn gradients into weight updates, and why the learning rate rules them all.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - optimization/gradient-descent
+  - neural-networks/backpropagation
+leadsTo:
+  - neural-networks/initialization
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import OptimizerDescentRace from '../../../components/demos/OptimizerDescentRace.tsx';
+
+## The hook: skiing down a lopsided valley
+
+Picture a snowy bowl that is steep side-to-side but barely tilted along its length. A naive skier who
+always points straight downhill will rocket across the slope, overshoot, carve back, overshoot again —
+zig-zagging while making painfully slow progress toward the actual bottom. An experienced skier builds
+**momentum** down the long axis and damps the side-to-side wobble.
+
+Neural-network loss surfaces look exactly like that lopsided bowl — far steeper in some directions than
+others. Plain gradient descent is the naive skier. **Optimizers** are the techniques that turn the raw
+gradient from backprop into a smarter step, so training reaches a good minimum faster and more reliably.
+
+<Callout type="intuition" title="The one-sentence idea">
+An optimizer decides how to convert each gradient into an actual weight update — adding memory of past
+gradients (momentum) and per-parameter scaling (adaptive rates) to plain gradient descent.
+</Callout>
+
+## Intuition: from one step to a smart step
+
+You know **gradient descent**: step downhill by the negative gradient, scaled by a **learning rate**
+$\eta$. Backprop supplies the gradient; the optimizer decides what to do with it.
+
+- **SGD** takes the plain step. Simple and strong, but it zig-zags in lopsided valleys and crawls on flat
+  stretches.
+- **Momentum** accumulates a velocity — an exponentially decaying average of past gradients. Consistent
+  directions build speed; oscillating directions cancel out. It is the skier carrying speed down the long
+  axis.
+- **RMSprop** keeps a running average of each parameter's *squared* gradient and divides by its square
+  root, giving every parameter its own adaptive step. Steep directions get smaller steps, flat ones
+  larger.
+- **Adam** combines both: momentum for direction **and** RMSprop-style per-parameter scaling, plus a bias
+  correction for the early steps. It is the sensible default for most deep learning.
+
+Above all looms the **learning rate**. Too small and training crawls; too large and the steps overshoot
+and diverge. No optimizer rescues a badly chosen learning rate — it is the single most important knob.
+
+## Play with it
+
+The surface below is a narrow valley (steep in $y$, gentle in $x$). Pick an optimizer, set the learning
+rate, and press Run. Watch SGD zig-zag, momentum surge, and Adam thread the valley.
+
+<OptimizerDescentRace client:visible />
+
+<Callout type="tip">
+Select <strong>SGD</strong> and push the learning rate high — the path explodes across the valley walls.
+Now try the same rate with <strong>Adam</strong> or <strong>RMSprop</strong>: per-parameter scaling tames
+the steep direction so the path stays sane.
+</Callout>
+
+## The formal definition
+
+Let $g_t = \nabla_\theta \mathcal{L}$ be the gradient at step $t$ and $\eta$ the learning rate.
+
+**SGD:**
+$$
+\theta_{t+1} = \theta_t - \eta\, g_t.
+$$
+
+**Momentum** (decay $\beta$, typically $0.9$):
+$$
+v_t = \beta v_{t-1} - \eta\, g_t, \qquad \theta_{t+1} = \theta_t + v_t.
+$$
+
+**RMSprop** (decay $\rho$, small $\varepsilon$):
+$$
+s_t = \rho\, s_{t-1} + (1-\rho)\, g_t^2, \qquad \theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{s_t} + \varepsilon}\, g_t.
+$$
+
+**Adam** combines a first moment $m_t$ and second moment $v_t$ with bias correction:
+$$
+m_t = \beta_1 m_{t-1} + (1-\beta_1) g_t, \qquad v_t = \beta_2 v_{t-1} + (1-\beta_2) g_t^2,
+$$
+$$
+\hat{m}_t = \frac{m_t}{1-\beta_1^{\,t}}, \quad \hat{v}_t = \frac{v_t}{1-\beta_2^{\,t}}, \qquad \theta_{t+1} = \theta_t - \frac{\eta}{\sqrt{\hat{v}_t} + \varepsilon}\, \hat{m}_t.
+$$
+
+```python
+m = b1 * m + (1 - b1) * g           # momentum (1st moment)
+v = b2 * v + (1 - b2) * g**2        # variance (2nd moment)
+mhat, vhat = m / (1 - b1**t), v / (1 - b2**t)   # bias correction
+theta -= lr * mhat / (np.sqrt(vhat) + 1e-8)     # Adam step
+```
+
+<Callout type="why">
+Adaptive optimizers like Adam matter because deep networks have parameters with wildly different gradient
+scales. Giving each its own effective step size is what lets a single learning rate work across millions of
+very different weights.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Algorithmic trading" icon="📉">
+A model calibrating a strategy faces noisy, jumpy gradients from volatile markets. <strong>Adam</strong>'s
+moving averages smooth that noise into a stable direction, so a few wild data points do not throw the
+parameters off course.
+</ExampleCard>
+
+<ExampleCard domain="Climate modeling" icon="🌍">
+Fitting a climate emulator mixes fast variables (daily temperature) with slow ones (ocean heat). Per-
+parameter rates from <strong>RMSprop</strong> let each variable move at its own natural pace instead of
+one global step size choking the slow ones.
+</ExampleCard>
+
+<ExampleCard domain="Recommendation" icon="🎧">
+Training embeddings for millions of rarely-seen songs gives most parameters tiny, infrequent gradients.
+Adaptive methods boost those small updates so niche items still learn, while popular ones are not
+over-stepped.
+</ExampleCard>
+
+<ExampleCard domain="Aerospace" icon="🛰️">
+Tuning a controller in simulation, engineers add <strong>momentum</strong> to glide past tiny bumps in the
+cost landscape that would trap a plain step — like a heavy craft coasting through small dips instead of
+stopping in each one.
+</ExampleCard>
+
+<Callout type="note">
+A practical recipe: start with Adam and a learning rate around 1e-3, watch the loss curve, and lower the
+rate if it spikes or plateaus. Well-tuned SGD with momentum can generalize better, but Adam is the
+reliable first try.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What problem does momentum specifically address?',
+      options: [
+        'It removes the need for a loss function',
+        'It dampens zig-zagging and builds speed in consistent directions',
+        'It makes the learning rate irrelevant',
+        'It computes the gradient for you',
+      ],
+      answer: 1,
+      explain: 'Momentum accumulates past gradients, so oscillations cancel while consistent directions accelerate.',
+    },
+    {
+      q: 'What does dividing by the square root of a running average of squared gradients (RMSprop/Adam) accomplish?',
+      options: [
+        'It gives each parameter its own adaptive step size',
+        'It sets all gradients to zero',
+        'It removes the bias term',
+        'It guarantees the global minimum',
+      ],
+      answer: 0,
+      explain: 'Scaling by 1/√(mean square gradient) shrinks steps in steep directions and grows them in flat ones — per-parameter adaptivity.',
+    },
+    {
+      q: 'Which knob most directly causes training to diverge if set too high?',
+      options: ['The number of classes', 'The learning rate', 'The batch index', 'The bias initialization sign'],
+      answer: 1,
+      explain: 'Too large a learning rate makes each step overshoot, so the loss grows instead of shrinking — no optimizer saves a bad learning rate.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>optimizer</strong> turns the gradient from backprop into the actual weight update.',
+    '<strong>Momentum</strong> averages past gradients to damp oscillation and accelerate consistent directions.',
+    '<strong>RMSprop</strong> and <strong>Adam</strong> give each parameter an adaptive step from its squared-gradient history.',
+    '<strong>Adam</strong> combines momentum and adaptive scaling and is the reliable default.',
+    'The <strong>learning rate</strong> dominates: too small crawls, too large diverges — tune it first.',
+  ]}
+/>
+
+Next up: **initialization** — before any optimizer can help, the starting weights must keep signals and
+gradients alive through every layer.

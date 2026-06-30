@@ -17,10 +17,28 @@ export interface LessonMeta {
   status: LessonStatus;
 }
 
+// Ordered learning stages — the sidebar, /path and landing page group by these.
+export type Stage =
+  | 'Foundations'
+  | 'Core Math'
+  | 'Machine Learning'
+  | 'Deep Learning'
+  | 'LLMs & Generative AI'
+  | 'Reinforcement Learning';
+
+export const STAGES: Stage[] = [
+  'Foundations',
+  'Core Math',
+  'Machine Learning',
+  'Deep Learning',
+  'LLMs & Generative AI',
+  'Reinforcement Learning',
+];
+
 export interface Track {
   id: string;          // also the Tailwind color key
   title: string;
-  stage: 'Foundations' | 'Core';
+  stage: Stage;
   icon: string;        // emoji glyph used in nav/cards
   blurb: string;
   lessons: LessonMeta[];
@@ -146,7 +164,7 @@ export const TRACKS: Track[] = [
   {
     id: 'calculus-1',
     title: 'Calculus 1',
-    stage: 'Core',
+    stage: 'Core Math',
     icon: '∂',
     blurb: 'Change and accumulation: derivatives and integrals.',
     lessons: [
@@ -161,7 +179,7 @@ export const TRACKS: Track[] = [
   {
     id: 'calculus-2',
     title: 'Calculus 2',
-    stage: 'Core',
+    stage: 'Core Math',
     icon: '∫',
     blurb: 'Integration mastery and infinite series.',
     lessons: [
@@ -174,7 +192,7 @@ export const TRACKS: Track[] = [
   {
     id: 'calculus-3',
     title: 'Calculus 3',
-    stage: 'Core',
+    stage: 'Core Math',
     icon: '∇',
     blurb: 'Multivariable calculus — the gradient that powers learning.',
     lessons: [
@@ -190,7 +208,7 @@ export const TRACKS: Track[] = [
   {
     id: 'differential-equations',
     title: 'Differential Equations',
-    stage: 'Core',
+    stage: 'Core Math',
     icon: '🌱',
     blurb: 'Equations that describe how things change over time.',
     lessons: [
@@ -204,7 +222,7 @@ export const TRACKS: Track[] = [
   {
     id: 'linear-algebra',
     title: 'Linear Algebra',
-    stage: 'Core',
+    stage: 'Core Math',
     icon: '⬚',
     blurb: 'Vectors, matrices and transformations — the data structures of ML.',
     lessons: [
@@ -228,7 +246,7 @@ export const TRACKS: Track[] = [
   {
     id: 'combinatorics',
     title: 'Combinatorics',
-    stage: 'Core',
+    stage: 'Core Math',
     icon: '🔢',
     blurb: 'The art of counting — the foundation under every probability.',
     lessons: [
@@ -241,7 +259,7 @@ export const TRACKS: Track[] = [
   {
     id: 'probability',
     title: 'Probability',
-    stage: 'Core',
+    stage: 'Core Math',
     icon: '🎲',
     blurb: 'Reasoning about uncertainty — the language of machine learning.',
     lessons: [
@@ -261,7 +279,7 @@ export const TRACKS: Track[] = [
   {
     id: 'statistics',
     title: 'Statistics',
-    stage: 'Core',
+    stage: 'Core Math',
     icon: '📊',
     blurb: 'Learning from data: estimation, testing and regression.',
     lessons: [
@@ -275,7 +293,7 @@ export const TRACKS: Track[] = [
   {
     id: 'optimization',
     title: 'Optimization',
-    stage: 'Core',
+    stage: 'Core Math',
     icon: '🎯',
     blurb: 'The capstone: how machines actually learn by minimizing error.',
     lessons: [
@@ -288,7 +306,7 @@ export const TRACKS: Track[] = [
   {
     id: 'information-theory',
     title: 'Information Theory',
-    stage: 'Core',
+    stage: 'Core Math',
     icon: 'ℹ️',
     blurb: 'Measuring surprise and information — the source of ML loss functions.',
     lessons: [
@@ -301,7 +319,7 @@ export const TRACKS: Track[] = [
   {
     id: 'fourier',
     title: 'Fourier & Signals',
-    stage: 'Core',
+    stage: 'Core Math',
     icon: '〜',
     blurb: 'Every signal is a sum of waves — the transform behind audio, images and attention.',
     lessons: [
@@ -313,16 +331,118 @@ export const TRACKS: Track[] = [
       soon('fourier-applications', 'Fourier in the Real World & ML', 'Audio, images, spectrograms and positional encodings.'),
     ],
   },
+  // ---------------- MACHINE LEARNING ----------------
+  {
+    id: 'classical-ml',
+    title: 'Classical ML Algorithms',
+    stage: 'Machine Learning',
+    icon: '📈',
+    blurb: 'The workhorse algorithms before deep learning — still everywhere in practice.',
+    lessons: [
+      soon('logistic-regression', 'Logistic Regression', 'Turning a linear score into a probability with the sigmoid.'),
+      soon('knn', 'k-Nearest Neighbors', 'Classify by looking at who you are closest to.'),
+      soon('decision-trees', 'Decision Trees', 'Splitting data with yes/no questions to maximize information gain.'),
+      soon('ensembles-boosting', 'Ensembles & Boosting', 'Random forests and gradient boosting — many weak learners, one strong one.'),
+      soon('kmeans', 'k-Means Clustering', 'Finding groups in unlabeled data by minimizing within-cluster distance.'),
+      soon('naive-bayes', 'Naive Bayes', 'A fast probabilistic classifier built straight from Bayes’ rule.'),
+    ],
+  },
   {
     id: 'ml-methods',
     title: 'ML Methods (from the Book)',
-    stage: 'Core',
+    stage: 'Machine Learning',
     icon: '🤖',
-    blurb: "The book's four central ML problems, where all the math comes together.",
+    blurb: "The book's central ML problems, where all the foundational math comes together.",
     lessons: [
       soon('when-models-meet-data', 'When Models Meet Data', 'Empirical risk, training vs testing, overfitting and model selection.'),
       soon('gaussian-mixture-models', 'Gaussian Mixture Models', 'Soft clustering and density estimation with the EM algorithm.'),
       soon('support-vector-machines', 'Support Vector Machines', 'Maximum-margin classifiers and the kernel trick.'),
+    ],
+  },
+
+  // ---------------- DEEP LEARNING ----------------
+  {
+    id: 'tensors',
+    title: 'Tensors & Autodiff',
+    stage: 'Deep Learning',
+    icon: '🧊',
+    blurb: 'The data structures and machinery that make deep learning compute.',
+    lessons: [
+      soon('tensors', 'Tensors', 'N-dimensional arrays — how data and parameters are stored.'),
+      soon('broadcasting-einsum', 'Broadcasting & einsum', 'Operating on whole tensors at once, the index-free way.'),
+      soon('computational-graphs', 'Computational Graphs', 'Every model is a graph of operations.'),
+      soon('automatic-differentiation', 'Automatic Differentiation', 'How frameworks compute exact gradients automatically.'),
+      soon('numerical-stability', 'Numerical Stability', 'The log-sum-exp trick, overflow, and floating-point reality.'),
+    ],
+  },
+  {
+    id: 'neural-networks',
+    title: 'Neural Networks',
+    stage: 'Deep Learning',
+    icon: '🧠',
+    blurb: 'From a single neuron to deep networks that learn by gradient descent.',
+    lessons: [
+      soon('the-neuron', 'The Neuron', 'Weighted sum, bias and activation — the unit of computation.'),
+      soon('activation-functions', 'Activation Functions', 'Sigmoid, tanh, ReLU, GELU, softmax — and their derivatives.'),
+      soon('loss-functions', 'Loss Functions', 'MSE, cross-entropy and the objective the network minimizes.'),
+      soon('backpropagation', 'Backpropagation', 'The chain rule, applied layer by layer, end to end.'),
+      soon('optimizers', 'Optimizers', 'SGD, momentum, RMSprop and Adam — smarter ways downhill.'),
+      soon('initialization', 'Initialization & Vanishing Gradients', 'Why starting weights right keeps signals alive.'),
+      soon('regularization', 'Regularization', 'L1/L2 and dropout — fighting overfitting in deep nets.'),
+      soon('normalization', 'Normalization', 'Batch and layer normalization — stabilizing training.'),
+      soon('convolutional-networks', 'Convolutional Networks', 'Weight sharing and convolution for images.'),
+      soon('recurrent-networks', 'Recurrent Networks', 'RNNs, LSTMs and GRUs for sequences.'),
+    ],
+  },
+
+  // ---------------- LLMs & GENERATIVE AI ----------------
+  {
+    id: 'transformers',
+    title: 'Transformers & LLMs',
+    stage: 'LLMs & Generative AI',
+    icon: '💬',
+    blurb: 'The architecture behind ChatGPT — attention, end to end.',
+    lessons: [
+      soon('embeddings', 'Embeddings', 'Turning tokens into vectors that carry meaning.'),
+      soon('attention', 'Attention (Q, K, V)', 'Scaled dot-product attention — the core operation.'),
+      soon('multi-head-attention', 'Multi-Head Attention', 'Many attention heads looking at different relationships.'),
+      soon('positional-encoding', 'Positional Encoding', 'Giving a set-based model a sense of order.'),
+      soon('softmax-sampling', 'Softmax, Temperature & Sampling', 'How an LLM turns scores into the next token.'),
+      soon('layer-norm-residuals', 'Layer Norm & Residual Streams', 'The plumbing that lets deep transformers train.'),
+      soon('transformer-block', 'The Transformer Block', 'Assembling attention + MLP into the full block.'),
+      soon('language-modeling', 'Language Modeling & Perplexity', 'Next-token prediction, cross-entropy loss and perplexity.'),
+      soon('tokenization-scaling', 'Tokenization & Scaling Laws', 'BPE tokens and how performance scales with size and data.'),
+    ],
+  },
+  {
+    id: 'generative-models',
+    title: 'Generative Models',
+    stage: 'LLMs & Generative AI',
+    icon: '🎨',
+    blurb: 'The math of creating data: sampling, VAEs, diffusion and GANs.',
+    lessons: [
+      soon('monte-carlo', 'Monte Carlo Methods', 'Estimating the impossible by random sampling.'),
+      soon('mcmc', 'Markov Chain Monte Carlo', 'Sampling from distributions you can only evaluate.'),
+      soon('reparameterization-trick', 'The Reparameterization Trick', 'Backpropagating through randomness.'),
+      soon('vae', 'Variational Autoencoders', 'Encoding to a latent distribution and the ELBO.'),
+      soon('diffusion-models', 'Diffusion Models', 'Generating by gradually denoising — the math of Stable Diffusion.'),
+      soon('gans', 'GANs', 'A generator and discriminator locked in a minimax game.'),
+    ],
+  },
+
+  // ---------------- REINFORCEMENT LEARNING ----------------
+  {
+    id: 'reinforcement-learning',
+    title: 'Reinforcement Learning & RLHF',
+    stage: 'Reinforcement Learning',
+    icon: '🕹️',
+    blurb: 'Learning from reward — and how LLMs are aligned with human feedback.',
+    lessons: [
+      soon('markov-decision-processes', 'Markov Decision Processes', 'States, actions, rewards — the framework of RL.'),
+      soon('value-functions', 'Value Functions & Bellman', 'How good is a state? The recursive answer.'),
+      soon('q-learning', 'Q-Learning', 'Learning the value of actions from experience.'),
+      soon('policy-gradients', 'Policy Gradients', 'Optimizing the policy directly with gradient ascent.'),
+      soon('rlhf', 'RLHF, PPO & DPO', 'Aligning LLMs with human feedback — the math of fine-tuning.'),
     ],
   },
 ];

@@ -1,0 +1,177 @@
+---
+title: Recurrent Networks
+track: neural-networks
+summary: RNNs unrolled in time, LSTM/GRU gating, and the vanishing-gradient problem over long sequences — how networks remember.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - neural-networks/backpropagation
+leadsTo:
+  - transformers/embeddings
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import RecurrentCellStepper from '../../../components/demos/RecurrentCellStepper.tsx';
+
+## The hook: finishing each other's sentences
+
+When you read *"the clouds gathered and it began to ___"*, your brain fills in *rain* instantly. You did not
+process each word in isolation — you carried a running summary of the sentence so far and used it to predict
+what comes next. Reading is sequential, and meaning lives in the **order**.
+
+A plain feed-forward network has no memory: show it one word and it forgets the last. A **recurrent neural
+network** (RNN) fixes this by keeping a **hidden state** — a running summary — and updating it one step at a
+time as the sequence flows by. It is the natural architecture for anything that unfolds in time: text,
+speech, music, sensor streams, stock prices.
+
+<Callout type="intuition" title="The one-sentence idea">
+A recurrent network reads a sequence one step at a time, folding each new input into a **hidden state** that
+carries everything it has seen so far.
+</Callout>
+
+## Intuition: the same cell, reused at every step
+
+From **backpropagation** you know a network learns by sending gradients backward through its computations. An
+RNN applies one small "cell" of weights over and over — once per time step — and reuses the result. This is
+weight sharing again, but across **time** instead of space.
+
+At each step $t$ the cell takes the new input $x_t$ and the previous hidden state $h_{t-1}$, mixes them, and
+produces an updated state $h_t$. Picture the cell "unrolled" into a chain: step 1 feeds step 2 feeds step 3.
+The hidden state is the messenger passing context down the line.
+
+The catch is **memory over long ranges**. To learn that a word at step 50 depends on one at step 1, the
+gradient must travel back through 50 cells. Each hop multiplies by roughly the same factor (just like the
+depth problem from initialization) — so the gradient either **vanishes** to nothing or **explodes**. Vanilla
+RNNs therefore forget the distant past. The fix is **gating**.
+
+## Play with it
+
+Press **Step** to push the sequence through the cell one moment at a time. The bars show the current hidden
+state; the lines below trace each hidden unit over time. Switch to **GRU (gated)** and notice how the update
+gate lets the state hold its memory more steadily instead of being overwritten every step.
+
+<RecurrentCellStepper client:visible />
+
+<Callout type="tip">
+In the vanilla RNN the hidden lines jitter hard — each step rewrites the state. With the <strong>gate</strong>
+on, the state changes more gently: the network <em>chooses</em> how much past to keep, which is exactly what
+preserves long-range memory.
+</Callout>
+
+## The formal definition
+
+A vanilla RNN cell updates its hidden state with a single nonlinearity:
+
+$$
+h_t = \tanh\!\left(W_x\, x_t + W_h\, h_{t-1} + b\right).
+$$
+
+```python
+h = np.tanh(Wx @ x_t + Wh @ h + b)   # one recurrent step; h carries the memory
+```
+
+The trouble is the chain of derivatives in backpropagation through time: it contains repeated factors of
+$W_h$, so the gradient scales like $W_h^{\,T}$ over $T$ steps — vanishing if its eigenvalues are below 1,
+exploding if above. **Gated** cells (LSTM, GRU) add learned gates that control the flow. A GRU uses an update
+gate $z_t$ to interpolate between keeping the old state and accepting a new candidate $\tilde{h}_t$:
+
+$$
+z_t = \sigma\!\left(W_z x_t + U_z h_{t-1} + b_z\right), \qquad
+h_t = (1 - z_t)\,h_{t-1} + z_t\,\tilde{h}_t.
+$$
+
+<Callout type="why">
+That additive path — carrying $h_{t-1}$ forward almost unchanged when the gate is near zero — gives the
+gradient a "highway" that does not shrink at every step. This is how LSTMs and GRUs remember information
+across hundreds of time steps, and it is the same additive-shortcut idea that later powers residual
+connections in transformers.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Predictive text" icon="⌨️">
+Your phone's keyboard suggests the next word from everything you have typed so far. The running hidden state
+encodes the sentence's drift — after "I'll meet you at the" it leans toward *station*, *office*, *gate* —
+updating with every keystroke, exactly like an RNN reading a sequence.
+</ExampleCard>
+
+<ExampleCard domain="Weather forecasting" icon="🌦️">
+Tomorrow's temperature depends on today's *and* the trend over the past week. A recurrent model folds each
+day's readings into a hidden state that summarizes the recent atmosphere, then rolls it forward — sequence in,
+prediction out.
+</ExampleCard>
+
+<ExampleCard domain="Music" icon="🎵">
+To generate a melody, a model must remember the key and motif established bars ago. The hidden state holds the
+musical context so the next note resolves in tune — and gating is what keeps that distant key signature from
+being forgotten halfway through the piece.
+</ExampleCard>
+
+<ExampleCard domain="Healthcare monitoring" icon="❤️">
+An ECG stream is a long time series; a recurrent model watches the rolling rhythm to flag an arrhythmia. The
+abnormality is defined by the *pattern over time*, not any single beat — precisely what a hidden state is
+built to track.
+</ExampleCard>
+
+<Callout type="note">
+RNNs process a sequence strictly left to right, one step at a time, so they are slow to train and still
+strain on very long contexts. Solving that — letting a model attend to <em>all</em> positions at once — is the
+leap that produced transformers, the next track.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the role of the hidden state in an RNN?',
+      options: [
+        'It stores the final output only',
+        'It is a running summary that carries information from earlier steps to later ones',
+        'It is a fixed constant set before training',
+        'It replaces the need for weights',
+      ],
+      answer: 1,
+      explain: 'The hidden state is the network\'s memory: each step folds the new input into it and passes it forward.',
+    },
+    {
+      q: 'Why do vanilla RNNs struggle to learn long-range dependencies?',
+      options: [
+        'They have too few weights',
+        'Gradients are multiplied by the same factor at each step, so they vanish or explode over many steps',
+        'They cannot use an activation function',
+        'They only work on images',
+      ],
+      answer: 1,
+      explain: 'Backpropagation through time multiplies repeated factors of the recurrent weight, causing gradients to vanish or explode over long sequences.',
+    },
+    {
+      q: 'How do LSTM/GRU gates help?',
+      options: [
+        'They delete old information immediately',
+        'They learn how much past state to keep versus update, creating an additive path that preserves gradients',
+        'They make the network feed-forward',
+        'They remove the hidden state entirely',
+      ],
+      answer: 1,
+      explain: 'Gates interpolate between keeping the previous state and accepting new input, giving gradients a stable highway across many steps.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>RNN</strong> processes a sequence step by step, maintaining a <strong>hidden state</strong> that summarizes the past.',
+    'The cell\'s weights are <strong>shared across time</strong> — the same update applied at every step.',
+    'Backpropagation through time causes <strong>vanishing or exploding gradients</strong>, so vanilla RNNs forget distant context.',
+    '<strong>LSTM and GRU gates</strong> learn how much memory to keep, using an additive path that preserves gradients over long sequences.',
+    'RNNs are inherently <strong>sequential</strong> — the bottleneck that motivated attention and transformers.',
+  ]}
+/>
+
+Recurrent networks read one step at a time; transformers will read everything at once — but first they need a
+way to turn tokens into vectors. On to **embeddings**.

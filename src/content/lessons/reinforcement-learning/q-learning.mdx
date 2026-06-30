@@ -1,0 +1,170 @@
+---
+title: Q-Learning
+track: reinforcement-learning
+summary: Learn the value of actions straight from experience — no model needed — and balance exploring against exploiting.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - reinforcement-learning/value-functions
+leadsTo:
+  - reinforcement-learning/policy-gradients
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import QLearningGridAgent from '../../../components/demos/QLearningGridAgent.tsx';
+
+## The hook: learning a city with no map
+
+Imagine moving to a new city with no map and no GPS. The first weeks you wander, take wrong turns, and
+occasionally stumble onto a great coffee shop. Slowly a mental table forms: *from this corner, turning left
+tends to work out well.* You never computed transition probabilities — you just updated your gut feeling
+each time reality surprised you.
+
+That is **Q-learning** exactly. The previous lesson computed values when we *knew* the environment's
+dynamics. But robots and game agents usually don't. Q-learning throws away the model and learns the
+action-values $Q(s,a)$ from raw, trial-and-error experience.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Q-learning** keeps a running estimate of how good each action is in each state, and nudges that estimate
+toward "the reward I just got, plus the value of the best action available next."
+</Callout>
+
+## Intuition: learn from the surprise
+
+Every time the agent acts, it sees a reward and a next state. It then asks: *was that better or worse than I
+expected?* That gap is the **temporal-difference (TD) error**, and the update simply moves the old estimate a
+fraction of the way toward the new evidence.
+
+There's a deeper trick. The target uses $\max_{a'} Q(s', a')$ — the value of the **best** next action,
+regardless of what the agent actually does next. That's what makes Q-learning **off-policy**: it can wander
+around exploring randomly yet still learn the value of the *optimal* greedy behavior.
+
+Which raises the central tension of all reinforcement learning: the **exploration–exploitation trade-off**.
+Always taking the action you currently think is best (exploiting) means you may never discover something
+better. Always trying random things (exploring) means you never cash in. The classic compromise is
+**$\varepsilon$-greedy**: with probability $\varepsilon$ act randomly, otherwise act greedily.
+
+## Play with it
+
+Press **Watch one** to see a single episode unfold — the robot stumbles toward the flag using its current
+(possibly terrible) estimates, learning as it goes. Then hit **Train 20** a few times and watch the cells
+fill with $Q$ values and the arrows lock onto a clean path. Crank $\varepsilon$ up and down to feel the
+explore/exploit dial.
+
+<QLearningGridAgent client:visible />
+
+<Callout type="tip">
+Start with high $\varepsilon$ (lots of exploration) so the agent discovers the flag at all; once the arrows
+look sensible, drop $\varepsilon$ to *exploit* the path it found. That schedule — explore early, exploit
+late — is how almost every RL agent is trained.
+</Callout>
+
+## The formal definition
+
+Q-learning maintains a table $Q(s,a)$ and, after each transition $(s, a, r, s')$, applies the update:
+
+$$
+Q(s,a) \leftarrow Q(s,a) + \alpha\Big[\, \underbrace{r + \gamma \max_{a'} Q(s', a')}_{\text{TD target}} - Q(s,a) \,\Big].
+$$
+
+Here $\alpha$ is the **learning rate** (how big a step toward new evidence) and the bracketed quantity is the
+**TD error**. As long as every state–action pair keeps getting visited and $\alpha$ shrinks suitably,
+$Q$ provably converges to the optimal $Q^*$ — and the greedy policy on $Q^*$ is optimal.
+
+```python
+# one Q-learning update from a single transition
+a = argmax(Q[s]) if random() > eps else random_action()   # ε-greedy
+s2, r, done = env.step(a)
+target = r + gamma * max(Q[s2])         # bootstrap on best next action
+Q[s][a] += alpha * (target - Q[s][a])   # move toward the target
+```
+
+<Callout type="why">
+Q-learning is the seed of **deep Q-networks (DQN)** — the system that learned to play dozens of Atari games
+from pixels alone. Swap the lookup table for a neural network that *predicts* $Q(s,a)$, and the very same
+update rule scales to states far too numerous to ever enumerate.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Arcade games" icon="👾">
+DeepMind's DQN learned Breakout, Pong, and Space Invaders using nothing but the screen pixels as state and
+the score as reward. The famous "dig a tunnel behind the wall" Breakout strategy was *discovered*, not
+programmed — pure Q-learning exploiting a high-value pattern it stumbled into.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🚁">
+A drone learning to land treats its state as (height, velocity, tilt) and actions as thrust adjustments.
+Early episodes are crash-prone exploration; over time the Q-values steer it onto smooth descents — without
+anyone modelling the aerodynamics.
+</ExampleCard>
+
+<ExampleCard domain="Recommendation" icon="📰">
+A news app can frame each article slot as an action and a user's click-and-dwell as reward. ε-greedy keeps
+it occasionally showing fresh, untested stories (exploration) so it doesn't get trapped recommending the
+same safe topics forever (over-exploitation).
+</ExampleCard>
+
+<ExampleCard domain="Traffic control" icon="🚦">
+An intersection's signal controller has states (queue lengths, current phase) and actions (which light to
+turn green). Reward is negative total waiting time. Learned Q-values let it adapt phase timing to real
+traffic instead of running a fixed clock.
+</ExampleCard>
+
+<Callout type="note">
+Q-learning is <em>off-policy</em>: it learns about the greedy policy while behaving with an exploratory one.
+Its on-policy cousin, SARSA, instead bootstraps on the action it <em>actually</em> takes next — a small change
+with big consequences for how cautiously the agent learns near cliffs.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the temporal-difference (TD) error?',
+      options: [
+        'The total reward of an episode',
+        'The gap between the bootstrapped target and the current Q estimate',
+        'The number of steps to the goal',
+        'The difference between two policies',
+      ],
+      answer: 1,
+      explain: 'TD error = (r + γ·maxₐ Q(s′,a)) − Q(s,a): how surprised the agent was, which drives the update.',
+    },
+    {
+      q: 'Q(s,a) is currently 2. The agent takes a, gets reward 1, and the best next-state value is 5, with γ = 0.9 and α = 0.5. What is the new Q(s,a)?',
+      options: ['3.75', '5.5', '2.0', '4.25'],
+      answer: 0,
+      explain: 'Target = 1 + 0.9×5 = 5.5. New Q = 2 + 0.5×(5.5 − 2) = 2 + 1.75 = 3.75.',
+    },
+    {
+      q: 'Why use an ε-greedy policy instead of always acting greedily?',
+      options: [
+        'To make the math simpler',
+        'To keep exploring so the agent can discover better actions it has not tried',
+        'Because greedy actions are always wrong',
+        'To guarantee the episode never ends',
+      ],
+      answer: 1,
+      explain: 'Pure greed can lock onto a mediocre habit; ε-greedy injects exploration so better options are found.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Q-learning</strong> estimates action-values Q(s,a) directly from experience, with no model of the environment.',
+    'Each step nudges Q toward the <strong>TD target</strong> r + γ·maxₐ Q(s′,a) by a fraction α (the learning rate).',
+    'It is <strong>off-policy</strong>: it learns the optimal greedy values while exploring with a different behavior.',
+    'The <strong>exploration–exploitation</strong> balance is handled by ε-greedy: act randomly with probability ε, else greedily.',
+    'Replace the Q-table with a neural net and you get <strong>DQN</strong>, which scales to huge state spaces like Atari pixels.',
+  ]}
+/>
+
+Next up: instead of learning values and acting greedily, what if we optimize the policy *itself*? That is the
+leap to **policy gradients**.

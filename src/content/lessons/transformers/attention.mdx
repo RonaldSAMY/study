@@ -1,0 +1,173 @@
+---
+title: Attention (Q, K, V)
+track: transformers
+summary: Scaled dot-product attention — how each token asks a question, matches it against keys, and blends the values it cares about.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - linear-algebra/matrix-multiplication
+  - neural-networks/activation-functions
+leadsTo:
+  - transformers/multi-head-attention
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import AttentionWeightLab from '../../../components/demos/AttentionWeightLab.tsx';
+
+## The hook: which word does "it" refer to?
+
+Read this: *"The trophy didn't fit in the suitcase because **it** was too big."* What was too big — the
+trophy or the suitcase? You resolved it instantly by letting "it" *look back* at the other words and
+decide which one matters. Change "big" to "small" and the answer flips. A model needs the same skill: for
+every token, scan the whole sentence and pull in the parts that are relevant. That mechanism is
+**attention**, and it is the engine of the transformer.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Attention** lets each token ask a question (a **query**), compare it against every token's **key**, and
+build its output as a **weighted average of values** — paying the most attention to the best matches.
+</Callout>
+
+## Intuition: a soft database lookup
+
+Think of a library lookup. You arrive with a **query** (what you want). Every book has a **key** (what
+it's about) and a **value** (its actual contents). A rigid database returns the one book whose key matches
+exactly. Attention is the *soft* version: it scores how well your query matches **every** key, turns those
+scores into percentages, and hands you a **blend** of all the values, weighted by match.
+
+From the [activation-functions lesson](/neural-networks/activation-functions) you already know the tool that
+turns scores into percentages — the **softmax**. And from
+[matrix multiplication](/linear-algebra/matrix-multiplication) you know that comparing one vector against
+many at once is just a matrix product. Attention is those two ideas, bolted together:
+
+1. **Score** the query against each key with a dot product (high when they align).
+2. **Normalize** the scores with softmax so they sum to 1.
+3. **Blend** the values using those weights.
+
+The Q, K, and V vectors are themselves learned: each is the input embedding passed through its own weight
+matrix, so the model decides *what to ask, what to advertise, and what to deliver.*
+
+## Play with it
+
+Drag the indigo **query**. The brightest beam shows where attention flows; the bars are the softmax
+weights; the emerald dot is the blended **output**. Toggle "divide by √d" to feel why scaling matters.
+
+<AttentionWeightLab client:visible />
+
+<Callout type="tip">
+Park the query right on top of one key: that key's weight rockets toward 100% and the output snaps to its
+value. Sit the query between two keys and the output becomes their mix — attention is a *soft* selector.
+</Callout>
+
+## The formal definition
+
+Stack the queries, keys, and values for a sequence into matrices $Q$, $K$, $V$. Scaled dot-product
+attention is a single expression:
+
+$$
+\text{Attention}(Q, K, V) = \text{softmax}\!\left(\frac{Q K^{\top}}{\sqrt{d_k}}\right) V.
+$$
+
+Reading it piece by piece:
+
+- $Q K^{\top}$ — every query dotted with every key, giving a grid of **match scores**.
+- $\div \sqrt{d_k}$ — divide by the square root of the key dimension so large dot products don't push softmax
+  into a near one-hot spike (which would kill the gradients).
+- $\text{softmax}(\cdot)$ — each row becomes a probability distribution over the keys: the **attention weights**.
+- $\times\, V$ — multiply by the values to get each token's output as a weighted average.
+
+```python
+scores = Q @ K.T / sqrt(d_k)      # (n_query, n_key) match grid
+weights = softmax(scores, axis=-1)  # each row sums to 1
+out = weights @ V                  # blended values, one row per query
+```
+
+<Callout type="why">
+This one line is most of what a transformer *does.* It is also fully parallel — every token is processed
+at once, no left-to-right loop — which is exactly why transformers train so much faster than the recurrent
+networks they replaced.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Machine translation" icon="🌐">
+Translating "the red car" into French, the model producing *"rouge"* sends a query that matches the key for
+"red" most strongly. Attention **aligns** output words with the source words they depend on — the modern
+heir to old word-alignment tables.
+</ExampleCard>
+
+<ExampleCard domain="Code completion" icon="💻">
+Inside a function, the token after `return` queries the surrounding code and attends to the variable that
+was just assigned. That's how an autocomplete tool "remembers" a name you defined ten lines up.
+</ExampleCard>
+
+<ExampleCard domain="Customer support" icon="💬">
+A bot answering *"is it waterproof?"* sends a query that lights up on the product's spec sheet keys. The
+value it blends in is the relevant spec — attention is the soft retrieval step behind a grounded answer.
+</ExampleCard>
+
+<ExampleCard domain="Protein folding" icon="🧬">
+Models like AlphaFold use attention so each amino acid attends to others that are far apart in the chain but
+close in 3D. The weights reveal which residues physically interact — relevance across distance.
+</ExampleCard>
+
+<Callout type="note">
+Q, K, and V can come from the same sequence (**self-attention**) or from two different ones (**cross-attention**,
+as in translation, where queries come from the output and keys/values from the input). Same formula, different wiring.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In attention, what role does the softmax play?',
+      options: [
+        'It picks the single best key and ignores the rest',
+        'It turns the match scores into weights that sum to 1, so the output is a weighted average of the values',
+        'It scales the keys to unit length',
+        'It adds positional information',
+      ],
+      answer: 1,
+      explain: 'Softmax converts raw scores into a probability distribution over keys; those weights then blend the values.',
+    },
+    {
+      q: 'Why divide the scores by √dₖ before the softmax?',
+      options: [
+        'To make the matrix square',
+        'To keep large dot products from making softmax nearly one-hot, which would starve the gradients',
+        'Because values must be normalized',
+        'To convert scores to probabilities directly',
+      ],
+      answer: 1,
+      explain: 'As dimension grows, dot products grow too; the √dₖ factor tames them so the softmax stays soft and trainable.',
+    },
+    {
+      q: 'A query is dotted with three keys giving scores [2, 2, 0] (ignore scaling). Roughly where does attention go?',
+      options: [
+        'All on the third key',
+        'Split mostly between the first two keys, little on the third',
+        'Evenly across all three',
+        'Entirely on the first key',
+      ],
+      answer: 1,
+      explain: 'Softmax of [2,2,0] gives about [0.42, 0.42, 0.16] — the two equal top scores share most of the weight.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Attention is a <strong>soft lookup</strong>: a query is matched against keys, and the output is a weighted average of values.',
+    'The core formula is <strong>softmax(QKᵀ/√dₖ)·V</strong> — a score, a normalize, and a blend.',
+    'The <strong>√dₖ scaling</strong> keeps softmax from collapsing to one-hot, preserving useful gradients.',
+    'Q, K, and V are <strong>learned projections</strong> of the inputs: the model chooses what to ask, advertise, and deliver.',
+    'It is fully <strong>parallel</strong> across tokens — the speed advantage that made transformers win.',
+  ]}
+/>
+
+Next up: **multi-head attention** — running several of these lookups in parallel so the model can track
+many kinds of relationship at once.

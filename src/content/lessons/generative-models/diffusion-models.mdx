@@ -1,0 +1,191 @@
+---
+title: Diffusion Models
+track: generative-models
+summary: Destroy data with noise step by step, then train a network to reverse the process — generating images from pure static.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - generative-models/vae
+  - probability/continuous-distributions
+leadsTo:
+  - generative-models/gans
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DiffusionNoiserDemo from '../../../components/demos/DiffusionNoiserDemo.tsx';
+
+## The hook: sculpting a picture out of static
+
+Point a camera at an untuned TV and you get pure snow — random noise with no picture in it at all. Now
+imagine a machine that stares at that static and, step by step, *removes* exactly the right speck of
+noise until a photorealistic image of an astronaut riding a horse emerges. That is not a metaphor: it is
+literally how Stable Diffusion, DALL·E, and Midjourney generate images. They learn to run noise
+**backward** into data.
+
+The genius is in how they learn it. Rather than guess how to denoise out of thin air, the model first
+watches data get *destroyed* by noise on a fixed schedule — an easy process to define — and simply
+learns to undo one small step of it. Reverse that learned step hundreds of times and noise becomes art.
+
+<Callout type="intuition" title="The one-sentence idea">
+Gradually add noise to data until it becomes pure static (the easy **forward** process), then train a
+network to **reverse** one small step at a time — so it can start from noise and create new data.
+</Callout>
+
+## Intuition: an easy direction and a hard one
+
+One direction is trivial: take a clean image and stir in a little Gaussian noise, again and again, until
+nothing remains but static. This **forward process** needs no learning — it is just a fixed recipe for
+adding noise, and after enough steps any image becomes an indistinguishable sample from
+$\mathcal{N}(0, I)$.
+
+The hard direction is the **reverse**: given a slightly noisy image, recover the slightly cleaner one it
+came from. That step *is* learnable, and remarkably, it has a simple target. Because we created each
+noisy image ourselves, we know **exactly which noise we added** — so we can train a network to look at a
+noisy image and predict that noise. Subtract a little of the predicted noise, and you have stepped one
+notch back toward clean data.
+
+This connects straight to the previous lesson: a diffusion model is essentially a **VAE with hundreds of
+latent steps**, where the "encoder" is the fixed noising schedule and the "decoder" is the learned
+denoiser applied over and over.
+
+## Play with it
+
+Slide the **timestep**. At $t = 0$ you see clean data; as $t$ grows, the fixed schedule mixes in more
+noise until the smiley dissolves into static. The noise field is held fixed, so sliding back is the
+*ideal* reverse process — exactly what the model learns to approximate.
+
+<DiffusionNoiserDemo client:visible />
+
+<Callout type="tip">
+Watch the <strong>signal</strong> and <strong>noise</strong> readouts. Early on, a lot of structure
+survives — denoising is easy. Near the end almost nothing remains, so the model must hallucinate the
+coarse shapes first and refine details later. That is why generation goes from blurry blobs to sharp
+images.
+</Callout>
+
+## The formal definition
+
+The **forward process** adds Gaussian noise over $T$ steps with a variance schedule $\beta_t$. A lovely
+shortcut lets us jump straight to any timestep without looping. Writing $\alpha_t = 1 - \beta_t$ and
+$\bar{\alpha}_t = \prod_{s=1}^{t} \alpha_s$:
+
+$$
+x_t = \sqrt{\bar{\alpha}_t}\, x_0 + \sqrt{1 - \bar{\alpha}_t}\,\varepsilon, \qquad \varepsilon \sim \mathcal{N}(0, I).
+$$
+
+As $t$ grows, $\bar{\alpha}_t \to 0$, so the signal $\sqrt{\bar{\alpha}_t}\,x_0$ fades and $x_t$
+approaches pure noise — exactly the slider's behavior. Note this is the reparameterization trick again:
+a deterministic mix of clean data and fixed noise.
+
+To **reverse**, a network $\varepsilon_\theta(x_t, t)$ is trained to predict the noise that was added.
+The training objective is astonishingly simple — a plain squared error between the true noise and the
+predicted noise:
+
+$$
+\mathcal{L} = \mathbb{E}_{x_0,\, t,\, \varepsilon}\Big[\;\big\lVert \varepsilon - \varepsilon_\theta(x_t, t) \big\rVert^2\;\Big].
+$$
+
+```python
+t   = randint(1, T)                         # random timestep
+eps = torch.randn_like(x0)                  # the noise we add
+x_t = abar[t].sqrt()*x0 + (1-abar[t]).sqrt()*eps
+loss = ((eps - model(x_t, t))**2).mean()    # learn to predict that noise
+```
+
+At generation time, start from $x_T \sim \mathcal{N}(0, I)$ and repeatedly subtract a slice of the
+predicted noise (adding a little fresh randomness each step), walking back from $t = T$ to $t = 0$ to
+land on a fresh, clean sample.
+
+<Callout type="why">
+This objective is a simplified form of the same **ELBO** you maximized for the VAE, specialized to the
+noising chain. Predicting noise turns out to be equivalent to learning the **score** — the gradient of
+the log-density — which is why diffusion models are also called score-based models.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Digital art" icon="🎨">
+Text-to-image tools start from a square of pure noise and denoise it for a few dozen steps, *guided* by
+your prompt's embedding at every step. The prompt steers which image the reverse process converges to —
+"a watercolor fox" pulls the denoiser toward foxes rather than frogs.
+</ExampleCard>
+
+<ExampleCard domain="Protein design" icon="🧪">
+Tools like RFdiffusion run the same denoising idea over 3D atomic coordinates instead of pixels. Starting
+from random clouds of atoms, they denoise into novel, physically plausible protein backbones — designing
+brand-new molecules that never existed in nature.
+</ExampleCard>
+
+<ExampleCard domain="Music & audio" icon="🎵">
+Audio diffusion denoises a spectrogram or raw waveform, generating speech, sound effects, or full musical
+passages. The forward process corrupts a sound into static; the learned reverse process composes new
+audio from noise, optionally conditioned on a text or melody prompt.
+</ExampleCard>
+
+<ExampleCard domain="Medical imaging" icon="🩻">
+An MRI scanner collects far less data than a full image needs. A diffusion model trained on clean scans
+acts as a learned prior: it denoises the under-sampled measurement into a sharp reconstruction,
+accelerating scans while preserving diagnostic detail.
+</ExampleCard>
+
+<Callout type="note">
+Pixels, atoms, sound, and medical signals — all the same machinery: a fixed corruption process and a
+learned reversal. Only the kind of data being denoised changes.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In a diffusion model, which direction requires no learning at all?',
+      options: [
+        'The reverse (denoising) process',
+        'The forward (noising) process — it is a fixed schedule of adding Gaussian noise',
+        'Both directions must be learned',
+        'Neither direction is learned',
+      ],
+      answer: 1,
+      explain: 'The forward process is a predefined recipe that just adds noise on a fixed schedule; only the reverse denoising step is learned.',
+    },
+    {
+      q: 'What does the network ε_θ(x_t, t) actually predict during training?',
+      options: [
+        'The class label of the image',
+        'The clean image directly in one shot',
+        'The noise that was added to produce x_t',
+        'The variance schedule β_t',
+      ],
+      answer: 2,
+      explain: 'The standard objective trains the network to predict the noise ε added at step t, then a slice of it is subtracted to step toward cleaner data.',
+    },
+    {
+      q: 'As the timestep t increases toward T, what happens to x_t?',
+      options: [
+        'It becomes sharper and cleaner',
+        'It approaches pure Gaussian noise as the signal coefficient √ᾱ_t shrinks toward 0',
+        'It stays exactly equal to the original image',
+        'It becomes a constant gray image',
+      ],
+      answer: 1,
+      explain: 'Since x_t = √ᾱ_t·x₀ + √(1−ᾱ_t)·ε and ᾱ_t → 0, the data term vanishes and x_t approaches a sample from N(0, I).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Diffusion models</strong> define an easy forward process that adds noise to data, then learn to reverse it step by step.',
+    'The closed-form forward step <strong>x_t = √ᾱ_t·x₀ + √(1−ᾱ_t)·ε</strong> jumps to any timestep — the reparameterization trick again.',
+    'The network is trained to <strong>predict the added noise</strong>, with a simple squared-error loss ‖ε − ε_θ(x_t, t)‖².',
+    'Generation runs the learned reverse process from pure noise back to data, refining coarse structure first, then details.',
+    'It is closely related to the <strong>VAE/ELBO</strong> and to <strong>score-based</strong> models, and powers Stable Diffusion, protein design, and more.',
+  ]}
+/>
+
+Next up: a completely different way to generate — pit two networks against each other in a game. Meet
+**GANs**, where a forger and a detective train each other to a standstill.

@@ -1,0 +1,174 @@
+---
+title: The Neuron
+track: neural-networks
+summary: A weighted sum, a bias, and an activation — a single neuron is a tiny linear model that decides.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - linear-algebra/vector-ops-dot
+  - tensors/tensors
+leadsTo:
+  - neural-networks/activation-functions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import NeuronDecisionLab from '../../../components/demos/NeuronDecisionLab.tsx';
+
+## The hook: a triage decision in a single number
+
+A radiologist looks at a scan and weighs a handful of clues: *how large is the mass? how irregular are
+the cell borders? how dense is the tissue?* Some clues matter more than others, so they get more
+**weight**. Add the weighted clues together, lean toward caution with a baseline **bias**, and squash
+the total into a single confidence: *"85% likely malignant."*
+
+That entire reasoning — weigh, sum, shift, squash — is exactly what one artificial **neuron** does. It is
+the smallest decision-making unit in a neural network, and it is nothing more than a tiny linear model
+with a knob on the end.
+
+<Callout type="intuition" title="The one-sentence idea">
+A neuron takes a **dot product** of its inputs with learned **weights**, adds a **bias**, and passes the
+result through an **activation function** to produce one output.
+</Callout>
+
+## Intuition: a dot product that learned what to care about
+
+You already know the **dot product** as a similarity score: $\mathbf{w} \cdot \mathbf{x}$ is large when the
+input $\mathbf{x}$ points the same way as the weight vector $\mathbf{w}$. A neuron uses exactly this. The
+weights $\mathbf{w}$ are a *learned template* of "what this neuron is looking for," and the dot product
+measures how strongly the current input matches that template.
+
+Two more pieces finish the unit:
+
+- The **bias** $b$ shifts the decision threshold. With a big negative bias the neuron stays quiet unless
+  the evidence is strong; with a positive bias it fires easily.
+- The **activation** $\sigma$ bends the straight-line score into something useful — for example squashing
+  it into a probability between 0 and 1.
+
+Because the inputs $\mathbf{x}$ live in a **tensor** and the weights in another, a real layer computes
+thousands of these dot products at once. But the logic of *one* neuron is the whole story.
+
+## Play with it
+
+The lab below is a single neuron screening tumors from two features: size and cell uniformity. Tip the
+green **decision line** by changing the two weights, slide it with the **bias**, then drag the white dot
+(a new patient) to read its score.
+
+<NeuronDecisionLab client:visible />
+
+<Callout type="tip">
+The green line is exactly where the weighted sum equals zero — the neuron's "undecided" boundary. Notice
+the weights control the line's <strong>tilt</strong> and the bias controls its <strong>position</strong>.
+That separation is the key to how a neuron learns.
+</Callout>
+
+## The formal definition
+
+Given an input vector $\mathbf{x} \in \mathbb{R}^n$, a weight vector $\mathbf{w} \in \mathbb{R}^n$, and a
+scalar bias $b$, a neuron computes a **pre-activation** (often called the logit):
+
+$$
+z = \mathbf{w} \cdot \mathbf{x} + b = \sum_{i=1}^{n} w_i x_i + b.
+$$
+
+It then applies an **activation function** $\sigma$ to get the output:
+
+$$
+a = \sigma(z) = \sigma\!\left(\mathbf{w} \cdot \mathbf{x} + b\right).
+$$
+
+With the logistic activation $\sigma(z) = \dfrac{1}{1 + e^{-z}}$, the output is a number in $(0, 1)$ you can
+read as a probability. The set of points where $z = 0$ is a straight line (in 2D) or a **hyperplane** (in
+higher dimensions) — the neuron's decision boundary.
+
+```python
+z = w @ x + b          # weighted sum (dot product) plus bias
+a = 1 / (1 + np.exp(-z))  # logistic activation -> "firing rate" in (0, 1)
+```
+
+<Callout type="why">
+Stack many of these and let the weights be learned from data, and you have a neural network. Every
+parameter a giant language model tunes is just a $w_i$ or a $b$ inside one of billions of these units.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Email & NLP" icon="📧">
+A spam filter is a neuron. The input is word counts; the weights are large and positive for tokens like
+"free" or "wire transfer," negative for words common in your real mail. The dot product is a spam score,
+the bias sets how aggressive the filter is, and the activation turns it into "probability this is spam."
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💳">
+A credit model weighs income, debt ratio, and payment history. Each applicant is a vector; the learned
+weights say how much each factor counts. A negative bias keeps approvals conservative, and the sigmoid
+output is the estimated probability of repayment.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="⚽">
+Scouts score a prospect from speed, accuracy, and stamina. Give each attribute a weight, sum them, and
+add a bias for the position's baseline difficulty. One neuron turns a stat line into a single "draft this
+player?" signal.
+</ExampleCard>
+
+<ExampleCard domain="Smart agriculture" icon="🌾">
+A field sensor decides when to irrigate from soil moisture, temperature, and humidity. The weights encode
+which readings matter for this crop; a high bias means "water often." The neuron fires when the weighted
+evidence crosses its threshold.
+</ExampleCard>
+
+<Callout type="note">
+In every case the math is identical — a dot product plus a bias plus a squash. Only the meaning of the
+weights changes, and the weights are exactly what learning will discover.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a single neuron compute before the activation function?',
+      options: [
+        'The product of all inputs',
+        'A weighted sum of the inputs plus a bias',
+        'The largest input',
+        'The average of the weights',
+      ],
+      answer: 1,
+      explain: 'The pre-activation is z = w·x + b: a dot product of inputs with weights, plus a bias.',
+    },
+    {
+      q: 'A neuron has weights w = [2, -1] and bias b = -1. For input x = [2, 3], what is z = w·x + b?',
+      options: ['0', '1', '6', '-2'],
+      answer: 0,
+      explain: '2·2 + (-1)·3 + (-1) = 4 - 3 - 1 = 0 — exactly on the decision boundary.',
+    },
+    {
+      q: 'What role does the bias play geometrically?',
+      options: [
+        'It rotates the decision boundary',
+        'It scales the inputs',
+        'It shifts the decision boundary without changing its tilt',
+        'It has no effect on the boundary',
+      ],
+      answer: 2,
+      explain: 'Weights set the orientation (tilt) of the boundary; the bias slides it toward or away from the origin.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>neuron</strong> computes z = w·x + b, then applies an activation σ to get its output a.',
+    'The <strong>weights</strong> are a learned template; the <strong>dot product</strong> measures how well the input matches it.',
+    'The <strong>bias</strong> shifts the decision threshold; weights set the boundary&apos;s tilt, bias sets its position.',
+    'With a logistic activation the output is a <strong>probability</strong> in (0, 1), and z = 0 is the decision boundary.',
+    'A whole network is just <strong>many neurons</strong> stacked — the same tiny computation, repeated and learned.',
+  ]}
+/>
+
+Next up: **activation functions** — the nonlinear squashers like sigmoid, ReLU, and GELU that give a
+neuron (and a network) its real expressive power.

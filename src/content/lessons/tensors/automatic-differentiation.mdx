@@ -1,0 +1,183 @@
+---
+title: Automatic Differentiation
+track: tensors
+summary: Reverse-mode autodiff is the chain rule run backward over the computational graph — exact gradients, computed automatically.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - tensors/computational-graphs
+  - calculus-3/chain-rule-jacobian
+leadsTo:
+  - tensors/numerical-stability
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import AutodiffGraphFlow from '../../../components/demos/AutodiffGraphFlow.tsx';
+
+## The hook: how does a model know which knob to turn?
+
+Training a network means nudging millions of parameters to reduce one error number. To nudge wisely
+you need to know, for *every* parameter, "if I increase you a little, does the error go up or down,
+and how fast?" That is a gradient. Computing it by hand for millions of knobs is hopeless, and
+approximating it by wiggling each knob would take millions of forward passes. **Automatic
+differentiation** gets all of them at once — in a single backward sweep of the graph you already
+built.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Reverse-mode autodiff** runs the chain rule backward through the computational graph: seed the
+output's gradient as 1, then multiply local derivatives along each edge to get every input's gradient
+in one pass.
+</Callout>
+
+## Intuition: send sensitivities backward
+
+You met the **multivariable chain rule** in calculus: to differentiate a composition, multiply the
+derivatives of each link. A computational graph *is* a composition, so we can apply the chain rule
+edge by edge — but in the smart direction.
+
+Take the graph from last lesson, $f = a \cdot b + c$, with intermediate $d = a \cdot b$. Each
+operation knows its own **local derivatives**:
+
+- the add node: $\partial f / \partial d = 1$ and $\partial f / \partial c = 1$;
+- the multiply node: $\partial d / \partial a = b$ and $\partial d / \partial b = a$.
+
+Now flow gradients **right to left**. Seed the output with $\partial f / \partial f = 1$. Push it
+through the add node to get $\partial f / \partial d = 1$ and $\partial f / \partial c = 1$. Push
+$\partial f / \partial d$ through the multiply node, scaling by each local derivative:
+
+$$
+\frac{\partial f}{\partial a} = \frac{\partial f}{\partial d}\cdot\frac{\partial d}{\partial a} = 1 \cdot b = b,
+\qquad
+\frac{\partial f}{\partial b} = 1 \cdot a = a.
+$$
+
+One backward sweep, every gradient. This is **reverse mode**, and its magic is that one output's
+sensitivity to *all* inputs costs about the same as one forward pass — no matter how many inputs.
+
+## Play with it
+
+Same graph, now with two numbers on each edge: the blue **forward value** and the rose **gradient of
+$f$**. Drag a slider and watch the backward numbers update — confirm that $\partial f / \partial a$
+really does track $b$, and $\partial f / \partial b$ tracks $a$.
+
+<AutodiffGraphFlow client:visible />
+
+<Callout type="tip">
+Set $b = 0$. Now $\partial f / \partial a = 0$: when $b$ is zero, changing $a$ can't move the
+product, so $a$'s gradient vanishes. The graph captures that coupling automatically.
+</Callout>
+
+## The formal definition
+
+Give each node $v$ an **adjoint** $\bar v = \partial f / \partial v$, the sensitivity of the output to
+that node. Reverse mode initializes $\bar f = 1$ and propagates backward: a node $u$ accumulates
+contributions from every node $v$ it feeds, each scaled by the local partial derivative:
+
+$$
+\bar u = \sum_{v \,:\, (u,v)\in E} \bar v \, \frac{\partial v}{\partial u}.
+$$
+
+Visiting nodes in **reverse topological order** guarantees each $\bar v$ is finished before it is
+used. For tensor-valued nodes the local factor $\partial v / \partial u$ is a **Jacobian**, and the
+backward step is a vector–Jacobian product — the chain rule from calculus 3, applied at every edge.
+
+```python
+import torch
+a = torch.tensor(3.0, requires_grad=True)
+b = torch.tensor(2.0, requires_grad=True)
+c = torch.tensor(1.0, requires_grad=True)
+f = a * b + c        # forward pass builds the graph
+f.backward()         # one reverse sweep fills in the gradients
+a.grad, b.grad, c.grad   # tensor(2.), tensor(3.), tensor(1.)  == b, a, 1
+```
+
+<Callout type="why">
+This is **backpropagation**. Reverse mode is the perfect fit for deep learning, where there are
+millions of parameters (inputs) but a single scalar loss (output): all those gradients come out of
+one backward pass. The forward pass had to *store* every intermediate value precisely so the backward
+pass could reuse it — that stored history is the price of cheap gradients.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Robotics" icon="🤖">
+A robot arm's fingertip position is a chain of joint rotations. Autodiff differentiates that chain to
+ask "which joint angle most reduces the gap to the target?" — sending the position error backward to
+every joint at once, the heart of gradient-based motion planning.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+A chemical plant's yield depends on temperature, pressure, and flow rate through many coupled stages.
+Differentiating the process graph reveals how sensitive the final yield is to each upstream setting,
+so engineers know which dial actually matters.
+</ExampleCard>
+
+<ExampleCard domain="Quantitative finance" icon="📉">
+An option's price is a composition of rates, volatility, and time. The "Greeks" are its derivatives.
+Reverse-mode autodiff (adjoint algorithmic differentiation) computes all the Greeks of a complex
+portfolio in roughly one pricing pass instead of bumping each input separately.
+</ExampleCard>
+
+<ExampleCard domain="Ecology" icon="🦌">
+A population model predicts next year's herd from birth, death, and migration rates. Differentiating
+it tells biologists how much a small change in the survival rate shifts the long-run population —
+sensitivities flowing backward through the model's equations.
+</ExampleCard>
+
+<Callout type="note">
+There is also <em>forward-mode</em> autodiff, which is efficient when you have few inputs and many
+outputs — the mirror image. Deep learning's "many inputs, one loss" shape is exactly why reverse mode
+won.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'For f = a·b + c with a = 5, b = 4, what is ∂f/∂a?',
+      options: ['5', '4', '9', '1'],
+      answer: 1,
+      explain: '∂f/∂a equals the other factor b, so with b = 4 the gradient is 4 — independent of a itself.',
+    },
+    {
+      q: 'Why is reverse-mode autodiff the natural choice for training neural networks?',
+      options: [
+        'It only works on small graphs',
+        'One backward pass gives gradients for all inputs when there is a single scalar output',
+        'It avoids storing any intermediate values',
+        'It is the same as finite differences',
+      ],
+      answer: 1,
+      explain: 'With millions of parameters but one scalar loss, reverse mode delivers every gradient in a single backward sweep.',
+    },
+    {
+      q: 'What does the forward pass have to keep so the backward pass can run?',
+      options: [
+        'Only the final output',
+        'The intermediate values (and graph structure) at each node',
+        'Nothing — gradients are recomputed from scratch',
+        'A second copy of the inputs only',
+      ],
+      answer: 1,
+      explain: 'Local derivatives often depend on intermediate values (e.g. ∂(a·b)/∂a = b), so those must be stored during the forward pass.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Reverse-mode autodiff</strong> applies the chain rule backward over the computational graph.',
+    'Seed the output adjoint at 1, then multiply by each node\'s <strong>local derivative</strong> along the edges.',
+    'Nodes are processed in <strong>reverse topological order</strong> so each gradient is ready when used.',
+    'For a single scalar output, every input gradient is obtained in <strong>one backward pass</strong> — this is backpropagation.',
+    'The forward pass must store intermediate values, since local derivatives often depend on them.',
+  ]}
+/>
+
+Next up: **numerical stability** — gradients and outputs are only as trustworthy as the floating-point
+arithmetic underneath, so we learn where it breaks and how to fix it.

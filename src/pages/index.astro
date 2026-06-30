@@ -17,8 +17,10 @@ const FEATURED = [
 const flagships = FEATURED
   .map((slug) => ALL_LESSONS.find((l) => l.slug === slug))
   .filter((l): l is NonNullable<typeof l> => Boolean(l) && readySet.has(l!.slug));
-const foundations = TRACKS.filter((t) => t.stage === 'Foundations');
-const core = TRACKS.filter((t) => t.stage === 'Core');
+import { STAGES } from '../data/curriculum';
+const stageGroups = STAGES
+  .map((label) => ({ label, tracks: TRACKS.filter((t) => t.stage === label) }))
+  .filter((g) => g.tracks.length > 0);
 ---
 
 <Layout>
@@ -83,9 +85,9 @@ const core = TRACKS.filter((t) => t.stage === 'Core');
   <!-- The learning path overview -->
   <section class="mt-14">
     <h2 class="text-2xl font-extrabold">The learning journey</h2>
-    <p class="mt-1 text-muted">Two stages. Master the foundations, then the machine-learning core.</p>
+    <p class="mt-1 text-muted">From the basics all the way to building LLMs — one connected path.</p>
 
-    {[{ label: 'Foundations', tracks: foundations }, { label: 'Core (ML math)', tracks: core }].map((group) => (
+    {stageGroups.map((group) => (
       <div class="mt-6">
         <p class="mb-3 text-xs font-bold uppercase tracking-wider text-muted">{group.label}</p>
         <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

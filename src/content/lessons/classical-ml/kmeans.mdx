@@ -1,0 +1,193 @@
+---
+title: k-Means Clustering
+track: classical-ml
+summary: Discover hidden groups in unlabeled data by repeatedly assigning points to the nearest center and recentering.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - linear-algebra/vector-ops-dot
+leadsTo:
+  - classical-ml/naive-bayes
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import KMeansLloydStepper from '../../../components/demos/KMeansLloydStepper.tsx';
+
+## The hook: the customers nobody labeled
+
+A shop has ten thousand customers and not a single tag describing any of them. Nobody wrote down
+"this is a bargain hunter" or "this one is a weekend splurger." All you have is what each person *did*:
+how often they visit, how much they spend, how late at night they browse. Plot every customer as a
+point and a striking thing happens — they don't smear out evenly. They **clump**. Some clumps spend
+big and rarely; others spend little but constantly. You never told the data what the groups were, yet
+the groups are sitting right there. **k-means** is the algorithm that finds them.
+
+<Callout type="intuition" title="The one-sentence idea">
+k-means hunts for **k centers** so that every point sits as close as possible to its nearest center,
+by repeatedly assigning points to the closest center and then sliding each center to the middle of the
+points it caught.
+</Callout>
+
+## Intuition: clumps as points near a shared center
+
+You already know how to turn anything into a **vector** and how to measure the **distance** between two
+vectors. k-means is built entirely on those two skills. Picture each data item as a point in space. A
+**cluster** is just a bunch of points huddled near a common location — and that location is the
+cluster's **center** (its *centroid*).
+
+The catch that makes this interesting: this is **unsupervised** learning. Nobody handed us the right
+answers — there are no labels to learn from. The algorithm must propose the groups itself. It does so
+by guessing some centers and then improving them through two steps that take turns:
+
+1. **Assign** — color each point by whichever center is nearest to it. (Pure distance, the dot-product
+   neighbor of the last lesson.)
+2. **Update** — move each center to the *average position* of all the points that just chose it.
+
+Re-assign, re-center, re-assign, re-center. Each round the centers slide toward the dense heart of
+their group, and the grouping gets cleaner. After a few passes nothing moves — the centers have settled
+and the clusters are found.
+
+## Play with it
+
+Start by pressing the button once to **assign** the grey points to their nearest center, then again to
+**update** the centers. Keep alternating and watch the colored groups sharpen while the inertia number
+falls.
+
+<KMeansLloydStepper client:visible />
+
+<Callout type="tip">
+Step <strong>assign</strong> then <strong>update</strong> over and over and watch two things: the
+<strong> inertia</strong> readout only ever drops, and the centers eventually stop moving. Then hit
+<strong> New seeds</strong> — the same points can settle into a <em>different</em> answer depending on
+where the centers started. That sensitivity to the starting guess is real and important.
+</Callout>
+
+## The formal definition
+
+We have $n$ data points $x_1, \dots, x_n$, each a vector in $\mathbb{R}^d$. We want $k$ centroids
+$\mu_1, \dots, \mu_k$ and an assignment $c_i$ that says which centroid point $x_i$ belongs to. k-means
+chooses them to minimize the **within-cluster sum of squares** (also called the *inertia*):
+
+$$
+J = \sum_{i=1}^{n} \bigl\lVert x_i - \mu_{c_i} \bigr\rVert^2 .
+$$
+
+This is a chicken-and-egg problem: the best assignments depend on the centers, and the best centers
+depend on the assignments. **Lloyd's algorithm** breaks the loop by fixing one and optimizing the
+other, in turn.
+
+**Assignment step** — with the centers held fixed, give each point to its nearest center:
+
+$$
+c_i = \arg\min_{j} \, \bigl\lVert x_i - \mu_j \bigr\rVert^2 .
+$$
+
+**Update step** — with the assignments held fixed, move each center to the mean of its members. If
+$C_j$ is the set of points assigned to center $j$, then
+
+$$
+\mu_j = \frac{1}{\lvert C_j \rvert} \sum_{i \in C_j} x_i .
+$$
+
+Each step can only lower $J$ (or leave it unchanged), so the algorithm **converges** — but only to a
+**local minimum**, not necessarily the best possible grouping. That is exactly the "different seeds,
+different answer" effect from the demo. In practice we run it several times from different random starts
+and keep the lowest-inertia result, and smarter seeding (**k-means++**) spreads the initial centers out
+to avoid bad starts. Choosing $k$ itself is a judgment call: a common trick is the **elbow method** —
+plot inertia against $k$ and look for the bend where adding more clusters stops helping much.
+
+The whole update loop is just a few lines of array math:
+
+```python
+# X: (n, d) points, mu: (k, d) centers
+labels = np.argmin(((X[:, None] - mu) ** 2).sum(2), axis=1)   # assign
+mu = np.array([X[labels == j].mean(0) for j in range(k)])      # update
+```
+
+<Callout type="why">
+k-means is the gateway to **unsupervised learning**: finding structure with no labels at all. The same
+"compress data to k representative vectors" move is **vector quantization** — replacing many vectors
+with their nearest centroid to save space. And the assign-then-update rhythm is the hard-edged cousin of
+the **EM algorithm** behind Gaussian mixture models, where points belong to clusters *softly* by
+probability instead of all-or-nothing.
+</Callout>
+
+## The same idea, four different worlds
+
+The "group points around k centers" move shows up far beyond customer data.
+
+<ExampleCard domain="Marketing" icon="🛍️">
+A retailer clusters shoppers by spend, frequency, and recency. k-means surfaces segments like
+"loyal regulars," "big rare spenders," and "one-time browsers" — none of which anyone defined in
+advance. Each centroid is the *average profile* of a segment, and campaigns get tailored to it.
+</ExampleCard>
+
+<ExampleCard domain="Computer vision" icon="🖼️">
+To shrink an image to $k$ colors, treat every pixel as an RGB vector and run k-means with, say,
+$k = 16$. Each pixel is then redrawn as its nearest centroid color. The photo still looks right but now
+uses just 16 colors — that's **color quantization**, classic vector quantization at work.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="✨">
+Survey telescopes measure brightness, color, and size for millions of objects. k-means groups them by
+these properties, separating, say, red giant stars from young blue ones, or galaxies of different types
+— letting astronomers triage a flood of objects without inspecting each by hand.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="🚚">
+Where should a company place $k$ warehouses to serve thousands of delivery addresses? Treat each address
+as a point and run k-means: the centroids land at the spots that minimize total squared distance to
+customers — exactly the warehouse locations that keep deliveries short.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the update step, three points (2, 0), (4, 0), and (0, 6) are assigned to one centroid. Where does that centroid move?',
+      options: ['(2, 2)', '(3, 3)', '(2, 3)', '(6, 6)'],
+      answer: 0,
+      explain: 'The new centroid is the mean of its points: x = (2 + 4 + 0)/3 = 2 and y = (0 + 0 + 6)/3 = 2, so it moves to (2, 2).',
+    },
+    {
+      q: 'Why is k-means called an unsupervised algorithm?',
+      options: [
+        'It needs no computer to run',
+        'It is given no labels — it discovers the groups itself',
+        'It always finds the globally best clustering',
+        'It only works on two-dimensional data',
+      ],
+      answer: 1,
+      explain: 'Unsupervised means there are no target labels. k-means proposes the groups purely from how the data points are arranged.',
+    },
+    {
+      q: 'You run k-means twice on the same data and get two different clusterings. Why can that happen?',
+      options: [
+        'k-means is random and never repeatable',
+        'The data changed between runs',
+        'It converges to a local minimum that depends on where the centroids started',
+        'A bug — k-means is guaranteed to give one unique answer',
+      ],
+      answer: 2,
+      explain: 'Lloyd&rsquo;s algorithm only guarantees a local minimum of the inertia. Different random starting centroids can lead to different local minima — which is why we run it several times or use k-means++.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'k-means is <strong>unsupervised</strong>: it finds groups in data that has no labels at all.',
+    'It alternates two steps — <strong>assign</strong> each point to its nearest centroid, then <strong>update</strong> each centroid to the mean of its points.',
+    'It minimizes the <strong>within-cluster sum of squares</strong> (inertia), which decreases every step until the centroids settle.',
+    'It converges only to a <strong>local minimum</strong>, so results depend on initialization — use multiple restarts or <strong>k-means++</strong>.',
+    'Choosing <strong>k</strong> is a modeling choice; the <strong>elbow method</strong> helps spot a sensible number of clusters.',
+  ]}
+/>
+
+Next up: **Naive Bayes** — instead of grouping points by distance, we'll classify them with probability,
+using Bayes' rule and a bold independence assumption.

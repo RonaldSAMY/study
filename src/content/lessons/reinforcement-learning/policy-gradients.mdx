@@ -1,0 +1,182 @@
+---
+title: Policy Gradients
+track: reinforcement-learning
+summary: Skip the value table — optimize the policy directly by following the gradient of expected reward.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - reinforcement-learning/q-learning
+  - neural-networks/backpropagation
+leadsTo:
+  - reinforcement-learning/rlhf
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PolicyGradientAscentLab from '../../../components/demos/PolicyGradientAscentLab.tsx';
+
+## The hook: teaching a robot to walk
+
+You can't write a rulebook for walking. The number of joint angles, speeds, and balance corrections is
+endless, and "the right move" is a smooth, continuous adjustment — not one of four buttons. Q-learning,
+which ranks a small menu of discrete actions, hits a wall here. We need to learn a *continuous* controller
+and tune it gently.
+
+So change the target. Instead of learning how good each action is and acting greedily, **learn the policy
+itself** — a function (usually a neural network) that maps a state straight to an action — and improve it by
+nudging its parameters in whatever direction makes reward go up. That direction is the **policy gradient**.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Policy gradients** treat expected reward as a function of the policy's parameters, then do gradient
+*ascent*: make actions that led to high reward more likely, and actions that led to low reward less likely.
+</Callout>
+
+## Intuition: turn up what worked
+
+The recipe, called **REINFORCE**, is almost suspiciously simple:
+
+1. Run the current policy and record the actions it took and the rewards it earned.
+2. For actions followed by **high** return, increase their probability.
+3. For actions followed by **low** return, decrease their probability.
+
+You are reusing the chain rule from backpropagation, but the "loss" is now "negative expected reward." The
+network's weights shift so that high-reward behavior becomes the path of least resistance. Because we adjust
+*probabilities* smoothly, this works beautifully for continuous actions like joint torques or steering angles
+— no $\arg\max$ over an infinite menu required.
+
+One practical wrinkle: raw returns are noisy, so naive REINFORCE wobbles. Subtracting a **baseline** (a
+typical return for that state) keeps only the *surprise* — "better than usual" or "worse than usual" — which
+slashes the variance. That surprise-above-baseline is called the **advantage**, and it is the beating heart
+of the PPO algorithm you'll meet in the next lesson.
+
+## Play with it
+
+A robot is learning to **aim** at the moving 🎯. Its policy is a bell curve (indigo) over where to aim; the
+green curve is the hidden reward landscape. Each **Step** samples a few aims, sees their rewards, and shifts
+the policy uphill. Move the target, change the learning rate, and watch expected reward climb.
+
+<PolicyGradientAscentLab client:visible />
+
+<Callout type="tip">
+Notice the policy doesn't jump straight to the target — it *drifts* there as samples that landed near the
+bullseye pull the mean along. A bigger learning rate moves faster but can overshoot and oscillate.
+</Callout>
+
+## The formal definition
+
+Let the policy $\pi_\theta(a\mid s)$ have parameters $\theta$ (a neural network's weights). We maximize the
+expected return $J(\theta) = \mathbb{E}_{\pi_\theta}[\,G\,]$. The **policy-gradient theorem** gives a gradient
+we can actually estimate from samples:
+
+$$
+\nabla_\theta J(\theta) = \mathbb{E}_{\pi_\theta}\!\left[\, \nabla_\theta \log \pi_\theta(a\mid s)\, \cdot\, A(s,a) \,\right],
+$$
+
+where $A(s,a)$ is the **advantage** (return minus baseline). Read it as: push up the log-probability of each
+action, weighted by how much better than expected its outcome was. The update is plain gradient ascent:
+
+$$
+\theta \leftarrow \theta + \eta\, \nabla_\theta J(\theta).
+$$
+
+```python
+# REINFORCE update for one trajectory
+logps, rewards = run_episode(policy)        # collect log π(a|s) and rewards
+returns = discounted_returns(rewards, gamma)
+adv = returns - returns.mean()              # simple baseline -> advantage
+loss = -(logps * adv).mean()                # ascent on reward = descent on -reward
+loss.backward(); optimizer.step()           # gradients via backprop
+```
+
+<Callout type="why">
+This is the bridge from RL to large language models. An LLM *is* a policy: given a context (state) it outputs
+a distribution over next tokens (actions). Aligning it with human feedback means doing policy-gradient ascent
+on a reward — precisely the RLHF recipe in the final lesson.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Robotics locomotion" icon="🤖">
+Simulated humanoids learn to run, jump, and recover from shoves entirely through policy gradients. The policy
+network outputs continuous joint torques; rewards for forward speed and staying upright shape a natural gait
+that no engineer hand-coded.
+</ExampleCard>
+
+<ExampleCard domain="Strategy games" icon="🕹️">
+AlphaStar reached grandmaster level at StarCraft II using policy-gradient methods over an enormous action
+space — where to move, what to build, whom to attack. Discrete-action value tables are hopeless here; a
+parameterized policy is the only way in.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="📈">
+An execution agent selling a large stock position can use a policy that outputs a continuous trade size each
+minute. Reward is proceeds minus market impact; gradient ascent learns to spread the order out smoothly
+rather than dumping it all at once.
+</ExampleCard>
+
+<ExampleCard domain="Online advertising" icon="💰">
+In a real-time bidding system the action is a continuous bid amount. A policy-gradient agent learns a bidding
+function that maximizes expected conversions per dollar, adjusting smoothly as the auction landscape shifts.
+</ExampleCard>
+
+<Callout type="note">
+Value methods (Q-learning) and policy methods are not rivals — the best modern algorithms are
+<strong>actor–critic</strong>: an actor (policy) decides what to do, while a critic (value function) supplies
+the baseline that tames the gradient's variance. PPO is the famous example.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a policy-gradient method optimize directly?',
+      options: [
+        'The transition probabilities',
+        'The parameters of the policy itself, via gradient ascent on expected reward',
+        'The discount factor',
+        'A lookup table of state values only',
+      ],
+      answer: 1,
+      explain: 'Policy gradients adjust the policy network\'s parameters θ to increase expected return J(θ).',
+    },
+    {
+      q: 'Why subtract a baseline to form the advantage A(s,a)?',
+      options: [
+        'To make rewards larger',
+        'To reduce the variance of the gradient estimate while keeping it unbiased',
+        'To remove the discount factor',
+        'To force the policy to be deterministic',
+      ],
+      answer: 1,
+      explain: 'A baseline keeps only the surprise (return minus typical return), which lowers variance without biasing the gradient.',
+    },
+    {
+      q: 'Why are policy gradients well suited to continuous action spaces where Q-learning struggles?',
+      options: [
+        'They never need rewards',
+        'They adjust action probabilities smoothly instead of taking an argmax over a menu of actions',
+        'They only work in 2D',
+        'They ignore the state entirely',
+      ],
+      answer: 1,
+      explain: 'A parameterized policy outputs (e.g.) a continuous distribution, so there is no intractable argmax over infinitely many actions.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Policy gradients</strong> optimize the policy network directly, by gradient ascent on expected reward J(θ).',
+    'The <strong>policy-gradient theorem</strong> weights each action\'s log-probability by its advantage A(s,a).',
+    '<strong>REINFORCE</strong>: make high-return actions more likely and low-return actions less likely.',
+    'A <strong>baseline</strong> turns return into advantage, cutting variance so learning is stable.',
+    'They handle <strong>continuous actions</strong> naturally and underpin actor–critic methods like PPO — and RLHF.',
+  ]}
+/>
+
+Next up: point this machinery at language models. **RLHF** builds a reward model from human preferences and
+uses policy gradients (PPO) — or a clever shortcut (DPO) — to align an LLM.

@@ -1,0 +1,199 @@
+---
+title: Layer Norm & Residual Streams
+track: transformers
+summary: Residual connections and layer normalization — the quiet plumbing that lets transformers be hundreds of layers deep without their training signal dying.
+difficulty: advanced
+estMinutes: 14
+prereqs:
+  - neural-networks/normalization
+leadsTo:
+  - transformers/transformer-block
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ResidualStreamFlow from '../../../components/demos/ResidualStreamFlow.tsx';
+
+## The hook: why a 96-layer chatbot doesn't go silent
+
+A modern chat model like the one behind your favorite assistant stacks **dozens of identical
+layers** — each one nudging the meaning of every token a little. But there's a catch that nearly
+killed deep learning in the 2010s: when you train such a deep stack, the learning signal has to travel
+all the way from the output back down to the first layer. If each layer shrinks that signal even
+slightly, after 50 or 96 layers it has decayed to *nothing*, and the early layers never learn. It is a
+game of telephone with 96 whispers.
+
+Two small ideas fix this completely. They are not glamorous — they are **plumbing** — but without them
+there is no GPT, no Claude, no deep transformer at all.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **residual connection** lets each layer *add a correction* to a running copy of the data instead of
+rewriting it from scratch, and **layer norm** keeps that running copy at a sane scale — together they
+give the gradient a clear, unbroken path from the output back to the very first layer.
+</Callout>
+
+## Intuition: keep the original, add a small edit
+
+You already met **normalization** in the neural-networks track — re-centering and re-scaling numbers so
+they don't blow up or vanish. Here we use it inside each transformer layer. But the real star is the
+**residual** (or *skip*) connection.
+
+Picture a long chain of editors improving a document. A **bad** workflow: each editor rewrites the
+whole document from memory and passes it on. Errors compound; by editor 96 the original meaning is
+gone. A **good** workflow: each editor keeps the current document and only writes *suggested edits* on
+top — "change this word, add this clause." The document is never destroyed, just refined.
+
+That running document is the **residual stream**. Every layer reads it, computes a correction
+$F(x)$, and writes back $x + F(x)$. Because the original $x$ is always passed through untouched, the
+information — and crucially the *gradient* — has a clean lane straight down the stack.
+
+**Layer norm** is the editor first putting on their glasses: before computing a correction, it
+normalizes the stream so the numbers are well-scaled and the correction is computed against a stable
+reference.
+
+## Play with it
+
+The chart plots the **gradient magnitude** as it travels from the output (left) down to the input
+(right), on a log scale. Toggle skip connections off and watch the indigo curve plummet — that's the
+vanishing gradient. Turn them on and the signal stays near 1 all the way down.
+
+<ResidualStreamFlow client:visible />
+
+<Callout type="tip">
+Crank <strong>depth</strong> up to 48 with skip connections OFF and a sub-layer factor of 0.8: the
+gradient reaching the input is essentially zero, so the bottom layers are frozen. Now turn skips ON —
+the green curve barely moves. That single change is what makes very deep transformers trainable.
+</Callout>
+
+## The formal definition
+
+**Layer normalization.** For one token's feature vector $x \in \mathbb{R}^d$, compute its own mean and
+variance *across the features*:
+
+$$
+\mu = \frac{1}{d}\sum_{i=1}^{d} x_i, \qquad
+\sigma^2 = \frac{1}{d}\sum_{i=1}^{d}(x_i - \mu)^2.
+$$
+
+Then standardize and apply a learned scale $\gamma$ and shift $\beta$:
+
+$$
+\mathrm{LN}(x)_i = \gamma_i \,\frac{x_i - \mu}{\sqrt{\sigma^2 + \epsilon}} + \beta_i .
+$$
+
+**Residual (pre-norm) sub-layer.** A sub-layer $F$ (attention or MLP) is wrapped like this:
+
+$$
+y = x + F\big(\mathrm{LN}(x)\big).
+$$
+
+The magic is in the derivative. Differentiating the residual,
+
+$$
+\frac{\partial y}{\partial x} = I + \frac{\partial F}{\partial x},
+$$
+
+that $I$ (the identity) is a free, always-on path. Even if $\partial F / \partial x$ is tiny, the
+gradient through the block stays near 1 — so stacking $L$ blocks multiplies the gradient by something
+near $1^L = 1$ instead of $f^L \to 0$.
+
+```python
+def layer_norm(x, g, b, eps=1e-5):
+    mu  = x.mean(-1, keepdims=True)
+    var = x.var(-1, keepdims=True)
+    return g * (x - mu) / np.sqrt(var + eps) + b
+
+# pre-norm residual: keep x, add a correction computed on the normalized copy
+y = x + sublayer(layer_norm(x))
+```
+
+<Callout type="why">
+The residual stream is the transformer's "shared memory bus." Every layer reads from it and writes a
+small update back. Researchers can even *interpret* a model by watching what each layer adds to the
+stream — a whole subfield (mechanistic interpretability) is built on this one equation.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Logistics" icon="🚚">
+A parcel network with an **express lane**: instead of unloading and re-sorting every package at all 96
+depots, the truck keeps its load and each depot only adds or removes a few items. Nothing gets lost in
+re-sorting, and a tracking update can be traced cleanly from the destination back to the origin — just
+like the gradient down the residual stream.
+</ExampleCard>
+
+<ExampleCard domain="Music production" icon="🎚️">
+A mixing engineer runs a vocal through a chain of effects. Before each effect they **normalize the
+level** (gain-staging) so nothing clips or disappears — that's layer norm. And they blend the
+processed signal back with the dry original (a "parallel" or wet/dry mix) instead of replacing it — a
+residual connection in audio form.
+</ExampleCard>
+
+<ExampleCard domain="Collaborative writing" icon="✍️">
+In a shared doc with *suggested edits*, every collaborator adds tracked changes on top of the current
+text rather than retyping the page. The base document survives a hundred passes, and you can always
+trace who changed what — the same "read, add a correction, write back" loop as the residual stream.
+</ExampleCard>
+
+<ExampleCard domain="Physiology" icon="🩺">
+Your body holds blood pH near 7.4 no matter what you eat, via buffering systems — **homeostasis**.
+Layer norm is homeostasis for activations: it keeps each layer's inputs in a healthy range so the next
+layer can do its job, regardless of how wild the previous computation got.
+</ExampleCard>
+
+<Callout type="note">
+Two flavors exist: <strong>post-norm</strong> (the original 2017 transformer) puts the norm after the
+add; <strong>pre-norm</strong> (used by almost every modern LLM) puts it before the sub-layer, as in
+the demo. Pre-norm keeps the residual path perfectly clean, which is why it trains more stably at depth.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the main job of a residual (skip) connection?',
+      options: [
+        'To make each layer rewrite the data from scratch',
+        'To add a layer’s output onto an unchanged copy of its input, giving the gradient a clean path',
+        'To shuffle the tokens into a new order',
+        'To reduce the number of parameters in the model',
+      ],
+      answer: 1,
+      explain: 'A residual computes y = x + F(x). The untouched x term means the gradient always has an identity path back, so it cannot vanish through the block.',
+    },
+    {
+      q: 'A 20-layer network without skip connections multiplies the gradient by about 0.7 at every layer. Roughly how much of the signal reaches the first layer?',
+      options: ['About 70%', 'About 14%', 'Less than 0.1%', 'It grows to over 100%'],
+      answer: 2,
+      explain: '0.7^20 ≈ 0.0008, i.e. under 0.1%. The signal has essentially vanished — exactly the problem residual connections solve.',
+    },
+    {
+      q: 'Layer norm standardizes a token’s feature vector using which statistics?',
+      options: [
+        'The mean and variance computed across the batch of examples',
+        'The mean and variance computed across that token’s own features',
+        'A fixed global mean and variance baked in at the start',
+        'The maximum and minimum feature values only',
+      ],
+      answer: 1,
+      explain: 'Layer norm normalizes each token across its own feature dimension — independent of the batch — then applies a learned scale γ and shift β.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>residual connection</strong> computes <em>y = x + F(x)</em>: keep the original, add a correction. The running copy is the <strong>residual stream</strong>.',
+    'Its derivative <em>I + ∂F/∂x</em> has a built-in identity path, so the gradient stays near 1 instead of decaying to <em>f<sup>L</sup></em> through L layers.',
+    '<strong>Layer norm</strong> standardizes each token across its own features, then rescales with learned <em>γ</em> and <em>β</em> — keeping activations in a healthy range.',
+    'Together they make <strong>very deep</strong> transformers (dozens to ~100 layers) trainable; without them the early layers never learn.',
+    'Modern LLMs use <strong>pre-norm</strong> (normalize before each sub-layer) to keep the residual path clean and training stable.',
+  ]}
+/>
+
+Next up: we bolt attention, an MLP, layer norm, and these residuals together into the repeating unit of
+every LLM — **the transformer block**.

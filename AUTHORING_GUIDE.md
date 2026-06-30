@@ -81,6 +81,12 @@ import YourDemo from '../../../components/demos/YourDemo.tsx';
 - Inline math: `$ ... $`. Display math: `$$ ... $$` on its own lines.
 - Use standard LaTeX. In matrices/aligned use `\\` for row breaks. Keep it valid — invalid KaTeX breaks the build.
 
+## Code snippets (applied lessons only)
+For applied ML/DL/LLM/RL lessons you MAY include ONE short conceptual code snippet (a fenced
+```python block, ~3-12 lines) where it makes the math click — e.g. `attn = softmax(Q @ K.T / sqrt(d)) @ V`.
+Astro highlights it automatically (Shiki) — no imports needed. Keep it conceptual (NumPy/PyTorch-style),
+put it inside or right after the formal-definition section, and never let it replace the intuition/demo.
+
 ## Book citations (do NOT add these yourself)
 Mapping lessons to the "Mathematics for Machine Learning" book is handled centrally in
 `src/data/bookMap.ts`, and the "📖 In the book" badge is rendered automatically by LessonLayout.

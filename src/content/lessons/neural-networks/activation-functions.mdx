@@ -1,0 +1,179 @@
+---
+title: Activation Functions
+track: neural-networks
+summary: Sigmoid, tanh, ReLU, GELU and softmax — the nonlinear squashers that give networks their power, and the derivatives that let them learn.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - neural-networks/the-neuron
+  - calculus-1/derivative
+leadsTo:
+  - neural-networks/loss-functions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ActivationDerivativeScope from '../../../components/demos/ActivationDerivativeScope.tsx';
+
+## The hook: why stacking linear layers is a waste
+
+Imagine wiring three audio mixers in a row, each just scaling and adding signals. No matter how many you
+chain, the result is still one big scaling-and-adding — a single linear pass. Stack a hundred linear
+neuron layers and you get the algebraic power of... one linear layer. Something has to **bend** the signal
+between layers, or depth buys you nothing.
+
+That bend is the **activation function**. It is the small nonlinear twist after each neuron's weighted sum
+that lets networks carve curved decision boundaries, model "if-then" behavior, and ultimately approximate
+almost any function.
+
+<Callout type="intuition" title="The one-sentence idea">
+An activation function is a **nonlinear** squash applied to each neuron's output — without it a deep
+network collapses into a single linear layer.
+</Callout>
+
+## Intuition: shape matters, and so does the slope
+
+A neuron's pre-activation $z = \mathbf{w}\cdot\mathbf{x} + b$ is a straight-line score. The activation
+reshapes it:
+
+- **Sigmoid** squashes anything into $(0,1)$ — great for a probability, but it *saturates*: far from zero
+  the curve goes flat.
+- **Tanh** is a recentered sigmoid landing in $(-1,1)$, so its outputs are zero-centered.
+- **ReLU** simply zeroes out negatives, $\max(0, z)$ — cheap, and it does not saturate for positive
+  inputs, which keeps gradients alive in deep networks.
+- **GELU** is a smooth, modern cousin of ReLU used throughout transformers; it lets a little negative
+  signal leak through.
+- **Softmax** is special: it acts on a whole vector of scores and turns it into a probability
+  distribution that sums to 1 — the standard final layer for classification.
+
+The second thing that matters is the **derivative**. Learning happens by following slopes (the chain rule,
+two lessons ahead). Where an activation is flat, its derivative is near zero and the neuron stops learning
+— the dreaded *vanishing gradient*. So we judge an activation by both its shape **and** its slope.
+
+## Play with it
+
+Switch activations and watch the function (solid) and its derivative (dashed) together. Drag the marker to
+read both values. The **softmax** tab swaps to three competing class scores.
+
+<ActivationDerivativeScope client:visible />
+
+<Callout type="tip">
+Push the marker far to the left or right on <strong>sigmoid</strong> or <strong>tanh</strong> and watch the
+derivative collapse toward 0 — that flat region is where deep sigmoid networks stop learning. Now try
+<strong>ReLU</strong>: its derivative stays a flat 1 for all positive inputs.
+</Callout>
+
+## The formal definition
+
+The common activations and their derivatives:
+
+$$
+\sigma(z) = \frac{1}{1+e^{-z}}, \qquad \sigma'(z) = \sigma(z)\,\bigl(1 - \sigma(z)\bigr).
+$$
+
+$$
+\tanh(z), \qquad \frac{d}{dz}\tanh(z) = 1 - \tanh^2(z).
+$$
+
+$$
+\operatorname{ReLU}(z) = \max(0, z), \qquad \operatorname{ReLU}'(z) = \begin{cases} 1 & z > 0 \\ 0 & z < 0 \end{cases}.
+$$
+
+GELU uses the standard normal CDF $\Phi$: $\operatorname{GELU}(z) = z\,\Phi(z)$. For a vector of scores
+$\mathbf{z} = (z_1, \dots, z_K)$, **softmax** produces a distribution:
+
+$$
+\operatorname{softmax}(\mathbf{z})_i = \frac{e^{z_i}}{\sum_{j=1}^{K} e^{z_j}}, \qquad \sum_{i} \operatorname{softmax}(\mathbf{z})_i = 1.
+$$
+
+```python
+relu = np.maximum(0, z)
+gelu = z * 0.5 * (1 + erf(z / np.sqrt(2)))
+probs = np.exp(z - z.max()) / np.exp(z - z.max()).sum()  # stable softmax
+```
+
+<Callout type="why">
+The choice of activation is not cosmetic. Replacing sigmoid with ReLU in hidden layers was one of the
+changes that made very deep networks trainable, precisely because ReLU's derivative does not vanish for
+positive inputs.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Language models" icon="💬">
+The final layer of a chatbot predicts the next token with <strong>softmax</strong> over the whole
+vocabulary: tens of thousands of scores become a probability distribution. The model then samples its next
+word from that distribution.
+</ExampleCard>
+
+<ExampleCard domain="Computer vision" icon="📷">
+Convolutional image networks lean on <strong>ReLU</strong> after almost every layer. It is fast to compute
+on millions of pixels and keeps gradients flowing through dozens of layers so the network can learn edges,
+textures, then objects.
+</ExampleCard>
+
+<ExampleCard domain="Game AI" icon="🎮">
+A reinforcement-learning agent's policy head often uses <strong>tanh</strong> to bound a continuous action
+(like a steering angle) into a safe range such as -1 to 1, with outputs naturally centered at zero.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+A model scoring whether a DNA segment is a binding site ends in a single <strong>sigmoid</strong>, turning
+the raw score into a probability a biologist can threshold — say, flag anything above 0.9.
+</ExampleCard>
+
+<Callout type="note">
+Rule of thumb: ReLU or GELU for hidden layers (keep gradients alive), sigmoid for a single
+yes/no probability, softmax for picking one of many classes.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why do we need a nonlinear activation between layers?',
+      options: [
+        'To make training slower on purpose',
+        'Because stacking only linear layers is equivalent to a single linear layer',
+        'To turn weights into integers',
+        'To remove the bias term',
+      ],
+      answer: 1,
+      explain: 'A composition of linear maps is still linear. Nonlinearity is what lets depth add expressive power.',
+    },
+    {
+      q: 'The sigmoid output at some z is σ(z) = 0.2. What is its derivative σ′(z) there?',
+      options: ['0.2', '0.8', '0.16', '0.04'],
+      answer: 2,
+      explain: 'σ′ = σ(1 - σ) = 0.2 × 0.8 = 0.16.',
+    },
+    {
+      q: 'What makes ReLU attractive for deep hidden layers compared to sigmoid?',
+      options: [
+        'Its output is always between 0 and 1',
+        'It is nonlinear but its derivative does not vanish for positive inputs',
+        'It has no derivative',
+        'It guarantees outputs sum to 1',
+      ],
+      answer: 1,
+      explain: 'ReLU keeps a constant slope of 1 for positive inputs, so gradients flow through many layers instead of dying out.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Activations add the <strong>nonlinearity</strong> that lets stacked layers represent curved, complex functions.',
+    '<strong>Sigmoid</strong> and <strong>tanh</strong> saturate — their derivatives vanish far from zero, stalling learning.',
+    '<strong>ReLU</strong> and <strong>GELU</strong> keep gradients alive for positive inputs, which is why deep nets use them.',
+    '<strong>Softmax</strong> turns a vector of scores into a probability distribution that sums to 1.',
+    'Always think about an activation&apos;s <strong>derivative</strong>, not just its shape — that slope is what training rides on.',
+  ]}
+/>
+
+Next up: **loss functions** — once a neuron outputs a number or a probability, how do we measure how wrong
+it is so the network knows what to fix?

@@ -1,0 +1,174 @@
+---
+title: Softmax, Temperature & Sampling
+track: transformers
+summary: How an LLM turns raw logits into a next-token choice — softmax, the temperature dial, and greedy, top-k and top-p sampling.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - neural-networks/activation-functions
+  - information-theory/entropy
+leadsTo:
+  - transformers/layer-norm-residuals
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SamplingTemperatureLab from '../../../components/demos/SamplingTemperatureLab.tsx';
+
+## The hook: why does the same prompt give different answers?
+
+Ask a chatbot the same question twice and you may get two different replies — sometimes a safe, predictable
+one, sometimes a creative surprise. That variation isn't a bug; it's a **dial** you can turn. After all the
+attention layers finish, the model holds a list of raw scores over the whole vocabulary. Turning that list
+into one actual word is its own small science, and it decides whether your model sounds like a careful
+encyclopedia or a freewheeling poet.
+
+<Callout type="intuition" title="The one-sentence idea">
+The model's final scores (**logits**) become a probability distribution via **softmax**; **temperature**
+sharpens or flattens it, and a **sampling rule** (greedy, top-k, top-p) picks the next token from it.
+</Callout>
+
+## Intuition: from scores to a choice
+
+The last layer outputs one **logit** per vocabulary token — an unbounded "how much I like this word" score.
+You already met the fix in the [activation-functions lesson](/neural-networks/activation-functions):
+**softmax** exponentiates the logits and normalizes them into probabilities that sum to 1.
+
+Then comes the artistic part. We rarely just take the single highest-probability token (that's **greedy**
+decoding, and it tends to be repetitive and dull). Instead we **sample**, and we shape the distribution first:
+
+- **Temperature $T$** divides the logits before softmax. Low $T$ makes the distribution *spiky* (confident,
+  near-greedy); high $T$ makes it *flat* (diverse, risky). This is literally lowering or raising the
+  [entropy](/information-theory/entropy) of the next-token distribution.
+- **Top-k** keeps only the $k$ most likely tokens and renormalizes — cutting off the long tail of nonsense.
+- **Top-p (nucleus)** keeps the smallest set of tokens whose probabilities sum past $p$ — an *adaptive* cutoff
+  that's wide when the model is unsure and narrow when it's confident.
+
+## Play with it
+
+Slide **temperature** and watch the bars sharpen or flatten. Add **top-k** / **top-p** to grey out the
+pruned tail. Then hit **Sample** to draw a token — run it a few times at high vs low temperature and feel
+the difference in how predictable the choice is.
+
+<SamplingTemperatureLab client:visible />
+
+<Callout type="tip">
+Push temperature toward 0 and the tallest bar swallows everything — sampling becomes greedy. Push it high
+and the bars level out, so even "grim" can win. Top-p quietly protects you: it keeps the flattening from
+ever selecting true garbage.
+</Callout>
+
+## The formal definition
+
+Given logits $z_1, \dots, z_V$, the temperature-scaled softmax probability of token $j$ is
+
+$$
+p_j = \frac{\exp(z_j / T)}{\sum_{v=1}^{V} \exp(z_v / T)}.
+$$
+
+As $T \to 0$ the distribution concentrates on the top logit (greedy); as $T$ grows it approaches uniform.
+The sampling rules then restrict the support before drawing:
+
+$$
+\text{top-}k:\ \text{keep the }k\text{ largest } p_j;\qquad
+\text{top-}p:\ \text{keep the smallest set with } \sum p_j \ge p.
+$$
+
+After pruning, renormalize the survivors and draw one token at random from them.
+
+```python
+p = softmax(logits / T)            # temperature reshapes the distribution
+p[p < threshold_from_topk_topp] = 0
+p /= p.sum()                       # renormalize the survivors
+next_token = sample(p)             # draw one token
+```
+
+<Callout type="why">
+This is the knob behind "creativity" in every deployed LLM. A coding assistant runs near $T = 0$ for
+correct, deterministic output; a brainstorming partner runs hotter. Same model weights — totally different
+behavior — set entirely by how you turn logits into a choice.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Creative writing" icon="✍️">
+A story generator runs at high temperature with top-p around 0.9: enough randomness for surprising imagery,
+but the nucleus cutoff blocks incoherent words. Drop the temperature and the prose turns flat and formulaic.
+</ExampleCard>
+
+<ExampleCard domain="Code generation" icon="💻">
+A programming assistant wants the *one* correct continuation, so it decodes greedily or at very low
+temperature. Randomness here means bugs — you don't want a creative semicolon.
+</ExampleCard>
+
+<ExampleCard domain="Game dialogue" icon="🎮">
+An NPC powered by an LLM samples at moderate temperature so repeated conversations feel fresh instead of
+canned, while top-k keeps the character from blurting nonsense that breaks immersion.
+</ExampleCard>
+
+<ExampleCard domain="Weather & forecasting copy" icon="🌦️">
+A service that auto-writes forecast summaries keeps temperature low: it wants "rain likely this afternoon,"
+not a poetic gamble. Predictability is the feature, so the distribution is kept sharp.
+</ExampleCard>
+
+<Callout type="note">
+Temperature and entropy are two views of the same thing: raising $T$ raises the entropy (uncertainty) of the
+next-token distribution, lowering it makes the choice more certain. The sampling rules then decide how much
+of that uncertainty you're willing to act on.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does raising the temperature T do to the next-token distribution?',
+      options: [
+        'Makes it spikier and more deterministic',
+        'Flattens it, raising entropy and making diverse tokens more likely',
+        'Removes the softmax step',
+        'Guarantees the top token is chosen',
+      ],
+      answer: 1,
+      explain: 'Dividing logits by a larger T shrinks their differences, flattening the softmax — higher entropy, more variety.',
+    },
+    {
+      q: 'How does top-p (nucleus) sampling differ from top-k?',
+      options: [
+        'Top-p always keeps exactly p tokens',
+        'Top-p keeps the smallest set of tokens whose probabilities sum past p — an adaptive cutoff',
+        'Top-p ignores the probabilities entirely',
+        'They are identical',
+      ],
+      answer: 1,
+      explain: 'Top-k keeps a fixed count; top-p keeps a variable number so the cutoff is wide when the model is unsure and narrow when confident.',
+    },
+    {
+      q: 'You want a coding assistant to give the single most likely, repeatable answer. What decoding fits best?',
+      options: [
+        'High temperature with large top-k',
+        'Greedy / very low temperature',
+        'Top-p = 0.99 with T = 2',
+        'Random uniform sampling',
+      ],
+      answer: 1,
+      explain: 'Greedy or near-zero temperature picks the highest-probability token deterministically — ideal when there is one correct continuation.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Softmax</strong> turns raw logits into a probability distribution over the vocabulary.',
+    '<strong>Temperature</strong> divides logits before softmax: low ⇒ spiky/greedy, high ⇒ flat/creative — directly tuning entropy.',
+    '<strong>Greedy</strong> decoding takes the top token; it is deterministic but often repetitive.',
+    '<strong>Top-k</strong> keeps a fixed number of tokens; <strong>top-p</strong> keeps an adaptive nucleus summing past p, then you renormalize and draw.',
+    'The same model becomes precise or playful purely through how logits are turned into a choice.',
+  ]}
+/>
+
+Next up: **layer norm & residual streams** — the plumbing that keeps signals stable so we can stack dozens
+of these attention blocks into a deep transformer.

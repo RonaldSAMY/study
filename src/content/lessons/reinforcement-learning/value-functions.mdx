@@ -1,0 +1,184 @@
+---
+title: Value Functions & Bellman
+track: reinforcement-learning
+summary: How good is a state, really? The recursive Bellman equation answers it — and value iteration solves it.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - reinforcement-learning/markov-decision-processes
+leadsTo:
+  - reinforcement-learning/q-learning
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ValueIterationGrid from '../../../components/demos/ValueIterationGrid.tsx';
+
+## The hook: which chess position would you rather have?
+
+Grandmasters glance at a board and instantly *feel* who is winning — long before any checkmate. They are
+estimating a single number: how good is this position, assuming good play from here? That number is a
+**value**. If you could attach an accurate value to every state, choosing a move becomes trivial: step
+toward the highest-valued neighbor.
+
+The previous lesson set up the MDP and the return $G_t$. But the return depends on a whole future you
+haven't lived yet. **Value functions** turn that infinite, uncertain future into one estimate per state —
+and a beautiful self-referential equation makes it computable.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **value** of a state is the expected return you'll collect starting from it — and it equals the
+immediate reward plus the (discounted) value of wherever you land next.
+</Callout>
+
+## Intuition: value defined in terms of itself
+
+Here is the key move. The value of "now" is the reward you get this step **plus** the value of the state
+you move to. That state's value is *its* reward plus the value after *it* — and so on. Instead of summing an
+endless chain, value folds the whole future into one recursive relationship: **this state's value points at
+the next state's value.**
+
+That self-reference is the **Bellman equation**. It feels circular, but it is solvable — just like
+"the number that equals 3 plus half of itself" has the clean answer 6. Every state's value is pinned down
+by its neighbors, and a simple repeated update untangles them all at once.
+
+We track two flavours:
+
+- $V^\pi(s)$ — the **state-value**: how good is state $s$ if I follow policy $\pi$.
+- $Q^\pi(s, a)$ — the **action-value**: how good is taking action $a$ in $s$, then following $\pi$.
+
+$Q$ is the more useful one for *control*, because it ranks actions directly — exactly what the next lesson
+on Q-learning exploits.
+
+## Play with it
+
+This is the same grid-world, but now we **compute** values. Press **Sweep** to apply one Bellman backup
+to every cell: each cell looks one step ahead and takes the best neighbor's discounted value. Watch the
+numbers flood outward from the flag, and the indigo arrows snap into the optimal **policy**.
+
+<ValueIterationGrid client:visible />
+
+<Callout type="tip">
+After enough sweeps the numbers stop changing — they've hit the **fixed point** $V^*$. The arrows then
+trace the best route to the goal from *every* square at once. That is the whole point of computing values.
+</Callout>
+
+## The formal definition
+
+The **state-value** under a policy $\pi$ is the expected return from $s$:
+
+$$
+V^\pi(s) = \mathbb{E}_\pi\!\left[\, G_t \mid s_t = s \,\right].
+$$
+
+Unrolling one step gives the **Bellman expectation equation** — value in terms of next-state value:
+
+$$
+V^\pi(s) = \sum_{a} \pi(a\mid s) \sum_{s'} P(s'\mid s,a)\Big[\, R(s,a) + \gamma\, V^\pi(s') \,\Big].
+$$
+
+To find the *best* policy we use the **Bellman optimality equation**, which replaces "average over the
+policy" with "take the best action":
+
+$$
+V^*(s) = \max_{a} \sum_{s'} P(s'\mid s,a)\Big[\, R(s,a) + \gamma\, V^*(s') \,\Big].
+$$
+
+**Value iteration** simply uses this equation as an assignment and repeats it until the values settle:
+
+```python
+# value iteration: turn the Bellman optimality equation into a loop
+for _ in range(num_sweeps):
+    for s in states:
+        V[s] = max(R(s, a) + gamma * sum(P(s2, s, a) * V[s2] for s2 in states)
+                   for a in actions)
+# the greedy policy w.r.t. the final V is optimal
+```
+
+<Callout type="why">
+The Bellman equation is the load-bearing beam of reinforcement learning. Q-learning, deep Q-networks, and
+actor–critic methods are all, at heart, ways to satisfy a Bellman equation when you *cannot* sweep every
+state by hand — because the real state space is astronomically large.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Board games" icon="♟️">
+A chess engine's evaluation function *is* an approximate value function: it scores a position by the
+expected outcome under strong play. Modern engines like the AlphaZero family learned $V$ from millions of
+self-play games rather than hand-coded rules.
+</ExampleCard>
+
+<ExampleCard domain="Medicine" icon="🩺">
+In treatment planning, a **state** is a patient's vitals and a **policy** is a sequence of dose decisions.
+The value of a state estimates expected long-term health outcome — letting a model weigh a harsh therapy
+now against better survival later, exactly the discounted-future trade-off.
+</ExampleCard>
+
+<ExampleCard domain="Energy storage" icon="🔋">
+Should a grid battery charge or discharge right now? Each state (charge level, electricity price) has a
+value: the expected future profit. Bellman backups let the controller hold charge through cheap hours and
+sell into expensive ones — planning, not reacting.
+</ExampleCard>
+
+<ExampleCard domain="Elevator control" icon="🛗">
+An elevator bank's state is the set of pending calls and car positions. A value function scores how costly
+a configuration is in future wait time, so the dispatcher can pre-position empty cars where demand is about
+to appear instead of greedily chasing the nearest button.
+</ExampleCard>
+
+<Callout type="note">
+$V$ tells you how good a *state* is; $Q$ tells you how good an *action* is. If you only have $V$, you must
+peek one step ahead (and know the model) to choose. If you have $Q$, you just pick the largest entry — which
+is why learning $Q$ directly, with no model at all, is so powerful.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the Bellman equation express?',
+      options: [
+        'A state\'s value equals immediate reward plus the discounted value of the next state',
+        'The sum of all rewards must equal zero',
+        'Every policy has the same value',
+        'Value depends only on the action, never the state',
+      ],
+      answer: 0,
+      explain: 'Bellman is the recursion V(s) = reward now + γ × value of where you go next.',
+    },
+    {
+      q: 'A state pays reward 0 and always moves to a state with value 10, using γ = 0.9. What is its value?',
+      options: ['10', '9', '0.9', '19'],
+      answer: 1,
+      explain: 'V = 0 + 0.9 × 10 = 9. The discounted next-state value carries straight through.',
+    },
+    {
+      q: 'Why is Q(s,a) often more directly useful than V(s) for choosing actions?',
+      options: [
+        'It is always smaller, so easier to store',
+        'It scores each action directly, so you pick the largest without a model',
+        'It ignores rewards entirely',
+        'It only works for deterministic environments',
+      ],
+      answer: 1,
+      explain: 'Q ranks actions per state, so control is just argmax over actions — no transition model needed.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>value function</strong> turns the uncertain future return into one expected-value estimate per state.',
+    'The <strong>Bellman equation</strong> defines value recursively: reward now plus discounted next-state value.',
+    'The <strong>optimality</strong> version takes a max over actions, and its fixed point V* gives the best policy.',
+    '<strong>Value iteration</strong> repeats the Bellman backup until values converge.',
+    '<strong>State-value V</strong> rates states; <strong>action-value Q</strong> rates actions and makes the choice direct.',
+  ]}
+/>
+
+Next up: what if you *don't* know the transition probabilities? **Q-learning** estimates action-values from
+raw experience — no model required.

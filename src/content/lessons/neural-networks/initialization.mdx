@@ -1,0 +1,182 @@
+---
+title: Initialization & Vanishing Gradients
+track: neural-networks
+summary: Why the scale of your starting weights decides whether a deep network's signal stays alive, fades to nothing, or blows up.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - probability/expectation-variance
+  - neural-networks/activation-functions
+leadsTo:
+  - neural-networks/regularization
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import InitScaleVarianceLab from '../../../components/demos/InitScaleVarianceLab.tsx';
+
+## The hook: turning the amp up to eleven
+
+Picture a live band running through a chain of effects pedals into an amplifier. If each pedal is set
+too quiet, by the time the signal reaches the speaker it has faded into a whisper. If each pedal is set
+too loud, the signal clips, screeches, and feeds back into an unusable roar. Sound engineers call the
+sweet spot **gain staging**: every stage should pass the signal along at roughly the same healthy level.
+
+A deep neural network is exactly this kind of chain — except the "stages" are layers, and the "gain" is
+set by the **scale of the random starting weights**. Get that scale wrong and a 30-layer network is dead
+before training even begins. This is the problem of **vanishing and exploding gradients**, and the fix is
+a careful choice of *initialization*.
+
+<Callout type="intuition" title="The one-sentence idea">
+Initialize weights so each layer multiplies the **variance** of its signal by about **1** — then activations
+(and the gradients that flow back) stay alive all the way through a deep network.
+</Callout>
+
+## Intuition: variance is the signal's volume
+
+You already know an **activation function** decides what each neuron outputs, and from
+**expectation & variance** you know that variance measures spread — how loud or quiet a set of numbers is.
+
+Now stack the layers. A neuron computes a weighted sum of its $n_{\text{in}}$ inputs. If the inputs and the
+weights are independent and roughly zero-mean, the variance of that sum is
+
+$$
+\operatorname{Var}(z) = n_{\text{in}} \cdot \operatorname{Var}(W) \cdot \operatorname{Var}(x).
+$$
+
+So each layer **multiplies** the signal's variance by the factor $n_{\text{in}} \cdot \operatorname{Var}(W)$.
+Multiply by a number less than 1 layer after layer and the variance decays geometrically toward zero —
+the signal **vanishes**. Multiply by a number greater than 1 and it **explodes**. Only when that factor is
+about 1 does the signal keep a steady volume through the whole stack. The exact same multiplication happens
+to gradients on the way back, which is why a vanished signal means a network that cannot learn.
+
+## Play with it
+
+Pick an initialization scheme and drag the depth slider. Each bar is the activation variance at one layer
+(log scale); the green band is the "alive" zone. Watch *Too small* collapse into the floor, *Too large*
+rocket off the top, and **Xavier**/**He** hold steady no matter how deep you go.
+
+<InitScaleVarianceLab client:visible />
+
+<Callout type="tip">
+Notice the per-layer multiplier in the readout. When it sits near <strong>1.00</strong>, the variance is
+flat across depth. That single number is the whole ballgame.
+</Callout>
+
+## The formal definition
+
+We want $n_{\text{in}} \cdot \operatorname{Var}(W) \approx 1$, which fixes the weight variance:
+
+$$
+\operatorname{Var}(W) = \frac{1}{n_{\text{in}}}.
+$$
+
+This is **Xavier (Glorot)** initialization, designed for activations like $\tanh$ that are roughly linear
+near zero. A common symmetric form also accounts for the backward pass:
+
+$$
+\operatorname{Var}(W) = \frac{2}{n_{\text{in}} + n_{\text{out}}}.
+$$
+
+**ReLU** is different: it zeroes out half its inputs, cutting the variance in half. To compensate, **He**
+initialization doubles the weight variance:
+
+$$
+\operatorname{Var}(W) = \frac{2}{n_{\text{in}}}.
+$$
+
+```python
+# He initialization for a ReLU layer (PyTorch/NumPy style)
+W = np.random.randn(n_out, n_in) * np.sqrt(2.0 / n_in)
+b = np.zeros(n_out)
+```
+
+<Callout type="why">
+This is why you never initialize a deep net with, say, <code>randn() * 0.01</code> for everything. That
+fixed scale ignores $n_{\text{in}}$, so wide layers vanish and the network stalls. Matching the scale to the
+fan-in is what made training networks with dozens of layers practical.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Audio engineering" icon="🎚️">
+A guitar signal through five pedals: if every pedal cuts the level by half, the amp receives
+$(1/2)^5 \approx 3\%$ of the original — a vanishing whisper. If every pedal doubles it, you get clipping and
+feedback — an exploding roar. Unity gain at each stage keeps the tone intact, exactly like a per-layer
+variance factor of 1.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="📈">
+Compound growth is the same geometric multiplication. A return factor of $0.97$ per year quietly erodes a
+fund toward zero; $1.03$ per year compounds it upward. Across 30 "layers" (years) a factor microscopically
+off from 1 produces wildly different ends — which is why deep nets are so sensitive to the weight scale.
+</ExampleCard>
+
+<ExampleCard domain="Media & art" icon="🖨️">
+Photocopy a photo, then photocopy the copy, again and again. Faint details fade to white (vanishing) while
+specks of toner can smear into black blotches (exploding). Each copy is a layer that scales the "signal";
+only a perfect 1× copier would preserve the picture through many generations.
+</ExampleCard>
+
+<ExampleCard domain="Public health" icon="🦠">
+Epidemiologists track the reproduction number $R$: each infected person passes the disease to $R$ others.
+$R < 1$ and the outbreak dies out over generations; $R > 1$ and it grows exponentially. A neural network's
+per-layer variance factor is the $R$ of its signal — and we engineer it to sit right at the critical value.
+</ExampleCard>
+
+<Callout type="note">
+Initialization only sets the <em>starting</em> point. It cannot fix a network on its own — but a bad start
+can make a good architecture untrainable. The next lessons (normalization especially) add machinery that
+keeps the signal healthy <em>during</em> training, not just at step zero.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A linear layer has fan-in n_in = 100. Roughly what weight variance keeps activation variance stable for a tanh network (Xavier)?',
+      options: ['100', '1/100', '2', '0'],
+      answer: 1,
+      explain: 'Xavier sets Var(W) = 1 / n_in so that n_in · Var(W) ≈ 1. Here that is 1/100 = 0.01.',
+    },
+    {
+      q: 'Why does He initialization use 2/n_in instead of 1/n_in?',
+      options: [
+        'ReLU doubles the variance, so we halve the weights',
+        'ReLU zeroes out about half the inputs, halving the variance, so we double Var(W) to compensate',
+        'It works better for tanh networks',
+        'Larger weights always train faster',
+      ],
+      answer: 1,
+      explain: 'ReLU keeps roughly half the signal, cutting variance in half; doubling the weight variance restores a per-layer factor near 1.',
+    },
+    {
+      q: 'In a 25-layer network, each layer multiplies the activation variance by 0.7. What happens to the signal?',
+      options: [
+        'It stays about the same',
+        'It explodes toward infinity',
+        'It vanishes — 0.7^25 ≈ 0.0001, essentially zero',
+        'It oscillates',
+      ],
+      answer: 2,
+      explain: 'A factor below 1 compounds geometrically: 0.7^25 is tiny, so activations and gradients vanish.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A layer multiplies its signal\'s <strong>variance</strong> by about <strong>n_in · Var(W)</strong>; deep stacks compound this factor.',
+    'A factor below 1 makes activations and gradients <strong>vanish</strong>; above 1 makes them <strong>explode</strong>.',
+    '<strong>Xavier</strong> uses Var(W) = 1/n_in for tanh-like activations to hold the factor near 1.',
+    '<strong>He</strong> uses Var(W) = 2/n_in for ReLU, which otherwise halves the variance.',
+    'Scaling weights to the <strong>fan-in</strong> — not a fixed constant — is what makes very deep networks trainable from the start.',
+  ]}
+/>
+
+A healthy start keeps the signal alive; next we make sure the network does not just *memorize* the training
+data. On to **regularization**.

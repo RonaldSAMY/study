@@ -1,10 +1,11 @@
 ---
-import { TRACKS } from '../data/curriculum';
+import { TRACKS, STAGES } from '../data/curriculum';
 import { getReadySlugs } from '../lib/lessons';
 import { url, stripBase } from '../lib/url';
 
 const current = stripBase(Astro.url.pathname); // current slug, base removed
-const stages = ['Foundations', 'Core'] as const;
+// Only show stages that actually have tracks.
+const stages = STAGES.filter((s) => TRACKS.some((t) => t.stage === s));
 const ready = await getReadySlugs();
 ---
 

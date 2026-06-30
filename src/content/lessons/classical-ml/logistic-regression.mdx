@@ -1,0 +1,183 @@
+---
+title: Logistic Regression
+track: classical-ml
+summary: Sigmoid turns a linear score into a probability — and log-loss teaches the line where to sit.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - statistics/regression
+  - optimization/gradient-descent
+leadsTo:
+  - classical-ml/knn
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SigmoidLogisticLab from '../../../components/demos/SigmoidLogisticLab.tsx';
+
+## The hook: should this email go to spam?
+
+A filter can't answer *"spam or not"* with a shrug. But it also shouldn't pretend to be certain. What it
+really wants to say is *"I'm 92% sure this is spam"* — a **probability** between 0 and 1. The same need
+shows up everywhere a machine must make a yes/no call under uncertainty: a doctor weighing a diagnosis, a
+bank sizing up a loan, an app deciding whether to show you an ad. Each one starts from a **score** — a
+single number summarizing the evidence — and needs to turn that score into a calibrated chance. That
+translation, from raw score to honest probability, is exactly what **logistic regression** does.
+
+<Callout type="intuition" title="The one-sentence idea">
+Logistic regression takes a **linear score** $w x + b$ and squashes it through the **sigmoid** into a
+probability between 0 and 1, then learns $w$ and $b$ by making those probabilities match the labels.
+</Callout>
+
+## Intuition: from a straight line to a smooth switch
+
+You already met **linear regression**: fit a line $w x + b$ to predict a number. The trouble is that a
+line shoots off to $+\infty$ and $-\infty$, while a probability must stay politely between 0 and 1. So we
+keep the familiar linear score — call it $z = w x + b$ — and then bend it.
+
+The bending function is the **sigmoid**, an S-shaped curve. Feed it a big positive $z$ and it returns
+something close to 1; feed it a big negative $z$ and you get close to 0; feed it exactly 0 and you land at
+0.5 — the moment of maximum doubt. So logistic regression is really two familiar moves stacked: a linear
+score (from regression), then a smooth squash into a probability.
+
+Where the curve crosses $0.5$ is the **decision boundary** — the dividing point between predicting class 0
+and class 1. Everything to one side leans one way; everything to the other side leans the other. Learning
+means sliding and steepening that S so the boundary sits between your two groups of points.
+
+## Play with it
+
+Drag the points along the axis (and click one to flip its class), then move the $w$ and $b$ sliders to
+slide and steepen the sigmoid. Watch the **decision boundary** and the **log-loss** react — then hit
+**Fit** to let gradient descent place the curve for you.
+
+<SigmoidLogisticLab client:visible />
+
+<Callout type="tip">
+$w$ controls the <strong>steepness</strong> of the S (a confident, sharp switch vs. a hesitant ramp), and
+$b$ <strong>slides</strong> the whole curve left or right. The boundary always sits where the green curve
+crosses $p = 0.5$.
+</Callout>
+
+## The formal definition
+
+The **sigmoid** (logistic) function maps any real number into $(0, 1)$:
+
+$$
+\sigma(z) = \frac{1}{1 + e^{-z}}.
+$$
+
+We build the score linearly and pass it through the sigmoid to get the predicted probability of class 1:
+
+$$
+z = \mathbf{w} \cdot \mathbf{x} + b, \qquad p = \sigma(z) = \frac{1}{1 + e^{-(\mathbf{w}\cdot\mathbf{x} + b)}}.
+$$
+
+To train, we need a loss that punishes confident-but-wrong predictions. That loss is the **log-loss**, or
+**binary cross-entropy**, averaged over $n$ examples with labels $y \in \{0, 1\}$:
+
+$$
+L = -\frac{1}{n} \sum_{i=1}^{n} \Big[\, y_i \log p_i + (1 - y_i)\log(1 - p_i) \,\Big].
+$$
+
+When the true label is $y = 1$ only the first term survives, so the loss is $-\log p$ — tiny when $p$ is
+near 1, exploding when $p$ heads toward 0. The **decision boundary** is where the model is maximally
+unsure, $p = 0.5$, which happens exactly when
+
+$$
+z = \mathbf{w}\cdot\mathbf{x} + b = 0.
+$$
+
+```python
+# one forward pass + average log-loss
+z = X @ w + b
+p = 1 / (1 + np.exp(-z))
+loss = -np.mean(y * np.log(p) + (1 - y) * np.log(1 - p))
+```
+
+<Callout type="why">
+Why log-loss instead of the squared error from linear regression? Two reasons. First, it is
+<strong>probabilistic</strong>: minimizing it is the same as maximizing the likelihood of the data under a
+Bernoulli model, so the outputs behave like real probabilities. Second, paired with the sigmoid it is
+<strong>convex</strong>, giving gradient descent a single bowl-shaped valley to roll into — squared error
+on a sigmoid is bumpy and can trap the optimizer.
+</Callout>
+
+## The same idea, four different worlds
+
+A linear score squashed into a probability shows up far beyond spam filters.
+
+<ExampleCard domain="Healthcare" icon="🏥">
+From a tumor's **size**, a model outputs the probability it is malignant. A small lump might score
+$p = 0.08$ (likely benign), a large one $p = 0.94$ (likely malignant). The decision boundary is the size
+at which the model tips from "watch" to "biopsy" — and a clinician can shift it to trade false alarms
+against missed cases.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💳">
+A lender turns an applicant's features into a score, then a **probability of default**. Output $p = 0.03$
+and the loan is approved; output $p = 0.61$ and it is flagged. Because the answer is a calibrated chance,
+the bank can price risk — higher predicted default, higher interest — instead of a blunt yes/no.
+</ExampleCard>
+
+<ExampleCard domain="Marketing" icon="📣">
+Ad systems predict the **probability a user clicks**. Each ad-user pair gets a score; the sigmoid turns it
+into a click-through probability like $p = 0.012$. Tiny numbers, but ranking by them decides which ad you
+see — and multiplying by the bid is how the auction picks a winner.
+</ExampleCard>
+
+<ExampleCard domain="Sports" icon="🏀">
+The **win probability** ticker on a live broadcast is logistic regression in action. From the score
+margin and time remaining, the model squashes a linear score into a chance like $p = 0.78$ that the home
+team wins — updating play by play as the evidence changes.
+</ExampleCard>
+
+<Callout type="note">
+Notice the pattern: each domain feeds different features into the same machine. Build a score, squash it
+into a probability, and pick a boundary. The features change; the math does not.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the value of the sigmoid at z = 0, i.e. σ(0)?',
+      options: ['0', '0.5', '1', 'It is undefined'],
+      answer: 1,
+      explain: 'σ(0) = 1 / (1 + e^0) = 1 / (1 + 1) = 0.5 — the point of maximum uncertainty, and exactly where the decision boundary sits.',
+    },
+    {
+      q: 'A model has w = 2 and b = -4. At what value of x does the decision boundary (p = 0.5) occur?',
+      options: ['x = -2', 'x = 0', 'x = 2', 'x = 4'],
+      answer: 2,
+      explain: 'The boundary is where z = wx + b = 0, so 2x - 4 = 0, giving x = 2. Points above 2 get p > 0.5, points below get p < 0.5.',
+    },
+    {
+      q: 'Why does logistic regression train with log-loss instead of the squared error used in linear regression?',
+      options: [
+        'Log-loss is faster to type',
+        'Squared error cannot be computed for probabilities',
+        'Log-loss is convex with the sigmoid and matches a probabilistic (maximum-likelihood) model',
+        'Log-loss always gives exactly zero error',
+      ],
+      answer: 2,
+      explain: 'Log-loss corresponds to maximizing the likelihood of Bernoulli labels and is convex when paired with the sigmoid, so gradient descent reliably finds the minimum.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Logistic regression takes a <strong>linear score</strong> (z = wx + b) and passes it through the <strong>sigmoid</strong> to produce a probability between 0 and 1.',
+    'The <strong>sigmoid</strong> squashes any real number into (0, 1), and sends 0 to exactly 0.5.',
+    'The <strong>decision boundary</strong> lives where the probability is 0.5 — that is, where the score z = wx + b is zero.',
+    'Training minimizes <strong>log-loss (binary cross-entropy)</strong>, which is probabilistic and convex with the sigmoid.',
+    '<strong>w</strong> sets how steep the switch is and <strong>b</strong> slides it sideways — gradient descent tunes both to fit the data.',
+  ]}
+/>
+
+Next up: **k-Nearest Neighbors** — a classifier that skips the equation entirely and decides by looking at
+who its neighbors are.

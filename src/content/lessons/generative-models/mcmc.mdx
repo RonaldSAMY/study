@@ -1,0 +1,186 @@
+---
+title: Markov Chain Monte Carlo
+track: generative-models
+summary: Sample from distributions you can only evaluate by building a random walk that lingers where probability is high.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - generative-models/monte-carlo
+  - probability/conditional-bayes
+leadsTo:
+  - generative-models/reparameterization-trick
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import MetropolisSamplerDemo from '../../../components/demos/MetropolisSamplerDemo.tsx';
+
+## The hook: drawing samples when you only know "how likely," not "how often"
+
+Plain Monte Carlo needs you to **sample** from a distribution. But the most useful distributions in
+science arrive in a frustrating form: you can compute how *relatively* likely any single state is, yet
+you have no idea how to draw fresh examples, and you cannot even add up all the states to normalize it.
+A protein has more configurations than atoms in the universe; a Bayesian posterior hides an integral no
+one can solve. You can *score* a state — but not *sample* one.
+
+Markov Chain Monte Carlo (MCMC) is the escape hatch. Instead of sampling directly, it takes a **random
+walk** through the space, nudged so that it spends time in each region exactly in proportion to that
+region's probability. Let the walk run, and the places it visits *are* your samples.
+
+<Callout type="intuition" title="The one-sentence idea">
+Build a random walk whose long-run visiting frequency equals the target distribution — then the path it
+traces gives you samples, even from a distribution you can only score up to a constant.
+</Callout>
+
+## Intuition: a guided wander
+
+Recall from Bayes that a posterior is $p(\theta \mid \text{data}) \propto p(\text{data} \mid \theta)\,p(\theta)$.
+The annoying part is the "$\propto$": we know the shape but not the normalizing constant, so we cannot
+sample directly. MCMC only ever needs **ratios** of the target, and ratios make the unknown constant
+cancel.
+
+The **Metropolis** recipe is almost suspiciously simple. From your current spot:
+
+1. **Propose** a small random step to a nearby point.
+2. Compare densities. If the proposal is **more** probable, **always go**.
+3. If it is **less** probable, go anyway with probability equal to the ratio — otherwise stay put.
+
+Always climbing toward higher probability, but *sometimes* tolerating a downhill step, is the magic.
+Pure greed would get stuck on the first peak; the occasional downhill move lets the walk explore the
+whole landscape while still lingering where probability is high.
+
+## Play with it
+
+The shaded hills are the target density — two peaks the chain has never been *told*, only allowed to
+**evaluate**. The white dot proposes a step each tick and accepts or rejects it by the rule above. Green
+dots are the samples kept. Press **Run** and watch a faithful picture of the distribution emerge.
+
+<MetropolisSamplerDemo client:visible />
+
+<Callout type="tip">
+Slide the **step size**. Tiny steps: almost everything is accepted but the chain inches along, barely
+exploring. Huge steps: proposals keep overshooting into low-density valleys and get rejected, so the dot
+freezes. The sweet spot — an acceptance rate near $25\%$ to $50\%$ — explores fastest.
+</Callout>
+
+## The formal definition
+
+We want samples from a target $\pi(x)$ known only up to a constant: $\pi(x) = \tilde{\pi}(x)/Z$ with
+$Z$ unknown. Metropolis–Hastings builds a Markov chain using a proposal $q(x' \mid x)$. Given the
+current state $x$, propose $x' \sim q(\cdot \mid x)$ and accept it with probability
+
+$$
+A(x \to x') = \min\!\left(1,\; \frac{\tilde{\pi}(x')\, q(x \mid x')}{\tilde{\pi}(x)\, q(x' \mid x)}\right).
+$$
+
+Because only the **ratio** $\tilde{\pi}(x')/\tilde{\pi}(x)$ appears, the unknown $Z$ cancels — that is
+the whole point. With a symmetric proposal (like a Gaussian step, where $q(x'\mid x) = q(x \mid x')$)
+the $q$ terms cancel too, leaving the plain Metropolis rule $\min(1, \tilde{\pi}(x')/\tilde{\pi}(x))$.
+
+```python
+x = x0
+for _ in range(steps):
+    x_prop = x + sigma * randn()              # symmetric Gaussian step
+    ratio  = target(x_prop) / target(x)       # unknown Z cancels
+    if rand() < min(1, ratio):
+        x = x_prop                            # accept
+    chain.append(x)                            # keep it either way
+```
+
+This chain is built to satisfy **detailed balance**, $\pi(x)\,T(x\to x') = \pi(x')\,T(x'\to x)$, which
+guarantees $\pi$ is its stationary distribution. After an initial **burn-in** (while the walk forgets
+its starting point), the collected states behave like samples from $\pi$ — though consecutive ones are
+**correlated**, not independent.
+
+<Callout type="why">
+MCMC is how Bayesian models are actually fit and how energy-based generative models draw samples. The
+same accept/reject logic underlies physics simulations and, conceptually, the iterative denoising you
+will meet in diffusion models. When a distribution is too tangled to sample, MCMC is the workhorse.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Molecular simulation" icon="🧬">
+A molecule's states follow the Boltzmann distribution, $p(\text{config}) \propto e^{-E/kT}$, with an
+impossible normalizer. Metropolis Monte Carlo — its original 1953 use — proposes jiggling the atoms and
+accepts moves by the energy ratio, sampling realistic shapes to predict how a drug binds its target.
+</ExampleCard>
+
+<ExampleCard domain="Cosmology" icon="🔭">
+To infer the universe's parameters (its age, its dark-energy density) from telescope data, astronomers
+run MCMC over the Bayesian posterior. The cloud of accepted points becomes the "corner plot" of
+credible regions reported in papers — direct output of a guided random walk.
+</ExampleCard>
+
+<ExampleCard domain="Image denoising" icon="🖼️">
+Treat a clean image as a high-probability configuration of pixels under a model that rewards smoothness
+and agreement with the noisy input. Sampling that posterior by flipping pixels and accepting by the
+probability ratio — a Gibbs/Metropolis sweep — reconstructs the underlying picture.
+</ExampleCard>
+
+<ExampleCard domain="Codebreaking" icon="🔐">
+To crack a substitution cipher, define a "score" for how English-like a decryption looks. MCMC proposes
+swapping two letters in the key and accepts by the score ratio. Within thousands of steps the chain
+wanders into the one mapping that turns gibberish into readable text.
+</ExampleCard>
+
+<Callout type="note">
+Atoms, galaxies, pixels, and ciphers — each is a space with a probability you can only *score*. The same
+propose-and-accept loop draws samples from all of them without ever computing the normalizer.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why can Metropolis–Hastings sample from a distribution known only up to its normalizing constant Z?',
+      options: [
+        'It estimates Z first by integration',
+        'The acceptance step uses only a ratio of densities, so Z cancels',
+        'It ignores Z and is therefore biased',
+        'Z is always equal to 1 in practice',
+      ],
+      answer: 1,
+      explain: 'Acceptance depends on π̃(x′)/π̃(x); the unknown constant divides out, so you never need Z.',
+    },
+    {
+      q: 'A proposed step lands somewhere with HIGHER target density than the current state. What does Metropolis do?',
+      options: [
+        'Reject it to stay safe',
+        'Accept it with probability 0.5',
+        'Always accept it',
+        'Accept only after burn-in',
+      ],
+      answer: 2,
+      explain: 'If the ratio π̃(x′)/π̃(x) ≥ 1 the acceptance probability is min(1, ratio) = 1, so an uphill move is always taken.',
+    },
+    {
+      q: 'Your sampler reports a 2% acceptance rate and the chain barely moves. What is the likely fix?',
+      options: [
+        'Increase the proposal step size',
+        'Decrease the proposal step size',
+        'Run fewer iterations',
+        'Remove the burn-in period',
+      ],
+      answer: 1,
+      explain: 'A very low acceptance rate means steps are too large and keep landing in low-density regions; shrinking the step size raises acceptance and restores movement.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>MCMC</strong> samples from hard distributions by running a random walk whose long-run visiting frequencies match the target.',
+    'The <strong>Metropolis</strong> rule: propose a step, always accept uphill, accept downhill with probability equal to the density ratio.',
+    'Because only <strong>ratios</strong> appear, the unknown normalizing constant Z cancels — perfect for Bayesian posteriors and energy models.',
+    'Tune the <strong>step size</strong> for a healthy acceptance rate (~25–50%); discard an initial <strong>burn-in</strong>, and remember samples are correlated.',
+    '<strong>Detailed balance</strong> is the condition that makes the target the chain’s stationary distribution.',
+  ]}
+/>
+
+Next up: sampling is essential, but randomness blocks gradients from flowing through a model. The
+**reparameterization trick** rewrites a random draw so we can backpropagate straight through it.

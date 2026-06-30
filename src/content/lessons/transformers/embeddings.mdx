@@ -1,0 +1,173 @@
+---
+title: Embeddings
+track: transformers
+summary: Turning tokens into vectors whose geometry captures meaning — closeness, direction, and analogy.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - linear-algebra/vectors
+  - neural-networks/the-neuron
+leadsTo:
+  - transformers/attention
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import EmbeddingSpaceMap from '../../../components/demos/EmbeddingSpaceMap.tsx';
+
+## The hook: how does a search box know "puppy" means "dog"?
+
+You type *"affordable laptop for students"* and the results include pages that never use the word
+"affordable" — they say *"budget"* and *"cheap."* The search engine isn't matching letters. It has
+quietly turned every word into a **point in space**, and it found pages whose points sit *near* yours.
+Meaning became geometry. That trick — representing a token as a vector of numbers — is the **embedding**,
+and it is the very first thing that happens inside every large language model.
+
+<Callout type="intuition" title="The one-sentence idea">
+An **embedding** maps each token to a vector, placed so that things with similar meaning end up
+**close together** and meaningful relationships become **consistent directions**.
+</Callout>
+
+## Intuition: from a name to a place
+
+A word like "cat" is just a symbol — there's no arithmetic you can do with the letters. So a model keeps
+a giant lookup table called the **embedding matrix**: one learnable row per token. Looking up a token is
+just picking its row, which gives a vector like the ones from the [vectors lesson](/linear-algebra/vectors).
+
+Why bother? Because once a word *is* a vector, all of linear algebra becomes available. You already know
+two of the tools you need:
+
+- **Distance / direction** tells you how related two words are (recall the dot product from the vectors lesson).
+- A **weighted sum** of input vectors is exactly what a [neuron](/neural-networks/the-neuron) computes.
+
+The model never *defines* meaning. It nudges these vectors during training until the geometry is useful —
+and remarkably, structure appears on its own: synonyms cluster, and relationships like *gender* or
+*plural* show up as a repeatable step you can add.
+
+## Play with it
+
+In **Cosine similarity** mode, click a word and watch the beams light up — thickness is how aligned the
+two vectors are. Then switch to **Word analogy** and watch the famous $\text{king} - \text{man} + \text{woman}$
+land right on top of "queen."
+
+<EmbeddingSpaceMap client:visible />
+
+<Callout type="tip">
+Notice that "king" is closest to "prince" and "man" — not "dog." The model arranged the space so that
+*nearby in meaning* literally means *nearby in distance.*
+</Callout>
+
+## The formal definition
+
+Let the vocabulary have $V$ tokens. The embedding matrix is
+
+$$
+E \in \mathbb{R}^{V \times d},
+$$
+
+where $d$ is the embedding dimension (often 768, 4096, or more). Token $i$ becomes the row $E_i \in \mathbb{R}^d$.
+
+To compare two embeddings $\mathbf{a}$ and $\mathbf{b}$ we use **cosine similarity** — the cosine of the
+angle between them, which ignores length and cares only about direction:
+
+$$
+\cos\theta = \frac{\mathbf{a}\cdot\mathbf{b}}{\lVert\mathbf{a}\rVert\,\lVert\mathbf{b}\rVert} \in [-1, 1].
+$$
+
+A value near $1$ means "point the same way" (similar); near $0$ means unrelated; near $-1$ means opposite.
+The analogy magic is plain vector arithmetic on these rows:
+
+$$
+\mathbf{e}_{\text{king}} - \mathbf{e}_{\text{man}} + \mathbf{e}_{\text{woman}} \approx \mathbf{e}_{\text{queen}}.
+$$
+
+```python
+v_king = E[token_id["king"]]              # row lookup in the embedding matrix
+sim = (a @ b) / (norm(a) * norm(b))       # cosine similarity, ignores length
+```
+
+<Callout type="why">
+Embeddings are why an LLM can generalize. Because "budget" and "cheap" sit close, a pattern learned for
+one transfers to the other for free. The whole model that follows — attention and all — operates on these
+vectors, never on the raw words.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Web search" icon="🔎">
+A search engine embeds your query and every document into the same space, then ranks documents by
+**cosine similarity** to the query. "How to fix a flat tire" surfaces a page titled "Repairing a punctured
+wheel" because their vectors nearly coincide — no shared keywords required.
+</ExampleCard>
+
+<ExampleCard domain="Music streaming" icon="🎧">
+Each song becomes a vector learned from listening patterns. Songs you'd enjoy next are simply the **nearest
+neighbors** of what you're playing. The "radio" feature is a walk through embedding space, hopping from one
+nearby point to the next.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+Researchers embed proteins so that sequences with similar 3D structure or function land near each other.
+A newly discovered protein can be understood by reading off its neighbors — guilt by geometric association.
+</ExampleCard>
+
+<ExampleCard domain="Translation" icon="🌐">
+Multilingual models embed "dog," "perro," and "chien" into nearly the same location. Meaning is shared
+across languages, so the geometry — not a dictionary — is what lets the model bridge them.
+</ExampleCard>
+
+<Callout type="note">
+These spaces have hundreds of dimensions, far past what we can draw. But every intuition from the 2D demo
+— closeness, direction, analogy — carries over unchanged. That is the gift of the list-of-numbers view.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is an embedding, most precisely?',
+      options: [
+        'A compressed image of a word',
+        'A learnable vector that represents a token, placed so similar tokens are nearby',
+        'The spelling of a word stored as numbers',
+        'A rule that translates between two languages',
+      ],
+      answer: 1,
+      explain: 'Each token gets a learnable vector (a row of the embedding matrix); training arranges them so meaning becomes geometry.',
+    },
+    {
+      q: 'Two embeddings have cosine similarity ≈ 0. What does that suggest?',
+      options: ['They are synonyms', 'They are opposites', 'They are roughly unrelated', 'One is longer than the other'],
+      answer: 2,
+      explain: 'Cosine ≈ 1 means similar, ≈ −1 means opposite, and ≈ 0 means the vectors are perpendicular — essentially unrelated in meaning.',
+    },
+    {
+      q: 'Why does cosine similarity divide by the vector lengths?',
+      options: [
+        'To make the numbers smaller',
+        'So the score depends only on direction (meaning), not on magnitude',
+        'Because division is required by softmax',
+        'To convert the vectors to unit integers',
+      ],
+      answer: 1,
+      explain: 'Dividing by the norms strips out length, leaving the cosine of the angle — a pure measure of how aligned the directions are.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>embedding</strong> turns a discrete token into a continuous vector — a row of the learnable embedding matrix <em>E</em>.',
+    'Training places vectors so that <strong>similar meaning ⇒ nearby in space</strong>, making meaning into geometry.',
+    '<strong>Cosine similarity</strong> measures alignment by angle, ignoring length, on a scale from −1 to 1.',
+    'Relationships become directions: <strong>king − man + woman ≈ queen</strong> is ordinary vector arithmetic.',
+    'Everything downstream in a transformer operates on these vectors, never on the raw words.',
+  ]}
+/>
+
+Next up: **attention** — how each token looks across the whole sequence and pulls in the embeddings that
+matter most.

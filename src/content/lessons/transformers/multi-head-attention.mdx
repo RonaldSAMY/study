@@ -1,0 +1,165 @@
+---
+title: Multi-Head Attention
+track: transformers
+summary: Running several attention heads in parallel so the model can track many kinds of relationship at once, then concatenate and project.
+difficulty: advanced
+estMinutes: 14
+prereqs:
+  - transformers/attention
+leadsTo:
+  - transformers/positional-encoding
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import MultiHeadAttentionGrid from '../../../components/demos/MultiHeadAttentionGrid.tsx';
+
+## The hook: reading a sentence with several pairs of eyes
+
+When a careful editor reads *"The tired cat slept soundly,"* they track several things at once: which
+adjective modifies which noun, what the subject of the verb is, and how the adverb attaches. One pass,
+many simultaneous questions. A single [attention](/transformers/attention) operation can only form *one*
+weighted blend per token — one question at a time. So transformers run several attention operations side by
+side, each free to specialize. That's **multi-head attention**.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Multi-head attention** runs several attention operations in parallel — each with its own Q, K, V — so the
+model can attend to different relationships at once, then concatenates their outputs and mixes them.
+</Callout>
+
+## Intuition: a committee of specialists
+
+You already know one attention head: query, key, value, softmax, blend. Now imagine $h$ copies of it
+running together over the same input. Crucially, each head gets its **own** learned projection matrices, so
+each one carves the embedding into a different, smaller subspace and asks a different question.
+
+In practice, heads reliably discover distinct jobs. Studied transformers contain heads that:
+
+- attend to the **previous token** (useful local context),
+- lock onto the **syntactic head** of a phrase (the noun an adjective belongs to),
+- track **long-range** dependencies like matching brackets or quotation marks.
+
+No one programs these roles — they emerge from training, the same way the embedding geometry did. After
+the heads finish, their outputs are **stacked together** and passed through one final linear layer that
+decides how to combine the perspectives.
+
+## Play with it
+
+Pick a query word and watch three heads light up *different* patterns over the same sentence: one looks
+**backward**, one fixates on the **noun**, one looks **forward**. Toggle a head off to see what its slice
+of the output would drop.
+
+<MultiHeadAttentionGrid client:visible />
+
+<Callout type="tip">
+Same sentence, same query — yet three completely different attention rows. That diversity is the whole
+point: one head can't be the previous-word detector *and* the noun-tracker at the same time.
+</Callout>
+
+## The formal definition
+
+Split the work into $h$ heads. Each head $i$ has its own projections $W_i^Q, W_i^K, W_i^V$ and runs ordinary
+scaled dot-product attention:
+
+$$
+\text{head}_i = \text{softmax}\!\left(\frac{(X W_i^Q)(X W_i^K)^{\top}}{\sqrt{d_k}}\right) (X W_i^V).
+$$
+
+Then concatenate all heads and apply one output projection $W^O$:
+
+$$
+\text{MultiHead}(X) = \text{Concat}(\text{head}_1, \dots, \text{head}_h)\, W^O.
+$$
+
+Each head works in dimension $d_k = d / h$, so the total compute stays about the same as one full-width head
+— you're slicing the same budget into specialists rather than paying extra.
+
+```python
+heads = [attention(X @ Wq[i], X @ Wk[i], X @ Wv[i]) for i in range(h)]
+out = concat(heads, axis=-1) @ Wo     # mix the perspectives back together
+```
+
+<Callout type="why">
+A single head is forced to average all relationships into one blend, blurring them together. Splitting into
+heads lets the model keep separate "channels" for grammar, position, and meaning — a big reason transformers
+capture language so well, at no extra cost.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Sports analytics" icon="⚽">
+Tracking a play, one analyst watches the ball carrier, another watches off-ball runs, another watches the
+defensive line. Each "head" attends to a different facet of the same moment; the coach fuses their reports
+into one decision — exactly the concat-and-project step.
+</ExampleCard>
+
+<ExampleCard domain="Legal review" icon="⚖️">
+A contract analyzer needs one head tracking defined terms, one tracking cross-references ("as defined in
+Section 4"), and one tracking dates and amounts. Different relationships, read in parallel over the same clause.
+</ExampleCard>
+
+<ExampleCard domain="Music" icon="🎼">
+Hearing a chord, your ear simultaneously tracks the bass line, the melody on top, and the harmony in between.
+Multiple attention channels over the same notes — separate then combined into the sound you perceive.
+</ExampleCard>
+
+<ExampleCard domain="Vision transformers" icon="🖼️">
+Image models split a picture into patches and let different heads attend to different cues: one to edges, one
+to color regions, one to far-apart patches that form an object. Concatenating them rebuilds a rich view of the scene.
+</ExampleCard>
+
+<Callout type="note">
+More heads is not automatically better. Each head is narrower (smaller $d_k$), so there's a balance: enough
+heads to specialize, wide enough heads to still represent each subspace well.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why use several attention heads instead of one big one?',
+      options: [
+        'To make the model smaller',
+        'So different heads can specialize in different relationships, instead of averaging them all together',
+        'Because softmax only works in low dimensions',
+        'To avoid needing positional information',
+      ],
+      answer: 1,
+      explain: 'One head can form just one weighted blend per token; multiple heads keep separate channels for distinct kinds of relationship.',
+    },
+    {
+      q: 'After the heads compute their outputs, what happens next?',
+      options: [
+        'They are averaged into a single number',
+        'They are concatenated and passed through a final linear projection W^O',
+        'Only the strongest head is kept',
+        'They are fed back into the embeddings',
+      ],
+      answer: 1,
+      explain: 'The per-head outputs are concatenated and mixed by W^O, letting the model combine the different perspectives.',
+    },
+    {
+      q: 'With model dimension d = 512 and h = 8 heads, what is each head’s dimension dₖ?',
+      options: ['512', '64', '8', '4096'],
+      answer: 1,
+      explain: 'Each head works in d/h = 512/8 = 64 dimensions, so total compute stays close to a single full-width head.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Multi-head attention</strong> runs several attention operations in parallel, each with its own learned Q, K, V projections.',
+    'Heads <strong>specialize</strong> — previous-token, syntactic-head, long-range — and these roles emerge from training.',
+    'Outputs are <strong>concatenated</strong> and combined by a final projection <em>Wᴼ</em>.',
+    'Each head uses dimension <strong>dₖ = d / h</strong>, so many specialists cost about the same as one wide head.',
+    'Splitting into channels is a key reason transformers model the many simultaneous relationships in language.',
+  ]}
+/>
+
+Next up: **positional encoding** — attention treats the input as an unordered set, so we must inject a sense
+of *order* before any of this can know that "cat slept" differs from "slept cat."

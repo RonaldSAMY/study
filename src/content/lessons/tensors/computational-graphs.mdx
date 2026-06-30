@@ -1,0 +1,163 @@
+---
+title: Computational Graphs
+track: tensors
+summary: Every model is a graph of operations — express a computation as a DAG and watch values flow forward through it.
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - tensors/broadcasting-einsum
+leadsTo:
+  - tensors/automatic-differentiation
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ComputeGraphForward from '../../../components/demos/ComputeGraphForward.tsx';
+
+## The hook: a recipe is a wiring diagram
+
+Read a recipe and you see more than a list of steps — you see *dependencies*. You can't frost the
+cake before it bakes, and you can't bake before you mix. Some steps can happen in parallel (whip the
+cream while the oven preheats); others must wait for their ingredients. Draw arrows from each step to
+the steps that depend on it and you've drawn a **computational graph**: the exact structure every
+neural network secretly is.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **computational graph** is a directed acyclic graph (DAG) whose nodes are operations and whose
+edges carry values; running it left-to-right — the **forward pass** — produces the output.
+</Callout>
+
+## Intuition: break a formula into atoms
+
+You can compute on whole tensors now with broadcasting and einsum. A real model chains *many* such
+operations, and the cleanest way to track them is as a graph. Take a small expression:
+
+$$
+f = a \cdot b + c.
+$$
+
+Instead of one blob, break it into the smallest operations and the temporary values between them:
+
+1. A **multiply** node takes inputs $a$ and $b$ and outputs an intermediate $d = a \cdot b$.
+2. An **add** node takes $d$ and $c$ and outputs $f = d + c$.
+
+The inputs $a$, $b$, $c$ are **leaf** nodes; the operations are **interior** nodes; $f$ is the
+**root**. Edges point in the direction the values travel. Because no arrow ever loops back, the graph
+is **acyclic** — there is always a valid order to evaluate it (leaves first, root last).
+
+## Play with it
+
+Slide $a$, $b$, and $c$ and watch the numbers flow rightward: into the $\times$ node to make $d$,
+then into the $+$ node to make $f$.
+
+<ComputeGraphForward client:visible />
+
+<Callout type="tip">
+Notice the intermediate $d$ has its own value on the edge. The graph doesn't just remember the final
+answer — it remembers every in-between result. That stored history is exactly what the *next* lesson
+will reuse to compute gradients.
+</Callout>
+
+## The formal definition
+
+A computational graph is a DAG $G = (V, E)$. Each node $v$ either holds an input value or applies an
+operation $o_v$ to the values arriving on its incoming edges:
+
+$$
+\text{val}(v) = o_v\big(\text{val}(u_1), \dots, \text{val}(u_m)\big), \qquad (u_i, v) \in E.
+$$
+
+The **forward pass** evaluates the nodes in **topological order** — every node after all of its
+inputs — so each value is ready exactly when it is needed. For our example the order is
+$a, b \to d \to f$, giving $\text{val}(d) = a \cdot b$ then $\text{val}(f) = d + c$.
+
+```python
+a, b, c = 3.0, 2.0, 1.0
+d = a * b          # node 1: multiply  -> 6.0
+f = d + c          # node 2: add       -> 7.0
+# the graph is implicit in the order these ops run
+```
+
+<Callout type="why">
+Frameworks like PyTorch and TensorFlow build this graph for you as your code runs (PyTorch) or ahead
+of time (TensorFlow's static graphs). Representing a model as a graph is what lets it be optimized,
+run on a GPU, split across devices — and, crucially, differentiated automatically.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Cooking" icon="🍰">
+"Bake" depends on "mix", which depends on "crack eggs" and "measure flour". The dependency arrows
+form a DAG; any order that respects them works, and independent steps (preheat the oven) can run in
+parallel. That is a forward pass through a recipe graph.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A delivery cost is raw materials → factory → warehouse → truck → doorstep. Each stage's output feeds
+the next, and the final price is the value at the root after everything upstream is computed. Change a
+fuel cost upstream and it propagates forward to the total.
+</ExampleCard>
+
+<ExampleCard domain="Game design" icon="🎮">
+Damage dealt = (base attack × critical multiplier) − target armor. The engine evaluates the multiply
+node, then the subtract node, producing the number shown over the enemy's head — a three-input
+computational graph rebuilt every frame.
+</ExampleCard>
+
+<ExampleCard domain="Social media" icon="📱">
+A feed-ranking score might be (relevance × recency) + affinity. Each signal is a leaf, the combining
+operations are interior nodes, and the final score decides the post's position — evaluated for
+millions of posts as one big graph.
+</ExampleCard>
+
+<Callout type="note">
+The word *acyclic* matters: if a value could depend on itself, there would be no valid starting point.
+Feed-forward networks are pure DAGs; even recurrent networks are "unrolled" into a DAG over time
+before they run.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the graph for f = a·b + c, which node is the intermediate value?',
+      options: ['a', 'd = a·b', 'c', 'f'],
+      answer: 1,
+      explain: 'a, b, c are leaf inputs and f is the root output; d = a·b is the interior intermediate produced by the multiply node.',
+    },
+    {
+      q: 'Why must a computational graph be acyclic?',
+      options: [
+        'So it can be drawn on paper',
+        'So there is always a valid evaluation order with no value depending on itself',
+        'Because GPUs require it',
+        'So it has exactly one input',
+      ],
+      answer: 1,
+      explain: 'A cycle would mean a value depends on itself, leaving no place to start. Acyclicity guarantees a topological order exists.',
+    },
+    {
+      q: 'With a = 4, b = 3, c = 2, what value flows out of the multiply node, and what is f?',
+      options: ['d = 12, f = 14', 'd = 7, f = 9', 'd = 12, f = 12', 'd = 9, f = 11'],
+      answer: 0,
+      explain: 'The multiply node gives d = 4·3 = 12, then the add node gives f = 12 + 2 = 14.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>computational graph</strong> is a DAG: nodes are operations, edges carry values.',
+    'Leaves are inputs, interior nodes are operations, and the root is the final output.',
+    'The <strong>forward pass</strong> evaluates nodes in topological order, storing every intermediate value.',
+    'The graph must be <strong>acyclic</strong> so a valid evaluation order always exists.',
+    'Frameworks build this graph automatically, enabling GPU execution, optimization, and automatic differentiation.',
+  ]}
+/>
+
+Next up: **automatic differentiation** — reuse the very same graph, walk it *backward*, and let the
+chain rule hand you every gradient for free.

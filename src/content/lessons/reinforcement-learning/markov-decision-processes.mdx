@@ -1,0 +1,181 @@
+---
+title: Markov Decision Processes
+track: reinforcement-learning
+summary: States, actions, transitions, rewards and a discount — the formal frame for any agent learning by trial and error.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - probability/conditional-bayes
+leadsTo:
+  - reinforcement-learning/value-functions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import GridWorldMDPExplorer from '../../../components/demos/GridWorldMDPExplorer.tsx';
+
+## The hook: a robot in a room with no instructions
+
+Drop a cleaning robot into an unfamiliar room. Nobody tells it the floor plan. All it can do is
+*try* something — roll forward, turn, bump a wall — and notice what happens: sometimes it reaches the
+charging dock (good!), sometimes it tumbles down the stairs (very bad). Over time it should learn a
+*habit*: from any spot, what is the smartest move?
+
+To make "smartest move" a math problem we need a precise way to describe the world, the choices, and
+what counts as good. That description is the **Markov Decision Process (MDP)** — the contract that
+every reinforcement-learning algorithm is written against.
+
+<Callout type="intuition" title="The one-sentence idea">
+An **MDP** says: you are in a **state**, you pick an **action**, the world rolls dice to send you to a
+new state and hands you a **reward** — and the future depends only on where you are *now*, not how you
+got there.
+</Callout>
+
+## Intuition: the agent–environment loop
+
+Reinforcement learning is a conversation that repeats forever:
+
+1. The **agent** observes the current **state** $s_t$.
+2. It chooses an **action** $a_t$.
+3. The **environment** responds with a **reward** $r_{t+1}$ and a **next state** $s_{t+1}$.
+4. Repeat.
+
+The single most important assumption is the **Markov property**: the next state depends only on the
+*current* state and action — the past is already baked into "where you are now." This is exactly the
+conditional-probability thinking from Bayes, but pointed forward in time: $P(s_{t+1}\mid s_t, a_t)$ needs
+no earlier history.
+
+Two more pieces complete the picture. A **policy** $\pi$ is the agent's strategy — its rule for picking
+actions. And the **discount factor** $\gamma$ (a number between 0 and 1) decides how much a reward in the
+future is worth *today*: a reward $t$ steps away is multiplied by $\gamma^t$, so far-off rewards fade.
+
+## Play with it
+
+Below is a tiny **grid-world**. Tap a square next to the robot (or use the arrows) to take an action.
+Each step pays a small reward, the flag pays $+1$, and the pit pays $-1$. Drag the discount slider and
+watch how it reshapes the **return** $G$ — the total discounted reward you collect.
+
+<GridWorldMDPExplorer client:visible />
+
+<Callout type="tip">
+Lower $\gamma$ toward 0 and the robot becomes impatient — only the *next* reward matters. Push $\gamma$
+toward 1 and it plans for the long haul, happily taking many small penalties to reach the far-off flag.
+</Callout>
+
+## The formal definition
+
+An MDP is the five-tuple $(\mathcal{S}, \mathcal{A}, P, R, \gamma)$:
+
+- $\mathcal{S}$ — the set of **states**.
+- $\mathcal{A}$ — the set of **actions**.
+- $P(s' \mid s, a)$ — the **transition probability** of landing in $s'$ after doing $a$ in $s$.
+- $R(s, a)$ — the **reward** for that step.
+- $\gamma \in [0, 1)$ — the **discount factor**.
+
+The agent's goal is to maximize the **expected return**: the discounted sum of all future rewards.
+
+$$
+G_t = r_{t+1} + \gamma\, r_{t+2} + \gamma^2 r_{t+3} + \cdots = \sum_{k=0}^{\infty} \gamma^{k}\, r_{t+k+1}.
+$$
+
+A **policy** maps states to action probabilities, $\pi(a \mid s)$, and the whole game is to find the policy
+that makes $G_t$ as large as possible on average.
+
+```python
+# one turn of the agent-environment loop
+state = env.reset()
+for t in range(T):
+    action = policy(state)              # agent decides
+    next_state, reward, done = env.step(action)  # environment responds
+    state = next_state
+    if done: break
+```
+
+<Callout type="why">
+Almost every modern AI that *acts* — game engines, robots, ad bidders, and the fine-tuning step behind
+chatbots — is trained by casting its problem as an MDP. Get the states, actions, and rewards right and
+the learning algorithms in the next lessons do the rest.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Video games" icon="🎮">
+In Pac-Man the **state** is the maze layout plus everyone's positions; the **actions** are up/down/left/right;
+the **reward** is points for pellets and a big penalty for being caught. The Markov property roughly holds —
+the current screen tells you almost everything you need to decide your next move.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🦾">
+A warehouse robot's **state** is its location and battery level; **actions** are drive, turn, or pick up a box.
+Motors slip and wheels skid, so the same action gives different outcomes — that randomness is exactly the
+transition probability $P(s'\mid s,a)$, not a bug.
+</ExampleCard>
+
+<ExampleCard domain="Smart-home control" icon="🌡️">
+A learning thermostat sits in a **state** of (room temperature, time of day). Its **action** is how hard to
+heat. The **reward** trades comfort against energy cost. A patient agent (high $\gamma$) pre-heats before a
+cold morning instead of reacting only once you shiver.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A store's restocking problem is an MDP: the **state** is current inventory, the **action** is how much to
+reorder, transitions come from random customer demand, and the **reward** subtracts holding costs and
+stock-outs. Discounting captures that money saved now beats money saved next quarter.
+</ExampleCard>
+
+<Callout type="note">
+Notice what *isn't* in the tuple: a map, a plan, or any labelled "right answers." The agent is handed only
+rewards, and must discover good behavior itself. That is what makes reinforcement learning different from
+the supervised learning in earlier tracks.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the Markov property actually claim?',
+      options: [
+        'Rewards are always positive',
+        'The next state depends only on the current state and action, not the full history',
+        'The agent knows the whole map in advance',
+        'Every action is equally likely',
+      ],
+      answer: 1,
+      explain: 'Markov = memoryless: the present state already summarizes everything needed to predict what comes next.',
+    },
+    {
+      q: 'A reward of 10 arrives 3 steps from now, with discount γ = 0.5. What is it worth today?',
+      options: ['10', '5', '1.25', '0'],
+      answer: 2,
+      explain: 'Discount by γ³ = 0.5³ = 0.125, so 10 × 0.125 = 1.25.',
+    },
+    {
+      q: 'Which list correctly names the five parts of an MDP?',
+      options: [
+        'States, actions, transitions, rewards, discount',
+        'Inputs, weights, loss, gradient, step size',
+        'Mean, variance, prior, likelihood, posterior',
+        'Nodes, edges, paths, costs, heuristics',
+      ],
+      answer: 0,
+      explain: 'An MDP is the tuple (S, A, P, R, γ): states, actions, transition probabilities, rewards, and the discount factor.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>MDP</strong> is the tuple (S, A, P, R, γ): states, actions, transition probabilities, rewards, and a discount.',
+    'The <strong>agent–environment loop</strong> repeats: observe state → choose action → receive reward and next state.',
+    'The <strong>Markov property</strong> means the future depends only on the present state and action, not the past.',
+    'The agent maximizes the <strong>expected return</strong> G = Σ γᵏ r, the discounted sum of future rewards.',
+    'The <strong>discount γ</strong> tunes patience: near 0 is short-sighted, near 1 plans far ahead.',
+  ]}
+/>
+
+Next up: if the agent wants the best policy, it first needs to answer "how good is this state?" — that is
+the job of **value functions** and the Bellman equation.

@@ -1,0 +1,165 @@
+---
+title: Broadcasting & einsum
+track: tensors
+summary: Operating on whole tensors at once — the rules that stretch mismatched shapes, and the index notation that names every tensor op.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - tensors/tensors
+leadsTo:
+  - tensors/computational-graphs
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BroadcastShapeChecker from '../../../components/demos/BroadcastShapeChecker.tsx';
+
+## The hook: adding a bonus to a million salaries without a loop
+
+Suppose a spreadsheet holds a $1000 \times 12$ table of monthly salaries, and you want to give every
+person a flat 200-unit raise each month. You could write a double loop over twelve million cells —
+or you could just write `table + 200` and let the framework figure out that the single number
+applies everywhere. That quiet stretching of a small thing to fit a big thing is **broadcasting**,
+and it is what makes tensor code both fast and short.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Broadcasting** automatically stretches smaller shapes to match bigger ones (without copying data),
+and **einsum** is a tiny notation that names exactly which axes to multiply and sum — so any tensor
+operation fits on one line.
+
+</Callout>
+
+## Intuition: line shapes up from the right
+
+You already know a tensor's **shape** is its tuple of axis lengths. When you combine two tensors
+element-wise, the framework compares their shapes **axis by axis, starting from the right**. For each
+aligned pair it asks one question: are they equal, or is one of them 1?
+
+- Equal lengths → line up directly.
+- One length is 1 → stretch that axis to match the other (a 1 acts like "repeat me").
+- A missing axis on the shorter shape → treated as length 1, then stretched.
+- Neither equal nor 1 → **error**, the shapes are incompatible.
+
+So $(1000, 12)$ combined with a scalar works (the scalar is shape $()$, stretched everywhere), and
+$(256, 256, 3)$ combined with $(3,)$ works (the 3 channels line up on the right). But $(3, 4)$ with
+$(2, 4)$ fails: the leading 3 and 2 disagree and neither is 1.
+
+## Play with it
+
+Pick two shapes (or edit them) and the checker aligns them from the right, marks each axis pair
+compatible or not, and shows the resulting shape.
+
+<BroadcastShapeChecker client:visible />
+
+<Callout type="tip">
+Try "column + row": $(4, 1)$ with $(1, 5)$. Both stretch, and the result is the full $(4, 5)$ grid —
+this is exactly how an *outer product* falls out of broadcasting for free.
+</Callout>
+
+## The formal definition
+
+Two shapes broadcast if, after right-aligning them and padding the shorter with leading 1s, every
+aligned pair $(s_d, t_d)$ satisfies
+
+$$
+s_d = t_d \quad\text{or}\quad s_d = 1 \quad\text{or}\quad t_d = 1,
+$$
+
+and the result axis is $\max(s_d, t_d)$.
+
+For naming reductions there is **Einstein summation**. The rule: an index repeated on the input side
+but dropped from the output is summed over. A matrix product is
+
+$$
+C_{ik} = \sum_{j} A_{ij}\, B_{jk},
+$$
+
+which in einsum is simply `'ij,jk->ik'`. Drop the `k` to get a matrix–vector product `'ij,j->i'`;
+keep all indices to get a batched element-wise multiply.
+
+```python
+import numpy as np
+A = np.random.randn(4, 3)
+B = np.random.randn(3, 5)
+np.einsum('ij,jk->ik', A, B)        # matrix product, shape (4, 5)
+np.einsum('bij,bjk->bik', X, Y)     # the SAME idea, batched over b
+```
+
+<Callout type="why">
+Attention, convolutions, and batched linear layers are all einsum one-liners over batch, head, token,
+and feature axes. Broadcasting is how a bias vector adds to a whole batch, and how a per-channel scale
+hits every pixel. Together they replace nested loops with a single readable expression that the GPU
+runs in parallel.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Finance" icon="💹">
+A returns matrix of shape $(\text{days}, \text{assets})$ times a weight vector of shape
+$(\text{assets},)$, summed over the asset axis, gives daily portfolio returns —
+`'da,a->d'`. The weights broadcast across every day automatically.
+</ExampleCard>
+
+<ExampleCard domain="Audio" icon="🎧">
+A stereo clip has shape $(2, \text{samples})$. Multiply by a per-channel gain of shape $(2, 1)$ and
+broadcasting applies the left gain to every left sample and the right gain to every right sample —
+no loop over the samples.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="🏀">
+A season's box scores sit in $(\text{players}, \text{stats})$. To z-score each stat, subtract a
+mean of shape $(\text{stats},)$ and divide by a std of the same shape. Both broadcast down every
+player row, normalizing the whole table at once.
+</ExampleCard>
+
+<ExampleCard domain="Climate science" icon="🌡️">
+A temperature field of shape $(\text{months}, \text{lat}, \text{lon})$ minus a baseline map of shape
+$(\text{lat}, \text{lon})$ yields the monthly *anomaly*. The baseline lacks a month axis, so it is
+treated as length 1 and broadcast across all twelve months.
+</ExampleCard>
+
+<Callout type="note">
+Broadcasting never actually copies the small array — it just reads the same elements repeatedly. That
+is why "stretching" a bias across a million rows costs almost no memory.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Do shapes (256, 256, 3) and (3,) broadcast, and to what?',
+      options: ['No, the 3s clash', 'Yes → (256, 256, 3)', 'Yes → (256, 256, 1)', 'Yes → (3, 256, 256)'],
+      answer: 1,
+      explain: 'Align from the right: 3 vs 3 match; the missing leading axes are treated as 1 and stretched to 256, 256.',
+    },
+    {
+      q: 'Which pair of shapes CANNOT be broadcast together?',
+      options: ['(5, 1) and (1, 4)', '(8,) and (3, 8)', '(3, 4) and (2, 4)', '(2, 3, 4) and (4,)'],
+      answer: 2,
+      explain: 'Right-aligned, the 4s match but 3 vs 2 disagree and neither is 1 — incompatible. The others all have each pair equal or 1.',
+    },
+    {
+      q: 'What does the einsum string \'ij,j->i\' compute?',
+      options: ['An outer product', 'A matrix–vector product (sum over j)', 'Element-wise multiply', 'A transpose'],
+      answer: 1,
+      explain: 'j is repeated on the inputs and dropped from the output, so it is summed: that is A times a vector.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Broadcasting</strong> aligns shapes from the right; each axis pair must be equal or have a 1, and the result takes the max.',
+    'A missing leading axis is treated as length 1, then stretched — so a bias or per-channel scale fits a whole batch.',
+    'Broadcasting stretches <strong>without copying</strong>, so it is cheap in memory.',
+    '<strong>einsum</strong> names every axis; an index repeated on inputs but absent from the output is summed over.',
+    'Matrix products, batched layers, and attention are all short einsum expressions over batch/feature axes.',
+  ]}
+/>
+
+Next up: **computational graphs** — once you can express any operation on tensors, we wire those
+operations together into the graph that a model actually is.

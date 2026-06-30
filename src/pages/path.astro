@@ -1,10 +1,10 @@
 ---
 import Layout from '../components/Layout.astro';
-import { TRACKS } from '../data/curriculum';
+import { TRACKS, STAGES } from '../data/curriculum';
 import { getReadySlugs } from '../lib/lessons';
 import { url } from '../lib/url';
 
-const stages = ['Foundations', 'Core'] as const;
+const stages = STAGES.filter((s) => TRACKS.some((t) => t.stage === s));
 const ready = await getReadySlugs();
 ---
 

@@ -1,0 +1,183 @@
+---
+title: Positional Encoding
+track: transformers
+summary: Giving an order-blind attention mechanism a sense of position with sinusoids of many frequencies — and the rotation idea behind RoPE.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - fourier/sinusoids-frequency
+  - transformers/attention
+leadsTo:
+  - transformers/softmax-sampling
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PositionalEncodingMatrix from '../../../components/demos/PositionalEncodingMatrix.tsx';
+
+## The hook: "dog bites man" vs "man bites dog"
+
+Same three words, opposite meaning — the only difference is **order**. But look back at the
+[attention](/transformers/attention) formula: it's a sum over tokens, and a sum doesn't care about
+arrangement. Shuffle the input and attention produces the same blend. To a bare transformer, a sentence is
+an unordered *bag* of words. Something has to tell it where each token sits. That something is
+**positional encoding**.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Positional encoding** adds a position-dependent signal to each token's embedding so the model can tell
+*where* a token is — built from sinusoids of many frequencies, like a binary clock written in waves.
+</Callout>
+
+## Intuition: a clock made of waves
+
+How would you stamp each position with a unique label that a model can do math with? A single counter
+$(0, 1, 2, \dots)$ grows without bound and destabilizes training. Instead we borrow an idea straight from
+[sinusoids](/fourier/sinusoids-frequency): describe position with a bundle of sine and cosine waves at
+different frequencies.
+
+Think of how a digital clock encodes time: the seconds digit cycles fast, minutes slower, hours slower
+still. Read all the digits together and the moment is unique. Positional encoding does the same with smooth
+waves — **fast** sinusoids in some dimensions, **slow** ones in others. Each position gets a unique
+"fingerprint" vector, and because waves are bounded between $-1$ and $1$, the numbers stay tame no matter
+how long the sequence.
+
+The real payoff is **relative** position. With sinusoids, shifting from position $p$ to $p+k$ is a fixed
+rotation that depends only on the gap $k$ — so attention can learn "look 3 tokens back" as one consistent
+operation, anywhere in the text.
+
+## Play with it
+
+The heatmap is the position-encoding matrix: rows are positions, columns are dimensions. Slide the model
+size $d$, and highlight a dimension to see its wave. Watch low dimensions wiggle fast and high dimensions
+drift slowly — the spread of frequencies that makes every position distinct.
+
+<PositionalEncodingMatrix client:visible />
+
+<Callout type="tip">
+Drag the highlighted dimension from low to high and read the wavelength: it stretches from a few positions
+to hundreds. That geometric spread of frequencies is the whole trick — it's a Fourier basis for position.
+</Callout>
+
+## The formal definition
+
+For position $pos$ and dimension index $i$ in a model of width $d$, the sinusoidal encoding is
+
+$$
+PE_{(pos,\,2i)} = \sin\!\left(\frac{pos}{10000^{\,2i/d}}\right), \qquad
+PE_{(pos,\,2i+1)} = \cos\!\left(\frac{pos}{10000^{\,2i/d}}\right).
+$$
+
+Each pair of dimensions is a sine/cosine at one frequency; the frequencies fall off geometrically across
+dimensions. The vector is then **added** to the token embedding before attention:
+
+$$
+\mathbf{z}_{pos} = \mathbf{e}_{token} + PE_{pos}.
+$$
+
+```python
+i = arange(d // 2)
+freq = 1.0 / (10000 ** (2 * i / d))      # geometric spread of frequencies
+PE[pos, 0::2] = sin(pos * freq)          # even dims: sine
+PE[pos, 1::2] = cos(pos * freq)          # odd dims:  cosine
+```
+
+<Callout type="why">
+The Fourier connection is exact: a position is described by its frequency components, just like a signal.
+Because $\sin$ and $\cos$ of a shifted angle are linear combinations of the originals, the encoding of
+$pos + k$ is a linear (rotation) transform of the encoding of $pos$ — which is precisely what lets attention
+generalize to relative distances and even to lengths it never saw in training.
+</Callout>
+
+### A note on RoPE
+
+Modern LLMs often use **Rotary Position Embedding (RoPE)** instead of adding a vector. Rather than *adding*
+a signal, RoPE **rotates** each query and key by an angle proportional to its position, in many 2D planes at
+different frequencies. When a query at position $m$ dots a key at position $n$, the rotations combine so the
+score depends only on the relative offset $m - n$. Same Fourier intuition — sinusoids of many frequencies —
+applied as rotation, which is why RoPE extends gracefully to very long contexts.
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Music notation" icon="🎵">
+A melody is the same pitches in a particular order and rhythm. Reorder the beats and you get a different
+tune. A music model needs the beat index of each note — a positional stamp — for the very same reason a
+language model does.
+</ExampleCard>
+
+<ExampleCard domain="Time-series forecasting" icon="📈">
+Sensor readings only mean something in sequence: yesterday before today. Transformers for forecasting add
+time encodings — often literally sinusoids for hour-of-day and day-of-week — so the model knows *when* each
+measurement happened.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+In a DNA sequence, a motif's meaning depends on where it sits relative to a gene's start. Sequence models
+encode nucleotide position so "near the promoter" and "deep in the intron" are distinguishable.
+</ExampleCard>
+
+<ExampleCard domain="Navigation & GPS" icon="🛰️">
+Encoding a continuous coordinate as a stack of sines at many frequencies (a "Fourier feature") helps models
+represent fine and coarse spatial detail at once — the same multi-frequency idea, used for place instead of order.
+</ExampleCard>
+
+<Callout type="note">
+Positions can be <strong>learned</strong> (a trainable vector per slot) instead of fixed sinusoids. Sinusoids
+and RoPE win when you need to handle sequences longer than anything seen in training, thanks to their
+relative-position structure.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does plain attention need positional information added in the first place?',
+      options: [
+        'Because softmax cannot handle long sequences',
+        'Because attention is a sum over tokens and is therefore order-blind — it treats the input as a set',
+        'Because embeddings are too large',
+        'To reduce the number of parameters',
+      ],
+      answer: 1,
+      explain: 'Attention sums over tokens, so permuting the input gives the same result; position must be injected separately.',
+    },
+    {
+      q: 'Why use sinusoids of many different frequencies rather than a single counter 0,1,2,…?',
+      options: [
+        'Sinusoids are faster to compute than integers',
+        'They stay bounded and give each position a unique multi-frequency fingerprint, with relative shifts as fixed rotations',
+        'Because the model only understands angles',
+        'To make all positions identical',
+      ],
+      answer: 1,
+      explain: 'Bounded waves keep values stable, many frequencies make positions distinct, and shifts become consistent rotations — enabling relative-position reasoning.',
+    },
+    {
+      q: 'What is the key idea behind RoPE compared to the original sinusoidal encoding?',
+      options: [
+        'It removes position information entirely',
+        'It rotates queries and keys by a position-dependent angle, so attention scores depend on relative offset',
+        'It adds a random vector to each token',
+        'It replaces softmax with a sine function',
+      ],
+      answer: 1,
+      explain: 'RoPE applies position as a rotation to Q and K; the rotations combine in the dot product so the score sees only the relative distance.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Attention is <strong>order-blind</strong> (a sum over tokens), so position must be injected explicitly.',
+    'Sinusoidal encoding stamps each position with <strong>sines and cosines of many frequencies</strong> — a Fourier fingerprint.',
+    'Bounded waves keep values stable, and a shift by <em>k</em> becomes a <strong>fixed rotation</strong>, enabling relative-position reasoning.',
+    'The encoding is simply <strong>added to the token embedding</strong> before attention.',
+    '<strong>RoPE</strong> applies the same multi-frequency idea as a rotation of Q and K, extending cleanly to long contexts.',
+  ]}
+/>
+
+Next up: **softmax, temperature & sampling** — once the stack of attention layers has done its work, how do
+the final scores become the actual next token?

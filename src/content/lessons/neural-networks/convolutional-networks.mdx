@@ -1,0 +1,172 @@
+---
+title: Convolutional Networks
+track: neural-networks
+summary: Convolution, kernels, weight sharing, and pooling — how networks see images by sliding small filters that detect edges, textures, and shapes.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - fourier/convolution-theorem
+  - neural-networks/backpropagation
+leadsTo:
+  - neural-networks/recurrent-networks
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ConvKernelSlideLab from '../../../components/demos/ConvKernelSlideLab.tsx';
+
+## The hook: a magnifying glass that hunts for edges
+
+Imagine sweeping a tiny stencil across a photograph, and every time the patch underneath looks like a
+vertical edge, the stencil lights up. Slide it over the whole image and you get a new picture — a map of
+*where the vertical edges are*. Swap the stencil for one tuned to corners, or skin texture, or the curve of
+an eye, and you get a different map each time.
+
+That sliding stencil is a **convolution**, the stencil is a **kernel**, and stacking layers of them is a
+**convolutional neural network** (CNN) — the architecture that taught computers to see. Instead of wiring
+every pixel to every neuron (millions of weights, no sense of geometry), a CNN reuses one small kernel
+everywhere, baking in the truth that a cat is a cat in any corner of the frame.
+
+<Callout type="intuition" title="The one-sentence idea">
+A convolution slides one small set of **shared weights** (a kernel) across an image, producing a **feature
+map** that says where that kernel's pattern appears.
+</Callout>
+
+## Intuition: weight sharing is the big idea
+
+From **backpropagation** you know a network learns its weights by gradient descent. A fully connected layer
+on a modest $200 \times 200$ image would need 40,000 weights *per neuron* — and it would have to relearn what
+an edge looks like separately for every location. Wasteful and fragile.
+
+Convolution fixes both problems with **weight sharing**: a single $3 \times 3$ kernel (just 9 numbers) slides
+across every position. Two consequences fall out:
+
+1. **Translation equivariance** — because the *same* kernel scans everywhere, a feature detected in the
+   top-left is detected identically in the bottom-right.
+2. **Massive parameter savings** — 9 shared weights instead of millions, so the network learns from far less
+   data and generalizes better.
+
+After convolution, a **pooling** step (e.g. take the max of each $2 \times 2$ block) shrinks the map, keeping
+the strongest responses while granting a little tolerance to *where* exactly a feature sat.
+
+## Play with it
+
+Pick a kernel and press play. The indigo window slides over the input image; for each position it
+dot-products the kernel with the patch underneath and writes one number into the **feature map** on the
+right. Try the **vertical edge** kernel and watch the square's left and right sides light up while flat
+regions stay dark.
+
+<ConvKernelSlideLab client:visible />
+
+<Callout type="tip">
+The kernel never changes as it slides — those are the <strong>shared weights</strong>. The same 9 numbers
+detect the same pattern at every location, which is why CNNs need so few parameters.
+</Callout>
+
+## The formal definition
+
+For an image $I$ and a kernel $K$ of size $k \times k$, the (cross-correlation) feature map is
+
+$$
+S(i, j) = \sum_{m}\sum_{n} I(i + m,\; j + n)\, K(m, n).
+$$
+
+Each output pixel is a dot product of the kernel with the patch beneath it.
+
+```python
+for i in range(H - 2):
+    for j in range(W - 2):
+        out[i, j] = (img[i:i+3, j:j+3] * kernel).sum()   # slide and dot
+```
+
+Here is the beautiful connection to the **convolution theorem** you already met in the Fourier track:
+convolution in the spatial domain is plain *multiplication* in the frequency domain.
+
+$$
+\mathcal{F}\{I * K\} = \mathcal{F}\{I\} \cdot \mathcal{F}\{K\}.
+$$
+
+<Callout type="why">
+This is not just elegant — it is practical. A kernel is a frequency filter: a blur kernel keeps low
+frequencies (smooth regions) and an edge kernel keeps high frequencies (sharp transitions). And for large
+kernels, libraries literally compute the convolution via the FFT because multiplying in frequency space is
+faster. The math you learned for signals is the math a CNN runs on images.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Medical imaging" icon="🩻">
+Radiology software runs edge-detecting kernels over X-rays and MRIs to outline bone fractures or tumor
+boundaries that are hard for the eye to catch. The same convolution that finds a square's edge in the demo
+traces the edge of a hairline crack.
+</ExampleCard>
+
+<ExampleCard domain="Remote sensing" icon="🛰️">
+Satellites photograph farmland; convolutions detect the straight boundaries between fields and the texture of
+healthy versus stressed crops. Because the kernel is shared, a field in one corner of the image is analyzed
+exactly like a field in another — translation equivariance over square kilometers.
+</ExampleCard>
+
+<ExampleCard domain="Photo editing" icon="🖼️">
+Every "sharpen," "blur," and "emboss" filter in your photo app is a convolution with a fixed kernel — the
+same operation a CNN performs, except the CNN *learns* its kernels from data instead of having an artist
+hand-design them.
+</ExampleCard>
+
+<ExampleCard domain="Document scanning" icon="📄">
+Before recognizing text, an OCR pipeline convolves the page with stroke-detecting kernels to find the
+vertical and horizontal pen strokes that make up letters. Pooling then tolerates the slight wobble of
+handwriting so the same letter is recognized whether it leans left or right.
+</ExampleCard>
+
+<Callout type="note">
+Stack convolutions and a hierarchy emerges on its own: early layers learn edges, middle layers combine edges
+into textures and parts (an eye, a wheel), deep layers assemble parts into whole objects. Each level is built
+from the level below — pattern detectors all the way up.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the main advantage of weight sharing in a convolutional layer?',
+      options: [
+        'It makes the image larger',
+        'One small kernel reuses the same weights everywhere, slashing parameters and detecting a feature at any location',
+        'It removes the need for an activation function',
+        'It guarantees zero training error',
+      ],
+      answer: 1,
+      explain: 'A shared kernel means far fewer parameters and translation equivariance — the same pattern is found wherever it appears.',
+    },
+    {
+      q: 'A 3×3 kernel slides over a 14×14 image with no padding (valid convolution). How big is the feature map?',
+      options: ['14×14', '12×12', '16×16', '3×3'],
+      answer: 1,
+      explain: 'Valid convolution shrinks each dimension by k − 1 = 2, giving (14−2) × (14−2) = 12×12.',
+    },
+    {
+      q: 'According to the convolution theorem, convolution in the spatial domain corresponds to what in the frequency domain?',
+      options: ['Convolution again', 'Addition', 'Pointwise multiplication', 'Division'],
+      answer: 2,
+      explain: 'The convolution theorem states F{I * K} = F{I} · F{K} — convolution becomes simple multiplication in frequency space.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>convolution</strong> slides a small <strong>kernel</strong> across an image, producing a feature map of where its pattern appears.',
+    '<strong>Weight sharing</strong> reuses the same kernel everywhere — huge parameter savings plus translation equivariance.',
+    '<strong>Pooling</strong> downsamples feature maps, keeping strong responses and adding tolerance to exact position.',
+    'By the <strong>convolution theorem</strong>, spatial convolution equals pointwise multiplication in the frequency domain — kernels are frequency filters.',
+    'Stacked conv layers build a <strong>hierarchy</strong>: edges → textures → parts → objects.',
+  ]}
+/>
+
+CNNs share weights across *space*; next we share weights across *time* to handle sequences. On to
+**recurrent networks**.

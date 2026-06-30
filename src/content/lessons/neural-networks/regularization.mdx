@@ -1,0 +1,167 @@
+---
+title: Regularization
+track: neural-networks
+summary: L1/L2 weight penalties and dropout — the discipline that stops a network from memorizing its training data and lets it generalize.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - neural-networks/loss-functions
+leadsTo:
+  - neural-networks/normalization
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import RegularizationFitLab from '../../../components/demos/RegularizationFitLab.tsx';
+
+## The hook: the student who memorized the answer key
+
+Imagine a student who, the night before an exam, memorizes every answer from last year's test word for
+word. On the practice paper they score 100%. On the real exam — same topics, different questions — they
+fall apart. They learned the *answers*, not the *subject*.
+
+A powerful neural network is exactly that student. With millions of parameters it can fit the training set
+perfectly, including its noise and quirks, and still fail on new data. This gap between training and reality
+is **overfitting**, and the tools that close it are called **regularization**: gentle pressure that pushes
+the model to learn the *pattern* instead of memorizing the *examples*.
+
+<Callout type="intuition" title="The one-sentence idea">
+Regularization adds a penalty for complexity, so the network prefers the **simplest** explanation that still
+fits the data — and simple explanations generalize.
+</Callout>
+
+## Intuition: don't just minimize the loss
+
+From **loss functions** you know training means minimizing some error like mean-squared error or
+cross-entropy. The trouble: a flexible model minimizes that error by contorting itself through every single
+training point, noise included. The result is a wild, wiggly function that nails the training data and
+whiffs on everything else.
+
+Regularization changes the goal. Instead of "make the training error as small as possible," we ask for
+"small training error **with** small, well-behaved weights." Two classic ways to apply that pressure:
+
+- **Weight penalties** (L1 and L2): add the size of the weights to the loss, so the optimizer pays a price
+  for large or unnecessary parameters.
+- **Dropout**: during training, randomly switch off a fraction of neurons each step, so no single neuron can
+  become a memorization crutch — the network must spread its knowledge around.
+
+## Play with it
+
+A degree-9 polynomial is fit to a few noisy points. With no penalty it wiggles madly through every point
+(low training error, terrible elsewhere). Turn up **L2** or **dropout** and watch it relax toward the smooth
+true signal. Push too far and it goes flat — *underfitting*.
+
+<RegularizationFitLab client:visible />
+
+<Callout type="tip">
+Watch the two error readouts. Overfitting shows <strong>low train error but high test error</strong>. The
+sweet spot is where the test error bottoms out — not where the training error is smallest.
+</Callout>
+
+## The formal definition
+
+Add a penalty term to the loss. **L2** (ridge / weight decay) penalizes the squared size of the weights:
+
+$$
+\mathcal{L}_{\text{L2}} = \mathcal{L}_{\text{data}} + \lambda \sum_i w_i^2.
+$$
+
+**L1** (lasso) penalizes the absolute size, which drives many weights to *exactly* zero — automatic feature
+selection and sparsity:
+
+$$
+\mathcal{L}_{\text{L1}} = \mathcal{L}_{\text{data}} + \lambda \sum_i |w_i|.
+$$
+
+The knob $\lambda$ sets the strength: $\lambda = 0$ is no regularization; large $\lambda$ forces tiny weights.
+**Dropout** instead multiplies each activation by a random on/off mask with keep-probability $1 - p$:
+
+```python
+loss = mse(y, y_hat) + lam * np.sum(W**2)        # L2 weight penalty
+mask = (np.random.rand(*h.shape) > p) / (1 - p)  # inverted dropout
+h = h * mask                                      # randomly drop neurons
+```
+
+<Callout type="why">
+For a linear model, training with dropout is provably equivalent to a form of L2 penalty — both shrink the
+effective weights. That is why the demo can fold dropout strength into the same smoothing knob: different
+mechanisms, the same anti-overfitting pressure.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Tailoring" icon="🧵">
+A suit cut to fit you in one frozen pose — arms out, chest puffed — looks perfect in the fitting room and
+splits a seam the moment you sit down. A slightly looser, smarter cut fits every pose well enough. L2 is
+that bit of slack: a model tailored too tightly to the training data tears on new inputs.
+</ExampleCard>
+
+<ExampleCard domain="Sports scouting" icon="🏀">
+A team that drafts players solely to beat *one* rival's exact lineup wins that matchup and loses the season.
+Good scouting builds a roster that generalizes across opponents. Dropout is like forcing the team to win
+without relying on any single star — depth and redundancy over a memorized game plan.
+</ExampleCard>
+
+<ExampleCard domain="Cartography" icon="🗺️">
+A subway map does not draw every curve of every tunnel — it *generalizes* to straight lines and clean angles
+so riders grasp the network. A map that reproduced every wiggle would be unreadable. Regularization is the
+mapmaker's deliberate simplification: keep the structure, drop the noise.
+</ExampleCard>
+
+<ExampleCard domain="Medicine" icon="🩺">
+A diagnostic model trained on one hospital can latch onto its scanner's serial-number watermark instead of
+the tumor — perfect on that data, useless elsewhere. Penalizing complex, spurious weights pushes it toward
+the real biological signal that transfers to other hospitals.
+</ExampleCard>
+
+<Callout type="note">
+L1 vs L2 in one line: L1 makes weights <em>sparse</em> (many exactly zero — good for feature selection); L2
+makes weights <em>small and spread out</em> (good for smoothness and stability). They are often combined,
+which is called elastic net.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A model gets 99% accuracy on training data but 70% on test data. What is the most likely problem?',
+      options: ['Underfitting', 'Overfitting', 'The learning rate is too low', 'The data is normalized'],
+      answer: 1,
+      explain: 'A large gap between strong training performance and weak test performance is the signature of overfitting.',
+    },
+    {
+      q: 'Which penalty tends to drive many weights to exactly zero, producing a sparse model?',
+      options: ['L2 (sum of squares)', 'L1 (sum of absolute values)', 'Dropout', 'A larger learning rate'],
+      answer: 1,
+      explain: 'L1\'s absolute-value penalty has a constant gradient that pushes small weights all the way to zero, yielding sparsity.',
+    },
+    {
+      q: 'What does dropout do during training?',
+      options: [
+        'Permanently deletes neurons from the network',
+        'Randomly switches off a fraction of neurons each step so the network cannot rely on any single one',
+        'Adds the squared weights to the loss',
+        'Increases the learning rate over time',
+      ],
+      answer: 1,
+      explain: 'Dropout randomly zeroes activations each step, forcing redundancy; at test time all neurons are used (scaled appropriately).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Overfitting</strong> is memorizing training data — low train error, high test error.',
+    '<strong>L2</strong> (weight decay) penalizes squared weights, keeping them small and the function smooth.',
+    '<strong>L1</strong> penalizes absolute weights, driving many to exactly zero for a sparse model.',
+    '<strong>Dropout</strong> randomly disables neurons during training so knowledge is spread, not memorized.',
+    'Tune the strength to minimize <strong>test</strong> error, not training error — too much regularization underfits.',
+  ]}
+/>
+
+Penalties keep the weights tame; next we tame the *activations* themselves so training runs fast and stable.
+On to **normalization**.

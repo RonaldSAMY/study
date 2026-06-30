@@ -1,0 +1,201 @@
+---
+title: Decision Trees
+track: classical-ml
+summary: A flowchart of yes/no questions, where each split is chosen to gain the most information.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - information-theory/entropy
+leadsTo:
+  - classical-ml/ensembles-boosting
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DecisionSplitExplorer from '../../../components/demos/DecisionSplitExplorer.tsx';
+
+## The hook: twenty questions, but the computer is asking
+
+Think of the game *20 Questions*. "Is it alive? Is it bigger than a breadbox? Can it fly?" A good
+player doesn't ask random things — they ask the question that **splits the remaining possibilities most
+evenly into useful groups**, ruling out as much as possible with each answer. A nurse at an emergency
+room does the same: *Are you breathing? Is there chest pain? How high is the fever?* Each yes/no answer
+routes you down a branch until the right action is obvious.
+
+A **decision tree** is exactly this game, learned automatically from data. It is a flowchart of
+yes/no questions, and at every fork it picks the single question that teaches it the most.
+
+<Callout type="intuition" title="The one-sentence idea">
+A decision tree asks a sequence of yes/no questions, and at each step it chooses the question that
+**reduces uncertainty the most** — splitting a messy mix of classes into purer and purer groups.
+</Callout>
+
+## Intuition: a good question kills uncertainty
+
+In the **entropy** lesson you saw that uncertainty has a number. A group that is a 50/50 mix of two
+classes is maximally uncertain — you learn a full bit by being told which class a point is. A group
+that is *all one class* has zero uncertainty: it is **pure**.
+
+A decision tree builds on that single idea. Imagine a pile of labeled points, some sky-blue and some
+indigo, jumbled together. The tree looks for a **threshold** — "is feature x below 5?" — that slices
+the pile into two smaller piles. A *good* slice leaves each pile much purer than the original; a *bad*
+slice leaves both piles just as mixed as before.
+
+The amount of uncertainty removed by a split is the **information gain**. The tree is greedy: at every
+fork it tries many thresholds, measures the gain of each, and keeps the best one. Then it repeats on
+each child pile, and again, growing branches until the leaves are pure (or nearly so). Reaching a pure
+leaf means the questions so far were enough to decide the class.
+
+## Play with it
+
+Drag the green line to slide the split threshold. Toggle whether you split on feature **x** or feature
+**y**, and switch the impurity metric between **Gini** and **Entropy**. Watch the parent impurity,
+the weighted child impurity, and the **information gain** update live as the regions shade toward their
+majority class.
+
+<DecisionSplitExplorer client:visible />
+
+<Callout type="tip">
+Move the threshold to <strong>maximize the information gain</strong>. The best split is the one that
+makes the two children as <strong>pure</strong> as possible — and you'll see the dashed "best" marker
+sit right where the two colors separate most cleanly. Splitting on the wrong feature gives almost no
+gain, no matter where you put the line.
+</Callout>
+
+## The formal definition
+
+At a node holding $n$ points, let $p_k$ be the fraction belonging to class $k$. We measure how mixed
+the node is with an **impurity** score. Two common choices:
+
+**Gini impurity:**
+
+$$
+G = 1 - \sum_{k} p_k^2.
+$$
+
+**Entropy** (in bits, the quantity from the previous lesson):
+
+$$
+H = - \sum_{k} p_k \log_2 p_k.
+$$
+
+Both are $0$ for a pure node and largest for an even mix. For two classes at 50/50, $G = 0.5$ and
+$H = 1$ bit.
+
+A split sends $n_{\text{L}}$ points left and $n_{\text{R}}$ points right. The quality of the split is
+the **information gain** — the parent's impurity minus the size-weighted impurity of the children:
+
+$$
+\text{Gain} = H(\text{parent}) - \sum_{c \in \{\text{L}, \text{R}\}} \frac{n_c}{n}\, H(c).
+$$
+
+The tree is built by **recursive, greedy splitting**: at each node, try every feature and threshold,
+pick the split with the highest gain, then recurse on the left and right children. It stops when a node
+is pure, too small to split, or a maximum depth is reached.
+
+```python
+# impurity of a node, and the gain of one split (two classes)
+gini   = 1 - sum((counts / counts.sum())**2)        # parent impurity
+parent = gini
+gain   = parent - (nL/n) * giniL - (nR/n) * giniR   # impurity drop
+```
+
+That depth limit matters: an unconstrained tree will keep asking questions until **every** training
+point sits in its own pure leaf — memorizing noise. That is **overfitting**, and we fight it by
+limiting depth, requiring a minimum number of points per leaf, or pruning weak branches afterward.
+
+<Callout type="why">
+Decision trees are the rare ML model a human can read like a flowchart — they are **interpretable**,
+need no feature scaling, and capture **nonlinear** boundaries by stacking simple cuts. A single tree is
+also the building block for the most powerful tabular models around: **random forests** and **gradient
+boosting**, which combine many trees and are the subject of the next lesson.
+</Callout>
+
+## The same idea, four different worlds
+
+A "choose the question that reduces uncertainty most, then branch" recipe shows up far beyond data
+science.
+
+<ExampleCard domain="Emergency medicine" icon="🚑">
+ER **triage** is a decision tree drawn on a laminated card. *Is the airway clear? Is breathing labored?
+Is the patient responsive?* Each answer routes the patient toward a severity level. The first questions
+are deliberately the ones that most sharply separate "needs care this second" from "can wait" — exactly
+the highest-information-gain splits at the top of the tree.
+</ExampleCard>
+
+<ExampleCard domain="Wildlife biology" icon="🦋">
+Field guides identify a species with a **dichotomous key**: *Are the wings scaled or clear? Are the
+antennae clubbed or feathered?* Each couplet is a yes/no split that halves the candidate species. A
+well-designed key orders its questions so that each one eliminates the most possibilities — a tree
+chosen to maximize information gain at every fork.
+</ExampleCard>
+
+<ExampleCard domain="Aviation" icon="✈️">
+Predicting whether a flight will be **delayed** branches naturally: *Is there a thunderstorm at the
+hub? Is it a tight evening connection? Is the inbound aircraft already late?* Weather, time of day, and
+route each carve the data into groups with very different delay rates — and the tree learns which
+question to ask first by measuring which one purifies "on time" versus "delayed" the most.
+</ExampleCard>
+
+<ExampleCard domain="Gaming" icon="🎮">
+Enemy AI in many games is literally a hand-built **behavior tree**: *Can I see the player? Is my health
+low? Is cover nearby?* Each check routes the agent to flee, attack, or heal. Designers order the checks
+so the most decisive question — usually "is the player visible?" — sits at the root, the same instinct
+as putting the highest-gain split first.
+</ExampleCard>
+
+<Callout type="note">
+Notice the pattern in all four: the *order* of questions is everything. Asking the most informative
+question first is what makes a key short, a triage fast, and a learned tree shallow and accurate.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A node contains 10 points: 5 of class A and 5 of class B. What is its Gini impurity?',
+      options: ['0', '0.25', '0.5', '1.0'],
+      answer: 2,
+      explain: 'Gini = 1 − (0.5² + 0.5²) = 1 − (0.25 + 0.25) = 0.5. A 50/50 mix is maximally impure for two classes.',
+    },
+    {
+      q: 'A split sends all sky points left and all indigo points right, so both children are pure. Compared with a split that leaves both children still 50/50 mixed, the pure split has…',
+      options: [
+        'lower information gain',
+        'higher information gain',
+        'the same information gain',
+        'undefined information gain',
+      ],
+      answer: 1,
+      explain: 'Pure children have zero impurity, so the weighted child impurity is 0 and the gain equals the full parent impurity — the largest gain possible. A 50/50 split removes no uncertainty, so its gain is about 0.',
+    },
+    {
+      q: 'Why do we limit a decision tree’s depth instead of letting it grow until every leaf is pure?',
+      options: [
+        'Deeper trees always make worse predictions on the training set',
+        'A fully grown tree memorizes noise and overfits, generalizing poorly to new data',
+        'Information gain cannot be computed past a certain depth',
+        'Entropy becomes negative for deep trees',
+      ],
+      answer: 1,
+      explain: 'An unconstrained tree keeps splitting until each training point is isolated, fitting noise rather than signal. Limiting depth (or pruning) keeps the tree general.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>decision tree</strong> is a flowchart of yes/no questions; each split routes points toward purer groups.',
+    '<strong>Impurity</strong> measures how mixed a node is — <strong>Gini</strong> (1 − sum of squared class fractions) and <strong>entropy</strong> (the bits from the entropy lesson) are both 0 for a pure node.',
+    '<strong>Information gain</strong> = parent impurity − size-weighted child impurity; the tree greedily picks the split with the most gain.',
+    'Trees are built by <strong>recursive splitting</strong> and stop at pure leaves, a depth limit, or a minimum leaf size.',
+    'Unconstrained trees <strong>overfit</strong> by memorizing noise — limit depth or prune; single trees are the basis for forests and boosting.',
+  ]}
+/>
+
+Next up: **Ensembles & Boosting** — why a crowd of imperfect trees, combined cleverly, beats any single
+tree, powering random forests and gradient boosting.

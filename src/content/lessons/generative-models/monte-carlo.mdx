@@ -1,0 +1,181 @@
+---
+title: Monte Carlo Methods
+track: generative-models
+summary: Estimate impossible sums and integrals by averaging random samples — and watch the error shrink as you draw more.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - probability/expectation-variance
+leadsTo:
+  - generative-models/mcmc
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import MonteCarloPiEstimator from '../../../components/demos/MonteCarloPiEstimator.tsx';
+
+## The hook: how do banks price risk they cannot calculate?
+
+A bank holds a tangle of thousands of contracts, and someone asks a simple question: *"How much
+could we lose on a really bad day?"* There is no neat formula — the payoff depends on interest rates,
+exchange rates, and defaults all moving together. So the bank does something almost cheeky: it
+**simulates tomorrow** a million times with random market moves, records the loss in each imaginary
+tomorrow, and reads off the answer from the pile of results. No integral solved, just **a lot of dice
+rolled**. That is the Monte Carlo method, and it quietly powers finance, physics, graphics, and every
+generative model you will meet next.
+
+<Callout type="intuition" title="The one-sentence idea">
+To compute an average (or an area, or an integral) you cannot do by hand, **take many random samples
+and average them** — the more samples, the closer the average gets to the true value.
+</Callout>
+
+## Intuition: averages instead of formulas
+
+You already know that the **expected value** of a random variable is its long-run average, $\mathbb{E}[X] = \sum_x x\,p(x)$
+or $\int x\,f(x)\,dx$. Monte Carlo turns that definition on its head. Instead of *computing* the
+expectation, it **estimates** it: draw samples $x_1, \dots, x_N$ from the distribution and take their
+plain average.
+
+The deep reason this works is the **law of large numbers** you met with the dice simulator: as the
+number of samples grows, the sample average converges to the true expectation. Monte Carlo is simply
+that law, used on purpose, as a calculator.
+
+The same trick computes areas and integrals. Want the area of a weird blob? Throw darts at a square you
+*can* measure, count the fraction that land inside the blob, and multiply. A hard geometry problem
+becomes a counting problem — which is exactly how we will estimate $\pi$ in a moment.
+
+## Play with it
+
+Every dot below is a dart thrown uniformly at the square. A dot is **green** if it lands inside the
+quarter circle. Since the circle covers $\tfrac{\pi}{4}$ of the square, four times the green fraction
+estimates $\pi$. Press **Run** and watch the estimate sharpen — slowly.
+
+<MonteCarloPiEstimator client:visible />
+
+<Callout type="tip">
+Notice the error does <em>not</em> drop steadily — it wobbles down. And it gets <strong>slow</strong>:
+going from $100$ to $10{,}000$ samples (100× the work) only cuts the error by about 10×. That
+$1/\sqrt{N}$ crawl is the price of randomness.
+</Callout>
+
+## The formal definition
+
+We want the expectation of some quantity $g(X)$ under a distribution $p$:
+
+$$
+\mu = \mathbb{E}_{X \sim p}\big[g(X)\big] = \int g(x)\, p(x)\, dx.
+$$
+
+The **Monte Carlo estimator** draws $N$ independent samples $x_i \sim p$ and averages:
+
+$$
+\hat{\mu}_N = \frac{1}{N} \sum_{i=1}^{N} g(x_i).
+$$
+
+This estimator is **unbiased** — on average it equals the truth, $\mathbb{E}[\hat{\mu}_N] = \mu$ — and
+the law of large numbers guarantees $\hat{\mu}_N \to \mu$ as $N \to \infty$. How fast? Its standard
+error is
+
+$$
+\operatorname{sd}(\hat{\mu}_N) = \frac{\sigma}{\sqrt{N}}, \qquad \sigma^2 = \operatorname{Var}\big(g(X)\big).
+$$
+
+That $\sqrt{N}$ in the denominator is the headline: to halve the error you need **four times** as many
+samples. Crucially, this rate does *not* depend on the dimension — which is why Monte Carlo beats grid
+methods for the high-dimensional integrals all over machine learning.
+
+```python
+# Estimate E[g(X)] for X ~ p by averaging samples
+samples = p.sample(N)          # draw N independent draws
+estimate = g(samples).mean()   # the Monte Carlo estimate
+stderr   = g(samples).std() / N**0.5   # shrinks like 1/sqrt(N)
+```
+
+<Callout type="why">
+Generative models are built on expectations no one can integrate: the evidence in a VAE, the loss in a
+diffusion model, the policy gradient in RL. Every one is approximated by averaging a handful of random
+samples. Monte Carlo is the engine under the whole track.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Quantitative finance" icon="💹">
+To price a complex option, a desk simulates thousands of random price paths for the underlying asset,
+computes the payoff on each, and **averages** them (discounted to today). The spread of those payoffs
+also gives the risk. No closed-form Black–Scholes needed — just sampled futures.
+</ExampleCard>
+
+<ExampleCard domain="Video-game AI" icon="🎮">
+A Go or chess engine cannot search every line. Instead it plays out many **random rollouts** from the
+current position and averages the win rates to score each move. This Monte Carlo tree search is what let
+AlphaGo evaluate positions no formula could.
+</ExampleCard>
+
+<ExampleCard domain="Computer graphics" icon="🎬">
+A photorealistic frame asks: how much light reaches each pixel, summed over every path light could take?
+That integral is monstrous, so renderers fire **random rays** into the scene and average the light they
+gather. The grainy "noise" in a half-rendered image *is* Monte Carlo error shrinking.
+</ExampleCard>
+
+<ExampleCard domain="Epidemiology" icon="🦠">
+To forecast an outbreak, modelers run a disease through a population thousands of times with random
+contacts and recoveries. Averaging the runs gives the expected case curve; the range across runs gives
+the uncertainty band you see on public dashboards.
+</ExampleCard>
+
+<Callout type="note">
+Four very different integrals — a payoff, a win rate, a light field, a case count — all attacked the
+same way: sample, evaluate, average. That uniformity is what makes Monte Carlo so beloved.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the π demo, why does multiplying the green fraction by 4 estimate π?',
+      options: [
+        'Because there are 4 quadrants in a circle',
+        'Because the quarter circle covers π/4 of the square, so (fraction)×4 ≈ π',
+        'Because π is approximately 4',
+        'Because each dart counts four times',
+      ],
+      answer: 1,
+      explain: 'A quarter circle of radius 1 has area π/4 inside a 1×1 square, so the inside-fraction estimates π/4, and ×4 estimates π.',
+    },
+    {
+      q: 'You run a Monte Carlo estimate with N samples and the error is about 0.04. Roughly how many samples do you need to get the error down to 0.01?',
+      options: ['2× as many', '4× as many', '16× as many', '100× as many'],
+      answer: 2,
+      explain: 'Error shrinks like 1/√N. Cutting it by 4× requires 4² = 16× the samples.',
+    },
+    {
+      q: 'What key property makes the Monte Carlo estimator trustworthy as N grows?',
+      options: [
+        'It is unbiased and converges to the true expectation by the law of large numbers',
+        'It always gives the exact answer for any N',
+        'Its error is independent of the number of samples',
+        'It only works in two dimensions',
+      ],
+      answer: 0,
+      explain: 'The estimator is unbiased (correct on average) and the law of large numbers drives it to the true value as N → ∞.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Monte Carlo</strong> estimates an expectation, area, or integral by averaging many random samples instead of solving a formula.',
+    'It rests on the <strong>law of large numbers</strong>: the sample average converges to the true expectation as N grows.',
+    'The estimator <strong>μ̂ = (1/N) Σ g(xᵢ)</strong> is unbiased, with standard error <strong>σ/√N</strong>.',
+    'Error shrinks only like <strong>1/√N</strong> — four times the samples to halve it — but the rate ignores dimension.',
+    'Nearly every quantity in generative modeling (evidence, losses, gradients) is an intractable expectation approximated this way.',
+  ]}
+/>
+
+Next up: when you can only *evaluate* a distribution but not *sample* from it, plain Monte Carlo
+stalls. **Markov Chain Monte Carlo** builds a clever random walk that visits points in exactly the
+right proportions.

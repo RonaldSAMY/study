@@ -1,0 +1,200 @@
+---
+title: k-Nearest Neighbors
+track: classical-ml
+summary: Classify a new point by asking its closest neighbors to vote.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - linear-algebra/vector-ops-dot
+leadsTo:
+  - classical-ml/decision-trees
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import KNNNeighborhoodExplorer from '../../../components/demos/KNNNeighborhoodExplorer.tsx';
+
+## The hook: you are who your neighbors are
+
+Imagine you move to a brand-new town and want to guess what genre of music the new family next door
+likes. You don't have their playlist — but you *do* know that the three closest houses are all into
+jazz. A pretty good guess for the newcomers? Jazz. You just performed **k-nearest neighbors** in your
+head: to label something unknown, look at the things nearest to it and let them vote. No equations, no
+training — just *closeness*. This humble idea turns out to be one of the most intuitive classifiers in
+all of machine learning.
+
+<Callout type="intuition" title="The one-sentence idea">
+To classify a new point, find the **k** training points closest to it and let them **vote** — the
+majority class wins.
+</Callout>
+
+## Intuition: closeness is a measurement
+
+In the **vectors** and **dot-product** lessons you learned to treat any
+object — a song, a house, a flower — as a **point in feature space**: an ordered list of numbers. A
+song might become $(\text{tempo}, \text{loudness}, \text{energy})$; a house might become
+$(\text{size}, \text{bedrooms}, \text{age})$. Once everything is a point, **distance** between points
+becomes a precise stand-in for *similarity*: points that sit near each other are alike, points far
+apart are different.
+
+k-NN takes that idea to its simplest conclusion. To label a mystery point:
+
+1. Measure the distance from it to **every** known (labeled) point.
+2. Keep the $k$ closest ones — its **neighborhood**.
+3. Count the classes in that neighborhood and pick the **majority**. That vote is your prediction.
+
+That is the entire algorithm. The only choices you make are *how big* the neighborhood is (the number
+$k$) and *how* you measure distance.
+
+## Play with it
+
+Drag the white question-mark handle through the cloud of colored training points below. Watch the
+connecting lines snap to its nearest neighbors and the predicted-class badge update as you move. Then
+slide $k$ and flip between distance measures.
+
+<KNNNeighborhoodExplorer client:visible />
+
+<Callout type="tip">
+Try the same spot with <strong>k = 1</strong> and then <strong>k = 9</strong>. Small k follows every
+local wiggle (jagged, noisy — one stray point can flip the answer); large k averages over a big
+neighborhood (smooth, but it can over-generalize and ignore genuine local structure). Most of the art
+of k-NN is choosing k well. Odd k for two classes avoids tied votes.
+</Callout>
+
+## The formal definition
+
+Let the training set be pairs $(\mathbf{x}_i, y_i)$, where each $\mathbf{x}_i \in \mathbb{R}^n$ is a
+feature vector and $y_i$ is its class label. For a new query point $\mathbf{q}$ we need a distance.
+The usual choice is **Euclidean distance** (straight-line):
+
+$$
+d(\mathbf{x}, \mathbf{q}) = \sqrt{\sum_{i=1}^{n} (x_i - q_i)^2}.
+$$
+
+A common alternative is the **Manhattan distance** (city-block — sum of axis-aligned steps):
+
+$$
+d_1(\mathbf{x}, \mathbf{q}) = \sum_{i=1}^{n} \lvert x_i - q_i \rvert.
+$$
+
+Let $N_k(\mathbf{q})$ be the set of the $k$ training points with the **smallest** distances to
+$\mathbf{q}$. The prediction is the class that appears most often among them — the **argmax of the
+class counts**:
+
+$$
+\hat{y}(\mathbf{q}) = \arg\max_{c} \sum_{\mathbf{x}_i \in N_k(\mathbf{q})} \mathbf{1}[\,y_i = c\,].
+$$
+
+Here $\mathbf{1}[\cdot]$ is $1$ when the neighbor's label equals class $c$ and $0$ otherwise — so the
+sum is simply the vote count for class $c$.
+
+Two practical notes the formula hides. First, you must **scale (normalize) your features**: if "salary"
+ranges in the tens of thousands and "age" in the tens, salary will dominate every distance and age will
+be ignored — so standardize each feature first. Second, $k$ controls the **bias-variance tradeoff**:
+tiny $k$ means low bias but high variance (overfits noise), large $k$ means high bias but low variance
+(oversmooths).
+
+```python
+# k-NN classification of one query point q
+d = np.linalg.norm(X - q, axis=1)   # distance to every training point
+idx = d.argsort()[:k]               # indices of the k smallest distances
+pred = mode(y[idx])                 # majority vote among those neighbors
+```
+
+<Callout type="why">
+k-NN is the textbook example of **lazy learning**: there is no training phase and no model parameters
+to fit — it just memorizes the data and does all the work at prediction time. Yet it implicitly carves
+the feature space into a **decision boundary** defined entirely by where the data sits. It's a perfect
+mental anchor for everything that follows: more advanced classifiers are largely clever ways to draw
+that same boundary faster and more smoothly.
+</Callout>
+
+## The same idea, four different worlds
+
+The "ask your neighbors" move shows up far beyond toy graphs. Here is the *same* algorithm doing real
+work.
+
+<ExampleCard domain="Music streaming" icon="🎵">
+Describe each track by audio features — $(\text{tempo}, \text{energy}, \text{danceability},
+\text{acousticness})$ — so every song is a point. To guess the genre of a freshly uploaded track, find
+the nearest songs already in the library and let their genre tags vote. Close in feature space tends to
+mean close in sound.
+</ExampleCard>
+
+<ExampleCard domain="Botany" icon="🌾">
+Measuring a seed or flower — petal length, petal width, sepal length — places each specimen in feature
+space. A new sample is labeled by the variety of the nearest known specimens. This is exactly how the
+classic iris/seed-classification tasks work: distinct varieties form tight clusters, so neighbors
+agree.
+</ExampleCard>
+
+<ExampleCard domain="Computer vision" icon="✍️">
+Flatten a small handwritten-digit image into a long pixel vector. To recognize a new digit, compare it
+to thousands of labeled examples and take the majority label of the closest ones. Two images of the
+same digit have similar pixel vectors, so the nearest neighbors usually share the correct answer — a
+surprisingly strong baseline for digit recognition.
+</ExampleCard>
+
+<ExampleCard domain="Real estate" icon="🏠">
+To estimate a home's value, find the nearest **comparable** homes by $(\text{size}, \text{bedrooms},
+\text{location}, \text{age})$ and **average** their sale prices. This is k-NN doing *regression* rather
+than classification: instead of voting on a label, the neighbors average a number — exactly the
+"comps" appraisers have used for decades.
+</ExampleCard>
+
+<Callout type="note">
+Notice the last example: when the answer is a number rather than a category, you swap the majority vote
+for an **average** of the neighbors' values. Same neighborhood, different aggregation — that's k-NN
+regression.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'With k = 3, a query point’s three nearest neighbors have classes [Blue, Blue, Red]. What does k-NN predict?',
+      options: ['Red', 'Blue', 'A tie, so no prediction', 'It averages them into purple'],
+      answer: 1,
+      explain: 'Majority vote: Blue appears twice and Red once, so the prediction is Blue.',
+    },
+    {
+      q: 'Why is an odd k often preferred for two-class problems?',
+      options: [
+        'Odd numbers compute faster',
+        'It guarantees the query lands on a training point',
+        'It avoids tied votes between the two classes',
+        'It makes the decision boundary a straight line',
+      ],
+      answer: 2,
+      explain: 'With two classes, an even k can split votes evenly (e.g. 2–2). An odd k can never tie between exactly two classes.',
+    },
+    {
+      q: 'One feature is measured in the tens of thousands and another in the tens. What should you do before running k-NN?',
+      options: [
+        'Nothing — k-NN handles scale automatically',
+        'Normalize/standardize the features so each contributes fairly to distance',
+        'Always use Manhattan distance',
+        'Increase k until it stops mattering',
+      ],
+      answer: 1,
+      explain: 'Distance is dominated by large-magnitude features. Scaling each feature to a comparable range lets every feature influence the neighborhood.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'k-NN classifies a point by the <strong>majority vote</strong> of its k nearest neighbors in feature space.',
+    'It is <strong>lazy learning</strong>: no training phase — it stores the data and does all the work at prediction time.',
+    'Choice of <strong>distance</strong> (Euclidean vs. Manhattan) and the value of <strong>k</strong> are the only real knobs.',
+    'k sets the <strong>bias-variance tradeoff</strong>: small k = jagged/overfit, large k = smooth/over-general; odd k avoids two-class ties.',
+    'Always <strong>scale your features</strong> first, and swap the vote for an average to do k-NN <strong>regression</strong>.',
+  ]}
+/>
+
+Next up: **Decision Trees** — instead of measuring distance to every point, we'll split the feature
+space with a series of simple yes/no questions.

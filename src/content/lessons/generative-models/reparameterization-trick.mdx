@@ -1,0 +1,186 @@
+---
+title: The Reparameterization Trick
+track: generative-models
+summary: Rewrite a random draw as a fixed noise source plus a deterministic shift, so gradients can flow straight through the randomness.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - probability/change-of-variables
+  - neural-networks/backpropagation
+leadsTo:
+  - generative-models/vae
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ReparamTrickDemo from '../../../components/demos/ReparamTrickDemo.tsx';
+
+## The hook: how do you take the derivative of a coin flip?
+
+Training a neural network means following gradients downhill. But generative models want a **random**
+step in the middle: "sample a latent code, then decode it." The moment you write `z = sample(...)`, the
+chain rule hits a wall — there is no smooth path from the network's parameters, through a dice roll, to
+the loss. Randomness is not differentiable.
+
+The reparameterization trick is a beautifully simple workaround. It splits the randomness off into a
+fixed, parameter-free noise source, and leaves behind a smooth, deterministic function that gradients
+*can* climb back through. You still get a genuine random sample — but now you can also differentiate it.
+
+<Callout type="intuition" title="The one-sentence idea">
+Instead of sampling $z$ directly from a distribution that depends on your parameters, sample fixed noise
+$\varepsilon$ and **transform** it: $z = \mu + \sigma\,\varepsilon$. The randomness lives in
+$\varepsilon$; the parameters live in a differentiable formula.
+
+</Callout>
+
+## Intuition: move the randomness out of the way
+
+Suppose you want a sample from $\mathcal{N}(\mu, \sigma^2)$, where $\mu$ and $\sigma$ are produced by
+your network. Sampling that distribution *directly* gives a number with no usable derivative with
+respect to $\mu$ or $\sigma$ — the operation is a black box of randomness.
+
+Now recall the **change of variables** idea: stretching and shifting a random variable reshapes its
+distribution in a predictable way. So draw a standard normal $\varepsilon \sim \mathcal{N}(0,1)$ — pure
+noise, depending on *nothing* — and form
+
+$$
+z = \mu + \sigma\,\varepsilon.
+$$
+
+The result is still distributed exactly as $\mathcal{N}(\mu, \sigma^2)$. But now $z$ is a plain,
+differentiable function of $\mu$ and $\sigma$: $\partial z / \partial \mu = 1$ and
+$\partial z / \partial \sigma = \varepsilon$. The chain rule sails right through, because the only
+random thing, $\varepsilon$, is a constant as far as the gradient is concerned.
+
+## Play with it
+
+The bottom row is the fixed noise $\varepsilon$; the top row is the transformed sample $z = \mu + \sigma\,\varepsilon$,
+with the blue curve showing the resulting distribution. In **Reparameterized** mode the noise is held
+fixed, so dragging $\mu$ and $\sigma$ slides every sample along a smooth, trackable path.
+
+<ReparamTrickDemo client:visible />
+
+<Callout type="tip">
+Switch to <strong>Direct sampling</strong> and drag the sliders: fresh noise is drawn every time, so the
+cloud jitters with no consistent path. There is nothing for a gradient to follow. The fixed-noise view
+is what makes the sample differentiable.
+</Callout>
+
+## The formal definition
+
+We want the gradient of an expectation whose distribution $q_\theta$ depends on parameters $\theta$:
+
+$$
+\nabla_\theta\, \mathbb{E}_{z \sim q_\theta}\big[f(z)\big].
+$$
+
+The problem: the thing we sample from *is* what depends on $\theta$, so we cannot push $\nabla_\theta$
+inside the expectation. The fix is to express $z$ as a deterministic, differentiable transform of
+parameter-free noise, $z = g_\theta(\varepsilon)$ with $\varepsilon \sim p(\varepsilon)$. For a Gaussian,
+$g_\theta(\varepsilon) = \mu + \sigma\,\varepsilon$. Now the distribution we average over no longer
+depends on $\theta$, so the gradient moves inside:
+
+$$
+\nabla_\theta\, \mathbb{E}_{z \sim q_\theta}\big[f(z)\big]
+= \mathbb{E}_{\varepsilon \sim p(\varepsilon)}\big[\nabla_\theta\, f(g_\theta(\varepsilon))\big].
+$$
+
+The right-hand side is an ordinary Monte Carlo estimate of a gradient — sample a few $\varepsilon$,
+backpropagate through $f$ and $g_\theta$, average. This **pathwise** estimator usually has far lower
+variance than the alternative score-function (REINFORCE) estimator, which is why it dominates wherever
+the latent variable is continuous.
+
+```python
+eps   = torch.randn_like(sigma)   # noise: requires_grad = False
+z     = mu + sigma * eps          # differentiable in mu, sigma
+loss  = f(z).mean()
+loss.backward()                   # gradients flow into mu and sigma
+```
+
+<Callout type="why">
+This single trick is what makes the **VAE** trainable end to end: the encoder outputs $\mu$ and
+$\sigma$, the trick samples a latent $z$, the decoder reconstructs the input, and the gradient flows all
+the way back through the sampling step. No reparameterization, no VAE.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Robotics" icon="🤖">
+A robot's policy outputs a *distribution* over actions and adds exploration noise: $a = \mu_\theta(s) + \sigma\,\varepsilon$.
+Reparameterizing lets the learning signal flow back into $\mu_\theta$ and $\sigma$, so the controller
+learns not just an action but how much to explore — the backbone of algorithms like SAC.
+</ExampleCard>
+
+<ExampleCard domain="Bayesian deep learning" icon="🩺">
+To express uncertainty, a medical model treats each weight as a distribution, $w = \mu + \sigma\,\varepsilon$,
+rather than a fixed number ("Bayes by Backprop"). The trick trains $\mu$ and $\sigma$ by gradient
+descent, so the network can say "I am unsure" on an unfamiliar scan instead of guessing confidently.
+</ExampleCard>
+
+<ExampleCard domain="Language models" icon="🔤">
+Picking a discrete token is non-differentiable, so the **Gumbel-softmax** trick reparameterizes a
+categorical draw: add fixed Gumbel noise to the logits, then soften with a temperature. Gradients flow
+through the relaxed choice, letting models learn to make near-discrete selections.
+</ExampleCard>
+
+<ExampleCard domain="Supply-chain planning" icon="📦">
+Optimizing inventory under random demand means minimizing an expected cost. Writing demand as a fixed
+noise source pushed through a parameterized model turns the noisy objective into a differentiable one, so
+gradient methods can tune reorder points directly against the sampled scenarios.
+</ExampleCard>
+
+<Callout type="note">
+Actions, weights, tokens, demand — in each case a random quantity sits in the middle of an optimization.
+The same move (fixed noise, deterministic transform) restores the gradient path every time.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does sampling z directly from N(μ, σ²) block backpropagation?',
+      options: [
+        'The normal distribution has no mean',
+        'The sampling operation is random, so there is no differentiable path from μ, σ to z',
+        'Because σ must be negative',
+        'Sampling is too slow to differentiate',
+      ],
+      answer: 1,
+      explain: 'A raw sampling op is a non-differentiable black box; the chain rule cannot pass a gradient through it back to the parameters.',
+    },
+    {
+      q: 'In z = μ + σ·ε with ε ~ N(0,1), what is ∂z/∂σ?',
+      options: ['1', 'ε', 'σ', '0'],
+      answer: 1,
+      explain: 'Differentiating μ + σ·ε with respect to σ gives ε, since μ and ε are constants w.r.t. σ. (And ∂z/∂μ = 1.)',
+    },
+    {
+      q: 'What is the key reason the reparameterized (pathwise) gradient is preferred over the score-function estimator for continuous latents?',
+      options: [
+        'It needs no random samples at all',
+        'It typically has much lower variance',
+        'It works only for discrete variables',
+        'It avoids computing any derivatives',
+      ],
+      answer: 1,
+      explain: 'Both are valid Monte Carlo gradient estimators, but the pathwise (reparameterized) one usually has far lower variance, giving more stable training.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Randomness is <strong>not differentiable</strong>, so a sampling step in the middle of a model blocks gradients.',
+    'The <strong>reparameterization trick</strong> rewrites a draw as fixed noise plus a deterministic transform: <strong>z = μ + σ·ε</strong>, ε ~ N(0,1).',
+    'This lets the gradient move inside the expectation: <strong>∇E[f(z)] = E[∇f(g(ε))]</strong> — an ordinary Monte Carlo gradient.',
+    'It relies on the <strong>change-of-variables</strong> view: stretching and shifting noise reshapes it into the target distribution.',
+    'It is the <strong>pathwise</strong> estimator (low variance) and the key that makes VAEs and many stochastic models trainable end to end.',
+  ]}
+/>
+
+Next up: we assemble Monte Carlo, sampling, and the reparameterization trick into a full generative
+model — the **Variational Autoencoder**, which learns a smooth latent space you can sample from.

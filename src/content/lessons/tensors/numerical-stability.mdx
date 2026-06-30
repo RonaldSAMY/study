@@ -1,0 +1,189 @@
+---
+title: Numerical Stability
+track: tensors
+summary: Floating-point reality — overflow, underflow, and the log-sum-exp trick that keeps softmax and cross-entropy from blowing up.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - tensors/automatic-differentiation
+  - information-theory/cross-entropy-kl
+leadsTo:
+  - neural-networks/the-neuron
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SoftmaxStabilityDemo from '../../../components/demos/SoftmaxStabilityDemo.tsx';
+
+## The hook: the math is right, the computer says NaN
+
+You derive a clean formula, code it exactly, run it — and the loss prints `NaN`. Nothing was wrong
+with the algebra. The problem is that a computer doesn't store real numbers; it stores
+*floating-point approximations* with a finite range. Numbers that are perfectly reasonable on paper —
+like $e^{1000}$ — simply don't fit, and the moment one slips out of range your whole computation
+turns to garbage. Knowing where this happens, and the few standard tricks to avoid it, is the
+difference between a model that trains and one that silently dies.
+
+<Callout type="intuition" title="The one-sentence idea">
+Floating point has a finite range and finite precision, so very large numbers **overflow** to
+infinity and very small ones **underflow** to zero — and the cure is to rewrite the math (like the
+**log-sum-exp trick**) so the intermediate numbers stay in a safe range.
+</Callout>
+
+## Intuition: a number line with edges and gaps
+
+A 64-bit float can only represent magnitudes up to about $1.8 \times 10^{308}$; anything larger
+becomes `inf`. It can't go smaller than about $5 \times 10^{-324}$; anything tinier becomes $0$. And
+between representable values there are *gaps*, so adding a tiny number to a huge one can change
+nothing at all.
+
+The classic victim is **softmax**, which you need for classification and attention:
+
+$$
+\text{softmax}(x)_i = \frac{e^{x_i}}{\sum_j e^{x_j}}.
+$$
+
+Because $e^{709}$ already overflows in float64, a single large logit makes both the top and bottom
+$\infty$, and $\infty / \infty$ is `NaN`. The fix is a one-line identity: subtract the maximum logit
+$m = \max_j x_j$ from every entry first. Since the same factor $e^{-m}$ cancels top and bottom, the
+result is **mathematically identical**, but now the largest exponent is $e^{0} = 1$, so nothing
+overflows:
+
+$$
+\text{softmax}(x)_i = \frac{e^{x_i - m}}{\sum_j e^{x_j - m}}.
+$$
+
+## Play with it
+
+Crank the **scale** slider to inflate the logits. The naive softmax overflows and collapses to `NaN`;
+the stable version (which subtracts the max) keeps producing the correct probabilities the whole way.
+
+<SoftmaxStabilityDemo client:visible />
+
+<Callout type="tip">
+Both versions agree exactly at small scales — the trick changes <em>nothing</em> about the answer. It
+only changes the size of the intermediate numbers, which is all the computer cares about.
+</Callout>
+
+## The formal definition
+
+The same idea cleans up the **log-sum-exp** function, which appears in cross-entropy loss, the
+log-partition function, and log-likelihoods. Naively $\log \sum_j e^{x_j}$ overflows; factor out the
+max $m = \max_j x_j$:
+
+$$
+\log \sum_{j} e^{x_j} = m + \log \sum_{j} e^{x_j - m}.
+$$
+
+Every exponent is now $\le 0$, so each term is in $(0, 1]$ and the sum is safe. A matching fix on the
+small side: for probabilities, never multiply many of them — that underflows to $0$. Add their
+**logs** instead, turning a vanishing product into a stable sum.
+
+```python
+import numpy as np
+def log_sum_exp(x):
+    m = np.max(x)                       # shift by the max
+    return m + np.log(np.sum(np.exp(x - m)))
+
+def softmax(x):
+    z = x - np.max(x)                   # largest exponent becomes 0
+    e = np.exp(z)
+    return e / e.sum()
+```
+
+<Callout type="why">
+Frameworks ship fused, stable ops for exactly this reason — <code>log_softmax</code> and
+<code>cross_entropy</code> combine the log and the softmax so the dangerous intermediate never
+materializes. Reaching for the stable version is not optional polish; with raw <code>exp</code> a
+modern network with large logits will overflow and poison every gradient from autodiff with
+<code>NaN</code>.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Astronomy" icon="🔭">
+Brightness spans an enormous range, from the Sun to the faintest galaxy. Computing flux directly
+overflows or underflows, so astronomers work in **magnitudes** — a logarithmic scale — exactly the
+"add logs instead of multiplying" move that keeps the numbers tame.
+</ExampleCard>
+
+<ExampleCard domain="Audio engineering" icon="🔊">
+Sound power ratios are billions to one, so engineers use **decibels**, a log scale. Gains that would
+multiply into overflow become additions in dB. Same trick: replace a runaway product with a stable
+sum of logarithms.
+</ExampleCard>
+
+<ExampleCard domain="Epidemiology" icon="🧫">
+The likelihood of an outbreak model is a product of thousands of per-case probabilities, each well
+below 1. Multiplied directly it underflows to exactly $0$ and the model learns nothing. Summing the
+**log-probabilities** keeps it finite — the same reason ML uses log-likelihood.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="🏦">
+Compounding a tiny daily return over decades, $\prod (1 + r_t)$, loses precision because adding a
+small $r_t$ to $1$ falls into the floating-point gap. Accumulating $\sum \log(1 + r_t)$ instead
+preserves the small contributions and avoids the drift.
+</ExampleCard>
+
+<Callout type="note">
+A subtler trap is **catastrophic cancellation**: subtracting two nearly equal large numbers wipes out
+the significant digits. Computing a variance as <em>E[x²] − E[x]²</em> can go negative from rounding
+alone — which is why stable, shifted formulas are preferred there too.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does naive softmax produce NaN for large logits?',
+      options: [
+        'Division is undefined for vectors',
+        'exp() overflows to infinity, and ∞/∞ is NaN',
+        'The logits are negative',
+        'Softmax has no maximum',
+      ],
+      answer: 1,
+      explain: 'A large logit makes exp overflow to ∞ in numerator and denominator, and ∞ divided by ∞ evaluates to NaN.',
+    },
+    {
+      q: 'What does subtracting max(x) before exponentiating do to the softmax result?',
+      options: [
+        'Changes it to a uniform distribution',
+        'Leaves it mathematically identical but keeps exponents ≤ 0',
+        'Makes it sum to more than 1',
+        'Only works for two classes',
+      ],
+      answer: 1,
+      explain: 'The factor e^(−m) cancels in the ratio, so the answer is unchanged; meanwhile the largest exponent becomes 0, so nothing overflows.',
+    },
+    {
+      q: 'You must combine 5000 probabilities, each around 0.01. What is the stable approach?',
+      options: [
+        'Multiply them all directly',
+        'Sum their logarithms instead of multiplying',
+        'Round each up to 0.1 first',
+        'Take the maximum probability only',
+      ],
+      answer: 1,
+      explain: 'A product of thousands of small numbers underflows to 0. Adding logs turns the product into a finite sum you can exponentiate safely if needed.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Floating point has a finite <strong>range</strong> (overflow to ∞, underflow to 0) and finite <strong>precision</strong> (gaps between values).',
+    'Naive <strong>softmax</strong> overflows for large logits; subtracting the max gives the identical result safely.',
+    'The <strong>log-sum-exp</strong> trick, log ∑ eˣ = m + log ∑ e^(x−m), keeps log-likelihoods and cross-entropy stable.',
+    'Replace products of many small probabilities with <strong>sums of logs</strong> to dodge underflow.',
+    'Use fused stable ops (log_softmax, cross_entropy) — raw exp will poison autodiff gradients with NaN.',
+  ]}
+/>
+
+You've now built the full machinery of deep learning computation: tensors, broadcasting, graphs,
+autodiff, and stable arithmetic. Next track — **Neural Networks** — puts it to work, starting with
+**the neuron**.

@@ -1,0 +1,163 @@
+---
+title: Tensors
+track: tensors
+summary: N-dimensional arrays — how data and parameters are stored, indexed, and shaped in deep learning.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - linear-algebra/matrices
+leadsTo:
+  - tensors/broadcasting-einsum
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TensorShapeExplorer from '../../../components/demos/TensorShapeExplorer.tsx';
+
+## The hook: one number can't hold a movie
+
+A single brightness value is one number. A row of pixels is a list. A grayscale photo is a grid —
+rows and columns. But a *color* photo needs a third stack of grids (red, green, blue), and a
+*video* needs a fourth: a sequence of those color photos over time. Each time reality gets richer,
+we add one more **axis**. The object that scales to any number of axes — and the one every deep
+learning framework is built around — is the **tensor**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **tensor** is just an n-dimensional array of numbers: a scalar is a 0-D tensor, a vector is 1-D,
+a matrix is 2-D, and stacking matrices gives 3-D, 4-D, and beyond — all indexed the same way.
+</Callout>
+
+## Intuition: climbing the ladder of dimensions
+
+You already met **vectors** (ordered lists) and **matrices** (grids of numbers). A tensor is the
+natural continuation of that same staircase:
+
+- **Scalar** — a lone number like $7$. Rank 0, no axes.
+- **Vector** — $\begin{bmatrix} 3 & 1 & 4 \end{bmatrix}$. Rank 1, one axis of length 3.
+- **Matrix** — a grid with rows and columns. Rank 2, two axes.
+- **3-D tensor** — a *stack* of matrices, like RGB channels of an image.
+- **n-D tensor** — keep stacking; nothing about the rules changes.
+
+Three words describe any tensor. Its **rank** (or *ndim*) is how many axes it has. Its **shape** is
+the tuple of axis lengths, like $(2, 3, 4)$. Its **size** (or *numel*) is the total number of
+elements — just multiply the shape, here $2 \times 3 \times 4 = 24$.
+
+## Play with it
+
+Below is a real $2 \times 3 \times 4$ tensor: two slices (axis 0), each a $3 \times 4$ grid. Step the
+index on each axis — or tap a cell — and watch which single element you select, along with its flat
+position in memory.
+
+<TensorShapeExplorer client:visible />
+
+<Callout type="tip">
+Watch the <strong>flat offset</strong>. Memory is one long line, so a tensor is stored row-major:
+moving one step along the last axis moves one slot; moving along the first axis jumps a whole slice.
+</Callout>
+
+## The formal definition
+
+A rank-$n$ tensor $T$ is an array whose elements are addressed by $n$ integer indices:
+
+$$
+T[i_0, i_1, \dots, i_{n-1}], \qquad 0 \le i_d < s_d,
+$$
+
+where the **shape** is the tuple $(s_0, s_1, \dots, s_{n-1})$ and the **size** is the product
+$s_0 \, s_1 \cdots s_{n-1}$. In **row-major** (C-order) storage, the multi-index collapses to one
+flat offset:
+
+$$
+\text{offset} = \sum_{d=0}^{n-1} i_d \prod_{e=d+1}^{n-1} s_e.
+$$
+
+For our $(2,3,4)$ tensor that is $\text{offset} = 12\,i_0 + 4\,i_1 + i_2$.
+
+```python
+import torch
+x = torch.arange(24).reshape(2, 3, 4)
+x.shape      # torch.Size([2, 3, 4])
+x.ndim       # 3   (rank)
+x.numel()    # 24  (size)
+x[1, 2, 0]   # one element, flat offset 12*1 + 4*2 + 0 = 20
+```
+
+<Callout type="why">
+Every model is tensors in, tensors out. An image batch is a 4-D tensor
+$(\text{batch}, \text{channels}, \text{height}, \text{width})$; a language batch is 3-D
+$(\text{batch}, \text{tokens}, \text{features})$. Reading a shape error is the single most common
+debugging task in deep learning — knowing rank, shape, and axes is half the battle.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Film & VFX" icon="🎬">
+A 10-second clip at 24 fps is a rank-4 tensor of shape $(240, 1080, 1920, 3)$: frames × height ×
+width × color. Slicing axis 0 grabs a single frame; slicing the last axis isolates the red channel.
+One index per axis pinpoints exactly one sub-pixel.
+</ExampleCard>
+
+<ExampleCard domain="Climate science" icon="🌍">
+A weather model stores temperature on a grid of shape $(\text{time}, \text{level}, \text{lat}, \text{lon})$ —
+hours of simulation, altitude layers, and a latitude–longitude mesh. The whole planet's forecast is
+one 4-D tensor, and "the temperature here, now, at this height" is a single indexed element.
+</ExampleCard>
+
+<ExampleCard domain="Medical imaging" icon="🩻">
+An MRI scan is a 3-D tensor of *voxels* with shape $(\text{slices}, \text{height}, \text{width})$ —
+a stack of cross-sectional images. Add a channel axis for different scan sequences and it becomes
+4-D. Radiology AI feeds exactly these tensors to a network.
+</ExampleCard>
+
+<ExampleCard domain="Language modeling" icon="💬">
+A batch of text for a transformer is a rank-3 tensor of shape
+$(\text{batch}, \text{tokens}, \text{features})$ — say $(32, 128, 768)$: 32 sentences, 128 tokens
+each, every token a 768-number embedding. Indexing $[5, 0]$ returns the embedding vector of the
+first token in the sixth sentence.
+</ExampleCard>
+
+<Callout type="note">
+Notice every example is the *same* object with a different number of axes. Learn the rules once —
+shape, rank, indexing — and they transfer to images, audio, text, and physics without change.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A tensor has shape (2, 3, 4). What are its rank and size?',
+      options: ['Rank 2, size 9', 'Rank 3, size 24', 'Rank 4, size 12', 'Rank 24, size 3'],
+      answer: 1,
+      explain: 'Rank is the number of axes (3). Size is the product of the shape: 2 × 3 × 4 = 24.',
+    },
+    {
+      q: 'In a row-major (2, 3, 4) tensor, what flat offset does element [1, 0, 2] map to?',
+      options: ['2', '6', '14', '20'],
+      answer: 2,
+      explain: 'offset = 12·i0 + 4·i1 + i2 = 12·1 + 4·0 + 2 = 14.',
+    },
+    {
+      q: 'A color-image batch is stored as (batch, channels, height, width). What does its first axis index?',
+      options: ['A color channel', 'Which image in the batch', 'A single pixel row', 'The width in pixels'],
+      answer: 1,
+      explain: 'Axis 0 is the batch axis: stepping it selects which image you are looking at.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>tensor</strong> is an n-dimensional array; scalars, vectors, and matrices are just ranks 0, 1, and 2.',
+    '<strong>Rank</strong> (ndim) = number of axes; <strong>shape</strong> = tuple of axis lengths; <strong>size</strong> = product of the shape.',
+    'An element is addressed by one index per axis, e.g. T[i, j, k].',
+    'Row-major storage flattens the indices into one memory offset, last axis moving fastest.',
+    'Real data — video, climate grids, MRI scans, token batches — are all tensors that differ only in how many axes they carry.',
+  ]}
+/>
+
+Next up: **broadcasting and einsum** — how to compute on whole tensors at once, even when their
+shapes don't match, without writing a single loop.

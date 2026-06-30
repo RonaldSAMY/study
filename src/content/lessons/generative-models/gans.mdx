@@ -1,0 +1,178 @@
+---
+title: GANs
+track: generative-models
+summary: Train a generator and a discriminator in a minimax game until the fakes become indistinguishable from real data.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - optimization/constrained-optimization
+  - neural-networks/loss-functions
+leadsTo: []
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import GanMinimaxDemo from '../../../components/demos/GanMinimaxDemo.tsx';
+
+## The hook: a forger and a detective who train each other
+
+Picture an art forger and a detective locked in a long duel. The forger paints fakes; the detective
+judges real from fake. Each time the detective catches a flaw, the forger improves. Each time the forger
+fools the detective, the detective sharpens its eye. Neither has a teacher — they learn entirely from
+*beating each other*. After enough rounds, the forgeries are so good the detective can do no better than
+a coin flip.
+
+That adversarial duel is a **Generative Adversarial Network**. One network generates data, another
+critiques it, and their competition drives the generator to produce samples indistinguishable from real.
+No reconstruction loss, no noise schedule — just a game.
+
+<Callout type="intuition" title="The one-sentence idea">
+Two networks compete: a **generator** turns noise into fake data, and a **discriminator** tries to tell
+fakes from real. Training the generator to fool an ever-improving discriminator makes its samples
+realistic.
+</Callout>
+
+## Intuition: learning from an opponent, not a target
+
+Earlier models in this track had an explicit objective: reconstruct the input (VAE) or predict the added
+noise (diffusion). A GAN has **no such target**. Instead, the quality signal *is* another network.
+
+- The **generator** $G$ maps a random noise vector $z$ to a fake sample $G(z)$. It never sees real data
+  directly — it only learns from the discriminator's verdict.
+- The **discriminator** $D$ takes a sample and outputs the probability it is real. It learns ordinary
+  binary classification: real examples get label $1$, generated ones get label $0$.
+
+They optimize **opposing** goals on the same score, which is why this is a **minimax game** — a saddle
+point, not a simple minimum. The discriminator climbs the objective; the generator pushes it back down.
+Recall the discriminator's job is just the **binary cross-entropy** loss from neural-network training,
+and the overall setup is a constrained, adversarial optimization rather than plain descent.
+
+At the ideal endpoint the generator's distribution matches the real one exactly, the discriminator is
+stuck outputting $\tfrac{1}{2}$ everywhere, and the fakes are statistically perfect.
+
+## Play with it
+
+The indigo curve is the real (two-peak) data; the emerald curve is the generator, a single bump. The
+dashed line is the discriminator's output $D(x)$. Press **Train** and watch the generator chase the
+real distribution.
+
+<GanMinimaxDemo client:visible />
+
+<Callout type="warning">
+Watch what the generator does: it slides onto <strong>one</strong> peak and parks there, ignoring the
+other entirely. A single-bump generator cannot cover a two-bump target, so it settles for fooling the
+discriminator on part of the data. This failure — covering only some of the data — is the notorious
+<strong>mode collapse</strong>.
+</Callout>
+
+## The formal definition
+
+The generator and discriminator play a two-player minimax game over a single value function $V(D, G)$:
+
+$$
+\min_{G} \max_{D}\; V(D, G) = \mathbb{E}_{x \sim p_{\text{data}}}\big[\log D(x)\big] + \mathbb{E}_{z \sim p_z}\big[\log\big(1 - D(G(z))\big)\big].
+$$
+
+The discriminator $D$ maximizes this (push $D(x) \to 1$ on real data, $D(G(z)) \to 0$ on fakes); the
+generator $G$ minimizes it (make $D(G(z)) \to 1$). For any fixed $G$, the optimal discriminator is
+
+$$
+D^*(x) = \frac{p_{\text{data}}(x)}{p_{\text{data}}(x) + p_g(x)},
+$$
+
+and plugging it back shows the generator is effectively minimizing the **Jensen–Shannon divergence**
+between the real and generated distributions — minimized exactly when $p_g = p_{\text{data}}$. In
+practice we alternate gradient steps, and use the "non-saturating" generator loss $-\log D(G(z))$ for
+stronger early gradients:
+
+```python
+# alternate the two updates each minibatch
+d_loss = -(log(D(x_real)) + log(1 - D(G(z)))).mean()   # detective: separate real vs fake
+g_loss = -log(D(G(z))).mean()                           # forger: fool the detective
+```
+
+<Callout type="why">
+Because the loss is a moving target — your opponent keeps changing — GAN training is famously unstable,
+prone to <strong>mode collapse</strong> and oscillation. Taming it (Wasserstein loss, gradient penalties,
+careful balancing) is a direct application of the constrained-optimization and saddle-point ideas, and a
+big reason diffusion models overtook GANs for many tasks.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Synthetic data" icon="🏦">
+Banks and hospitals cannot freely share real records, so a GAN learns to generate **synthetic
+transactions or patients** that match the statistics of the real data without copying any individual.
+Teams train and test models on the fakes, sidestepping privacy limits.
+</ExampleCard>
+
+<ExampleCard domain="Fashion design" icon="👗">
+Trained on thousands of garment photos, a GAN dreams up new clothing designs — plausible silhouettes,
+patterns, and textures that never existed. Designers browse the generator's output as a fast source of
+inspiration and variation.
+</ExampleCard>
+
+<ExampleCard domain="Photo super-resolution" icon="📷">
+A GAN can upscale a blurry, low-resolution photo into a sharp one by generating realistic high-frequency
+detail. The discriminator forces the invented texture to look like genuine sharp photography rather than
+a smudged guess — the basis of tools like SRGAN.
+</ExampleCard>
+
+<ExampleCard domain="Particle physics" icon="⚛️">
+Simulating detector responses at colliders is brutally slow. A GAN trained on full simulations learns to
+generate realistic detector events almost instantly, acting as a fast surrogate so physicists can produce
+the enormous samples their analyses demand.
+</ExampleCard>
+
+<Callout type="note">
+Records, garments, photos, and particle showers — each is a distribution a generator learns to imitate,
+policed by a discriminator. The adversarial game is the same; only the data differs.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the discriminator’s job in a GAN?',
+      options: [
+        'To generate new samples from noise',
+        'To output the probability that a sample is real rather than generated',
+        'To reconstruct the input image',
+        'To add noise to the data',
+      ],
+      answer: 1,
+      explain: 'The discriminator is a binary classifier estimating P(real); the generator learns from its verdicts.',
+    },
+    {
+      q: 'A generator learns to produce only one type of realistic sample and ignores the rest of the data’s variety. What is this called?',
+      options: ['Burn-in', 'Mode collapse', 'Overfitting the discriminator', 'Vanishing gradient'],
+      answer: 1,
+      explain: 'Mode collapse is when the generator covers only some modes of the real distribution, as the single-bump generator did in the demo.',
+    },
+    {
+      q: 'At the ideal GAN equilibrium, what does the optimal discriminator output for every input?',
+      options: ['1', '0', '0.5', 'It depends on the input'],
+      answer: 2,
+      explain: 'When p_g = p_data, the optimal D*(x) = p_data/(p_data + p_g) = 1/2 everywhere — the discriminator can no longer tell real from fake.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>GAN</strong> trains a generator and a discriminator as adversaries: one fakes data, the other detects fakes.',
+    'It is a <strong>minimax game</strong> over min_G max_D V(D, G) — a saddle point, not a simple loss minimum.',
+    'For a fixed generator the optimal discriminator is <strong>D*(x) = p_data / (p_data + p_g)</strong>, and the generator effectively minimizes Jensen–Shannon divergence.',
+    'GANs need no reconstruction or noise schedule — only the discriminator’s verdict — but training is <strong>unstable</strong> and prone to <strong>mode collapse</strong>.',
+    'They power synthetic data, design, super-resolution, and fast scientific simulation across many domains.',
+  ]}
+/>
+
+That completes the Generative Models track: from <strong>Monte Carlo</strong> sampling, through
+<strong>MCMC</strong>, the <strong>reparameterization trick</strong>, <strong>VAEs</strong>, and
+<strong>diffusion</strong>, to the adversarial game of <strong>GANs</strong> — the full mathematical
+toolkit for teaching machines to create.

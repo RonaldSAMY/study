@@ -1,0 +1,189 @@
+---
+title: Tokenization & Scaling Laws
+track: transformers
+summary: How text becomes tokens via BPE, and how a model's loss falls predictably — as a power law — when you add more parameters, data, and compute.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - transformers/language-modeling
+leadsTo:
+  - reinforcement-learning/rlhf
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BPEScalingLab from '../../../components/demos/BPEScalingLab.tsx';
+
+## The hook: how a search engine reads a query it has never seen
+
+Type `antidisestablishmentarianism` or a brand-new product name into a search box and the system still
+indexes it sensibly. It can't have a slot for every possible word — languages invent words faster than
+any dictionary can grow. The trick is to break text into **reusable pieces**: common chunks stay whole,
+rare words split into smaller parts, and *nothing* is ever truly out-of-vocabulary.
+
+That's the first half of this lesson. The second half answers the question every lab obsesses over:
+once you can train these models, **how much better do they get if you make them bigger?** The answer is
+shockingly clean — a straight line on a log-log plot, the **scaling law**.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Tokenization** chops text into subword pieces (via Byte-Pair Encoding) so any text maps to a fixed
+vocabulary, and **scaling laws** say a model's loss drops as a smooth power law as you grow its
+parameters, data, and compute — predictable, but with a hard floor it can never beat.
+</Callout>
+
+## Intuition: subword pieces, and the line that predicts the future
+
+**Why not just use words?** A word vocabulary is enormous and still misses every typo, name, and
+neologism. **Why not just use letters?** Then sequences become punishingly long and each token carries
+almost no meaning. **Byte-Pair Encoding (BPE)** finds the sweet spot. It starts from individual
+characters and repeatedly merges the most frequent adjacent pair into a new token. Frequent strings
+like `tion`, `ing`, or `the` become single tokens; a rare word gracefully falls back to a handful of
+pieces. The vocabulary is fixed (say 50k–100k tokens), yet it can spell *anything*.
+
+**Scaling laws** are the second surprise. If you plot a model's loss against the compute used to train
+it — on **log-log axes** — you get a remarkably straight, downward line. That straight line is the
+signature of a **power law**: every time you multiply compute by 10, the *reducible* part of the loss
+shrinks by the same factor. It lets researchers predict the loss of a model they haven't trained yet,
+and decide how to spend a fixed budget between a bigger model and more data.
+
+But the line doesn't go to zero. There is an **irreducible loss** — the genuine entropy of language
+from the last lesson — that no amount of scale can beat.
+
+## Play with it
+
+Two tools. In **BPE tokenizer**, step through the merges on a word and watch characters fuse into
+subwords. In **scaling law**, slide the compute budget along the log-log line and read off the
+predicted loss and perplexity — notice how it bends toward, but never reaches, the floor.
+
+<BPEScalingLab client:visible />
+
+<Callout type="tip">
+In the tokenizer, type a long word like <strong>entertainment</strong> and merge step by step: chunks
+like <span class="font-mono">en</span>, <span class="font-mono">ter</span>, and
+<span class="font-mono">ment</span> appear — exactly the reusable pieces real tokenizers learn. In the
+scaling tab, drag compute right and watch each 10× give the <em>same</em> drop in reducible loss.
+</Callout>
+
+## The formal definition
+
+**BPE**, in one loop: start with the characters, then greedily apply the highest-priority learned merge
+that's present, until none remain.
+
+```python
+tokens = list(word)                  # start from characters
+while True:
+    pair = best_adjacent_merge(tokens, ranked_merges)
+    if pair is None:
+        break
+    tokens = apply_merge(tokens, pair)   # e.g. ('t', 'ion') -> 'tion'
+```
+
+**Scaling laws.** Empirically, test loss follows a power law in model size $N$ (and, separately, in
+dataset size $D$):
+
+$$
+L(N) = E + \frac{A}{N^{\alpha}},
+$$
+
+where $E$ is the **irreducible loss** (the entropy floor), and $\alpha$ is a small exponent (often
+$\approx 0.05\text{–}0.1$). Taking logs of the *reducible* part turns it into a straight line — why
+log-log plots look linear:
+
+$$
+\log\big(L - E\big) = \log A - \alpha \log N.
+$$
+
+Compute, parameters, and data are linked by $C \approx 6\,N\,D$ FLOPs. The **Chinchilla** finding is
+that, for a fixed compute budget, $N$ and $D$ should grow *together* — roughly **20 training tokens per
+parameter** — rather than building a giant model starved of data.
+
+<Callout type="why">
+Scaling laws turned deep learning from alchemy into forecasting. Before spending millions on a training
+run, a lab fits the power law on small models and *extrapolates* the loss of the big one. The clean
+exponent is why "just make it bigger" has been such a reliable bet — until you hit the floor $E$ or run
+out of data.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Search & retrieval" icon="🔎">
+A search index doesn't store every word — it breaks queries into subword pieces and stems so a never-
+before-seen term still matches related documents. Subword tokens are why searching a misspelled or
+freshly coined word still returns something useful instead of a blank.
+</ExampleCard>
+
+<ExampleCard domain="Printing" icon="🅰️">
+Gutenberg's movable type didn't carve a separate block for every word — it reused a small set of
+letters and common ligatures (`fi`, `fl`) to print *any* text. BPE is movable type for neural nets:
+a fixed set of reusable pieces that compose into the entire language.
+</ExampleCard>
+
+<ExampleCard domain="Economics" icon="📉">
+Manufacturing **learning curves** (Wright's law) say unit cost falls by a fixed percentage every time
+cumulative production doubles — a power law, straight on a log-log plot. Solar panels and microchips
+followed it for decades. Model loss versus compute is the same kind of curve, same kind of line.
+</ExampleCard>
+
+<ExampleCard domain="Fitness training" icon="🏃">
+A new runner improves fast, then gains shrink as they approach their physiological limit — diminishing
+returns toward a hard floor. Scaling a model feels identical: early scale buys huge gains, later scale
+buys less, and the irreducible loss $E$ is the limit you asymptote toward but never cross.
+</ExampleCard>
+
+<Callout type="note">
+Tokenization quietly shapes a model's quirks: counting the letters in a word or doing digit arithmetic
+is hard partly because numbers and rare words get chopped into odd pieces. Many "why can't the model
+do X" puzzles trace back to the tokenizer.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why do LLMs use subword (BPE) tokenization instead of whole words or single characters?',
+      options: [
+        'It makes the vocabulary infinite',
+        'It keeps a fixed vocabulary that can still spell any word, balancing sequence length and meaning',
+        'It removes the need for embeddings',
+        'It guarantees one token per word',
+      ],
+      answer: 1,
+      explain: 'BPE gives a fixed vocab where common chunks are single tokens and rare words split into pieces — no out-of-vocabulary words, with reasonable sequence lengths.',
+    },
+    {
+      q: 'On a log-log plot, a model’s loss-versus-compute curve is a straight descending line. What does that tell you?',
+      options: [
+        'The loss will reach exactly zero with enough compute',
+        'The reducible loss follows a power law — each 10× of compute gives the same fractional drop',
+        'The model is broken',
+        'Compute has no effect on loss',
+      ],
+      answer: 1,
+      explain: 'A straight log-log line is the fingerprint of a power law L − E = A·C^(−α). It bends toward the floor E but never reaches zero.',
+    },
+    {
+      q: 'Using the Chinchilla rule of thumb (~20 training tokens per parameter), roughly how many tokens should you train a 10-billion-parameter model on?',
+      options: ['About 500 million', 'About 10 billion', 'About 200 billion', 'About 20 trillion'],
+      answer: 2,
+      explain: '20 tokens × 10 billion parameters ≈ 200 billion tokens. Compute-optimal training grows data and parameters together.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Byte-Pair Encoding</strong> builds tokens by repeatedly merging the most frequent adjacent pair, so common chunks are whole and rare words split into pieces — a fixed vocab with no out-of-vocabulary words.',
+    'Picking subwords balances <strong>sequence length</strong> (chars are too long) against <strong>vocabulary size</strong> (words are too many).',
+    '<strong>Scaling laws</strong>: loss follows a power law <em>L = E + A/N<sup>α</sup></em>, a straight line on log-log axes against parameters, data, or compute.',
+    'There is an <strong>irreducible loss E</strong> — the entropy of language itself — that scaling approaches but never beats.',
+    '<strong>Chinchilla</strong>: for a fixed compute budget (<em>C ≈ 6ND</em>), grow parameters and data together, ~20 tokens per parameter.',
+  ]}
+/>
+
+That completes the transformer architecture, end to end — from tokens in to a trained next-token
+predictor. Next we ask a different question: how do we make a capable model *helpful and aligned*?
+That's **RLHF**, where reinforcement learning meets human feedback.

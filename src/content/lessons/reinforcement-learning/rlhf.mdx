@@ -1,0 +1,188 @@
+---
+title: RLHF, PPO & DPO
+track: reinforcement-learning
+summary: Turn human preferences into a reward model, then align a language model with PPO — or skip straight to it with DPO.
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - reinforcement-learning/policy-gradients
+  - transformers/language-modeling
+leadsTo: []
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PreferenceRewardShaper from '../../../components/demos/PreferenceRewardShaper.tsx';
+
+## The hook: a model that can write, but not behave
+
+After pre-training, a language model is a dazzling autocomplete: it knows grammar, facts, and style, but it
+has no idea what *you* want. Ask it for help and it might ramble, dodge, or confidently make things up.
+There is no "loss function for being helpful, honest, and harmless" — those are human judgments, not labels
+in a dataset.
+
+So we ask humans. Show people two model answers and let them pick the better one. Do this thousands of times,
+distill those choices into a **reward model**, and then use the reinforcement-learning machinery from this
+whole track to push the language model toward answers humans prefer. That pipeline is **RLHF** —
+Reinforcement Learning from Human Feedback — the step that turned raw language models into usable assistants.
+
+<Callout type="intuition" title="The one-sentence idea">
+**RLHF** learns a reward function from human *comparisons*, then runs policy-gradient ascent so the language
+model produces answers that score high under that learned reward.
+</Callout>
+
+## Intuition: from "which is better?" to a steering signal
+
+Asking a human to *rate* an answer 7.5/10 is hopeless — nobody is consistent. But asking "is A better than
+B?" is easy and reliable. RLHF is built entirely on these pairwise preferences.
+
+The trick is the **Bradley–Terry** model: assume each response has a hidden scalar reward, and the chance a
+human prefers $A$ over $B$ grows with the *difference* in their rewards, squashed through a sigmoid. Fit a
+reward model $r_\phi$ to predict the observed choices and you've converted messy human taste into a single
+differentiable number per response.
+
+Now the language model is just a **policy** (lesson 4): given a prompt, it outputs a distribution over the
+next tokens. We do policy-gradient ascent to raise the reward — but with a leash. A **KL penalty** keeps the
+tuned model close to the original so it doesn't "reward-hack" into bizarre, degenerate text that games the
+reward model. The algorithm of choice for this constrained ascent is **PPO**, which clips each update so the
+policy never lurches too far in one step.
+
+**DPO** (Direct Preference Optimization) is the elegant shortcut: with some algebra you can skip training a
+separate reward model *and* the RL loop, optimizing the policy on the preference pairs directly with a single
+classification-style loss. Same goal, far less machinery.
+
+## Play with it
+
+You are the human labeler. Below are four candidate replies and a set of **preference weights** — the reward
+model. Slide what you reward (helpfulness, conciseness, warmth) and watch the **reward** of each reply change,
+which reshapes the aligned model's **output probabilities**. The β slider is the alignment strength.
+
+<PreferenceRewardShaper client:visible />
+
+<Callout type="tip">
+Reward only conciseness and the curt one-liner wins. Add warmth and helpfulness and the thoughtful answer
+takes over — while the rude reply stays suppressed. That is alignment in miniature: your preferences become
+the model's behavior. Watch what happens at β = 0: the reward stops mattering at all.
+</Callout>
+
+## The formal definition
+
+**Step 1 — reward model.** Given a prompt $x$ with a preferred answer $y_w$ and a rejected one $y_l$, fit
+$r_\phi$ by maximizing the Bradley–Terry likelihood:
+
+$$
+\mathcal{L}(\phi) = -\,\mathbb{E}\big[\, \log \sigma\big(r_\phi(x, y_w) - r_\phi(x, y_l)\big) \,\big].
+$$
+
+**Step 2 — PPO.** Optimize the policy $\pi_\theta$ to maximize reward while staying near the reference model
+$\pi_{\text{ref}}$:
+
+$$
+\max_{\theta}\; \mathbb{E}\big[\, r_\phi(x, y) \,\big] \;-\; \beta\, \mathrm{KL}\big(\pi_\theta \,\|\, \pi_{\text{ref}}\big).
+$$
+
+**DPO** folds both steps into one loss directly on the preference pairs — no separate reward model, no RL loop:
+
+$$
+\mathcal{L}_{\text{DPO}} = -\,\mathbb{E}\!\left[\, \log \sigma\!\left( \beta \log \frac{\pi_\theta(y_w\mid x)}{\pi_{\text{ref}}(y_w\mid x)} - \beta \log \frac{\pi_\theta(y_l\mid x)}{\pi_{\text{ref}}(y_l\mid x)} \right) \right].
+$$
+
+```python
+# DPO loss: raise preferred logprobs, lower rejected ones, vs a frozen reference
+logp_w = logprob(policy, x, y_win) - logprob(ref, x, y_win)
+logp_l = logprob(policy, x, y_lose) - logprob(ref, x, y_lose)
+loss = -F.logsigmoid(beta * (logp_w - logp_l)).mean()
+```
+
+<Callout type="why">
+This is how the assistants people use every day are shaped. Pre-training gives a model knowledge; RLHF (or DPO)
+gives it manners, helpfulness, and refusals. The same Bellman-to-policy-gradient ideas you learned on a tiny
+grid-world scale all the way up to aligning models with billions of parameters.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Chat assistants" icon="💬">
+Instruction-tuned chatbots are aligned by collecting preference pairs over their own answers, training a
+reward model, and running PPO. The leap from "plausible text" to "actually helpful reply" is almost entirely
+this preference-learning step.
+</ExampleCard>
+
+<ExampleCard domain="Content moderation" icon="🛡️">
+A summarizer can be steered away from sensational or unsafe phrasing by rewarding outputs that human raters
+mark as faithful and neutral. The reward model encodes a policy team's judgment far more flexibly than a
+keyword blocklist.
+</ExampleCard>
+
+<ExampleCard domain="Code assistants" icon="💻">
+Developers can express preferences over code completions — does it run, is it idiomatic, is it documented?
+A reward model trained on those comparisons nudges a coding model toward suggestions engineers actually accept.
+</ExampleCard>
+
+<ExampleCard domain="Image generation" icon="🎨">
+Text-to-image models are tuned the same way: humans pick the nicer of two generations, a reward model learns
+aesthetic and prompt-faithfulness preferences, and the generator is optimized to score higher — RLHF beyond
+language entirely.
+</ExampleCard>
+
+<Callout type="note">
+The KL leash matters. Without it, the policy chases the reward model into adversarial nonsense it happens to
+score highly — "reward hacking." Staying close to the reference model keeps the outputs fluent and trustworthy
+while still improving on human preference.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why do we collect pairwise preferences ("A is better than B") instead of numeric ratings?',
+      options: [
+        'Numeric ratings are illegal',
+        'Comparisons are far more consistent and reliable for humans to give',
+        'Pairs require no data',
+        'Ratings cannot be turned into a loss',
+      ],
+      answer: 1,
+      explain: 'Humans are inconsistent at absolute scores but reliable at relative judgments, so RLHF is built on comparisons.',
+    },
+    {
+      q: 'What is the role of the KL penalty in the PPO objective?',
+      options: [
+        'It increases the learning rate',
+        'It keeps the tuned policy close to the reference model, preventing reward hacking',
+        'It removes the reward model',
+        'It makes outputs longer',
+      ],
+      answer: 1,
+      explain: 'The KL term penalizes drifting far from the original model, so the policy improves reward without degenerating.',
+    },
+    {
+      q: 'What is the main practical advantage of DPO over the classic RLHF pipeline?',
+      options: [
+        'It needs no data at all',
+        'It optimizes the policy directly on preference pairs, skipping a separate reward model and RL loop',
+        'It ignores the reference model',
+        'It only works for images',
+      ],
+      answer: 1,
+      explain: 'DPO reparameterizes the objective so a single supervised-style loss on preferences replaces reward-model training plus PPO.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>RLHF</strong> turns human preference comparisons into a learned reward model, then aligns the LLM to it.',
+    'The <strong>reward model</strong> uses the Bradley–Terry idea: preference probability follows a sigmoid of the reward difference.',
+    '<strong>PPO</strong> does clipped policy-gradient ascent on the reward with a <strong>KL penalty</strong> to stay near the reference model.',
+    '<strong>DPO</strong> reaches the same goal by optimizing the policy directly on preference pairs — no reward model, no RL loop.',
+    'An LLM is just a <strong>policy</strong>, so the whole track — MDPs, values, Q-learning, policy gradients — culminates in alignment.',
+  ]}
+/>
+
+That completes the reinforcement-learning track: from the agent–environment loop all the way to the math that
+makes today's AI assistants helpful, honest, and aligned with what people actually want.

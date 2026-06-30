@@ -1,0 +1,174 @@
+---
+title: Normalization
+track: neural-networks
+summary: Batch norm and layer norm — standardizing a layer's activations to mean 0 and variance 1 so deep networks train fast and stay stable.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - statistics/descriptive-stats
+  - neural-networks/regularization
+leadsTo:
+  - neural-networks/convolutional-networks
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import NormalizationDistLab from '../../../components/demos/NormalizationDistLab.tsx';
+
+## The hook: grading on a curve
+
+A chemistry professor gives a brutal midterm: the raw scores cluster around 42 out of 100. Panic. Then the
+professor **curves** them — shifting and rescaling so the class centers on a B with a sensible spread.
+Suddenly the scores are comparable, the outliers are clear, and everyone can be ranked fairly. Nothing about
+who-knew-what changed; the *distribution* was just standardized.
+
+Deep networks need the same treatment. As signals pass through layers, their distributions drift — getting
+larger, smaller, off-center — which makes the layers above chase a moving target and slows training to a
+crawl. **Normalization** layers curve the activations on the fly: recenter to mean 0, rescale to variance 1,
+every step.
+
+<Callout type="intuition" title="The one-sentence idea">
+Normalization standardizes a layer's activations to **mean 0, variance 1**, then lets the network rescale
+them with two learnable knobs — so every layer always receives a clean, predictable input.
+</Callout>
+
+## Intuition: keep the inputs civilized
+
+From **descriptive statistics** you know the two numbers that summarize any batch of values: the **mean**
+(center) and the **standard deviation** (spread). From **regularization** you know we want training to be
+stable and well-behaved. Normalization combines both ideas.
+
+The problem it solves is *internal covariate shift*: as the weights below change during training, the
+distribution of activations feeding the next layer keeps shifting. Each layer must constantly re-adapt to a
+new input distribution — like trying to learn while someone keeps changing the units. Normalization pins that
+distribution in place: standardize first, *then* learn.
+
+There are two flavors, differing only in **which direction** they compute the statistics:
+
+- **Batch norm**: for each feature, use the mean and variance **across the batch** of examples.
+- **Layer norm**: for each example, use the mean and variance **across that example's own features**.
+
+## Play with it
+
+Slide the *incoming mean shift* and *spread* to push the activation distribution off-center (top histogram).
+Switch on **Batch norm** or **Layer norm** and the bottom histogram snaps back to a clean bell centered at
+zero. Then turn the learnable $\gamma$ (scale) and $\beta$ (shift) to see the network rescale it on purpose.
+
+<NormalizationDistLab client:visible />
+
+<Callout type="tip">
+With normalization on, the "after" μ/σ readout stays near <strong>0 / 1</strong> no matter how hard you
+shift the input — until you move γ and β. That robustness is the whole point.
+</Callout>
+
+## The formal definition
+
+For a set of activations $x_1, \dots, x_m$, compute the mean and variance, standardize, then apply the
+learnable scale $\gamma$ and shift $\beta$:
+
+$$
+\mu = \frac{1}{m}\sum_i x_i, \qquad \sigma^2 = \frac{1}{m}\sum_i (x_i - \mu)^2,
+$$
+
+$$
+\hat{x}_i = \frac{x_i - \mu}{\sqrt{\sigma^2 + \epsilon}}, \qquad y_i = \gamma\,\hat{x}_i + \beta.
+$$
+
+The tiny $\epsilon$ avoids division by zero. The genius of $\gamma$ and $\beta$: the network can *undo* the
+normalization if it wants ($\gamma = \sigma$, $\beta = \mu$), so it never loses expressive power — it just
+gets to *choose* the scale rather than have it drift.
+
+```python
+mu  = x.mean(axis=0)                  # batch norm: stats per feature, over the batch
+var = x.var(axis=0)
+x_hat = (x - mu) / np.sqrt(var + eps)
+y = gamma * x_hat + beta              # learnable scale and shift
+```
+
+<Callout type="why">
+Batch norm depends on the whole batch, so it struggles with tiny batches and sequence models. Layer norm
+normalizes each example on its own — independent of batch size — which is why <strong>transformers</strong>
+and RNNs use layer norm almost universally.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Education" icon="🎓">
+Curving exam scores is literal standardization: subtract the class mean, divide by the spread, and a raw 42
+becomes a z-score you can compare across exams. Batch norm curves each neuron's outputs the same way, every
+training step.
+</ExampleCard>
+
+<ExampleCard domain="Audio streaming" icon="🔊">
+Music platforms apply **loudness normalization** (LUFS): a whisper-quiet jazz track and a brick-walled pop
+song are rescaled to the same perceived volume so you are not lunging for the dial between songs. Layer norm
+does this per "song" (per example); batch norm does it per "channel" across the playlist.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💱">
+To compare a coffee's price in Tokyo, London, and New York, you convert everything to one currency and adjust
+for local cost of living. Only after putting values on a common scale can you reason about them — exactly
+what normalization gives the next layer.
+</ExampleCard>
+
+<ExampleCard domain="Photography" icon="📷">
+Auto **white balance** rescales a photo's color channels so a sheet of paper reads as neutral white under
+warm or cold light. The scene's content is unchanged; its distribution is recentered. A normalization layer
+white-balances the activations before the next layer looks at them.
+</ExampleCard>
+
+<Callout type="note">
+A pleasant side effect: batch norm's batch statistics inject a little noise each step, which acts as mild
+<em>regularization</em> — sometimes reducing the need for dropout. Stability and generalization, two for one.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'After the standardization step (before γ and β), what are the mean and variance of the activations?',
+      options: ['mean 1, variance 0', 'mean 0, variance 1', 'mean 0, variance 0', 'unchanged from the input'],
+      answer: 1,
+      explain: 'Subtracting the mean and dividing by the standard deviation produces a distribution with mean 0 and variance 1.',
+    },
+    {
+      q: 'What is the key difference between batch norm and layer norm?',
+      options: [
+        'Batch norm normalizes across the batch per feature; layer norm normalizes across features per example',
+        'Layer norm only works on images',
+        'Batch norm has no learnable parameters',
+        'They are identical',
+      ],
+      answer: 0,
+      explain: 'They differ in the axis of the statistics: batch norm uses the batch dimension per feature; layer norm uses the feature dimension per example.',
+    },
+    {
+      q: 'Why do γ (scale) and β (shift) matter?',
+      options: [
+        'They speed up the mean calculation',
+        'They let the network rescale or even undo the normalization, preserving its expressive power',
+        'They prevent overfitting directly',
+        'They remove the need for an activation function',
+      ],
+      answer: 1,
+      explain: 'The learnable γ and β restore the network\'s freedom to choose the output scale and mean, so normalization costs no representational power.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Normalization fixes <strong>internal covariate shift</strong> by standardizing each layer\'s activations to mean 0, variance 1.',
+    'The recipe: subtract the <strong>mean</strong>, divide by the <strong>standard deviation</strong> (plus ε), then apply learnable γ and β.',
+    '<strong>Batch norm</strong> uses statistics across the batch per feature; <strong>layer norm</strong> uses statistics across features per example.',
+    'γ and β let the network <strong>rescale or undo</strong> normalization, so it loses no expressive power.',
+    'Normalization makes deep nets train <strong>faster and more stably</strong>, and adds a touch of regularization for free.',
+  ]}
+/>
+
+With activations standardized, we are ready to give the network *structure* for images — sharing weights to
+detect patterns anywhere. On to **convolutional networks**.

@@ -1,0 +1,169 @@
+---
+title: Loss Functions
+track: neural-networks
+summary: MSE for numbers, cross-entropy for probabilities — the single score a network drives toward zero.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - information-theory/cross-entropy-kl
+  - statistics/mle-map
+leadsTo:
+  - neural-networks/backpropagation
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import LossResponseLab from '../../../components/demos/LossResponseLab.tsx';
+
+## The hook: a network needs a grade, not a vibe
+
+A photo app claims a picture is a cat with 55% confidence. Is that good? The picture *is* a cat — so the
+model was right but timid. Tomorrow it says 99% on a picture of a dog. Same "right/wrong" tally, wildly
+different mistakes. To improve, the network needs more than a pass/fail mark; it needs a **continuous
+grade** that gets worse smoothly as predictions drift from the truth.
+
+That grade is the **loss function**. It compresses "how wrong was this prediction?" into one number, and
+the entire job of training is to make that number small.
+
+<Callout type="intuition" title="The one-sentence idea">
+A loss function measures how far a prediction is from the truth as a single number — the quantity the
+network minimizes during training.
+</Callout>
+
+## Intuition: match the loss to the task
+
+You met **cross-entropy** in information theory as the cost of encoding the true distribution using your
+model's predicted one, and you saw in **maximum likelihood** that minimizing it is the same as maximizing
+the probability the model assigns to the correct answers. Two losses cover most of deep learning:
+
+- **Mean squared error (MSE)** for predicting *numbers*. The penalty grows with the square of the gap, so
+  big misses hurt much more than small ones.
+- **Cross-entropy** for predicting *probabilities* of classes. It punishes confident wrong answers
+  brutally — being 99% sure and wrong costs far more than being 60% sure and wrong.
+
+The contrast matters. If you use MSE on a classifier, a confidently-wrong prediction is barely penalized,
+and the gradients that drive learning go weak exactly when they should be loud. Cross-entropy fixes that:
+its penalty heads toward infinity as a confident prediction turns out wrong.
+
+## Play with it
+
+The lab plots both losses as you drag the model's predicted probability $p$. Flip the true label and watch
+how the curves change — especially how steep cross-entropy gets when you are confident and wrong.
+
+<LossResponseLab client:visible />
+
+<Callout type="tip">
+Set the true label to <strong>1</strong> and drag <strong>p</strong> toward 0. MSE rises gently to 1, but
+cross-entropy rockets upward. That cliff is what makes a classifier care intensely about not being
+confidently wrong.
+</Callout>
+
+## The formal definition
+
+For regression with predictions $\hat{y}_i$ and targets $y_i$ over $N$ examples, **mean squared error**:
+
+$$
+\mathcal{L}_{\text{MSE}} = \frac{1}{N} \sum_{i=1}^{N} \left(\hat{y}_i - y_i\right)^2.
+$$
+
+For binary classification with predicted probability $\hat{y}$ and label $y \in \{0, 1\}$, **binary
+cross-entropy**:
+
+$$
+\mathcal{L}_{\text{BCE}} = -\Bigl[\, y \log \hat{y} + (1 - y)\log(1 - \hat{y}) \,\Bigr].
+$$
+
+For $K$ classes with a one-hot target and softmax probabilities $\hat{y}_k$, the **categorical
+cross-entropy** (equivalently the negative log-likelihood, NLL) keeps only the true class term:
+
+$$
+\mathcal{L}_{\text{CE}} = -\sum_{k=1}^{K} y_k \log \hat{y}_k = -\log \hat{y}_{\text{true}}.
+$$
+
+```python
+mse = np.mean((y_hat - y) ** 2)
+bce = -np.mean(y * np.log(y_hat) + (1 - y) * np.log(1 - y_hat))
+```
+
+<Callout type="why">
+Minimizing cross-entropy is exactly <strong>maximum likelihood</strong>: the parameters that make the
+observed labels most probable are the ones that minimize the negative log-likelihood. The loss is not
+arbitrary — it falls straight out of probability theory.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Weather forecasting" icon="🌦️">
+Predicting tomorrow's temperature is regression, so models train with <strong>MSE</strong>. Squaring means
+a forecast off by 10°C is penalized 100× more than one off by 1°C — exactly the asymmetry meteorologists
+want.
+</ExampleCard>
+
+<ExampleCard domain="Medical screening" icon="🩺">
+A diagnostic model outputs the probability of disease and trains with <strong>cross-entropy</strong>. A
+confident "all clear" on a sick patient incurs a huge loss, pushing the model to stay calibrated rather
+than recklessly certain.
+</ExampleCard>
+
+<ExampleCard domain="E-commerce" icon="🛒">
+A click-through model predicts the probability a user taps an ad. <strong>Binary cross-entropy</strong>
+rewards well-calibrated probabilities, which matters because the predicted number is later multiplied by a
+bid — over-confidence literally costs money.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🤖">
+A robot arm learning to reach a target minimizes the <strong>squared distance</strong> between its
+fingertip and the goal — MSE in physical space. Tiny errors are tolerated; large ones dominate the loss
+and get corrected first.
+</ExampleCard>
+
+<Callout type="note">
+Pick the loss from the output: real-valued predictions → MSE; a probability or class → cross-entropy. The
+output activation and the loss are chosen together (sigmoid with BCE, softmax with categorical CE).
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which loss is the natural choice for a classifier that outputs probabilities?',
+      options: ['Mean squared error', 'Cross-entropy', 'Absolute value of the weights', 'The bias term'],
+      answer: 1,
+      explain: 'Cross-entropy matches probability outputs and penalizes confident wrong predictions sharply.',
+    },
+    {
+      q: 'True label y = 1 and the model predicts p = 0.9. What is the binary cross-entropy −[y log p + (1−y) log(1−p)]?',
+      options: ['≈ 0.105', '≈ 0.9', '≈ 2.302', '0'],
+      answer: 0,
+      explain: 'With y = 1 it reduces to −log(0.9) ≈ 0.105 — small, because the confident prediction is correct.',
+    },
+    {
+      q: 'Why is MSE a poor choice for training a probability classifier?',
+      options: [
+        'It cannot be computed',
+        'It penalizes confident wrong predictions only weakly, weakening the gradient',
+        'It always returns zero',
+        'It requires integer labels',
+      ],
+      answer: 1,
+      explain: 'MSE rises only to about 1 for a confidently wrong probability, so the learning signal stays weak exactly when it should be strong.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>loss function</strong> turns "how wrong is this prediction?" into one number to minimize.',
+    '<strong>MSE</strong> fits real-valued outputs and squares the error, so large misses dominate.',
+    '<strong>Cross-entropy</strong> fits probabilities and explodes for confident wrong answers — keeping models calibrated.',
+    'Minimizing cross-entropy equals <strong>maximum likelihood</strong> (negative log-likelihood).',
+    'Choose the loss to match the output: regression → MSE, classification → cross-entropy.',
+  ]}
+/>
+
+Next up: **backpropagation** — now that we can score the network, how does that single loss number tell
+every weight, layer by layer, exactly how to change?

@@ -1,0 +1,207 @@
+---
+title: Naive Bayes
+track: classical-ml
+summary: A fast, surprisingly strong classifier built directly from Bayes' rule plus one bold independence assumption.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - probability/conditional-bayes
+leadsTo:
+  - ml-methods/when-models-meet-data
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import NaiveBayesSpamToggler from '../../../components/demos/NaiveBayesSpamToggler.tsx';
+
+## The hook: the guard standing at your inbox
+
+Every email that arrives gets a split-second trial. A quiet little classifier reads the words —
+*"free", "winner", "invoice", "meeting"* — and decides, before you ever look, whether the message
+belongs in your inbox or the spam folder. It is wrong rarely enough that you forget it exists. The
+astonishing part is how *simple* the math behind it is: it is little more than counting words and
+multiplying probabilities. That classifier is **Naive Bayes**, and once you see how it works you can
+build one by hand.
+
+<Callout type="intuition" title="The one-sentence idea">
+Start with how likely spam is in general, then let each word in the email nudge that belief up or
+down — and **multiply** all the nudges together because we pretend the words are independent.
+</Callout>
+
+## Intuition: collecting clues, one word at a time
+
+You already know **Bayes' rule**: it tells you how to update a belief after seeing evidence. Here the
+belief is *"this email is spam"* and the evidence is *the words in it*. Before reading anything, you
+have a hunch — maybe a third of mail is spam. That is the **prior**.
+
+Then you read the words, treating each one as a **clue**. The word *"viagra"* is far more common in
+spam than in real mail, so it shoves your belief hard toward spam. The word *"meeting"* does the
+opposite. Each clue multiplies your odds by how much more (or less) spammy it makes the message.
+
+The catch: properly accounting for how words appear *together* is enormously complicated. So Naive
+Bayes makes one bold simplification — it pretends every word is **independent** of the others given
+the class. That assumption is almost never literally true (the words "machine" and "learning" clearly
+travel together), which is exactly why it is called **naive**. But it lets us replace a hopeless joint
+calculation with a simple **product** of one-word probabilities — and in practice it works
+remarkably well.
+
+## Play with it
+
+Toggle which words appear in the email and slide the prior. Watch the probability swing as each word
+multiplies the odds — spammy words push the bar toward indigo, work words pull it toward emerald.
+
+<NaiveBayesSpamToggler client:visible />
+
+<Callout type="tip">
+Turn on <strong>"free"</strong> and <strong>"winner"</strong> together and watch the bar leap past
+the threshold — each word multiplies the odds, so two strong clues compound. Then add
+<strong>"meeting"</strong> and see a hammy word pull it back down. The prior just sets your starting
+point before any word is read.
+</Callout>
+
+## The formal definition
+
+We want the probability of a class $C$ (say, spam) given the observed words $x_1, x_2, \dots, x_n$.
+Bayes' rule says:
+
+$$
+P(C \mid x_1, \dots, x_n) = \frac{P(C)\, P(x_1, \dots, x_n \mid C)}{P(x_1, \dots, x_n)}.
+$$
+
+The hard term is $P(x_1, \dots, x_n \mid C)$ — the chance of seeing *that exact combination* of
+words. The **naive (conditional-independence) assumption** says that, once we fix the class, the
+words don't influence each other:
+
+$$
+P(x_1, \dots, x_n \mid C) = \prod_{i=1}^{n} P(x_i \mid C).
+$$
+
+Substituting gives the Naive Bayes posterior:
+
+$$
+P(C \mid x_1, \dots, x_n) = \frac{P(C) \prod_{i=1}^{n} P(x_i \mid C)}{P(x_1, \dots, x_n)}.
+$$
+
+To **classify**, we don't even need the denominator: it is the same for every class, so we just pick
+the class with the largest numerator:
+
+$$
+\hat{C} = \arg\max_{C} \; P(C) \prod_{i=1}^{n} P(x_i \mid C).
+$$
+
+Multiplying hundreds of tiny probabilities underflows to zero, so in practice we work in **log
+space**, turning the product into a sum:
+
+$$
+\log P(C) + \sum_{i=1}^{n} \log P(x_i \mid C).
+$$
+
+One more fix: if a word never appeared with a class in training, its probability is $0$ and wipes out
+the whole product. **Laplace smoothing** adds a small count to every word so no probability is ever
+exactly zero:
+
+$$
+P(x_i \mid C) = \frac{\text{count}(x_i, C) + 1}{\text{count}(C) + V},
+$$
+
+where $V$ is the size of the vocabulary.
+
+```python
+# log-space scoring: rows = classes, cols = words
+logp = np.log(prior) + np.log(likelihood[:, present]).sum(axis=1)
+pred = logp.argmax()   # most probable class — no denominator needed
+```
+
+<Callout type="why">
+Naive Bayes is the classic **baseline** in machine learning: it trains in a single pass over the
+data, needs almost no tuning, and handles thousands of features (words) effortlessly. For text
+problems it is often shockingly hard to beat — which is why "try Naive Bayes first" is standard
+advice before reaching for anything heavier.
+</Callout>
+
+## The same idea, four different worlds
+
+The "multiply clue probabilities, pick the biggest" recipe is not about email at all. It shows up
+anywhere you classify something from a bundle of features.
+
+<ExampleCard domain="Email / NLP" icon="📧">
+The spam filter from the demo: each word has a probability under "spam" and under "ham". Multiply the
+prior by the likelihood of every word that appears, compare the two classes, and route the message.
+This is the original killer app for Naive Bayes.
+</ExampleCard>
+
+<ExampleCard domain="Medicine" icon="🩺">
+Given a patient's symptoms — fever, cough, loss of smell — estimate the probability of each disease.
+Start from how common each disease is (the prior), then multiply in how likely each symptom is for
+that disease. The diagnosis with the highest score is the leading suspect for further testing.
+</ExampleCard>
+
+<ExampleCard domain="News / NLP" icon="📰">
+An article lands in the newsroom system and must be filed under *sports*, *politics*, or *tech*. The
+word "election" is likely under politics, "quarterback" under sports. Multiply each category's prior
+by the likelihood of the article's words and tag it with the winner — automatic topic sorting.
+</ExampleCard>
+
+<ExampleCard domain="Social media" icon="💬">
+Sentiment analysis of a post: is it positive or negative? Words like "love" and "amazing" are far
+likelier in positive posts; "terrible" and "broken" in negative ones. The same product of word
+likelihoods scores each sentiment and flags the post's mood.
+</ExampleCard>
+
+<Callout type="note">
+Notice the pattern is identical every time: a <strong>prior</strong> per class, a
+<strong>likelihood</strong> per feature, a <strong>product</strong> to combine them, and an
+<strong>argmax</strong> to decide. Swap "words" for "symptoms" and email for patients — the algebra
+never changes.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What exactly is the "naive" assumption in Naive Bayes?',
+      options: [
+        'That the prior probability is always 0.5',
+        'That every feature (e.g. word) is conditionally independent of the others given the class',
+        'That there are only two possible classes',
+        'That all features are equally likely',
+      ],
+      answer: 1,
+      explain: 'Naive Bayes assumes the features are conditionally independent given the class, which lets us replace the joint probability with a simple product of per-feature probabilities.',
+    },
+    {
+      q: 'A prior of P(spam) = 0.2 gives prior odds of 0.25. One word multiplies the odds by 4 and another by 3. What are the resulting odds in favor of spam?',
+      options: ['0.25 × 7 = 1.75', '0.25 × 4 × 3 = 3', '0.25 + 4 + 3 = 7.25', '4 × 3 = 12'],
+      answer: 1,
+      explain: 'Each word multiplies the odds by its likelihood ratio: 0.25 × 4 × 3 = 3 — odds of 3 to 1 in favor of spam, i.e. P(spam) = 0.75.',
+    },
+    {
+      q: 'Why do we use Laplace smoothing?',
+      options: [
+        'To make training faster',
+        'To stop a single never-before-seen word (probability 0) from forcing the whole product to zero',
+        'To guarantee the classes are balanced',
+        'To convert probabilities into log space',
+      ],
+      answer: 1,
+      explain: 'A zero probability would annihilate the entire product. Adding a small count to every word keeps all probabilities strictly positive.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Naive Bayes</strong> applies Bayes\' rule to classify: start from a prior per class and update it with the evidence.',
+    'The <strong>"naive" assumption</strong> is conditional independence of features given the class — it turns a hard joint probability into a simple <strong>product</strong>.',
+    'You <strong>classify with argmax</strong> of prior × product of likelihoods; the shared denominator can be ignored.',
+    'Work in <strong>log space</strong> (sum of logs) to avoid numerical underflow, and use <strong>Laplace smoothing</strong> so no probability is ever zero.',
+    'It is fast, needs little data, and is a <strong>strong baseline</strong> for text — the same recipe powers spam filters, diagnosis, topic tagging, and sentiment.',
+  ]}
+/>
+
+Next up: **When Models Meet Data** — how a trained classifier like this one is fit, validated, and
+judged once it faces the messy real world.

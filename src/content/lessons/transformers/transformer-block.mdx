@@ -1,0 +1,186 @@
+---
+title: The Transformer Block
+track: transformers
+summary: Snap attention, a feed-forward MLP, layer norm and residual connections into one repeatable block — then stack it dozens of times to build an LLM.
+difficulty: advanced
+estMinutes: 14
+prereqs:
+  - transformers/multi-head-attention
+  - transformers/layer-norm-residuals
+leadsTo:
+  - transformers/language-modeling
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TransformerBlockFlow from '../../../components/demos/TransformerBlockFlow.tsx';
+
+## The hook: how a code model finishes your function
+
+You start typing `def quicksort(arr):` and your editor's AI completes the whole function. Behind that
+suggestion is a tall stack of *identical* units, each doing the same two-step dance on the code so far.
+We have already built the two dances separately — **multi-head attention** (tokens looking at each
+other) and the **residual + layer-norm** plumbing. Now we assemble them, plus one new piece, into the
+single repeating unit that *is* a transformer: the **block**.
+
+Stack twelve of these and you have a small model; stack ninety-six and you have a frontier LLM. Same
+Lego brick, just more of them.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **transformer block** does two things in a row — *mix information between tokens* with attention,
+then *think about each token on its own* with a small MLP — each wrapped in a layer-norm and a residual,
+and because its output has the same shape as its input, you can stack the block as many times as you like.
+</Callout>
+
+## Intuition: mix, then transform — and keep the shape
+
+A block is two sub-layers, run one after the other, both writing onto the residual stream from the last
+lesson.
+
+1. **Attention sub-layer — *communication*.** Each token looks at the others and pulls in what it
+   needs. In `quicksort`, the token for the second `arr` can attend back to the parameter `arr` and to
+   `def` to know it is inside a function. This is the only place tokens *talk to each other*.
+2. **Feed-forward sub-layer — *computation*.** A small two-layer MLP (the **FFN**) is applied to every
+   token position *independently*. No token-mixing here — it's the model "thinking" about each token's
+   gathered information, typically expanding to 4× the width, applying a nonlinearity, then projecting
+   back. This is where most of a model's parameters — and arguably its stored knowledge — live.
+
+Each sub-layer is wrapped exactly as you learned: normalize first, add the result back onto the stream.
+Crucially the block's output is the **same shape** as its input, which is the whole reason you can run
+the output of one block straight into the next, over and over.
+
+## Play with it
+
+Step the data through one block. Watch the residual stream (the little bars) get *added to* at each ⊕
+junction — attention writes once, the MLP writes once — and notice the two layer-norms standing guard
+before each sub-layer. Click any stage to read what it does.
+
+<TransformerBlockFlow client:visible />
+
+<Callout type="tip">
+Press <strong>Step</strong> all the way to "Output," then slide <strong>stacked blocks</strong> up.
+The output of this block has the same shape as its input — so block 2 is just another copy of the same
+diagram, fed by block 1. That's how a 96-layer model is built from one design.
+</Callout>
+
+## The formal definition
+
+Let $x$ be the residual stream (a matrix of token vectors). A **pre-norm** block is:
+
+$$
+\begin{aligned}
+x &\leftarrow x + \mathrm{MHA}\big(\mathrm{LN}_1(x)\big) \\[4pt]
+x &\leftarrow x + \mathrm{FFN}\big(\mathrm{LN}_2(x)\big)
+\end{aligned}
+$$
+
+The feed-forward network is the same MLP applied at every position:
+
+$$
+\mathrm{FFN}(z) = W_2\,\phi\!\left(W_1 z + b_1\right) + b_2,
+$$
+
+where $\phi$ is a nonlinearity (usually GELU), $W_1 \in \mathbb{R}^{d_{ff}\times d}$ expands the width
+to $d_{ff} = 4d$, and $W_2 \in \mathbb{R}^{d\times d_{ff}}$ projects it back to $d$. A full model is
+just $N$ of these blocks composed:
+
+$$
+h = \text{Block}_N\big(\cdots \text{Block}_2(\text{Block}_1(x))\big).
+$$
+
+```python
+def transformer_block(x):
+    x = x + multi_head_attention(layer_norm(x))  # communicate: tokens mix
+    x = x + feed_forward(layer_norm(x))          # compute: each token, alone
+    return x                                       # same shape in -> stackable
+
+for block in blocks:        # a 12-, 48-, or 96-deep model
+    x = transformer_block(x)
+```
+
+<Callout type="why">
+The split is the heart of the design: **attention moves information** between positions, while the
+**FFN processes** the information at each position. Almost everything an LLM can do is some
+interleaving of "gather context" and "transform it" — repeated dozens of times.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+A car factory is a line of identical-looking stations. At each, parts are first **gathered** from
+nearby bins (attention: pulling in what's needed) and then **assembled** onto the chassis (the FFN's
+per-unit work). The chassis rolls forward unchanged except for what each station adds — the residual
+stream — and because every station leaves a standard chassis, you can chain as many as you like.
+</ExampleCard>
+
+<ExampleCard domain="Cooking" icon="👨‍🍳">
+In a restaurant brigade, a plate passes down the line. The *garde-manger* checks what the other
+stations are doing (gather context), then the sauté station does its own focused work on the dish
+(per-plate computation). Each station adds to the plate rather than starting over, and the plate keeps
+the same form so the next station can take it.
+</ExampleCard>
+
+<ExampleCard domain="Film post-production" icon="🎬">
+A shot flows through editorial, color, VFX, and sound — repeated per scene. Some steps **reference
+other shots** for continuity (attention across the timeline); others **process this shot alone**
+(grading, denoising — the FFN). The frame format never changes, so the pipeline stages stack cleanly.
+</ExampleCard>
+
+<ExampleCard domain="Genetics" icon="🧬">
+Gene expression reads context — promoters and nearby regulatory regions interact (a kind of
+attention) — and then a local machine **transforms** the message into a product (transcription and
+translation, the per-site computation). The same machinery is reused across thousands of genes,
+much as one block design is reused across the whole network.
+</ExampleCard>
+
+<Callout type="note">
+A handy rule of thumb: of a block's parameters, roughly two-thirds sit in the FFN
+(its two big <em>d × 4d</em> matrices) and one-third in attention. Scaling a model up mostly means
+making these matrices — and the number of stacked blocks — bigger.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Within one transformer block, which sub-layer is the one that lets tokens exchange information?',
+      options: ['The feed-forward MLP', 'The layer norm', 'The multi-head attention', 'The residual addition'],
+      answer: 2,
+      explain: 'Attention is the only sub-layer that mixes across positions. The FFN processes each token independently; layer norm and the residual add are wrappers.',
+    },
+    {
+      q: 'Why must a block’s output have the same shape as its input?',
+      options: [
+        'So the loss can be computed',
+        'So that identical blocks can be stacked, each feeding the next',
+        'To save memory',
+        'So attention can be skipped',
+      ],
+      answer: 1,
+      explain: 'Shape-preservation is what makes the block repeatable: the output of block 1 is a valid input to block 2, letting you stack dozens of them.',
+    },
+    {
+      q: 'With model width d = 512 and the usual 4× expansion, how wide is the FFN’s hidden layer d_ff?',
+      options: ['128', '512', '1024', '2048'],
+      answer: 3,
+      explain: 'd_ff = 4 × d = 4 × 512 = 2048. The MLP expands to 2048, applies GELU, then projects back down to 512.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>transformer block</strong> = attention sub-layer (mix between tokens) then feed-forward sub-layer (process each token), each wrapped in <strong>layer norm + residual</strong>.',
+    'Attention is the only step that <strong>moves information across positions</strong>; the <strong>FFN</strong> transforms each position independently, expanding to ~<em>4d</em> and back.',
+    'The block <strong>preserves shape</strong> (input dim = output dim), which is exactly what lets you <strong>stack</strong> N identical blocks into a deep model.',
+    'Most parameters live in the <strong>FFN matrices</strong>; making the model bigger means wider matrices and more blocks.',
+    'A whole LLM is just this one brick repeated — <em>communicate, then compute</em> — dozens of times.',
+  ]}
+/>
+
+Next up: we have the architecture; now we give it a *goal*. **Language modeling** turns this stack into
+something that predicts the next token — and gives us a number, perplexity, for how good it is.

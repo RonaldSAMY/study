@@ -1,0 +1,181 @@
+---
+title: Language Modeling & Perplexity
+track: transformers
+summary: Train a transformer by making it guess the next token — cross-entropy is the loss, perplexity is the score, and that single objective is how every LLM learns.
+difficulty: advanced
+estMinutes: 14
+prereqs:
+  - information-theory/cross-entropy-kl
+  - transformers/softmax-sampling
+leadsTo:
+  - transformers/tokenization-scaling
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import NextTokenPredictor from '../../../components/demos/NextTokenPredictor.tsx';
+
+## The hook: the phone keyboard that learned every language
+
+When your phone suggests the next word — in English, in Spanish, in Hindi — it is playing one simple
+game: *given everything typed so far, guess what comes next.* An LLM plays the exact same game, just at
+a vastly larger scale. There is no separate "understand grammar" or "learn facts" module. There is one
+objective, repeated over trillions of tokens: **predict the next token**. Astonishingly, getting very
+good at that one game is what produces translation, reasoning, and code.
+
+We have a transformer that turns a sequence into scores for the next token (from the softmax lesson).
+Now we give it a goal, a way to measure progress, and a score everyone reports: **perplexity**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Train the model to put **high probability on the token that actually comes next**; measure how well it
+does with **cross-entropy** (average surprise), and report **perplexity** — roughly *how many tokens
+the model is effectively choosing between* at each step.
+</Callout>
+
+## Intuition: turn the whole internet into a fill-in-the-blank quiz
+
+Any text is automatically a supervised dataset. Take a sentence, hide the next word, ask the model to
+predict it, and you already know the right answer — it's the next word. No human labeling needed. This
+is why language models can train on the entire web: every sentence grades itself.
+
+At each position the model outputs a **probability distribution** over the whole vocabulary. We reward
+it for assigning high probability to the true next token and penalize it for being confidently wrong.
+The penalty is **surprise**: $-\log p(\text{true token})$. If the model said the right token was almost
+certain, surprise is near 0; if it gave the right token almost no chance, surprise is huge. Averaging
+that surprise over all positions gives the **cross-entropy loss** — the very quantity you met in
+information theory, now used as a training target.
+
+**Perplexity** is just that loss, exponentiated, turned into an intuitive unit: a perplexity of 1 means
+"I always knew the next token"; a perplexity of 50,000 means "I might as well have guessed uniformly
+from the whole vocabulary."
+
+## Play with it
+
+A short sentence; at each position the model predicts the next token. The true token's bar is green.
+Drag **training progress** from 0% (clueless, near-uniform) toward 100% (confident, correct) and watch
+the loss and perplexity collapse. Step through positions to see the running sentence average.
+
+<NextTokenPredictor client:visible />
+
+<Callout type="tip">
+At 0% training the model spreads probability everywhere, so perplexity is high — it really is choosing
+between many tokens. As you train, probability piles onto the green (true) token, surprise drops toward
+0, and perplexity falls toward <strong>1</strong>. That fall <em>is</em> learning.
+</Callout>
+
+## The formal definition
+
+A language model factorizes the probability of a sequence using the chain rule of probability — each
+token conditioned on all the ones before it:
+
+$$
+P(x_1, x_2, \dots, x_T) = \prod_{t=1}^{T} P(x_t \mid x_{\lt t}).
+$$
+
+Training minimizes the **cross-entropy** between the true next token and the model's predicted
+distribution — equivalently, the average negative log-likelihood:
+
+$$
+\mathcal{L} = -\frac{1}{T}\sum_{t=1}^{T} \log P\big(x_t \mid x_{\lt t}\big).
+$$
+
+Because the target is "one-hot" (the true token has probability 1), cross-entropy collapses to just
+the surprise of the correct token at each step. **Perplexity** is the exponential of that loss:
+
+$$
+\mathrm{PPL} = \exp(\mathcal{L}) = \exp\!\left(-\frac{1}{T}\sum_{t=1}^{T}\log P(x_t \mid x_{\lt t})\right).
+$$
+
+```python
+logits = model(tokens[:-1])               # score the next token at every position
+loss   = cross_entropy(logits, tokens[1:])  # mean of -log p(true next token)
+ppl    = loss.exp()                          # perplexity = exp(average loss)
+loss.backward()                             # one objective trains the whole model
+```
+
+<Callout type="why">
+Minimizing cross-entropy is the same as pushing the model's distribution toward the data's true
+distribution (their KL divergence to zero). The irreducible part of the loss is the language's own
+entropy — genuine unpredictability no model can beat. Everything an LLM "knows" is a side effect of
+chasing this one number down.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Weather forecasting" icon="🌧️">
+A forecaster who says "70% chance of rain" is graded by **log loss**: if it rains, the penalty is
+$-\log(0.7)$; a confident-but-wrong forecast is punished far more. Good forecasters, like good language
+models, are *calibrated* — their stated probabilities match reality, which is exactly what minimizing
+cross-entropy rewards.
+</ExampleCard>
+
+<ExampleCard domain="Sports betting" icon="🎲">
+A bookmaker's odds are a probability distribution over outcomes. **Perplexity is the effective number
+of outcomes** they're hedging against: tight odds on a clear favorite mean low perplexity; a wide-open
+field means high perplexity. A model with perplexity 8 is as unsure as someone guessing between 8
+equally likely choices.
+</ExampleCard>
+
+<ExampleCard domain="Mobile autocomplete" icon="📱">
+Your multilingual keyboard ranks next-word suggestions by probability. When it nails the word you
+wanted, its surprise on your text is low — low perplexity, better suggestions. Train it on your own
+messages and it adapts: the loss on *your* writing style goes down.
+</ExampleCard>
+
+<ExampleCard domain="Game shows" icon="🎯">
+Think of "Wheel of Fortune": guessing the next letter of a phrase. A contestant who knows English well
+needs few guesses — low perplexity. A perplexity of 2 means "on average I'm down to a coin flip per
+token," which is roughly how strong modern models are at ordinary English.
+</ExampleCard>
+
+<Callout type="note">
+Perplexity in <strong>nats</strong> uses <em>exp</em>; in <strong>bits</strong> it uses
+<em>2<sup>loss</sup></em>. Same idea, different log base — bits answer "how many yes/no questions, on
+average, to pin down the next token."
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the training objective of a language model?',
+      options: [
+        'Maximize the length of its outputs',
+        'Minimize the cross-entropy of predicting each next token',
+        'Match a human-written label for every sentence',
+        'Keep the attention weights as uniform as possible',
+      ],
+      answer: 1,
+      explain: 'A language model minimizes cross-entropy = average -log p(true next token). The labels are free: the next token is its own answer.',
+    },
+    {
+      q: 'At one position the model gives the correct next token a probability of 0.5. What is the cross-entropy loss for that step, and the per-step perplexity?',
+      options: ['loss 0.5, ppl 0.5', 'loss ln(2) ≈ 0.69, ppl 2', 'loss 0, ppl 1', 'loss 2, ppl 4'],
+      answer: 1,
+      explain: 'Loss = -ln(0.5) = ln(2) ≈ 0.69 nats. Perplexity = exp(0.69) = 2 — the model is effectively choosing between 2 options.',
+    },
+    {
+      q: 'A model that always predicted uniformly over a 50,000-token vocabulary would have what perplexity?',
+      options: ['1', '2', '50,000', '0'],
+      answer: 2,
+      explain: 'Uniform over V tokens gives perplexity V. So 50,000 is the "knows nothing" baseline; real models are far lower.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A language model learns one game: <strong>predict the next token</strong>, using <em>P(x<sub>t</sub> | x<sub>&lt;t</sub>)</em> from the chain rule.',
+    'The loss is <strong>cross-entropy</strong> — the average surprise <em>-log p(true token)</em> — and text grades itself, so no labels are needed.',
+    '<strong>Perplexity = exp(loss)</strong> is the effective number of tokens the model is choosing between; lower is better, 1 is perfect.',
+    'Minimizing cross-entropy pushes the model toward the data distribution (KL → 0); the language’s own <strong>entropy</strong> is the floor it can never beat.',
+    'This single objective, scaled up, is what yields translation, reasoning, and code — no separate modules required.',
+  ]}
+/>
+
+Next up: what *is* a "token," exactly? We meet **BPE tokenization** and the **scaling laws** that
+predict how much better the loss gets as you add data, parameters, and compute.

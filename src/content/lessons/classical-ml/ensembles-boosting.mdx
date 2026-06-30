@@ -1,0 +1,217 @@
+---
+title: Ensembles & Boosting
+track: classical-ml
+summary: Combine many weak learners — by averaging (bagging) or by correcting each other's mistakes (boosting) — into one strong model.
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - classical-ml/decision-trees
+leadsTo:
+  - classical-ml/kmeans
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BoostingEnsembleLab from '../../../components/demos/BoostingEnsembleLab.tsx';
+
+## The hook: the wisdom of a crowd
+
+Ask one person to guess the number of jelly beans in a jar and they will be wildly off. Ask a thousand
+people and *average* their guesses, and the answer is often eerily close to the truth. No single guesser
+is an expert — but their individual errors point in random directions and **cancel out**. A noisy crowd,
+combined the right way, beats almost any individual.
+
+Machine learning steals this trick. Instead of training one big, brittle model, we train many small,
+imperfect ones — a panel of experts — and combine their opinions. The two great recipes for combining
+them are **bagging** (let everyone vote, then average) and **boosting** (line the experts up so each one
+fixes the mistakes of the last). These ensembles win more real-world tabular competitions than anything
+else.
+
+<Callout type="intuition" title="The one-sentence idea">
+Many weak models, combined cleverly, make one strong model — by **averaging away their noise** (bagging)
+or by **sequentially correcting their errors** (boosting).
+</Callout>
+
+## Intuition: from one shaky tree to a panel of experts
+
+You already met the **decision tree**: it splits the data into regions and predicts a value in each one.
+A single deep tree is a *weak learner* in a specific sense — it is **high variance**. Shift the training
+data a little and the tree can change dramatically, because one different split near the top reshuffles
+everything below. It memorizes quirks instead of learning the signal.
+
+Here is the key tension, the **bias–variance tradeoff**, in plain words:
+
+- **Bias** is error from being too simple — a model that *can't* capture the pattern (a flat line trying
+  to fit a wave).
+- **Variance** is error from being too sensitive — a model that captures the pattern *and* the noise, and
+  so wobbles whenever the data changes.
+
+A deep tree has low bias but high variance. There are two ways to fix it, and they map onto our two
+recipes:
+
+1. **Bagging / random forests** — train many trees, each on a different random bootstrap sample of the
+   data (and a random subset of features). Each tree is still shaky, but their errors are now
+   *decorrelated*, so **averaging** them cancels the noise and slashes variance — exactly the jelly-bean
+   crowd.
+2. **Boosting** — train trees **sequentially**. The first makes a rough guess; the next is trained
+   specifically on what the first got wrong; the next fixes what those two still miss, and so on. Each
+   tree nudges the prediction toward the truth, steadily reducing **bias**.
+
+The demo below shows boosting in action.
+
+## Play with it
+
+Below is a smooth target curve (sky) that we want to learn. Each tree you add is a tiny step function
+fit to the *leftover error*. Press **Add tree** a few times and watch the indigo staircase climb toward
+the curve as the training MSE drops.
+
+<BoostingEnsembleLab client:visible />
+
+<Callout type="tip">
+Add trees one at a time and watch the rough step fit smooth out and the <strong>MSE</strong> fall fast at
+first, then slowly. A small <strong>learning rate</strong> takes more trees but fits more gently; too
+many trees will eventually chase the noise and start to overfit.
+</Callout>
+
+## The formal definition
+
+An **ensemble** is a weighted sum of $M$ base learners $h_m$:
+
+$$
+F(x) = \sum_{m=1}^{M} \gamma_m \, h_m(x).
+$$
+
+**Bagging** uses equal weights and trains each $h_m$ on its own bootstrap resample of the data:
+
+$$
+F(x) = \frac{1}{M} \sum_{m=1}^{M} h_m(x).
+$$
+
+Because the trees are (mostly) independent, averaging $M$ of them divides their variance by roughly $M$
+while leaving the bias unchanged — that is the whole point of a random forest.
+
+**Gradient boosting** builds the model up one stage at a time, each stage correcting the last:
+
+$$
+F_m(x) = F_{m-1}(x) + \eta \, h_m(x),
+$$
+
+where $\eta$ is the learning rate and $h_m$ is trained to fit the **negative gradient** of the loss. For
+squared-error loss $L = \tfrac{1}{2}(y - F)^2$, that negative gradient is simply the **residual**:
+
+$$
+r_i = y_i - F_{m-1}(x_i).
+$$
+
+So each new tree literally learns *"what is still wrong,"* and we add a fraction $\eta$ of it. In terms
+of the **bias–variance decomposition**,
+
+$$
+\text{error} \approx \text{bias}^2 + \text{variance} + \text{noise},
+$$
+
+bagging attacks the **variance** term and boosting attacks the **bias** term.
+
+```python
+# Gradient boosting with squared-error loss, in 4 lines.
+F = np.zeros_like(y)            # start from a constant prediction
+for m in range(M):
+    residual = y - F           # negative gradient for MSE loss
+    tree.fit(X, residual)      # fit a shallow tree to the residual
+    F += eta * tree.predict(X) # add a small step toward the fix
+```
+
+<Callout type="why">
+Gradient-boosted trees — **XGBoost**, **LightGBM**, **CatBoost** — are the workhorses of applied machine
+learning on tabular data. On spreadsheets of customers, transactions, and sensor readings they routinely
+beat deep neural nets, which is why they dominate data-science competitions and production pipelines.
+</Callout>
+
+## The same idea, four different worlds
+
+The "panel of experts" shows up far beyond graph paper.
+
+<ExampleCard domain="Finance" icon="🕵️">
+A bank scores each credit-card swipe for fraud with **gradient-boosted trees**. One tree might notice an
+odd merchant category, another a strange location, another an unusual amount at 3 a.m. Summed together,
+their small signals catch fraud that no single rule would, while keeping false alarms low.
+</ExampleCard>
+
+<ExampleCard domain="Healthcare" icon="🧬">
+No single biomarker diagnoses a disease. A clinician orders a **panel** — blood markers, imaging scores,
+genetic tests — and weighs them together, much like asking for second opinions. An ensemble model does
+the same: each weak test contributes evidence, and the combination is far more reliable than any one
+result.
+</ExampleCard>
+
+<ExampleCard domain="Web search" icon="🔎">
+Search engines use **learning-to-rank** with boosted trees to order results. Each tree scores a page from
+features like freshness, click history, and text match; summing many trees produces the final relevance
+score that decides what lands at the top of your results.
+</ExampleCard>
+
+<ExampleCard domain="Climate" icon="🌦️">
+Weather services run an **ensemble forecast** — the same model launched many times with slightly perturbed
+starting conditions. Averaging the runs gives the most likely forecast, and their spread becomes the
+*probability* of rain. It is bagging applied to the atmosphere.
+</ExampleCard>
+
+<Callout type="note">
+Notice the split: fraud detection and learning-to-rank *sum* sequential corrections (boosting), while the
+medical panel and weather runs *average* independent opinions (bagging). Same crowd, two ways to combine.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Bagging (random forests) and boosting both combine many trees. What does each primarily reduce?',
+      options: [
+        'Bagging reduces bias; boosting reduces variance',
+        'Bagging reduces variance; boosting reduces bias',
+        'Both reduce only variance',
+        'Both reduce only bias',
+      ],
+      answer: 1,
+      explain: 'Averaging decorrelated trees cancels their noise, cutting variance (bagging). Sequentially correcting errors steadily fits the signal, cutting bias (boosting).',
+    },
+    {
+      q: 'In gradient boosting with squared-error loss, what does each new tree fit?',
+      options: [
+        'The original targets y again, from scratch',
+        'The residual r = y − F(x) left by the current ensemble',
+        'A random bootstrap sample of the data',
+        'The average of all previous trees',
+      ],
+      answer: 1,
+      explain: 'For MSE loss the negative gradient is exactly the residual y − F(x), so each tree learns what the model still gets wrong.',
+    },
+    {
+      q: 'You add hundreds of boosting trees with a large learning rate and training error keeps dropping, but test error starts rising. What is happening, and what helps?',
+      options: [
+        'The model is underfitting; add even more trees',
+        'The model is overfitting; use a smaller learning rate and/or fewer trees',
+        'Bagging has failed; switch the loss function',
+        'Nothing — lower training error is always better',
+      ],
+      answer: 1,
+      explain: 'Too many aggressive boosting steps start fitting noise. A smaller learning rate (more, gentler steps) plus limiting the number of trees regularizes the ensemble.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>ensemble</strong> combines many weak learners into one strong model — a weighted sum of their predictions.',
+    '<strong>Bagging</strong> (random forests) averages decorrelated trees on bootstrap samples to cut <strong>variance</strong>.',
+    '<strong>Boosting</strong> adds trees sequentially, each fitting the previous error, to cut <strong>bias</strong>.',
+    'For squared-error loss, each boosting tree fits the <strong>residual</strong> (the leftover error) and is added with a small learning-rate step.',
+    'Gradient-boosted trees (<strong>XGBoost, LightGBM, CatBoost</strong>) dominate real-world tabular machine learning.',
+  ]}
+/>
+
+Next up: **k-Means Clustering** — where we leave labeled targets behind and let the data group itself.
