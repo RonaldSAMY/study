@@ -1,0 +1,255 @@
+---
+title: Thinking Recursively
+track: dsa-recursion
+summary: "Base case plus recursive case: how a function that calls itself reaches an answer, and how the call stack unwinds it."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-complexity/space-amortized
+leadsTo:
+  - dsa-recursion/factorial-power
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import RecCallStackTrace from '../../../components/demos/RecCallStackTrace.tsx';
+
+## The hook: standing in a cinema queue
+
+You are in the middle of a long cinema queue and want to know your position. You can't see the front,
+so you tap the person ahead and ask *"what's your number?"* They don't know either — so they ask the
+person ahead of *them*, and so on. Eventually the question reaches the very front: that person has
+**nobody** ahead, so they answer *"I'm number 1."* That answer flows back: *"then I'm 2"*, *"then I'm
+3"*, all the way to you. You just solved a problem **recursively**: every person delegated to a smaller
+version of the same question, until someone hit a case they could answer directly.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **recursive** function solves a problem by calling itself on a **smaller** input, stopping at a
+**base case** it can answer without recursing.
+</Callout>
+
+## Intuition: two parts, always
+
+Every correct recursion has exactly two ingredients:
+
+1. **The base case** — the smallest input, where you return an answer *directly* (the person at the
+   front of the queue). Without it, the function never stops.
+2. **The recursive case** — you assume the function already works on a smaller input, use that result,
+   and build your answer (*"their number, plus one"*).
+
+The leap of faith is step 2: you *trust* that `sum(rest of the list)` is correct, even while you are
+still defining `sum`. As long as every recursive call moves **closer to the base case**, that trust is
+justified — the chain of "smaller, smaller, smaller" must end.
+
+Take adding up a list of numbers. The list `[3, 1, 4]` is just `3 + (the sum of [1, 4])`. And `[1, 4]`
+is `1 + (the sum of [4])`. And `[4]` is `4 + (the sum of [])` — and the sum of the empty list is the
+base case: **0**. Notice the call stack builds up on the way *down* and collapses on the way *up*.
+
+## Play with it
+
+Type your own list of numbers, then press <strong>▶ Play</strong>. Watch frames get **pushed** onto the
+call stack as we dive toward the base case, then values **return** back up as each frame pops. Use
+<strong>⏭ / ⏮</strong> to inspect one step at a time.
+
+<RecCallStackTrace client:visible />
+
+<Callout type="tip">
+Follow the colours: a frame is <strong>sky</strong> while it's still waiting on a deeper call,
+<strong>emerald</strong> at the base case, and <strong>indigo</strong> once it has a value to return.
+The answer only appears after the deepest call returns — recursion finishes <em>bottom-up</em>.
+</Callout>
+
+## How it works: a dry run
+
+Here is the same `sum` the demo traced. Read it as *"the sum from index `i` is element `i` plus the
+sum from `i + 1`."*
+
+```ts
+function sum(arr, i = 0) {
+  if (i === arr.length) return 0;     // base case: nothing left
+  return arr[i] + sum(arr, i + 1);    // recursive case: one element + the rest
+}
+```
+
+Trace `sum([3, 1, 4])`:
+
+- `sum(·, 0)` = `3 + sum(·, 1)` — paused, waiting
+- `sum(·, 1)` = `1 + sum(·, 2)` — paused, waiting
+- `sum(·, 2)` = `4 + sum(·, 3)` — paused, waiting
+- `sum(·, 3)` = `0` — **base case**, returns immediately
+- now unwind: `4 + 0 = 4`, then `1 + 4 = 5`, then `3 + 5 = 8`
+
+Run it and add a few `console.log`s of your own:
+
+<CodeRunner
+  client:visible
+  code={`function sum(arr, i = 0) {
+  if (i === arr.length) return 0;
+  return arr[i] + sum(arr, i + 1);
+}
+
+// a string reversal is recursive too: first char goes last
+function reverse(str) {
+  if (str.length <= 1) return str;
+  return reverse(str.slice(1)) + str[0];
+}`}
+  tests={[
+    { expr: 'sum([3, 1, 4, 1, 5])' },
+    { expr: 'sum([])' },
+    { expr: 'reverse("recursion")' },
+  ]}
+/>
+
+## The real implementation
+
+These are faithful excerpts from the course's recursion file — the same shapes, with full base case +
+recursive case structure.
+
+```ts
+// /dsa/04-recursion/recursion-basics.ts
+
+// Recursive sum — Time: O(n), Space: O(n)
+function sumArray<T extends number>(arr: T[], index: number = 0): number {
+  if (index === arr.length) return 0;
+  return arr[index] + sumArray(arr, index + 1);
+}
+
+// Reverse a string — Time: O(n), Space: O(n)
+function reverseString(str: string): string {
+  if (str.length <= 1) return str;
+  return reverseString(str.slice(1)) + str[0];
+}
+
+// Palindrome check by shrinking from both ends
+function isPalindrome(str: string, left: number = 0, right: number = str.length - 1): boolean {
+  if (left >= right) return true;            // base case: pointers met
+  if (str[left] !== str[right]) return false;
+  return isPalindrome(str, left + 1, right - 1);
+}
+```
+
+Run the full file: `npx tsx 04-recursion/recursion-basics.ts`
+
+## Complexity
+
+For a "linear" recursion like `sum` that does $O(1)$ work and makes **one** call on an input one
+smaller, the running time satisfies
+
+$$
+T(n) = T(n-1) + O(1) \;\Rightarrow\; T(n) = O(n).
+$$
+
+The subtle cost is **space**: every paused call keeps a frame on the call stack, so the deepest the
+stack ever gets is the recursion's *depth*.
+
+| Quantity | This `sum` | Why |
+| --- | --- | --- |
+| Time (best/avg/worst) | $O(n)$ | one $O(1)$ step per element |
+| Stack space | $O(n)$ | $n$ frames stacked before any return |
+| Base-case hits | $1$ | the empty-list case |
+
+<Callout type="why">
+That $O(n)$ stack is why deep recursion can crash with a "maximum call stack size exceeded" error.
+You met the abstract idea of memory cost in <strong>Space &amp; Amortized Analysis</strong>; recursion
+is where it becomes physical — each frame is real memory.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Geology" icon="🪆">
+Russian nesting dolls are recursion you can hold. "Open the doll" means: if it's the tiny solid one,
+stop (**base case**); otherwise open it and **repeat the same instruction** on the smaller doll inside.
+The instruction never changes — only the doll gets smaller.
+</ExampleCard>
+
+<ExampleCard domain="File systems" icon="📁">
+To compute a folder's total size, add up the sizes of its files, then **recurse** into each subfolder
+and add those. The base case is a folder with no subfolders. This is exactly how `du` and your OS's
+"folder properties" dialog work — a tree walked recursively.
+</ExampleCard>
+
+<ExampleCard domain="Language" icon="🗣️">
+Sentences nest: *"The cat that chased the mouse that ate the cheese ran."* A noun phrase can contain a
+clause that contains another noun phrase. Grammars are defined recursively, which is why a parser for a
+programming language is naturally recursive too.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **No base case (or an unreachable one).** The classic infinite recursion. Always ask: *does every
+  call move strictly toward the base case?* `sum(arr, i)` works because `i` only grows; an off-by-one
+  like `i - 1` would loop forever.
+- **Doing work in the wrong order.** `arr[i] + sum(arr, i + 1)` adds *after* the recursive result
+  comes back. If you need to process *before* recursing (like printing a countdown), put the work
+  first. The position of your work decides whether things happen top-down or bottom-up.
+- **Forgetting the stack cost.** Interviewers love "what's the space complexity?" — for recursion the
+  answer is usually $O(\text{max depth})$, not $O(1)$, even when no array is allocated.
+- **Interview tip:** state your base case out loud *first*, then the recursive case. It signals you
+  know the structure and catches missing-base-case bugs before you write them.
+
+## Practice
+
+From `recursion-practice.js`, easiest first:
+
+1. **Sum of digits (easy).** `sumDigits(123) → 6`. Base case: a single digit. Recursive case:
+   `(n % 10) + sumDigits(Math.floor(n / 10))`.
+2. **Count occurrences (easy).** Count how often a value appears in an array by checking the first
+   element and recursing on the rest.
+3. **Palindrome check (easy).** Compare the first and last characters, then recurse on the middle.
+4. **Flatten a nested object (medium).** Walk keys; if a value is itself an object, recurse with an
+   extended key prefix — a great test of "recurse on the smaller structure."
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What two parts must every correct recursive function have?',
+      options: [
+        'A loop and a counter',
+        'A base case and a recursive case',
+        'A cache and a stack',
+        'Two recursive calls',
+      ],
+      answer: 1,
+      explain: 'The base case stops the recursion with a direct answer; the recursive case reduces the problem toward that base case.',
+    },
+    {
+      q: 'In sum([3, 1, 4]), which call returns FIRST (before any addition happens)?',
+      options: [
+        'sum(·, 0), the outer call',
+        'sum(·, 3), the base case',
+        'They all return at once',
+        'sum(·, 1)',
+      ],
+      answer: 1,
+      explain: 'Calls pause on the way down; the deepest one — the base case sum(·, 3) = 0 — returns first, then the stack unwinds upward.',
+    },
+    {
+      q: 'Why is the space complexity of this recursive sum O(n) rather than O(1)?',
+      options: [
+        'It allocates a new array each call',
+        'Each unfinished call keeps a frame on the call stack, up to n deep',
+        'Numbers in JavaScript are large',
+        'It is actually O(1)',
+      ],
+      answer: 1,
+      explain: 'All n calls are paused and stacked before the base case lets them unwind, so n frames coexist — that is O(n) stack space.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Recursion = <strong>base case</strong> (stop) + <strong>recursive case</strong> (shrink the problem and trust the smaller call).',
+    'The <strong>call stack</strong> grows as calls pause on the way down and unwinds as values return on the way up.',
+    'Every recursive call must move <strong>strictly toward the base case</strong>, or it runs forever.',
+    'A linear recursion over n items is <strong>O(n) time</strong> and <strong>O(n) stack space</strong> — the depth is real memory.',
+    'Where you put the work (before vs after the recursive call) decides whether it happens <strong>top-down or bottom-up</strong>.',
+  ]}
+/>
+
+Next up: two famous recursions — **factorial** and a clever **fast power** that finishes in $O(\log n)$
+by squaring instead of multiplying one factor at a time.

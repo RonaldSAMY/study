@@ -1,0 +1,204 @@
+---
+title: Essential Bit Tricks
+track: dsa-bit-manipulation
+summary: Get, set, clear and toggle a bit, isolate the lowest set bit, and test for a power of two — all in one line.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-bit-manipulation/bit-basics
+leadsTo:
+  - dsa-bit-manipulation/counting-bits
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BitTrickVisualizer from '../../../components/demos/BitTrickVisualizer.tsx';
+
+## The hook: the moves every competitive coder has memorised
+
+Once you know the six operators, a handful of *combinations* show up again and again — so often that
+experienced programmers type them without thinking. "Is this a power of two?" is `n & (n - 1)`.
+"Isolate the lowest set bit" is `n & -n`. These one-liners look like magic the first time you see
+them, but each is just a mask meeting an operator at the right column.
+
+<Callout type="intuition" title="The one-sentence idea">
+Almost every bit trick is the same recipe: **build a mask** (usually `1 << i` or a clever neighbour
+like `n - 1`) and **combine it** with the number using AND, OR, or XOR.
+</Callout>
+
+## Intuition: build a mask, pick an operator
+
+A **mask** is a number whose bits mark the positions you care about. The simplest mask is `1 << i`: a
+single 1 sitting at position $i$. Pair it with an operator and you control exactly one bit:
+
+- **Get** bit $i$: `(n >> i) & 1` — slide it down and keep just the ones place.
+- **Set** bit $i$: `n | (1 << i)` — OR forces it to 1.
+- **Clear** bit $i$: `n & ~(1 << i)` — AND with everything-except-$i$ forces it to 0.
+- **Toggle** bit $i$: `n ^ (1 << i)` — XOR flips it.
+
+The two "wow" tricks use a *non-obvious* mask. Subtracting 1 from $n$ flips its lowest 1 and every
+zero below it, which makes both of these fall out:
+
+- **Isolate the lowest set bit:** `n & -n` (since $-n = \sim n + 1$).
+- **Test power of two:** `n > 0 && (n & (n - 1)) === 0` — a power of two has exactly one 1-bit.
+
+## Play with it
+
+Type a number, pick a trick, and step through it. The blue **mask** row is built for you; watch how it
+meets `n` column by column, and read the verdict at the end. Try `lowest set bit` on `12`, then
+`power of two?` on `8` versus `12`.
+
+<BitTrickVisualizer client:visible />
+
+<Callout type="tip">
+For <strong>power of two?</strong>, watch the <code>n - 1</code> mask: it turns the lowest 1 into 0 and
+sets every bit below it. ANDing erases the single shared 1, leaving all zeros — the tell-tale sign of a
+lone bit.
+</Callout>
+
+## How it works
+
+Why does `n & (n - 1)` clear the lowest set bit? Take `n = 12 = 1100`. Then `n - 1 = 1011`: subtraction
+borrows through the trailing zeros, flipping the lowest 1 to 0 and the zeros below it to 1.
+
+```
+  1100   (12)
+& 1011   (11)
+  ----
+  1000   (8)   ← the lowest 1-bit is gone
+```
+
+If `n` had only one 1-bit to begin with (a power of two), there is nothing left, so the result is `0`.
+That is the entire power-of-two test. And `n & -n` does the opposite — it *keeps* only that lowest bit,
+because in two's complement `-n` is `~n + 1`, which agrees with `n` in exactly one position.
+
+<CodeRunner
+  client:visible
+  code={`function getBit(n, i)   { return (n >> i) & 1; }
+function setBit(n, i)   { return n | (1 << i); }
+function clearBit(n, i) { return n & ~(1 << i); }
+function toggleBit(n, i){ return n ^ (1 << i); }
+function lowestSetBit(n){ return n & -n; }
+function isPowerOfTwo(n){ return n > 0 && (n & (n - 1)) === 0; }`}
+  tests={[
+    { expr: 'getBit(13, 2)', label: 'bit 2 of 13' },
+    { expr: 'setBit(8, 1)', label: 'set bit 1 of 8' },
+    { expr: 'clearBit(13, 0)', label: 'clear bit 0 of 13' },
+    { expr: 'lowestSetBit(12)', label: 'lowest set bit of 12' },
+    { expr: 'isPowerOfTwo(8)', label: '8 a power of two?' },
+    { expr: 'isPowerOfTwo(12)', label: '12 a power of two?' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — the power-of-two test and the two rightmost-bit isolators that power
+later lessons:
+
+```ts
+// /dsa/16-bit-manipulation/bit-basics.ts
+function isPowerOfTwo(n: number): boolean {
+    return n > 0 && (n & (n - 1)) === 0;   // exactly one 1-bit
+}
+
+function getRightmostSetBit(n: number): number {
+    return n & (-n);                       // isolate the lowest 1-bit
+}
+
+function removeRightmostSetBit(n: number): number {
+    return n & (n - 1);                    // clear the lowest 1-bit
+}
+```
+
+Run the full file: `npx tsx 16-bit-manipulation/bit-basics.ts`.
+
+## Complexity
+
+Each trick is a fixed handful of operators on a machine word — no loops, no allocation:
+
+$$
+T(n) = O(1), \qquad S(n) = O(1).
+$$
+
+| Trick | Expression | Time |
+|-------|------------|------|
+| Get / Set / Clear / Toggle bit $i$ | `(n>>i)&1`, `n\|(1<<i)`, `n&~(1<<i)`, `n^(1<<i)` | $O(1)$ |
+| Lowest set bit | `n & -n` | $O(1)$ |
+| Power of two? | `n>0 && (n&(n-1))===0` | $O(1)$ |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Operating systems" icon="🧠">
+A memory allocator rounds requests up to a power of two so blocks pack neatly. <code>(n &amp; (n-1)) === 0</code>
+is the instant check for "already a clean power of two — no rounding needed."
+</ExampleCard>
+
+<ExampleCard domain="Game design" icon="🎮">
+A boss has eight status effects packed into a byte. "Cure the most recently applied effect" maps to
+isolating and clearing the lowest set bit with <code>n &amp; (n-1)</code> — no list to scan.
+</ExampleCard>
+
+<ExampleCard domain="Data formats" icon="🗜️">
+A sparse bitset uses <code>n &amp; -n</code> to jump straight to the next present element instead of looping
+through empty slots — the basis of fast iteration in compressed indexes.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Power-of-two needs the `n > 0` guard.** For `n = 0`, `n & (n - 1)` is also `0`, but zero is not a
+  power of two. Forgetting the guard is the #1 review comment on this trick.
+- **`1 << i` overflows past bit 31 in JS.** For positions ≥ 31, the result goes negative or wraps. Use
+  `2 ** i` or `BigInt` when you need higher bits.
+- **`-n` only behaves for signed integers.** It relies on two's complement; it does not mean "subtract"
+  here, it means "isolate the lowest bit."
+- **Interview cue:** "lowest set bit" and "power of two in $O(1)$" are warm-up questions that gate the
+  harder ones — answer them instantly to buy credibility.
+
+## Practice
+
+1. **Easy:** Use `setBit` and `clearBit` to turn `0b1010` into `0b1110`, then back.
+2. **Easy:** What is `lowestSetBit(40)`? Verify in the demo (`40 = 101000`).
+3. **Medium:** Write `clearLowestSetBit` and use it to count set bits by looping until `n` is 0.
+4. **Medium:** Given a power of two, find its exponent (which bit is set) using `Math.log2`.
+5. **Hard:** Implement `isPowerOfFour(n)` — a power of two whose single bit sits at an *even* position
+   (hint: AND with the mask `0x55555555`).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does n & (n - 1) compute?',
+      options: ['n with the lowest set bit cleared', 'the lowest set bit, isolated', 'n doubled', 'n with all bits flipped'],
+      answer: 0,
+      explain: 'Subtracting 1 flips the lowest 1 and the zeros below it; ANDing keeps everything above, erasing that lowest 1-bit.',
+    },
+    {
+      q: 'Which test correctly identifies a power of two?',
+      options: ['(n & (n - 1)) === 0', 'n > 0 && (n & (n - 1)) === 0', 'n & -n === n', '(n | (n - 1)) === 0'],
+      answer: 1,
+      explain: 'A power of two has exactly one 1-bit, so n & (n-1) is 0 — but you must exclude n = 0, which also gives 0.',
+    },
+    {
+      q: 'To set bit 3 of a number to 1 without touching other bits, you would use:',
+      options: ['n & (1 << 3)', 'n | (1 << 3)', 'n ^ ~(1 << 3)', 'n >> 3'],
+      answer: 1,
+      explain: 'OR with a one-hot mask forces that position to 1 and leaves every other column unchanged.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Most tricks are <strong>mask + operator</strong>: build <code>1 &lt;&lt; i</code>, then AND/OR/XOR.',
+    '<strong>Set</strong> = OR, <strong>clear</strong> = AND with the complement, <strong>toggle</strong> = XOR, <strong>get</strong> = shift then mask.',
+    '<code>n &amp; (n - 1)</code> <strong>clears</strong> the lowest set bit; <code>n &amp; -n</code> <strong>isolates</strong> it.',
+    'A power of two has one 1-bit, so <code>n &gt; 0 &amp;&amp; (n &amp; (n-1)) === 0</code> — never drop the zero guard.',
+    'These one-liners are <strong>O(1)</strong> building blocks reused throughout the rest of the track.',
+  ]}
+/>
+
+Next up: **Counting Set Bits** — using `n & (n - 1)` in a loop to count ones faster than checking every
+position.

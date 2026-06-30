@@ -1,0 +1,245 @@
+---
+title: Bitmask Dynamic Programming
+track: dsa-bit-manipulation
+summary: Using an integer as a subset so a DP table can store one answer per combination — the traveling-salesman trick.
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - dsa-bit-manipulation/xor-single-number
+leadsTo:
+  - dsa-arrays/array-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BitmaskSubsetExplorer from '../../../components/demos/BitmaskSubsetExplorer.tsx';
+
+## The hook: an integer that *is* a set
+
+Some problems force a brutal question: of $n$ items, which *subset* have I used so far? With $n = 15$
+there are $2^{15}$ possible answers — far too many to track with named variables. But here is the
+leap: a subset of up to ~20 items **is just an integer**. Bit $i$ on means "item $i$ is in." Suddenly
+a DP table indexed by an integer remembers an answer for *every* subset, and famously hard problems
+like the traveling salesman become tractable.
+
+<Callout type="intuition" title="The one-sentence idea">
+A bitmask turns a subset into a single integer, so `dp[mask]` can store the best answer for "having
+already used exactly the items whose bits are set in `mask`."
+</Callout>
+
+## Intuition: counting from 0 to 2ⁿ − 1 visits every subset
+
+Build on the [flags lesson](/lessons/dsa-bit-manipulation/flags-masks): each bit names one element. Now
+let the integer *range* from `0` to `2^n - 1`. Every value in that range is a different combination of
+on/off bits — so counting through all integers enumerates **all $2^n$ subsets, each exactly once**. The
+empty set is `0`; the full set is `(1 << n) - 1`.
+
+That gives DP a clean state space. The recipe is always:
+
+- **State:** a `mask` of which items are done (often plus a "current position").
+- **Transition:** pick an unused item `i` (`!(mask & (1 << i))`), move to `mask | (1 << i)`.
+- **Answer:** read `dp[(1 << n) - 1]`, the cell for "everything used."
+
+You'll also iterate **submasks** of a mask with the idiom `for (sub = mask; sub > 0; sub = (sub-1) & mask)`,
+which walks every subset of the already-chosen items.
+
+## Play with it
+
+Define a small set and count the mask from 0 upward. Each integer lights up the elements whose bits are
+set — that mask *is* the subset. The grid fills in as you go; by `2^n - 1` you've seen every combination
+exactly once. That sweep is precisely the outer loop of a bitmask DP.
+
+<BitmaskSubsetExplorer client:visible />
+
+<Callout type="tip">
+Watch the binary labels in the grid count up like an odometer: <code>000, 001, 010, 011, …</code>. Each
+new number flips bits in just the right way to land on the next subset — no subset is skipped or
+repeated.
+</Callout>
+
+## How it works
+
+The traveling salesman problem (TSP) is the canonical example. Let `dp[mask][i]` be the cheapest route
+that visits exactly the cities in `mask` and ends at city `i`. To extend it, go to an unvisited city
+`next` and turn its bit on:
+
+```
+dp[mask | (1<<next)][next] = min(
+    dp[mask | (1<<next)][next],
+    dp[mask][last] + dist[last][next]
+)
+```
+
+You start at `dp[1][0] = 0` (only city 0 visited, sitting at city 0) and finish by closing the loop
+back to the start from the full mask `(1 << n) - 1`. The whole tour search becomes a sweep over
+$2^n \cdot n$ table cells.
+
+<CodeRunner
+  client:visible
+  code={`// Enumerate every subset of n elements via its bitmask
+function subsets(items) {
+  const n = items.length, out = [];
+  for (let mask = 0; mask < (1 << n); mask++) {
+    const subset = [];
+    for (let i = 0; i < n; i++) if (mask & (1 << i)) subset.push(items[i]);
+    out.push(subset);
+  }
+  return out;
+}
+
+// Walk every submask of a mask (used inside DP transitions)
+function submasks(mask) {
+  const out = [];
+  for (let sub = mask; sub > 0; sub = (sub - 1) & mask) out.push(sub);
+  out.push(0);
+  return out;
+}`}
+  tests={[
+    { expr: 'subsets(["A","B","C"]).length', label: 'count of subsets of 3' },
+    { expr: 'JSON.stringify(subsets(["A","B"]))', label: 'subsets of [A,B]' },
+    { expr: 'JSON.stringify(submasks(0b101))', label: 'submasks of 101' },
+  ]}
+/>
+
+## The real implementation
+
+The course file's TSP solver — the textbook $O(2^n \cdot n^2)$ bitmask DP:
+
+```ts
+// /dsa/16-bit-manipulation/bitmask-dp.ts
+function tsp(dist: number[][]): number {
+    const n = dist.length;
+    const ALL_VISITED = (1 << n) - 1;
+    const dp: number[][] = Array(1 << n).fill(null).map(() => Array(n).fill(Infinity));
+    dp[1][0] = 0;                              // start: only city 0 visited
+
+    for (let mask = 1; mask < (1 << n); mask++) {
+        for (let last = 0; last < n; last++) {
+            if (!(mask & (1 << last)) || dp[mask][last] === Infinity) continue;
+            for (let next = 0; next < n; next++) {
+                if (mask & (1 << next)) continue;          // already visited
+                const newMask = mask | (1 << next);
+                dp[newMask][next] = Math.min(
+                    dp[newMask][next],
+                    dp[mask][last] + dist[last][next]
+                );
+            }
+        }
+    }
+    let best = Infinity;                        // close the loop back to city 0
+    for (let last = 1; last < n; last++) best = Math.min(best, dp[ALL_VISITED][last] + dist[last][0]);
+    return best;
+}
+```
+
+Run the full file: `npx tsx 16-bit-manipulation/bitmask-dp.ts`. (This builds directly on the ideas in
+the [Dynamic Programming track](/tracks/dsa-dynamic-programming) and the binary
+[number-systems](/lessons/binary-data/number-systems) lesson in the Game Dev course.)
+
+## Complexity
+
+There are $2^n$ masks; TSP pairs each with a "last city" and tries every "next," giving:
+
+$$
+T_{\text{TSP}}(n) = O(2^n \cdot n^2), \qquad S(n) = O(2^n \cdot n).
+$$
+
+| Problem | Time | Space |
+|---------|------|-------|
+| Subset enumeration | $O(2^n \cdot n)$ | $O(1)$ extra |
+| Submask enumeration (all masks) | $O(3^n)$ | $O(1)$ extra |
+| TSP / Hamiltonian path | $O(2^n \cdot n^2)$ | $O(2^n \cdot n)$ |
+
+Exponential — but for $n \le 20$, $2^{20} \approx 10^6$ states is perfectly fast. Beyond ~25, the table
+explodes and you need a different technique.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Logistics" icon="🚚">
+A delivery van with a dozen stops uses bitmask TSP to find the shortest route that hits every address
+once. <code>dp[mask][stop]</code> remembers the cheapest way to have visited exactly the stops in
+<code>mask</code> and be parked at <code>stop</code>.
+</ExampleCard>
+
+<ExampleCard domain="Operations research" icon="🧑‍🏭">
+Assigning $n$ workers to $n$ tasks: the mask is "which tasks are taken." Each worker fills one unset
+bit, and <code>dp[mask]</code> stores the best cost to assign the first <code>popcount(mask)</code> workers.
+</ExampleCard>
+
+<ExampleCard domain="Bioinformatics" icon="🧫">
+Choosing a minimal set of primers or probes that together cover all target genes is a set-cover problem;
+<code>dp[mask]</code> tracks the fewest probes needed to cover exactly the genes in <code>mask</code>.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Bitmask DP is only for small $n$.** The hard cap is roughly $n \le 20$–$22$. If $n$ can be large,
+  it's the wrong tool — say so before coding.
+- **`1 << n` overflows in JS for $n \ge 31$.** Stay well under that, or switch to `BigInt` for the
+  table index arithmetic.
+- **Initialise unreachable states to $\infty$ (or −1).** Skipping that lets garbage propagate into your
+  minimum; guard every transition with "is this state reachable?"
+- **The submask idiom is exact:** `sub = (sub - 1) & mask` visits each subset of `mask` once and only
+  the subsets — don't reinvent it with a slower nested loop.
+- **Interview cue:** "$n$ is at most 15–20 and you must track which items are used" is a flashing sign
+  for bitmask DP. Name the state `dp[mask]` immediately.
+
+## Practice
+
+1. **Easy:** How many subsets does a 4-element set have? Confirm with the demo.
+2. **Easy:** Write the mask for the subset $\{0, 2, 3\}$ of items 0–4, and give its decimal value.
+3. **Medium:** Enumerate all submasks of `0b1011` using `sub = (sub - 1) & mask`.
+4. **Medium:** Given `n` people and `k` seats per row, count valid seatings where no two chosen seats
+   are adjacent (a per-row mask is "who is seated").
+5. **Hard:** Solve "shortest path visiting all nodes" (LeetCode 847) with a BFS over states
+   `(mask, node)`, finishing when `mask === (1 << n) - 1`.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In bitmask DP, what does the integer mask represent?',
+      options: [
+        'A single chosen element',
+        'The subset of elements whose bits are set',
+        'The number of elements used',
+        'The cost so far',
+      ],
+      answer: 1,
+      explain: 'Each bit is one element; the mask as a whole encodes exactly which elements are in the current subset.',
+    },
+    {
+      q: 'Why does counting an integer from 0 to 2^n − 1 enumerate every subset exactly once?',
+      options: [
+        'Because integers are sorted',
+        'Because each integer is a unique pattern of n on/off bits',
+        'Because of XOR cancellation',
+        'It actually enumerates them n times',
+      ],
+      answer: 1,
+      explain: 'There are 2^n integers in that range and 2^n subsets, and each integer maps to one distinct on/off pattern.',
+    },
+    {
+      q: 'What is the time complexity of the classic bitmask-DP solution to TSP?',
+      options: ['O(n!)', 'O(2^n · n^2)', 'O(n^2)', 'O(2^n)'],
+      answer: 1,
+      explain: 'There are 2^n masks times n "last cities", and each tries n "next cities": O(2^n · n^2) — far better than O(n!).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>bitmask</strong> encodes a subset as one integer, so <code>dp[mask]</code> stores an answer per combination.',
+    'Counting <strong>0 to 2ⁿ − 1</strong> enumerates every subset exactly once — the DP’s outer sweep.',
+    'Transitions turn on an unused bit: <code>mask | (1 &lt;&lt; i)</code>; the answer lives at <code>dp[(1&lt;&lt;n)-1]</code>.',
+    'The submask idiom <code>sub = (sub-1) &amp; mask</code> walks every subset of a mask in <strong>O(3ⁿ)</strong> total.',
+    'It’s exponential, so it only fits <strong>small n (≤ ~20)</strong> — but it cracks TSP, assignment, and set-cover.',
+  ]}
+/>
+
+You've reached the end of the Bit Manipulation track — from single switches to subsets-as-integers. The
+same bit-level thinking reappears in array indexing and hashing next, in **Arrays & Two Pointers**.

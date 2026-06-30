@@ -1,0 +1,256 @@
+---
+title: Analyzing Real Code
+track: dsa-complexity
+summary: "Point Big-O at actual functions — loops, nested loops, sequential blocks, and recursion — and derive the complexity line by line."
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - dsa-complexity/complexity-classes
+leadsTo:
+  - dsa-complexity/space-amortized
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import CxLoopCounter from '../../../components/demos/CxLoopCounter.tsx';
+
+## The hook: the interviewer slides a function across the table
+
+You know the zoo. Now comes the real test: someone shows you twenty lines of code and asks, *"What's
+the time complexity?"* No stopwatch, no running it — just you, reading the structure and deriving the
+answer out loud.
+
+The good news: it comes down to **three mechanical rules**. Count the loops, multiply the nested ones,
+add the sequential ones, then drop constants. Master those and you can analyze almost any function on
+sight.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Nested loops multiply, sequential blocks add, and constants drop** — apply those three rules and the
+complexity falls out of the code's shape.
+</Callout>
+
+## Intuition: three rules and a recursion trick
+
+**Rule 1 — sequential code adds.** One $O(n)$ loop followed by *another* $O(n)$ loop is
+$O(n) + O(n) = O(2n) = O(n)$. You did twice the work, but the *shape* is still linear.
+
+**Rule 2 — nested code multiplies.** A loop running $n$ times *inside* a loop running $n$ times is
+$O(n) \times O(n) = O(n^2)$. Each outer step pays for a full inner pass.
+
+**Rule 3 — constants and lower terms drop.** An inner loop that always runs exactly 100 times is
+$O(1)$, not $O(n)$ — so two outer loops around it are $O(n^2)$, not $O(100 \, n^2)$.
+
+**The recursion trick.** For recursion, ask two questions: *how many calls happen?* and *how much work
+per call?* Two calls per level over $n$ levels is $2^n$ calls → $O(2^n)$. Halving the input each call,
+with $O(n)$ work to merge, is $O(n \log n)$.
+
+## Play with it
+
+Pick a loop shape and an input size, then press **▶ Play**. The grid lights up one cell per **basic
+operation** while a live counter ticks. Watch a single loop tick $n$ times, nested loops fill the whole
+$n \times n$ square, the triangular loop fill only *half* of it, and the halving loop touch a mere
+$\log n$ cells.
+
+<CxLoopCounter client:visible />
+
+<Callout type="tip">
+Compare **nested loops** and the **triangular loop** at the same $n$. The triangle fills *half* the
+square — $n(n+1)/2$ operations — yet both are $O(n^2)$. That's Rule 3 in action: a constant factor of
+$\tfrac{1}{2}$ doesn't change the class.
+</Callout>
+
+## How it works: a line-by-line dry run
+
+Take this function and analyze it top to bottom:
+
+```js
+function analyze(arr) {
+  console.log(arr[0]);                       // (a) O(1)
+  for (let i = 0; i < arr.length; i++) {     // (b) O(n)
+    console.log(arr[i]);
+  }
+  for (let i = 0; i < arr.length; i++) {     // (c) O(n)
+    for (let j = 0; j < arr.length; j++) {   //     × O(n)
+      console.log(arr[i], arr[j]);           //     = O(n²)
+    }
+  }
+}
+```
+
+- **(a)** one index lookup → $O(1)$.
+- **(b)** one loop over $n$ → $O(n)$.
+- **(c)** a loop inside a loop, same array → $O(n) \times O(n) = O(n^2)$.
+
+Add them (Rule 1): $O(1) + O(n) + O(n^2)$. Keep the biggest term (Rule 3): **$O(n^2)$**. Let's count
+the operations for real and confirm the $n^2$ term dominates:
+
+<CodeRunner
+  client:visible
+  code={`function analyze(arr) {
+  let ops = 0;
+  ops++;                                       // (a) O(1)
+  for (let i = 0; i < arr.length; i++) ops++;  // (b) O(n)
+  for (let i = 0; i < arr.length; i++)         // (c) O(n) ...
+    for (let j = 0; j < arr.length; j++) ops++;//     ... × O(n) = O(n²)
+  return ops;                                  // total = 1 + n + n²
+}
+
+// Two DIFFERENT inputs multiply as n×m, NOT n².
+function pairs(a, b) {
+  let ops = 0;
+  for (let i = 0; i < a.length; i++)
+    for (let j = 0; j < b.length; j++) ops++;
+  return ops;                                  // = a.length × b.length
+}
+
+const n10 = Array.from({ length: 10 }, (_, i) => i);
+const n100 = Array.from({ length: 100 }, (_, i) => i);`}
+  tests={[
+    { expr: 'analyze(n10)', label: '1 + n + n² at n=10' },
+    { expr: 'analyze(n100)', label: 'at n=100 (n² dominates)' },
+    { expr: 'pairs(n100, n10)', label: 'n×m, not n² (100×10)' },
+  ]}
+/>
+
+At $n = 10$ the total is $1 + 10 + 100 = 111$. At $n = 100$ it's $1 + 100 + 10000 = 10101$ — the $n^2$
+term is **99%** of the work. That's *why* we drop the rest.
+
+## The real implementation
+
+The course file spells out the analysis method directly in code comments. Here's the heart of it:
+
+```js
+// /dsa/00-complexity/big-o-notation.js
+
+function analyzeThis(arr) {
+  console.log(arr[0]);                          // O(1)
+  for (let i = 0; i < arr.length; i++) {        // O(n)
+    console.log(arr[i]);
+  }
+  for (let i = 0; i < arr.length; i++) {        // O(n) — separate, so ADD
+    console.log(arr[i] * 2);
+  }
+  // Total: O(1) + O(n) + O(n) = O(2n + 1) = O(n)
+}
+
+function analyzeNested(arr) {
+  for (let i = 0; i < arr.length; i++) {        // O(n)
+    for (let j = 0; j < arr.length; j++) {      // × O(n)
+      console.log(arr[i], arr[j]);              // = O(n²)
+    }
+  }
+}
+```
+
+> Run the full file: `node 00-complexity/big-o-notation.js`
+
+## Complexity
+
+The same code can have *different* best, average, and worst cases. Consider searching for a duplicate
+pair with an early `return`:
+
+$$
+\text{best} = O(1), \qquad \text{average} = O(n^2), \qquad \text{worst} = O(n^2).
+$$
+
+| Case | When | Cost |
+| --- | --- | --- |
+| Best | the pair is the first two elements, return immediately | $O(1)$ |
+| Average | the pair sits somewhere in the middle | $O(n^2)$ |
+| Worst | no pair exists, so both loops run fully | $O(n^2)$ |
+
+<Callout type="why">
+Worst case is the honest headline here: an early `return` *can* finish in $O(1)$, but you can't promise
+it. When the data refuses to cooperate, the nested loops run to completion — so we report $O(n^2)$.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Image processing" icon="🖼️">
+A filter that visits every pixel of a $w \times h$ photo is $O(w \cdot h)$ — linear in the pixel count.
+But a naïve blur that, for each pixel, scans a patch *of size proportional to the image* becomes
+$O((wh)^2)$ and grinds to a halt. Real filters keep the patch a *constant* size, so the kernel loop is
+$O(1)$ and the whole pass stays linear.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💹">
+Summing a column of $n$ trades is $O(n)$. Checking every pair of trades for a matching offset is the
+$O(n^2)$ nested loop — fine for one desk's hundred trades, ruinous for a million-row ledger. Quants
+swap it for a hash-map pass that's $O(n)$.
+</ExampleCard>
+
+<ExampleCard domain="Sports" icon="🏆">
+A round-robin tournament where every team plays every other team is exactly the triangular loop:
+$n(n-1)/2$ matches, which is $O(n^2)$. Eight teams → 28 games; double to sixteen → 120 games. The
+schedule grows quadratically even though each team's own slate grows only linearly.
+</ExampleCard>
+
+<ExampleCard domain="Climate" icon="🌡️">
+A weather model updates an $n \times n$ grid of cells, and for each cell looks at its handful of
+neighbors — a *constant* number. So it's $O(n^2)$ in the grid width (the cell count), not $O(n^3)$.
+Doubling the resolution quadruples the cells, and the runtime with it.
+</ExampleCard>
+
+## Common pitfalls &amp; interview tips
+
+- **Two different collections give $O(n \cdot m)$, not $O(n^2)$.** Only write $n^2$ when both loops run
+  over the *same* data. A 100-element array crossed with a 5-element one is 500 ops, not 10,000.
+- **A constant-bound inner loop is $O(1)$.** `for (k = 0; k < 100; k++)` doesn't depend on $n$; it
+  vanishes into the constant. Two outer loops around it are $O(n^2)$, full stop.
+- **`j` starting at `i` is still $O(n^2)$.** The triangular $n(n+1)/2$ is half a square — a smaller
+  constant, the same class.
+- **Watch hidden costs in built-ins.** `arr.slice()`, `arr.indexOf()`, and `[...arr]` are each $O(n)$;
+  put one inside a loop and you've quietly created an $O(n^2)$.
+
+## Practice
+
+From the course's practice set — derive the time complexity:
+
+1. **(Medium)** Nested loops where the inner loop runs over a *second* array `arr2`. *(Answer:
+   $O(n \cdot m)$ — different sizes, so it's a product, not $n^2$.)*
+2. **(Medium)** Outer loop over $n$, inner loop with `j = i`, body $O(1)$. *(Answer: $O(n^2)$ —
+   $n(n+1)/2$ iterations.)*
+3. **(Hard)** Two loops over $n$ wrapping an inner loop that runs exactly 100 times. *(Answer: $O(n^2)$
+   — the 100 is constant: $O(100 n^2) = O(n^2)$.)*
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A function has an O(1) line, then an O(n) loop, then a separate O(n²) nested loop. Overall complexity?',
+      options: ['O(n³)', 'O(n²)', 'O(n² + n + 1)', 'O(n)'],
+      answer: 1,
+      explain: 'Sequential blocks add: O(1) + O(n) + O(n²). Keep only the dominant term → O(n²).',
+    },
+    {
+      q: 'You loop over arr1 (length n) and inside it loop over arr2 (length m). Best description?',
+      options: ['O(n²)', 'O(n·m)', 'O(n + m)', 'O(m²)'],
+      answer: 1,
+      explain: 'Different collections multiply as n·m. It would only be O(n²) if both loops ran over the same array.',
+    },
+    {
+      q: 'An inner loop always runs exactly 50 times regardless of n, nested inside two loops over n. Complexity?',
+      options: ['O(n²)', 'O(50n²)', 'O(n³)', 'O(n)'],
+      answer: 0,
+      explain: 'The 50 is a constant, so the inner loop is O(1). Two outer loops over n give O(n²); constants drop.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Three rules</strong>: nested loops multiply, sequential blocks add, constants and lower terms drop.',
+    'Loops over <strong>different collections</strong> give O(n·m), not O(n²) — products only become squares on the same data.',
+    'A loop with a <strong>constant bound</strong> is O(1) and disappears into the constant factor.',
+    'For recursion, ask <strong>how many calls</strong> and <strong>how much work per call</strong> — that yields the class.',
+    'Best, average, and worst cases can differ; we headline the <strong>worst case</strong> because it\'s the guarantee.',
+  ]}
+/>
+
+Next up: **Space &amp; Amortized Analysis** — Big-O isn't only about time. We'll count *memory*, see how
+recursion uses the call stack, and unpack why a growable array's pushes are $O(1)$ *on average*.

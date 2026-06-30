@@ -1,0 +1,220 @@
+---
+title: The Magic of XOR
+track: dsa-bit-manipulation
+summary: XOR cancels pairs, so folding an array with it leaves the one unpaired value — in one pass and no extra memory.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - dsa-bit-manipulation/flags-masks
+leadsTo:
+  - dsa-bit-manipulation/bitmask-dp
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import XorSingleNumber from '../../../components/demos/XorSingleNumber.tsx';
+
+## The hook: find the odd one out, instantly
+
+Every student in a class paired up for an experiment — except one, who is left over. You want that
+person's number. You could sort, or build a hash map of counts, but XOR finds them in a single sweep
+with *no* extra memory. The trick rests on one almost magical property: **a number XOR-ed with itself
+vanishes**. Pairs annihilate each other, and only the loner survives.
+
+<Callout type="intuition" title="The one-sentence idea">
+Because `a ^ a = 0` and `a ^ 0 = a`, XOR-ing every element of an array makes the duplicates cancel in
+pairs, leaving exactly the value that had no partner.
+</Callout>
+
+## Intuition: the four properties that do all the work
+
+XOR has four algebraic properties, and together they make order and pairing irrelevant:
+
+1. $a \oplus 0 = a$ — XOR with zero changes nothing.
+2. $a \oplus a = 0$ — XOR with itself cancels.
+3. $a \oplus b = b \oplus a$ — commutative (order doesn't matter).
+4. $(a \oplus b) \oplus c = a \oplus (b \oplus c)$ — associative (grouping doesn't matter).
+
+So if a value appears twice anywhere in the array, you may mentally slide its two copies next to each
+other; they become $a \oplus a = 0$ and drop out. After every pair cancels, the accumulator holds the
+single unpaired number. The same idea finds a **missing number** (XOR the array against `0..n`) and
+**swaps two variables** with no temporary (`a ^= b; b ^= a; a ^= b`).
+
+## Play with it
+
+Edit the array, then fold it left to right. Watch the accumulator in binary: when a value reappears,
+the bits it set earlier get flipped right back off. By the end, only the survivor's bits remain.
+
+<XorSingleNumber client:visible />
+
+<Callout type="tip">
+Reorder the numbers and run it again — the answer never changes. That's properties 3 and 4 at work:
+XOR doesn't care about order or grouping, so the cancellation is guaranteed no matter the arrangement.
+</Callout>
+
+## How it works
+
+Fold `[4, 1, 2, 1, 2]` into an accumulator that starts at 0:
+
+```
+acc = 0
+0 ^ 4 = 4    (0100)
+4 ^ 1 = 5    (0101)
+5 ^ 2 = 7    (0111)
+7 ^ 1 = 6    (0110)   ← the second 1 cancels the first
+6 ^ 2 = 4    (0100)   ← the second 2 cancels the first
+result = 4
+```
+
+The two 1s and the two 2s each cancelled to nothing; `4`, which never had a partner, is what remains.
+
+<CodeRunner
+  client:visible
+  code={`// LeetCode 136 — every value appears twice except one
+function singleNumber(nums) {
+  let result = 0;
+  for (const num of nums) result ^= num;
+  return result;
+}
+
+// LeetCode 268 — numbers 0..n with exactly one missing
+function missingNumber(nums) {
+  let result = nums.length;
+  for (let i = 0; i < nums.length; i++) result ^= i ^ nums[i];
+  return result;
+}`}
+  tests={[
+    { expr: 'singleNumber([4,1,2,1,2])', label: 'single of [4,1,2,1,2]' },
+    { expr: 'singleNumber([7,3,7])', label: 'single of [7,3,7]' },
+    { expr: 'missingNumber([3,0,1])', label: 'missing from [3,0,1]' },
+    { expr: 'missingNumber([0,1,2,4])', label: 'missing from [0,1,2,4]' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the one-line classic, plus its clever sibling that finds the **two** unpaired
+numbers by splitting the array on a bit where they differ:
+
+```ts
+// /dsa/16-bit-manipulation/single-number.ts
+function singleNumber(nums: number[]): number {
+    let result = 0;
+    for (const num of nums) result ^= num;   // pairs cancel, loner remains
+    return result;
+}
+
+// Two numbers appear once, the rest twice → find both.
+function singleNumberIII(nums: number[]): [number, number] {
+    let xorAll = 0;
+    for (const num of nums) xorAll ^= num;     // = a ^ b
+    const diffBit = xorAll & (-xorAll);        // a bit where a and b differ
+    let a = 0, b = 0;
+    for (const num of nums) {
+        if (num & diffBit) a ^= num;           // partition by that bit...
+        else b ^= num;                         // ...so a and b land apart
+    }
+    return [a, b];
+}
+```
+
+Run the full file: `npx tsx 16-bit-manipulation/single-number.ts`.
+
+## Complexity
+
+A single pass, one accumulator — the best you can hope for:
+
+$$
+T(n) = O(n), \qquad S(n) = O(1).
+$$
+
+| Approach | Time | Space |
+|----------|------|-------|
+| Hash map of counts | $O(n)$ | $O(n)$ |
+| Sort then scan | $O(n \log n)$ | $O(1)$–$O(n)$ |
+| **XOR fold** | $O(n)$ | $O(1)$ |
+
+XOR matches the best time *and* uses constant space — the reason it is the textbook answer.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Storage / RAID" icon="💾">
+RAID-5 stores the XOR of all data drives on a parity drive. Lose any one disk and you reconstruct it by
+XOR-ing the survivors — the missing block is the "single number" the rest cancel down to.
+</ExampleCard>
+
+<ExampleCard domain="Cryptography" icon="🔐">
+A one-time pad encrypts with <code>cipher = message ^ key</code> and decrypts with
+<code>cipher ^ key = message</code>, because the key XOR-s out exactly like a cancelling pair.
+</ExampleCard>
+
+<ExampleCard domain="Networking" icon="📶">
+Forward error correction sends an XOR packet across a group; if one packet is dropped, the receiver
+XORs the rest with the parity packet to recover it — no retransmission round-trip.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **XOR only cancels *even* multiplicities.** If a value appears three times, it leaves itself behind
+  once — Single Number II needs bit-counting mod 3, not a plain fold.
+- **Two loners?** A single fold gives you `a ^ b`, not each separately. Split the array on any bit where
+  they differ (`xorAll & -xorAll`) and fold each half — that's `singleNumberIII` above.
+- **The swap trick breaks when the two variables alias.** `a ^= b; b ^= a; a ^= b` zeroes the value if
+  `a` and `b` are the same memory slot.
+- **Interview cue:** "find the unique element in $O(1)$ space" is a near-guaranteed XOR question; say
+  "pairs cancel" out loud and you're most of the way there.
+
+## Practice
+
+1. **Easy:** Fold `[5, 5, 9]` by hand. What survives?
+2. **Easy:** Use XOR to swap two numbers without a temporary, then trace the three steps.
+3. **Medium:** Find the missing number in a shuffled `0..n` array using `i ^ nums[i]`.
+4. **Medium:** Given an array where two elements appear once and the rest twice, return both using the
+   differing-bit partition.
+5. **Hard:** Numbers `1..n` contain one duplicate and one missing value. Find both with XOR and a single
+   partition (LeetCode 645).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the array [2, 3, 2], what does XOR-folding all elements return?',
+      options: ['2', '3', '7', '0'],
+      answer: 1,
+      explain: 'The two 2s cancel (2 ^ 2 = 0), leaving 0 ^ 3 = 3 — the unpaired value.',
+    },
+    {
+      q: 'Which property guarantees the answer is independent of element order?',
+      options: ['a ^ 0 = a', 'a ^ a = 0', 'XOR is commutative and associative', 'XOR is its own inverse'],
+      answer: 2,
+      explain: 'Commutativity and associativity let you reorder and regroup the XORs freely, so any arrangement cancels the same pairs.',
+    },
+    {
+      q: 'Why does the plain XOR trick fail when every duplicate appears three times?',
+      options: [
+        'XOR overflows',
+        'A value XOR-ed an odd number of times does not cancel to zero',
+        'It becomes O(n^2)',
+        'It only works for sorted arrays',
+      ],
+      answer: 1,
+      explain: 'a ^ a ^ a = a, so a thrice-seen value leaves itself behind. You need counting mod 3 instead.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'XOR’s key facts: <strong>a ^ a = 0</strong> and <strong>a ^ 0 = a</strong> — pairs cancel, identity survives.',
+    'Folding an array with XOR finds the <strong>lone unpaired value</strong> in O(n) time and O(1) space.',
+    'XOR is <strong>commutative and associative</strong>, so order and grouping never affect the result.',
+    'Two loners? Fold to <code>a ^ b</code>, then <strong>partition on a differing bit</strong> to separate them.',
+    'The same cancelling idea powers <strong>RAID parity, one-time pads, and missing-number</strong> problems.',
+  ]}
+/>
+
+Next up: **Bitmask Dynamic Programming** — treating an integer as a *subset* so a DP table can remember
+an answer for every combination of choices.

@@ -1,0 +1,270 @@
+---
+title: The Complexity Zoo
+track: dsa-complexity
+summary: "Meet the seven common complexity classes — from blazing O(1) to the universe-ending O(n!) — and learn to recognize each on sight."
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - dsa-complexity/big-o-intro
+leadsTo:
+  - dsa-complexity/analyzing-algorithms
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BigOZooLadder from '../../../components/demos/BigOZooLadder.tsx';
+
+## The hook: seven animals, wildly different appetites
+
+In the last lesson you met Big-O as a *language*. Now meet its **vocabulary** — the handful of growth
+curves that nearly every algorithm falls into. They look almost identical for tiny inputs, but their
+appetites diverge violently. At a million items, one class needs **1** operation, another needs a
+**trillion**, and one literally cannot finish before the sun dies.
+
+Knowing the zoo means that the moment you see a loop, a halving, or a branch of recursion, you can name
+its class instantly — the core skill the next lesson builds on.
+
+<Callout type="intuition" title="The one-sentence idea">
+Almost every algorithm's cost matches one of **seven shapes** — $O(1), O(\log n), O(n), O(n \log n),
+O(n^2), O(2^n), O(n!)$ — and they are ordered from "instant" to "impossible."
+</Callout>
+
+## Intuition: the ladder from instant to impossible
+
+Picture a ladder. Each rung is a complexity class, and climbing one rung means a *qualitatively* worse
+appetite for work:
+
+- **$O(1)$ constant** — work doesn't depend on $n$ at all. Grab the first item off a shelf.
+- **$O(\log n)$ logarithmic** — each step throws away *half* the problem. Binary search.
+- **$O(n)$ linear** — touch every item once. Count the people in a room.
+- **$O(n \log n)$ linearithmic** — do a $\log n$ job for each of $n$ items. The best possible sort.
+- **$O(n^2)$ quadratic** — compare every item with every other. Nested loops.
+- **$O(2^n)$ exponential** — every new item *doubles* the work. Try every on/off combination.
+- **$O(n!)$ factorial** — every ordering of the items. Brute-force the travelling salesman.
+
+The jump from $O(n^2)$ to $O(2^n)$ is the cliff edge: below it, big inputs are slow; above it, big
+inputs are *hopeless*.
+
+## Play with it
+
+Pick an input size, then press **▶ Play** to reveal the zoo one animal at a time, fastest to slowest.
+Bars are scaled by $\log_{10}$ of the operation count, so even $O(2^n)$ fits on screen next to $O(1)$ —
+read the exact numbers off the bar ends.
+
+<BigOZooLadder client:visible />
+
+<Callout type="tip">
+Switch $n$ between 100 and 1,000,000 and replay. $O(\log n)$ barely moves (7 → 20). $O(n^2)$ explodes
+from ten thousand to a **trillion**. The point isn't the bar lengths — it's how differently they react
+when the input grows.
+</Callout>
+
+## How it works: name the class from the structure
+
+You don't measure these — you *read* them off the code's shape:
+
+1. **No loop over the input** → $O(1)$.
+2. **Loop that halves $n$ each step** (`i *= 2` or "discard half") → $O(\log n)$.
+3. **One loop over all $n$** → $O(n)$.
+4. **A sort, or a halving done $n$ times** → $O(n \log n)$.
+5. **Loop inside a loop over the same data** → $O(n^2)$.
+6. **Recursion that makes two calls per level** → $O(2^n)$.
+7. **Recursion that tries every arrangement** → $O(n!)$.
+
+Here are runnable miniatures of five of them — press Run and compare the operation counts:
+
+<CodeRunner
+  client:visible
+  code={`function constant(arr) { return arr[0]; }                 // O(1): 1 op
+
+function logarithmic(n) {                                  // O(log n)
+  let ops = 0, i = 1;
+  while (i < n) { ops++; i *= 2; }
+  return ops;
+}
+
+function linear(arr) {                                      // O(n)
+  let ops = 0;
+  for (let i = 0; i < arr.length; i++) ops++;
+  return ops;
+}
+
+function quadratic(arr) {                                   // O(n²)
+  let ops = 0;
+  for (let i = 0; i < arr.length; i++)
+    for (let j = 0; j < arr.length; j++) ops++;
+  return ops;
+}
+
+function exponential(n) {                                   // O(2^n)
+  if (n <= 1) return 1;
+  return exponential(n - 1) + exponential(n - 1);           // counts calls
+}
+
+const ten = Array.from({ length: 10 }, (_, i) => i);`}
+  tests={[
+    { expr: 'linear(ten)', label: 'O(n) at n=10' },
+    { expr: 'quadratic(ten)', label: 'O(n²) at n=10' },
+    { expr: 'logarithmic(1000000)', label: 'O(log n) at n=1,000,000' },
+    { expr: 'exponential(20)', label: 'O(2^n) at n=20' },
+  ]}
+/>
+
+Look at the spread: linear does 10, quadratic does 100, logarithmic does **20 even at a million**, and
+exponential rockets past **half a million** by $n = 20$.
+
+## The real implementation
+
+The course file ships a counter-instrumented example for *every* class. Here are the two scariest —
+exponential and factorial — straight from the source:
+
+```js
+// /dsa/00-complexity/big-o-notation.js
+
+// O(2^n) — each call spawns two more calls. fib(20) ≈ 21,891 operations.
+function fibonacciRecursive(n, operations = { count: 0 }) {
+  operations.count++;
+  if (n <= 1) return n;
+  return fibonacciRecursive(n - 1, operations) +
+         fibonacciRecursive(n - 2, operations);
+}
+
+// O(n!) — every ordering of the items. 10 items = 3,628,800 permutations.
+function generatePermutations(arr) {
+  const result = [];
+  function permute(current, remaining) {
+    if (remaining.length === 0) { result.push(current); return; }
+    for (let i = 0; i < remaining.length; i++) {
+      permute(
+        [...current, remaining[i]],
+        [...remaining.slice(0, i), ...remaining.slice(i + 1)]
+      );
+    }
+  }
+  permute([], arr);
+  return result;
+}
+```
+
+Run the file to see each class print its operation count as the input grows:
+
+> Run the full file: `node 00-complexity/big-o-notation.js`
+
+## Complexity
+
+The classes form a strict ordering — every one to the right eventually leaves the previous in the dust:
+
+$$
+O(1) < O(\log n) < O(n) < O(n \log n) < O(n^2) < O(2^n) < O(n!).
+$$
+
+| Class | Name | $n = 10$ | $n = 1{,}000{,}000$ |
+| --- | --- | --- | --- |
+| $O(1)$ | constant | 1 | 1 |
+| $O(\log n)$ | logarithmic | 3 | 20 |
+| $O(n)$ | linear | 10 | 1,000,000 |
+| $O(n \log n)$ | linearithmic | 33 | ~20,000,000 |
+| $O(n^2)$ | quadratic | 100 | 1,000,000,000,000 |
+| $O(2^n)$ | exponential | 1,024 | impossible |
+| $O(n!)$ | factorial | 3,628,800 | the universe dies |
+
+<Callout type="why">
+The practical "speed limits": $O(n^2)$ is usually too slow past $n \approx 10{,}000$, $O(2^n)$ past
+$n \approx 25$, and $O(n!)$ past $n \approx 10$. Spot one of those classes on a large input and you
+*know* you need a better idea — that instinct is what the zoo gives you.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cooking" icon="🍳">
+Plating one dish from a finished tray is $O(1)$. Tasting every dish on the buffet is $O(n)$. But a
+chef pairing every wine with every dish to find the best match is $O(n \cdot m)$ — and if it's every
+dish against every *other* dish, $O(n^2)$. The kitchen's prep time scales with the algorithm you pick.
+</ExampleCard>
+
+<ExampleCard domain="Music streaming" icon="🎧">
+Jumping to a song by its ID is $O(1)$. Building a sorted "most played" list from your library is the
+$O(n \log n)$ sort. Generating *every possible ordering* of a playlist to find the "perfect flow" is
+$O(n!)$ — which is why shuffle uses a clever $O(n)$ trick instead of brute force.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="🔭">
+A sky survey with billions of stars *must* use $O(n)$ or $O(n \log n)$ pipelines — an $O(n^2)$
+"compare every star to every other" pass would take longer than the telescope's lifetime. The class
+you can afford literally bounds what science you can do.
+</ExampleCard>
+
+<ExampleCard domain="Board games" icon="♟️">
+Looking up whether a square is occupied is $O(1)$. Searching the full game tree of chess is effectively
+$O(2^n)$ — it branches every move — which is why engines *prune* instead of exploring it all. Solving a
+travelling-salesman tour of $n$ cities by brute force is the factorial monster, $O(n!)$.
+</ExampleCard>
+
+## Common pitfalls &amp; interview tips
+
+- **$O(n \log n)$ is "good," not "bad."** Beginners fear the $\log$. It's only a hair above linear and
+  is the *best possible* for comparison sorting — aim for it, don't avoid it.
+- **Two different inputs aren't $n^2$.** Looping `arr1` inside `arr2` is $O(n \cdot m)$, not $O(n^2)$,
+  unless they're the same collection. We'll hammer this in the next lesson.
+- **Recognize the halving pattern.** `i *= 2`, `i /= 2`, or "discard half" almost always means
+  $O(\log n)$. It's the cheapest big speed-up there is.
+- **Memorize the speed limits.** Knowing "$O(2^n)$ dies past ~25" lets you reject a brute-force idea in
+  seconds and reach for dynamic programming or greedy instead.
+
+## Practice
+
+From the course's practice set — name the class:
+
+1. **(Easy)** `let i = 1; while (i < n) { i = i * 2; }`. *(Answer: $O(\log n)$ — $i$ doubles, so it
+   reaches $n$ in $\log_2 n$ steps.)*
+2. **(Medium)** Two nested loops, the inner one starting at `j = i`. *(Answer: $O(n^2)$ — it runs
+   $n + (n-1) + \dots + 1 = n(n+1)/2$ times; drop constants and lower terms.)*
+3. **(Hard)** `f(n) = f(n-1) + f(n-1)` with a base case at $n \le 1$. *(Answer: $O(2^n)$ — each call
+   spawns two, so level $k$ has $2^k$ calls.)*
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Order these from fastest-growing to slowest-growing: O(n log n), O(1), O(2^n), O(n).',
+      options: [
+        'O(2^n), O(n log n), O(n), O(1)',
+        'O(1), O(n), O(n log n), O(2^n)',
+        'O(n), O(1), O(n log n), O(2^n)',
+        'O(1), O(n log n), O(n), O(2^n)',
+      ],
+      answer: 0,
+      explain: 'From fastest-growing (worst) to slowest-growing (best): O(2^n) > O(n log n) > O(n) > O(1).',
+    },
+    {
+      q: 'You see i *= 2 inside a loop that runs while i < n. Which class is this?',
+      options: ['O(n)', 'O(n²)', 'O(log n)', 'O(2^n)'],
+      answer: 2,
+      explain: 'Doubling i each step reaches n in about log₂(n) iterations — logarithmic time.',
+    },
+    {
+      q: 'Roughly what is the largest n for which an O(n!) brute force is still feasible?',
+      options: ['About 10', 'About 1,000', 'About 100,000', 'About 1,000,000'],
+      answer: 0,
+      explain: '10! is already 3.6 million operations; 20! exceeds 10^18. Factorial algorithms are only usable for n below ~10.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Nearly every algorithm matches one of <strong>seven classes</strong>, ordered O(1) < O(log n) < O(n) < O(n log n) < O(n²) < O(2^n) < O(n!).',
+    'You <strong>read the class off the code\'s shape</strong> — loops, halvings, and branching recursion each have a signature.',
+    '<strong>O(n log n)</strong> is the best possible comparison sort and only a hair above linear — a target, not a fear.',
+    'The cliff is between <strong>O(n²)</strong> (slow) and <strong>O(2^n)</strong> (hopeless): the latter dies past n ≈ 25.',
+    'Memorized speed limits let you <strong>reject a doomed approach instantly</strong> and reach for a better algorithm.',
+  ]}
+/>
+
+Next up: **Analyzing Real Code** — point Big-O at actual functions with loops, nested loops, and
+recursion, and derive the class line by line.

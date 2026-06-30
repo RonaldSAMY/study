@@ -1,0 +1,224 @@
+---
+title: Bitwise Operators
+track: dsa-bit-manipulation
+summary: AND, OR, XOR, NOT and the shifts — the six operations that act on the ones and zeros directly.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-recursion/recursion-vs-iteration
+leadsTo:
+  - dsa-bit-manipulation/bit-tricks
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BitOperatorPlayground from '../../../components/demos/BitOperatorPlayground.tsx';
+
+## The hook: the computer never sees "13"
+
+When you write `13`, the machine sees `00001101` — a row of switches, each either on or off. Every
+number, pixel, and permission you have ever touched is ultimately one of these rows. **Bitwise
+operators** are the tools that let you reach in and work on those switches one column at a time:
+combine two rows, flip them, or slide them sideways. They are the fastest operations a CPU can do —
+a single clock cycle — and they are the alphabet of everything else in this track.
+
+<Callout type="intuition" title="The one-sentence idea">
+A bitwise operator lines up two numbers by their bits and produces a new number by deciding each
+output bit from the **column** above it — independently, in parallel.
+</Callout>
+
+## Intuition: six ways to combine switches
+
+You already know `&&` and `||` for true/false. Bitwise operators are the same logic applied to **every
+bit position at once**:
+
+- **AND (`&`)** — output bit is 1 only if *both* inputs are 1. It's a filter: it keeps bits.
+- **OR (`|`)** — output bit is 1 if *either* input is 1. It's a merge: it adds bits.
+- **XOR (`^`)** — output bit is 1 only if the inputs *differ*. It's a difference detector and a toggle.
+- **NOT (`~`)** — flips every bit of a single number (and, in two's complement, turns $n$ into $-n-1$).
+- **Left shift (`<<`)** — slides all bits up, padding with zeros. `n << 1` doubles $n$.
+- **Right shift (`>>`)** — slides all bits down. `n >> 1` halves $n$ (integer division).
+
+The truth tables are tiny and worth memorising:
+
+| a | b | a & b | a \| b | a ^ b |
+|---|---|-------|--------|-------|
+| 0 | 0 | 0     | 0      | 0     |
+| 0 | 1 | 0     | 1      | 1     |
+| 1 | 0 | 0     | 1      | 1     |
+| 1 | 1 | 1     | 1      | 0     |
+
+## Play with it
+
+Toggle the bit cells of **a** and **b**, pick an operator, and step through the operation one column
+at a time. Watch the highlighted column and read the caption — that is exactly what the CPU does, only
+without the animation.
+
+<BitOperatorPlayground client:visible />
+
+<Callout type="tip">
+Set both rows to the same value and run <strong>XOR</strong>: every column has equal bits, so the
+result is all zeros. That <em>a ^ a = 0</em> fact is the seed of the whole "Magic of XOR" lesson later.
+</Callout>
+
+## How it works
+
+Take `5 & 3`. Line them up and decide each column with the AND rule (1 only if both are 1):
+
+```
+  0101   (5)
+& 0011   (3)
+  ----
+  0001   (1)
+```
+
+Only the ones-column has a 1 in both numbers, so the answer is `1`. Swap the operator and the same
+columns give `5 | 3 = 0111 = 7` and `5 ^ 3 = 0110 = 6`. Shifts are even simpler — `5 << 1` slides
+`0101` up to `1010 = 10` (a doubling), and `5 >> 1` slides it down to `0010 = 2` (halving, dropping the
+remainder).
+
+<CodeRunner
+  client:visible
+  code={`// The six core bitwise operators in plain JS
+const a = 5;   // 0101
+const b = 3;   // 0011
+
+const AND = a & b;   // 0001 = 1
+const OR  = a | b;   // 0111 = 7
+const XOR = a ^ b;   // 0110 = 6
+const NOT = ~a;      // ...11111010 = -6 (two's complement)
+const SHL = a << 1;  // 1010 = 10  (x2)
+const SHR = a >> 1;  // 0010 = 2   (/2, floored)
+
+console.log('AND', AND, 'OR', OR, 'XOR', XOR);
+console.log('NOT', NOT, 'SHL', SHL, 'SHR', SHR);`}
+  tests={[
+    { expr: 'a & b', label: '5 & 3' },
+    { expr: 'a | b', label: '5 | 3' },
+    { expr: 'a ^ b', label: '5 ^ 3' },
+    { expr: 'a << 1', label: '5 << 1' },
+    { expr: 'a >> 1', label: '5 >> 1' },
+  ]}
+/>
+
+## The real implementation
+
+Here is the faithful excerpt from the course's bit-basics file — the four single-bit primitives that
+every later lesson reuses. Notice each one builds a mask `1 << i` and combines it with the right
+operator.
+
+```ts
+// /dsa/16-bit-manipulation/bit-basics.ts
+function getBit(num: number, i: number): number {
+    return (num >> i) & 1;            // slide bit i down, mask off the rest
+}
+function setBit(num: number, i: number): number {
+    return num | (1 << i);           // OR in a 1 at position i
+}
+function clearBit(num: number, i: number): number {
+    return num & ~(1 << i);          // AND with a mask of all-1s except bit i
+}
+function toggleBit(num: number, i: number): number {
+    return num ^ (1 << i);           // XOR flips just bit i
+}
+```
+
+Run the full file: `npx tsx 16-bit-manipulation/bit-basics.ts`.
+
+## Complexity
+
+Every bitwise operator works on all 32 bits of a machine integer in one hardware step, regardless of
+the values involved:
+
+$$
+T_{\text{op}}(n) = O(1), \qquad S(n) = O(1).
+$$
+
+| Operation | Time | Space | Note |
+|-----------|------|-------|------|
+| `&`, `\|`, `^`, `~` | $O(1)$ | $O(1)$ | one CPU cycle |
+| `<<`, `>>`, `>>>` | $O(1)$ | $O(1)$ | barrel shifter |
+| `x & 1` vs `x % 2` | $O(1)$ | $O(1)$ | the bit form avoids a division unit |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Genetics" icon="🧬">
+A DNA strand can be stored two bits per base (A, C, G, T). To compare two strands for mutations, XOR
+their packed integers: every column that <em>differs</em> becomes a 1, so the result marks exactly the
+positions where the bases changed.
+</ExampleCard>
+
+<ExampleCard domain="Smart home" icon="💡">
+A lighting controller holds the state of eight bulbs in one byte. Turning a room's lights on is a
+single OR with that room's mask; turning them off is an AND with the complement. One number, one
+instruction, eight bulbs.
+</ExampleCard>
+
+<ExampleCard domain="Audio" icon="🎛️">
+A synthesiser routes which of 16 effects are active as a 16-bit word. Toggling the reverb pedal with a
+foot switch is one XOR against the reverb bit — the other 15 effects are untouched, no branching
+needed.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **`&` is not `&&`.** `6 & 4` is bitwise (gives `4`); `6 && 4` is logical (gives `4` for a different
+  reason). Mixing them up is the classic bug.
+- **JavaScript bitwise ops are 32-bit and signed.** A value above $2^{31}-1$ wraps to negative, and
+  `~5` is `-6`, not `250`. For 8- or 16-bit thinking, mask the result with `& 0xff` or `& 0xffff`.
+- **`>>` keeps the sign, `>>>` does not.** `-8 >> 1` is `-4`; `-8 >>> 1` is a huge positive number.
+- **Interview cue:** when you hear "do it in $O(1)$ space" or "without `+`/`*`", reach for bits. `x & 1`
+  for parity and `x << k` for "multiply by a power of two" are expected reflexes.
+
+## Practice
+
+1. **Easy:** Predict `12 & 10`, `12 | 10`, and `12 ^ 10` on paper, then check in the demo.
+2. **Easy:** Without running code, what does `1 << 5` equal? What about `(1 << 5) - 1`?
+3. **Medium:** Write `isEven(n)` using a single `&`. (Hint: look at the ones bit.)
+4. **Medium:** Use only `<<` and `+` to compute `n * 10`. (Hint: `n*10 = n*8 + n*2`.)
+5. **Hard:** Given a byte, swap its low nibble and high nibble using shifts, masks, and OR.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is 6 & 3?',
+      options: ['2', '7', '5', '0'],
+      answer: 0,
+      explain: '0110 & 0011 = 0010 = 2. Only the bit at value 2 is set in both numbers.',
+    },
+    {
+      q: 'Which operator would you use to flip exactly one chosen bit and leave the rest alone?',
+      options: ['AND with the mask', 'OR with the mask', 'XOR with the mask', 'NOT the whole number'],
+      answer: 2,
+      explain: 'XOR with 1 flips a bit; XOR with 0 leaves it. So XOR against a one-hot mask toggles just that position.',
+    },
+    {
+      q: 'Why is n << 1 the same as multiplying n by 2?',
+      options: [
+        'Because shifting adds a zero on the left',
+        'Because every bit moves to the next-higher power of two, doubling its value',
+        'Because << is defined as multiplication',
+        'It is only true for even numbers',
+      ],
+      answer: 1,
+      explain: 'Each bit at value 2^k moves to value 2^(k+1), so the whole number doubles. A zero fills the vacated ones place.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Every number is a row of bits; <strong>bitwise operators</strong> compute each output bit from its column.',
+    '<strong>AND</strong> keeps bits, <strong>OR</strong> adds bits, <strong>XOR</strong> flags differences (and toggles), <strong>NOT</strong> flips all.',
+    '<strong>Left shift</strong> multiplies by a power of two; <strong>right shift</strong> divides — both in one cycle.',
+    'A one-hot <strong>mask</strong> like <code>1 &lt;&lt; i</code> is how you target a single bit with these operators.',
+    'In JavaScript, bitwise ops are <strong>32-bit and signed</strong> — mask with <code>0xff</code> to think in bytes.',
+  ]}
+/>
+
+Next up: **Essential Bit Tricks** — turning these six operators into one-line superpowers like
+"isolate the lowest set bit" and "is this a power of two?"

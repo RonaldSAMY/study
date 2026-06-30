@@ -1,0 +1,229 @@
+---
+title: Counting Set Bits
+track: dsa-bit-manipulation
+summary: Popcount three ways — naive shifting, Brian Kernighan's loop that runs once per 1-bit, and a lookup table.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - dsa-bit-manipulation/bit-tricks
+leadsTo:
+  - dsa-bit-manipulation/flags-masks
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BitCountKernighan from '../../../components/demos/BitCountKernighan.tsx';
+
+## The hook: how many switches are on?
+
+"How many 1-bits does this number have?" sounds trivial, yet it underlies error-correcting codes,
+chess engines, database indexes, and machine-learning similarity scores. The operation even has a name
+— **population count**, or *popcount* — and a dedicated CPU instruction. The interesting part is doing
+it *cleverly*: a tiny change turns a loop that always runs 32 times into one that runs only as many
+times as there are 1-bits.
+
+<Callout type="intuition" title="The one-sentence idea">
+Repeatedly applying `n = n & (n - 1)` removes the lowest 1-bit each time, so the number of iterations
+until `n` hits zero **is** the number of set bits.
+
+</Callout>
+
+## Intuition: stop looking at the zeros
+
+The naive popcount checks all 32 positions: mask the ones bit, shift, repeat. It works, but it wastes
+time on every zero. **Brian Kernighan's trick** skips them entirely. You already met `n & (n - 1)` —
+it clears the lowest set bit. So loop it: each pass deletes one 1-bit and bumps a counter, and the
+moment `n` becomes 0 the counter holds the answer. A number like `0b10000000` (a single far-left bit)
+finishes in *one* step instead of eight.
+
+A third option trades memory for speed: precompute the popcount of every byte (0–255) into a 256-entry
+**lookup table**, then add up the four bytes of a 32-bit number — four array reads, no loop.
+
+## Play with it
+
+Type a number and step through Kernighan's loop. Each step highlights the lowest set bit just before
+`n & (n - 1)` erases it, and the counter ticks up. Notice the loop length equals the number of 1-bits,
+not the number of bits — the leading zeros are free.
+
+<BitCountKernighan client:visible />
+
+<Callout type="tip">
+Compare <code>0b10000</code> (one set bit) with <code>0b11111</code> (five). Same width, but the first
+finishes in one step and the second in five. That's the whole point of Kernighan's trick.
+</Callout>
+
+## How it works
+
+Counting the ones in `13 = 1101` with Kernighan's loop:
+
+```
+1101  & 1100 = 1100   count = 1   (cleared bit 0)
+1100  & 1011 = 1000   count = 2   (cleared bit 2)
+1000  & 0111 = 0000   count = 3   (cleared bit 3)
+n is 0 → answer is 3
+```
+
+Three 1-bits, three iterations. The naive method below would have looped four times (once per
+position) to reach the same answer.
+
+<CodeRunner
+  client:visible
+  code={`// Naive: check every position
+function popcountNaive(n) {
+  let count = 0;
+  while (n !== 0) { count += n & 1; n >>>= 1; }
+  return count;
+}
+
+// Brian Kernighan: one iteration per 1-bit
+function popcountKernighan(n) {
+  let count = 0;
+  while (n !== 0) { n = n & (n - 1); count++; }
+  return count;
+}`}
+  tests={[
+    { expr: 'popcountNaive(13)', label: 'naive(13)' },
+    { expr: 'popcountKernighan(13)', label: 'kernighan(13)' },
+    { expr: 'popcountKernighan(255)', label: 'kernighan(255)' },
+    { expr: 'popcountKernighan(1024)', label: 'kernighan(1024)' },
+  ]}
+/>
+
+## The real implementation
+
+The course file ships all three strategies. Here are Kernighan's loop and the lookup-table method:
+
+```ts
+// /dsa/16-bit-manipulation/bit-counting.ts
+function hammingWeightKernighan(n: number): number {
+    let count = 0;
+    while (n !== 0) {
+        n = n & (n - 1);   // drop the lowest 1-bit
+        count++;
+    }
+    return count;
+}
+
+// Precompute popcount for every byte once...
+const POPCOUNT_TABLE: number[] = new Array(256);
+for (let i = 0; i < 256; i++) {
+    POPCOUNT_TABLE[i] = (i & 1) + POPCOUNT_TABLE[Math.floor(i / 2)];
+}
+
+// ...then sum the four bytes of a 32-bit number — no loop.
+function hammingWeightLookup(n: number): number {
+    return (
+        POPCOUNT_TABLE[n & 0xff] +
+        POPCOUNT_TABLE[(n >> 8) & 0xff] +
+        POPCOUNT_TABLE[(n >> 16) & 0xff] +
+        POPCOUNT_TABLE[(n >> 24) & 0xff]
+    );
+}
+```
+
+Run the full file: `npx tsx 16-bit-manipulation/bit-counting.ts`.
+
+## Complexity
+
+Let $w$ be the word size (32) and $k$ the number of set bits in $n$:
+
+$$
+T_{\text{naive}} = O(w), \quad T_{\text{Kernighan}} = O(k), \quad T_{\text{lookup}} = O(w / 8).
+$$
+
+| Method | Time | Space | Best when |
+|--------|------|-------|-----------|
+| Naive shift | $O(w)$ | $O(1)$ | clarity matters |
+| Brian Kernighan | $O(k)$ | $O(1)$ | numbers are sparse (few 1-bits) |
+| Lookup table | $O(1)$ | $O(256)$ | popcount runs in a hot loop |
+
+Because $k \le w$, Kernighan is never worse than naive and is much faster on sparse inputs.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Telecommunications" icon="📡">
+Error-correcting codes measure the <em>Hamming distance</em> between a sent and received word: XOR them,
+then popcount the result. The count is exactly how many bits flipped in transit — the number of errors
+to correct.
+</ExampleCard>
+
+<ExampleCard domain="Chess engines" icon="♟️">
+A board is eight 64-bit "bitboards" (one per piece type). "How many pawns do I have?" is a single
+popcount of the pawn bitboard — which is why engines lean on the hardware <code>POPCNT</code> instruction.
+</ExampleCard>
+
+<ExampleCard domain="Recommendations" icon="🛒">
+User tastes encoded as bitsets compare with <em>Jaccard similarity</em>: popcount of the AND (shared
+likes) over popcount of the OR (combined likes). Two popcounts give a similarity score in nanoseconds.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Use `>>>`, not `>>`, in the naive loop.** A negative number with `>>` keeps its sign bit and loops
+  forever; the unsigned shift `>>>` fills with zeros and terminates.
+- **Kernighan's win is on *sparse* numbers.** If most bits are set, it is no faster than naive — quote
+  the $O(k)$ bound honestly.
+- **The DP cousin:** to popcount *every* number from 0 to $n$, use `bits[i] = bits[i >> 1] + (i & 1)` —
+  $O(n)$ total. That is LeetCode 338 and a frequent follow-up.
+- **Interview cue:** if asked to count bits "faster than 32 steps," Kernighan is the expected answer;
+  mention the lookup table and the hardware instruction for bonus points.
+
+## Practice
+
+1. **Easy:** By hand, how many steps does Kernighan take on `0b10101010`? Check in the demo.
+2. **Easy:** Compute the Hamming distance between `1` and `4` (hint: XOR then popcount).
+3. **Medium:** Implement `countBits(n)` returning an array of popcounts for `0..n` using the DP
+   recurrence `bits[i] = bits[i >> 1] + (i & 1)`.
+4. **Medium:** Find the longest gap between consecutive 1-bits of a number (binary gap).
+5. **Hard:** Compute the *total* Hamming distance over all pairs in an array in $O(32n)$ by counting,
+   for each bit position, how many numbers have it set.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How many iterations does Brian Kernighan’s loop run for the number 0b10110 (22)?',
+      options: ['5 (the bit width)', '3 (the number of 1-bits)', '2', '22'],
+      answer: 1,
+      explain: '22 = 10110 has three 1-bits, and each iteration of n & (n-1) clears exactly one, so the loop runs three times.',
+    },
+    {
+      q: 'Why is n >>> 1 (not n >> 1) used in the naive popcount loop?',
+      options: [
+        'It is faster',
+        'It fills with zeros so a negative number eventually reaches 0',
+        'It rounds correctly',
+        'There is no difference',
+      ],
+      answer: 1,
+      explain: 'Signed >> preserves the sign bit, so a negative n never becomes zero. The unsigned >>> shifts in zeros and terminates.',
+    },
+    {
+      q: 'A 256-entry popcount lookup table gives O(1) counting by:',
+      options: [
+        'Storing the answer for every 32-bit number',
+        'Splitting the number into four bytes and summing four table reads',
+        'Looping but with fewer steps',
+        'Using recursion',
+      ],
+      answer: 1,
+      explain: 'You precompute popcount per byte, then add the counts of the four bytes of a 32-bit word — a constant four lookups.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Popcount</strong> (population count) is the number of 1-bits — a workhorse operation with its own CPU instruction.',
+    "<strong>Brian Kernighan's</strong> loop <code>n = n &amp; (n-1)</code> runs once per set bit: <strong>O(k)</strong>, not O(width).",
+    'The <strong>naive</strong> loop is O(width) and must use <code>&gt;&gt;&gt;</code> to handle negatives.',
+    'A <strong>256-byte lookup table</strong> turns popcount into four reads — O(1) at the cost of memory.',
+    'XOR + popcount gives <strong>Hamming distance</strong>, the bridge to error correction and similarity.',
+  ]}
+/>
+
+Next up: **Flags & Bitmasks** — packing dozens of yes/no settings into a single integer and querying
+them with the operators you now know cold.

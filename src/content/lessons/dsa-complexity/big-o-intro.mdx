@@ -1,0 +1,263 @@
+---
+title: What Is Big-O?
+track: dsa-complexity
+summary: "Big-O is a language for how an algorithm's cost grows as the input grows — the single most important idea in algorithms."
+difficulty: beginner
+estMinutes: 12
+prereqs: []
+leadsTo:
+  - dsa-complexity/complexity-classes
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BigOGrowthRace from '../../../components/demos/BigOGrowthRace.tsx';
+
+## The hook: finding a name in a phone book of a million
+
+You need to find one name in a phone book with **1,000,000** entries.
+
+- **Method A** — start at page one and read every name until you hit it. Worst case: a million checks.
+- **Method B** — open to the middle, decide *before* or *after*, and throw away half. Repeat. Worst case: about **20** checks.
+
+Both methods are *correct*. One finishes before you blink; the other might run for an hour. The
+difference isn't the computer's speed — it's how the **number of steps grows with the input size**.
+Big-O is the notation that captures exactly that, *before you write a single line of code*.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Big-O describes how the work an algorithm does grows as its input gets bigger** — keeping only the
+fastest-growing term and ignoring constant factors.
+</Callout>
+
+## Intuition: growth rate, not stopwatch time
+
+A stopwatch measures *one* run on *one* machine with *one* input. Change the laptop, the input, or the
+mood of the operating system, and the number changes. That's too fragile to compare algorithms.
+
+So we ask a sturdier question: **if the input doubles, what happens to the work?**
+
+- If the work stays the same → that's **constant**, written $O(1)$.
+- If the work doubles → that's **linear**, $O(n)$.
+- If the work *quadruples* → that's **quadratic**, $O(n^2)$.
+
+The letter $n$ is the **input size** (the number of phone-book entries, pixels, users…). Big-O is a
+promise about the *shape* of the growth curve, not the exact second count. Two extra rules make it
+clean:
+
+- **Drop constant factors.** $O(2n)$ and $O(500n)$ are both just $O(n)$ — doubling the input still
+  doubles the work.
+- **Keep only the biggest term.** $O(n^2 + n)$ is $O(n^2)$, because once $n$ is huge the $n^2$ part
+  dwarfs everything else.
+
+## Play with it
+
+Press **▶ Play** and watch the operation counts grow as $n$ climbs. Toggle classes on and off, pick
+one to **focus**, and notice how the curves that looked similar near the origin tear apart as $n$ grows.
+
+<BigOGrowthRace client:visible />
+
+<Callout type="tip">
+Flip on the **logarithmic y-axis** and set the focus to $O(2^n)$. On a normal axis it shoots off the
+top almost immediately; the log axis is the only way to see all the classes at once. That blow-up is
+*why* we obsess over growth rate.
+</Callout>
+
+## How it works: a dry run
+
+Big-O is really just **counting the dominant operations**. Take linear search through an array of
+length $n$:
+
+1. Look at element 0. Match? If not, continue. *(1 operation)*
+2. Look at element 1. *(another)*
+3. … keep going …
+4. Worst case, the target is last (or missing): you do **$n$** comparisons.
+
+Now binary search on a *sorted* array:
+
+1. Check the middle. Too big? Throw away the right half. *(1 operation, half the data gone)*
+2. Check the middle of what's left. *(another, half again)*
+3. … you can only halve $n$ about $\log_2 n$ times before nothing's left.
+
+So linear search is $O(n)$ and binary search is $O(\log n)$. Let's count operations for real:
+
+<CodeRunner
+  client:visible
+  code={`// Returns how many operations each complexity class does at size n.
+function opsAt(n) {
+  const log = Math.ceil(Math.log2(n));
+  return {
+    constant: 1,
+    logarithmic: log,
+    linear: n,
+    linearithmic: n * log,
+    quadratic: n * n,
+  };
+}
+
+// "Drop constants": O(2n + 3) still grows like O(n).
+function dropConstants(n) {
+  let ops = 0;
+  for (let i = 0; i < n; i++) ops++;   // n
+  for (let i = 0; i < n; i++) ops++;   // + another n
+  ops += 3;                            // + 3
+  return ops;                          // = 2n + 3, but Big-O says O(n)
+}`}
+  tests={[
+    { expr: 'opsAt(1000)', label: 'work at n = 1000' },
+    { expr: 'opsAt(1000000).quadratic', label: 'quadratic at a million' },
+    { expr: 'dropConstants(1000)', label: '2n + 3 at n = 1000' },
+  ]}
+/>
+
+At $n = 1000$, constant time does **1** unit of work while quadratic does **1,000,000**. Same input,
+a million-fold difference. That gap is the whole reason Big-O exists.
+
+## The real implementation
+
+The course file instruments each complexity class with an operation counter so you can *see* the
+growth. Here is the $O(1)$ versus $O(n)$ pair, lifted straight from the source:
+
+```js
+// /dsa/00-complexity/big-o-notation.js
+
+// O(1) — no matter how big the array is, we always do 1 operation.
+function getFirstElement(arr) {
+  let operations = 0;
+  operations++;                 // only 1 operation
+  const result = arr[0];
+  console.log(`Array size: ${arr.length}, Operations: ${operations}`);
+  return result;
+}
+
+// O(n) — we must look at EVERY item once in the worst case.
+function findElement(arr, target) {
+  let operations = 0;
+  for (let i = 0; i < arr.length; i++) {
+    operations++;
+    if (arr[i] === target) return i;
+  }
+  return -1;
+}
+```
+
+`getFirstElement` prints `Operations: 1` whether the array has 3 items or 1,000,000.
+`findElement` prints a count that tracks the array length exactly. Run the full file to watch every
+class — including binary search's tiny ~20 steps on a million elements:
+
+> Run the full file: `node 00-complexity/big-o-notation.js`
+
+## Complexity
+
+Big-O is technically an **upper bound** — the worst case. It pairs with two siblings: best case (often
+written $\Omega$) and the tight "always" case ($\Theta$). For **linear search** of $n$ elements:
+
+$$
+\text{best } = O(1), \qquad \text{average } = O(n/2) = O(n), \qquad \text{worst } = O(n).
+$$
+
+| Case | When | Cost |
+| --- | --- | --- |
+| Best | target is the first element | $O(1)$ |
+| Average | target is somewhere in the middle | $O(n)$ |
+| Worst | target is last or missing | $O(n)$ |
+
+<Callout type="why">
+We usually quote the **worst case**, because that's the guarantee you can rely on under load. Notice
+the average dropped its constant: $n/2$ is still $O(n)$. Halving the work doesn't change the *shape* of
+the curve — only a better algorithm does.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Libraries" icon="📚">
+A library catalog with millions of titles is kept **sorted**, so finding a book is binary search —
+$O(\log n)$, roughly 20 hops even for ten million books. An unsorted "lost &amp; found" box is linear
+search, $O(n)$: you rummage through everything. Sorting once buys fast lookups forever.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A warehouse picking one parcel by its slot ID is $O(1)$ — the slot address jumps you straight there.
+But "find the two parcels whose weights add up to exactly 5 kg" by checking every pair is $O(n^2)$:
+double the parcels and you *quadruple* the comparisons. Engineers redesign that to $O(n)$ with a lookup
+table.
+</ExampleCard>
+
+<ExampleCard domain="Social networks" icon="🌐">
+Listing your friends is $O(n)$. Listing every **friend-of-a-friend pair** is the dreaded $O(n^2)$ —
+which is why a feature that's instant for your 200 friends melts the servers for an influencer with two
+million. Growth rate decides what's even *possible* at scale.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+A human genome is ~3 billion letters. An $O(n^2)$ alignment that's fine for a short gene is utterly
+hopeless on the whole genome, so bioinformatics leans on $O(n)$ and $O(n \log n)$ algorithms. Big-O is
+the difference between an answer today and an answer after the sun burns out.
+</ExampleCard>
+
+## Common pitfalls &amp; interview tips
+
+- **Don't confuse Big-O with speed.** An $O(n^2)$ algorithm can beat an $O(n)$ one for *small* $n$.
+  Big-O describes the *trend*, which wins only once $n$ gets large.
+- **Don't keep constants or lower terms.** $O(2n + 100)$ is $O(n)$. Saying "$O(2n)$" in an interview
+  signals you haven't internalized the rule.
+- **Always state time *and* space.** "It's $O(n)$ time and $O(1)$ extra space" — interviewers expect
+  both (we cover space two lessons from now).
+- **After you solve it, ask "can we do better?"** That question — $O(n^2) \to O(n \log n)$, or
+  $O(n) \to O(\log n)$ — is what separates a passing interview from a great one.
+
+## Practice
+
+From the course's practice set — analyze each *without running it*, then check yourself.
+
+1. **(Easy)** A single `for` loop that sums `0` to `n - 1`. Time? Space? *(Answer: $O(n)$ time, $O(1)$
+   space — one loop, only a couple of variables.)*
+2. **(Easy)** `arr[0] + arr[arr.length - 1]`. Time? *(Answer: $O(1)$ — two index lookups, no loop.)*
+3. **(Medium)** Two separate (not nested) loops over the same array. Time? *(Answer: $O(n) + O(n) =
+   O(2n) = O(n)$ — drop the constant.)*
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does Big-O actually measure?',
+      options: [
+        'The exact number of seconds a program runs',
+        'How the work grows as the input size grows',
+        'How much memory a laptop has',
+        'The number of lines of code',
+      ],
+      answer: 1,
+      explain: 'Big-O is about growth rate as a function of input size n — not wall-clock seconds, which depend on the machine.',
+    },
+    {
+      q: 'Simplify O(3n² + 5n + 40) using the Big-O rules.',
+      options: ['O(3n²)', 'O(n² + n)', 'O(n²)', 'O(n)'],
+      answer: 2,
+      explain: 'Drop the constant factor 3 and keep only the fastest-growing term n², giving O(n²).',
+    },
+    {
+      q: 'A million-entry phone book: linear scan vs. binary search worst case. Which pair of complexities is right?',
+      options: ['O(n) and O(n)', 'O(n) and O(log n)', 'O(log n) and O(1)', 'O(n²) and O(n)'],
+      answer: 1,
+      explain: 'Scanning every entry is O(n) (~1,000,000 checks); halving a sorted list each step is O(log n) (~20 checks).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Big-O</strong> measures how an algorithm\'s work grows with input size n, not stopwatch time.',
+    'Two rules: <strong>drop constant factors</strong> (O(2n) → O(n)) and <strong>keep only the biggest term</strong> (O(n²+n) → O(n²)).',
+    'When the input doubles: O(1) is unchanged, O(n) doubles, and O(n²) <strong>quadruples</strong>.',
+    'We usually quote the <strong>worst case</strong> because it\'s the guarantee you can rely on at scale.',
+    'A better growth rate — not a faster machine — is what makes huge inputs (genomes, social graphs) tractable.',
+  ]}
+/>
+
+Next up: **The Complexity Zoo** — meet all seven common classes, from blazing $O(1)$ to the
+universe-ending $O(n!)$, and learn to recognize each on sight.

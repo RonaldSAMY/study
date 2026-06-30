@@ -1,0 +1,263 @@
+---
+title: Recursion vs Iteration
+track: dsa-recursion
+summary: "When to recurse and when to loop — stack depth, tail calls, and converting recursion into iteration with an explicit stack."
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - dsa-recursion/tower-of-hanoi
+leadsTo:
+  - dsa-bit-manipulation/bit-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import RecVsIterRace from '../../../components/demos/RecVsIterRace.tsx';
+
+## The hook: same answer, very different bill
+
+Recursion and iteration can compute the *exact same result*, yet hand you wildly different bills for
+time and memory. Sum a million-element list recursively in JavaScript and you'll likely crash with
+*"Maximum call stack size exceeded"*; sum it with a `for` loop and it finishes in a blink using constant
+extra memory. Neither approach is "better" in the abstract — the skill is knowing which the problem is
+asking for, and being able to convert between them on demand.
+
+<Callout type="intuition" title="The one-sentence idea">
+Recursion trades **stack memory and call overhead** for **clarity on naturally nested problems**;
+iteration trades a little **elegance** for **speed and constant space** — and anything recursive can be
+rewritten as a loop with an explicit stack.
+
+</Callout>
+
+## Intuition: the stack you can't see vs the stack you can
+
+Every recursive call quietly uses the **call stack**: a frame per pending call, holding its arguments
+and where to resume. That's the $O(\text{depth})$ space you've been tracking all track. A loop keeps
+nothing of the sort — it reuses one set of variables — so its space is $O(1)$ unless it explicitly
+allocates.
+
+So the trade-offs line up like this:
+
+- **Reach for recursion** when the problem is *itself* nested — trees, graphs, divide-and-conquer,
+  backtracking. The code mirrors the structure and is far easier to get right.
+- **Reach for iteration** when the structure is flat (walking a list, counting), when performance is
+  critical, or when the depth could be huge and risk a stack overflow.
+
+There's a special case that gets the best of both: **tail recursion**. If the recursive call is the
+*very last thing* the function does — nothing waits to multiply or add to its result — then there's no
+pending work to remember, and the frame can be reused. Languages with **tail-call optimization** run
+such recursions in $O(1)$ space, like a loop. (Heads up: most JavaScript engines do *not* apply it, so
+in JS you still convert to a loop for deep cases.)
+
+And the universal escape hatch: **any** recursion can be turned into iteration by managing your own
+stack data structure — doing by hand what the call stack did for you.
+
+## Play with it
+
+Compute $\text{fib}(n)$ two ways at once and press <strong>▶ Play</strong>. The left panel is naive
+recursion: the big counter is total **calls** (it races toward $2^n$) while the little blocks show the
+live **stack depth** (it stays around $n$). The right panel is the loop: it fills $n$ cells and then
+sits idle, finished. Same answer, utterly different effort.
+
+<RecVsIterRace client:visible />
+
+<Callout type="tip">
+Notice the split personality of recursion's cost: the call counter explodes (that's <strong>time</strong>,
+O(2ⁿ) here) but the depth blocks barely grow (that's <strong>space</strong>, O(n)). Time and space are
+separate axes — a recursion can be cheap on one and ruinous on the other.
+</Callout>
+
+## How it works: three forms of the same function
+
+Factorial in three styles. The first stacks $n$ frames; the second is *tail* recursive (the multiply
+moves into an accumulator, so nothing waits after the call); the third is a flat loop.
+
+<CodeRunner
+  client:visible
+  code={`// 1. Plain recursion — work (the multiply) happens AFTER the call returns
+function factRec(n) {
+  if (n <= 1) return 1;
+  return n * factRec(n - 1);
+}
+
+// 2. Tail recursion — the recursive call is the LAST action; acc carries the result
+function factTail(n, acc = 1) {
+  if (n <= 1) return acc;
+  return factTail(n - 1, n * acc);
+}
+
+// 3. Iteration — one frame, constant extra space
+function factIter(n) {
+  let result = 1;
+  for (let i = 2; i <= n; i++) result *= i;
+  return result;
+}`}
+  tests={[
+    { expr: 'factRec(6)' },
+    { expr: 'factTail(6)' },
+    { expr: 'factIter(6)' },
+    { expr: 'factRec(6) === factIter(6)', label: 'all agree?' },
+  ]}
+/>
+
+In `factRec`, the pending `n * …` is exactly the work the stack frame has to remember. In `factTail`,
+there's nothing pending — which is what makes tail calls optimizable.
+
+## The real implementation
+
+Faithful excerpts from the course's comparison file — including the explicit-stack conversion of a
+recursive tree traversal.
+
+```ts
+// /dsa/04-recursion/recursion-vs-iteration.ts
+
+// Recursive inorder — clean, but O(h) call-stack space
+function inorderRecursive<T>(root: TreeNode<T> | undefined, result: T[] = []): T[] {
+  if (!root) return result;
+  inorderRecursive(root.left, result);
+  result.push(root.value);
+  inorderRecursive(root.right, result);
+  return result;
+}
+
+// Iterative inorder — the SAME traversal, with our OWN explicit stack
+function inorderIterative<T>(root: TreeNode<T> | undefined): T[] {
+  const result: T[] = [];
+  const stack: TreeNode<T>[] = [];
+  let current = root;
+  while (current || stack.length > 0) {
+    while (current) { stack.push(current); current = current.left; }
+    current = stack.pop()!;
+    result.push(current.value);
+    current = current.right;
+  }
+  return result;
+}
+```
+
+Run the full file: `npx tsx 04-recursion/recursion-vs-iteration.ts`
+
+## Complexity
+
+The big lesson: converting recursion to iteration usually keeps **time** the same and changes **space**.
+
+| Problem | Recursive | Iterative | What changed |
+| --- | --- | --- | --- |
+| Factorial | $O(n)$ time, $O(n)$ stack | $O(n)$ time, $O(1)$ space | space: $n$ frames → one |
+| Naive Fibonacci | $O(2^n)$ time | $O(n)$ time (loop), $O(1)$ space | both — the loop avoids repeats |
+| Tree inorder | $O(n)$ time, $O(h)$ stack | $O(n)$ time, $O(h)$ explicit stack | the stack moves from implicit to explicit |
+
+Tail recursion *with* tail-call optimization is $O(1)$ space; without it (plain JS), it's still
+$O(n)$ — so for deep inputs you convert to a loop.
+
+<Callout type="why">
+Notice the inorder row: iteration didn't make the space disappear, it just moved it from the hidden
+call stack into a visible array. That's the deep truth — recursion <em>is</em> a stack. Converting one
+to the other is a bookkeeping change, not a magic speedup. Knowing this lets you take any recursive
+solution into an environment with a tiny stack and run it safely.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Web browsers" icon="🌐">
+A browser laying out nested HTML elements walks the DOM tree. Recursion reads naturally, but a deeply
+nested page could overflow the stack — so production engines use an explicit work-stack (iteration) to
+stay robust on adversarial input.
+</ExampleCard>
+
+<ExampleCard domain="Aviation" icon="✈️">
+Flight software is often *forbidden* from using recursion at all: standards like the ones behind
+safety-critical avionics ban it because unbounded stack growth is unacceptable when a crash is literal.
+Everything is rewritten as bounded loops with explicit, size-checked stacks.
+</ExampleCard>
+
+<ExampleCard domain="Game AI" icon="🎮">
+A pathfinder or decision tree explored with recursive depth-first search is elegant, but on a large map
+the depth can blow the stack mid-frame. Game engines convert the search to an iterative loop over an
+explicit stack so it can also be *paused and resumed* across frames — something a call stack can't do.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Assuming JavaScript optimizes tail calls.** The spec allows it; almost no engine does it. Writing
+  "tail-recursive" JS for a million-deep input still overflows — convert to a loop.
+- **Converting and changing the order.** When you replace recursion with an explicit stack, remember a
+  stack is LIFO: to visit children left-to-right you often push them right-to-left. Easy to flip by
+  accident.
+- **Losing the post-order "after" work.** Pre-order conversions are easy; post-order (do work *after*
+  both children) needs you to track a phase per frame, as the course's `genericTraversal` does.
+- **Reaching for iteration on a tree just to look clever.** If depth is safely bounded (a balanced tree
+  is $O(\log n)$ deep), recursion is clearer and the stack cost is negligible. Optimize for readability
+  until depth is a real risk.
+- **Interview tip:** when asked "can you do this without recursion?", the answer is always yes —
+  describe simulating the call stack with an explicit stack, and note that time stays the same while
+  you gain control over space.
+
+## Practice
+
+1. **Sum, both ways (easy).** Write recursive and iterative sum; confirm equal results and explain the
+   space difference.
+2. **Tail-recursive rewrite (easy).** Convert recursive factorial and sum to accumulator-passing tail
+   form.
+3. **Iterative DFS (medium).** Rewrite recursive graph DFS using an explicit stack and a visited set —
+   the course's `dfsIterative`.
+4. **Trampoline a deep recursion (hard).** Use the `trampoline` helper to run a tail-recursive function
+   millions deep without overflowing — bouncing thunks instead of stacking frames.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You must sum a list of one million numbers in JavaScript without risking a crash. Which is safer?',
+      options: [
+        'Plain recursion',
+        'An iterative loop',
+        'They are identical',
+        'Neither can do it',
+      ],
+      answer: 1,
+      explain: 'Plain recursion would stack a million frames and overflow. A loop uses O(1) extra space and handles it easily.',
+    },
+    {
+      q: 'What makes a recursive call a TAIL call?',
+      options: [
+        'It is the first statement in the function',
+        'The recursive call is the very last action, with no pending work after it returns',
+        'It has no base case',
+        'It calls itself twice',
+      ],
+      answer: 1,
+      explain: 'In a tail call nothing waits on the result, so the frame can be reused — enabling O(1) space where tail-call optimization exists.',
+    },
+    {
+      q: 'When you convert a recursive tree traversal to an iterative one with your own stack, what typically stays the same?',
+      options: [
+        'The time complexity',
+        'The exact memory location used',
+        'Nothing — it becomes O(1) space',
+        'The base case disappears',
+      ],
+      answer: 0,
+      explain: 'Time is unchanged; you mainly move the space from the implicit call stack into an explicit stack you control.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Recursion and iteration can give the <strong>same answer</strong> with very different time and space bills.',
+    'Recursion uses <strong>O(depth) call-stack space</strong>; a plain loop usually uses <strong>O(1)</strong>.',
+    'Prefer recursion for <strong>nested structures</strong> (trees, divide-and-conquer); prefer iteration for flat work, speed, or deep inputs.',
+    '<strong>Tail calls</strong> can run in O(1) space — but most JavaScript engines don’t optimize them, so convert deep cases to loops.',
+    'Any recursion converts to iteration with an <strong>explicit stack</strong>: time stays the same, you gain control over space.',
+  ]}
+/>
+
+That completes the Recursion track — you can now spot a base case, trust a recursive subcall, read a
+recursion tree, and convert between recursion and loops at will. For another angle on the same ideas,
+the Game Development course's <strong>Recursion</strong> lesson (in its Algorithms track) applies them
+to game logic. Next stop in DSA: <strong>Bit Manipulation</strong>, where we drop down to the raw ones
+and zeros.

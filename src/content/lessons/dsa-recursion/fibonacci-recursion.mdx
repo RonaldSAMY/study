@@ -1,0 +1,246 @@
+---
+title: Fibonacci & the Recursion Tree
+track: dsa-recursion
+summary: "Why naive Fibonacci recursion explodes into an exponential tree, and how memoization prunes the repeats down to linear."
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - dsa-recursion/factorial-power
+leadsTo:
+  - dsa-recursion/tower-of-hanoi
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import RecFibTree from '../../../components/demos/RecFibTree.tsx';
+
+## The hook: the recursion that looks innocent and runs forever
+
+The Fibonacci numbers — $0, 1, 1, 2, 3, 5, 8, 13, \dots$ — are defined so cleanly that the recursion
+almost writes itself: each number is the sum of the two before it. Translate that directly to code and
+you get a function that is *correct* and *beautiful* and, for $n$ past about 40, **so slow it appears to
+hang**. The reason is the single most important cautionary tale in recursion: when a function calls
+itself **twice**, the work can grow like $2^n$. Understanding *why* — and the one-line fix — is what
+separates a naive recursion from a fast one.
+
+<Callout type="intuition" title="The one-sentence idea">
+Naive Fibonacci recomputes the same subproblems over and over, building an **exponential tree**;
+**memoization** caches each answer so every subproblem is solved exactly once.
+</Callout>
+
+## Intuition: one branch becomes two
+
+In the last lesson, `factorial` and `power` each made **one** recursive call, so the calls formed a
+straight chain. Fibonacci makes **two**:
+
+$$
+\text{fib}(n) = \text{fib}(n-1) + \text{fib}(n-2), \qquad \text{fib}(0) = 0,\; \text{fib}(1) = 1.
+$$
+
+That `+` hides a disaster. To compute $\text{fib}(5)$ you need $\text{fib}(4)$ **and** $\text{fib}(3)$.
+But $\text{fib}(4)$ *also* needs $\text{fib}(3)$. So $\text{fib}(3)$ gets computed twice — and
+$\text{fib}(2)$ many more times — each from scratch, with no memory that it was already solved. The
+calls form a **binary tree** that nearly doubles in size each level.
+
+The fix is almost embarrassingly simple. Keep a **cache** (a map). Before computing $\text{fib}(n)$,
+check the cache; if it's there, return it instantly and **don't recurse**. The first time you solve a
+subproblem you store it; every later request is free. The exploding tree collapses into a thin
+left-leaning spine — each value computed once.
+
+## Play with it
+
+Drag `n` up and press <strong>▶ Play</strong> to watch the call tree grow, call by call, in the order
+the recursion actually visits it. Then tick <strong>memoize</strong> and replay: amber nodes are
+*reused* values whose entire subtree is **pruned**. Compare "calls now" against "naive calls".
+
+<RecFibTree client:visible />
+
+<Callout type="tip">
+With memoization off, bump `n` to 7 or 8 and notice how many times the same small number reappears —
+that repetition <em>is</em> the exponential blow-up. Turn memoization on and the tree shrinks to a
+slim staircase: roughly <strong>n</strong> real calls instead of <strong>2ⁿ</strong>.
+</Callout>
+
+## How it works: a dry run
+
+Counting calls makes the explosion concrete. Naive $\text{fib}(5)$:
+
+- $\text{fib}(5)$ → $\text{fib}(4)$ + $\text{fib}(3)$
+- $\text{fib}(4)$ → $\text{fib}(3)$ + $\text{fib}(2)$  ← $\text{fib}(3)$ already needed above
+- … and $\text{fib}(2)$ is reached **5** separate times for $n = 5$
+
+In total $\text{fib}(5)$ costs **15** calls; $\text{fib}(10)$ costs **177**; $\text{fib}(30)$ costs over
+**2.6 million**. The memoized version computes each of $\text{fib}(0)\dots\text{fib}(n)$ once.
+
+<CodeRunner
+  client:visible
+  code={`let naiveCalls = 0;
+function fibNaive(n) {
+  naiveCalls++;
+  if (n <= 1) return n;
+  return fibNaive(n - 1) + fibNaive(n - 2);
+}
+
+function fibMemo(n, memo = new Map()) {
+  if (n <= 1) return n;
+  if (memo.has(n)) return memo.get(n);     // reuse — no recursion
+  const result = fibMemo(n - 1, memo) + fibMemo(n - 2, memo);
+  memo.set(n, result);
+  return result;
+}
+
+const value = fibNaive(15);`}
+  tests={[
+    { expr: 'value', label: 'fibNaive(15)' },
+    { expr: 'naiveCalls', label: 'calls used by fibNaive(15)' },
+    { expr: 'fibMemo(15)' },
+    { expr: 'fibMemo(50)' },
+  ]}
+/>
+
+Notice `fibNaive(15)` already burns over a thousand calls, while `fibMemo(50)` returns instantly.
+
+## The real implementation
+
+Faithful excerpts from the course's Fibonacci file — the naive trap and the memoized cure.
+
+```ts
+// /dsa/04-recursion/fibonacci.ts
+
+// Naive recursive — Time: O(2^n), Space: O(n). DON'T use for large n!
+function fibNaive(n: number): number {
+  if (n < 0) throw new Error('n must be non-negative');
+  if (n <= 1) return n;
+  return fibNaive(n - 1) + fibNaive(n - 2);
+}
+
+// Memoized (top-down DP) — Time: O(n), Space: O(n)
+function fibMemo(n: number, memo: Map<number, number> = new Map()): number {
+  if (n < 0) throw new Error('n must be non-negative');
+  if (n <= 1) return n;
+  if (memo.has(n)) return memo.get(n)!;
+  const result = fibMemo(n - 1, memo) + fibMemo(n - 2, memo);
+  memo.set(n, result);
+  return result;
+}
+```
+
+Run the full file: `npx tsx 04-recursion/fibonacci.ts`
+
+## Complexity
+
+| Version | Best | Average | Worst | Space |
+| --- | --- | --- | --- | --- |
+| Naive recursion | $O(2^n)$ | $O(\varphi^{\,n})$ | $O(2^n)$ | $O(n)$ stack |
+| Memoized (top-down) | $O(n)$ | $O(n)$ | $O(n)$ | $O(n)$ cache + stack |
+
+The naive tree's node count grows like the golden ratio $\varphi \approx 1.618$ raised to $n$ — formally
+$T(n) = T(n-1) + T(n-2) + O(1)$, which is itself a Fibonacci-shaped recurrence, hence exponential.
+Memoization changes the accounting completely: there are only $n+1$ distinct subproblems, each solved
+once at $O(1)$ cost, giving $O(n)$.
+
+<Callout type="why">
+Caching the answers to overlapping subproblems is exactly <strong>dynamic programming</strong>. This
+top-down "recursion + memo" style has a bottom-up twin (a table you fill with a loop). The dedicated
+lesson <strong>Memoization vs Tabulation</strong> in the Dynamic Programming track builds both on this
+very example — Fibonacci is the gateway drug to DP.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Botany" icon="🌻">
+Sunflower seed heads, pinecones, and the spirals of a nautilus shell arrange themselves in Fibonacci
+counts because each new growth builds on the previous two stages. Nature "computes" Fibonacci by
+literal accumulation — no wasted recomputation, which is exactly what memoization restores to our code.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="📈">
+Traders draw **Fibonacci retracement** levels (38.2%, 61.8% — ratios of consecutive Fibonacci numbers,
+which converge to the golden ratio) to guess where a price pullback might pause. Whether or not it
+predicts markets, the ratios come straight from this sequence.
+</ExampleCard>
+
+<ExampleCard domain="Puzzles" icon="🪜">
+"How many ways to climb $n$ stairs taking 1 or 2 steps?" is Fibonacci in disguise: the ways to reach
+step $n$ are the ways to reach $n-1$ (then a single step) plus the ways to reach $n-2$ (then a double).
+The `climbStairs` practice problem is solved by memoizing exactly like `fibMemo`.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Sharing the cache correctly.** Passing `memo` as a default parameter means callers share it across
+  the recursion but get a fresh one per top-level call. A closure-based cache (`createMemoizedFib`)
+  persists across calls — choose deliberately.
+- **Memoizing but still recomputing.** The check `if (memo.has(n)) return ...` must come **before** the
+  two recursive calls. Put it after and you've gained nothing.
+- **Stack depth, not just time.** Even memoized, the first descent goes $n$ deep, so it's still $O(n)$
+  stack — for $n$ in the hundreds of thousands you'd switch to the bottom-up loop to avoid overflow.
+- **Interview tip:** when you spot a recurrence that calls itself on *overlapping* inputs, say
+  "overlapping subproblems → memoize." Then state the new complexity ($O(n)$) explicitly. This is the
+  most common follow-up after "now make it faster."
+
+## Practice
+
+1. **Climbing stairs (medium).** Count ways to climb $n$ stairs with 1- or 2-steps; memoize it and
+   watch it match `fibMemo`.
+2. **Count distinct calls (easy).** Instrument `fibNaive` with a counter and chart calls vs $n$ — feel
+   the curve bend upward.
+3. **Tribonacci (medium).** $T(n) = T(n-1) + T(n-2) + T(n-3)$. Three branches make the naive tree even
+   worse; memoize it.
+4. **Bottom-up Fibonacci (medium).** Replace recursion with a loop and two running variables to reach
+   $O(n)$ time and $O(1)$ space — a preview of the next lesson and of tabulation.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why is naive recursive Fibonacci O(2^n) instead of O(n)?',
+      options: [
+        'JavaScript numbers are slow',
+        'It makes two recursive calls that recompute the same subproblems repeatedly',
+        'It uses too much memory for the cache',
+        'The base case is wrong',
+      ],
+      answer: 1,
+      explain: 'Two calls per step build a branching tree, and the same fib(k) values are recomputed from scratch many times — the node count grows exponentially.',
+    },
+    {
+      q: 'What does memoization change so that Fibonacci becomes O(n)?',
+      options: [
+        'It removes the base case',
+        'It stores each computed fib(k) and returns the cached value instead of recursing again',
+        'It switches to fast power',
+        'It uses BigInt',
+      ],
+      answer: 1,
+      explain: 'With a cache there are only n+1 distinct subproblems, each solved once; repeats become instant lookups, collapsing the tree.',
+    },
+    {
+      q: 'Where must the cache check `if (memo.has(n))` go for memoization to help?',
+      options: [
+        'After the two recursive calls',
+        'Before the two recursive calls',
+        'Inside the base case only',
+        'It does not matter',
+      ],
+      answer: 1,
+      explain: 'Checking before recursing is what prevents re-expanding an already-solved subtree; placed after the calls, the work has already happened.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Two recursive calls per step make a <strong>branching tree</strong> whose size grows like φⁿ ≈ exponential.',
+    'The blow-up comes from <strong>overlapping subproblems</strong> — the same fib(k) recomputed many times.',
+    '<strong>Memoization</strong> caches each answer so every subproblem is solved exactly once, giving O(n).',
+    'The cache check must run <strong>before</strong> the recursive calls, or it saves nothing.',
+    'Recursion + a cache is <strong>top-down dynamic programming</strong> — Fibonacci is its canonical first example.',
+  ]}
+/>
+
+Next up: **Tower of Hanoi**, a puzzle whose elegant two-line recursion provably needs $2^n - 1$ moves —
+exponential, but for a very different reason than Fibonacci.

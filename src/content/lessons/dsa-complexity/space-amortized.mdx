@@ -1,0 +1,260 @@
+---
+title: Space & Amortized Analysis
+track: dsa-complexity
+summary: "Big-O isn't only about time — count memory, see how recursion eats the call stack, and learn why a doubling array's pushes are O(1) on average."
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - dsa-complexity/analyzing-algorithms
+leadsTo:
+  - dsa-recursion/recursion-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import CxAmortizedDoubling from '../../../components/demos/CxAmortizedDoubling.tsx';
+
+## The hook: the photo app that runs out of memory
+
+Your code is blazing fast — and then it crashes. Not because it's slow, but because it tried to hold a
+billion things in memory at once. Time isn't the only resource Big-O measures; **space** matters just
+as much, and on a phone or a tiny cloud container it's often the thing that kills you first.
+
+There's also a subtler puzzle. Pushing onto a growable array (a JavaScript array, a Python list, a Java
+`ArrayList`) is "$O(1)$" — yet every so often a push secretly copies the *entire* array. How can an
+operation that sometimes does $n$ work be called constant time? The answer is **amortized analysis**,
+and it's one of the most beautiful ideas in the whole subject.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Space complexity counts the extra memory you allocate**, and **amortized analysis** averages a rare
+expensive step over the many cheap ones around it — so a doubling array's push is $O(1)$ on average.
+</Callout>
+
+## Intuition: two new lenses
+
+**Space complexity** asks the same growth question as time, but about *memory*:
+
+- $O(1)$ space — a fixed handful of variables, no matter how big the input. Finding a max with one
+  `max` variable.
+- $O(n)$ space — a new structure that grows with the input. Copying an array into a doubled one.
+- $O(n^2)$ space — a 2D grid. An $n \times n$ matrix.
+
+And don't forget **recursion uses memory**: each pending call sits on the **call stack**. A recursion
+$n$ levels deep costs $O(n)$ space even if it returns just one number.
+
+**Amortized analysis** asks: when *most* operations are cheap and a *few* are expensive, what's the
+true average cost per operation across a long run? Not the worst single step — the *average* over the
+whole sequence.
+
+## Play with it
+
+Push items one at a time and watch the backing array. Most pushes just drop a value into a free slot
+(cost 1). But when it's **full**, the array doubles and *copies everything across* — an expensive
+spike. Press **▶ Play** and watch the **average cost per push** (the line at the bottom) settle to a
+flat constant. Then flip to **grow by 1** and watch that same line climb without bound.
+
+<CxAmortizedDoubling client:visible />
+
+<Callout type="tip">
+With **double capacity**, the copy spikes get rarer exactly as fast as they get bigger, so the average
+flattens to a **small constant** (around 2) — that's the $O(1)$ amortized cost. With **grow by 1**, *every* push copies
+everything, so the average climbs like $n/2$ — that's $O(n)$ per push, $O(n^2)$ total. Same goal,
+catastrophically different cost.
+</Callout>
+
+## How it works: the doubling argument
+
+Why does doubling give $O(1)$ amortized? Push $n$ items, doubling capacity each time it fills. The
+copies happen at sizes $1, 2, 4, 8, \dots, n$, and their total is:
+
+$$
+1 + 2 + 4 + \cdots + n = 2n - 1 < 2n.
+$$
+
+So **all** the copying across $n$ pushes costs less than $2n$ — under **2 copies per push** on average.
+Add the $n$ writes themselves and the total stays under $3n$, so each push averages just a **small
+constant** (about 2 in practice): an $O(1)$ amortized cost. Let's measure it:
+
+<CodeRunner
+  client:visible
+  code={`// Simulate pushing n items, doubling capacity when full.
+// Returns the TOTAL work (copies + writes) and the average per push.
+function doublingCost(n) {
+  let cap = 0, size = 0, totalWork = 0;
+  for (let i = 0; i < n; i++) {
+    if (size >= cap) {            // full → grow and copy everything
+      totalWork += size;         // copy 'size' existing items
+      cap = cap === 0 ? 1 : cap * 2;
+    }
+    totalWork += 1;              // write the new item
+    size++;
+  }
+  return { totalWork, avgPerPush: +(totalWork / n).toFixed(2) };
+}
+
+// Compare: growing by ONE each time copies everything, every time.
+function growByOneCost(n) {
+  let totalWork = 0;
+  for (let i = 0; i < n; i++) { totalWork += i; totalWork += 1; }
+  return { totalWork, avgPerPush: +(totalWork / n).toFixed(2) };
+}`}
+  tests={[
+    { expr: 'doublingCost(1000)', label: 'doubling: total + avg per push' },
+    { expr: 'growByOneCost(1000)', label: 'grow-by-1: total + avg per push' },
+  ]}
+/>
+
+Doubling 1000 pushes costs about 2000 units (~2 each, constant). Grow-by-1 costs ~500,000 (~500 each,
+and rising) — the average *is* the input size. That's the entire case for doubling.
+
+## The real implementation
+
+The course file lays out space complexity by example — $O(1)$, $O(n)$, and $O(n^2)$ side by side:
+
+```js
+// /dsa/00-complexity/big-o-notation.js
+
+// O(1) space — only a fixed variable, regardless of input size.
+function findMax(arr) {
+  let max = arr[0];                 // 1 variable
+  for (let i = 1; i < arr.length; i++) {
+    if (arr[i] > max) max = arr[i];
+  }
+  return max;
+}
+
+// O(n) space — a new array that grows with the input.
+function doubleArray(arr) {
+  const doubled = [];               // grows to length n
+  for (let num of arr) doubled.push(num * 2);
+  return doubled;
+}
+
+// O(n²) space — an n×n matrix.
+function createMatrix(n) {
+  const matrix = [];
+  for (let i = 0; i < n; i++) matrix.push(new Array(n).fill(0));
+  return matrix;
+}
+```
+
+> Run the full file: `node 00-complexity/big-o-notation.js`
+
+## Complexity
+
+Time and space are *separate* budgets — an algorithm has a complexity for each, and they often trade
+off. For the growable-array push:
+
+$$
+\text{push time: best } = O(1), \quad \text{worst } = O(n), \quad \boxed{\text{amortized } = O(1)}.
+$$
+
+| Operation | Best | Worst | Amortized | Extra space |
+| --- | --- | --- | --- | --- |
+| Doubling-array push | $O(1)$ | $O(n)$ (on a resize) | $O(1)$ | $O(n)$ total |
+| Recursion, depth $n$ | — | — | — | $O(n)$ stack |
+| 2D grid build | — | — | — | $O(n^2)$ |
+
+<Callout type="why">
+Amortized is *not* average-case. Average-case asks about random inputs; amortized makes an **iron-clad
+guarantee** about a sequence of operations on *any* input. Any run of $n$ doubling-pushes costs $O(n)$
+total — never more — so $O(1)$ per push is a promise, not a probability.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Photography" icon="📷">
+Your camera roll is a growable array. Adding a photo is usually instant, but occasionally the app
+quietly re-allocates a bigger backing buffer and copies the index across — an amortized-$O(1)$ push.
+You never notice, because the rare big copy is spread thin over thousands of cheap adds.
+</ExampleCard>
+
+<ExampleCard domain="Restaurants" icon="🍽️">
+A coat check that recomputes everyone's ticket each time a guest arrives is $O(n)$ *per guest* —
+$O(n^2)$ for the evening. Switch to numbered hooks that only occasionally double in count, and each
+check-in becomes amortized $O(1)$. Same service, a fraction of the work on a busy night.
+</ExampleCard>
+
+<ExampleCard domain="Text editors" icon="✍️">
+Every keystroke pushes a state onto the **undo stack**, which grows to $O(n)$ memory for an $n$-edit
+session — a classic space cost. The push itself is amortized $O(1)$, but holding the whole history is
+the price you pay in space for instant undo. Time-for-space, made visible.
+</ExampleCard>
+
+<ExampleCard domain="Navigation" icon="🗺️">
+A route finder that stores the whole road network in memory is $O(V + E)$ space — millions of nodes
+and edges. On a phone that's the binding constraint, so map apps stream and discard tiles instead of
+holding the planet at once. Sometimes space, not time, decides the design.
+</ExampleCard>
+
+## Common pitfalls &amp; interview tips
+
+- **Recursion isn't free in space.** Even when it returns one value, a depth-$n$ recursion holds $n$
+  frames on the call stack → $O(n)$ space. Doubly-recursive Fibonacci is $O(2^n)$ *time* but only
+  $O(n)$ *space*, because at most $n$ calls are live at once.
+- **New arrays and objects count.** Building a result array of length $n$ is $O(n)$ space, even if the
+  time is also $O(n)$. "In-place" ($O(1)$ extra space) is a frequent interview follow-up.
+- **Amortized ≠ average-case.** Amortized is a guarantee over a *sequence*; average-case is about
+  *random inputs*. Don't blur them.
+- **The classic trade: space for time.** A hash set turns an $O(n^2)$ pair search into $O(n)$ time —
+  at the cost of $O(n)$ space. State both numbers and the trade out loud.
+
+## Practice
+
+From the course's practice set — give **time and space**:
+
+1. **(Medium)** A loop that builds and returns a new array of doubled values. *(Answer: $O(n)$ time and
+   $O(n)$ space — the new array grows with the input.)*
+2. **(Hard)** `f(n) = f(n-1) + f(n-1)` with a base case at $n \le 1$. *(Answer: $O(2^n)$ time but only
+   $O(n)$ space — the call stack is at most $n$ deep.)*
+3. **(Hard)** The two-sum hash-set scan that stores every seen number. *(Answer: $O(n)$ time and
+   $O(n)$ space — trading memory to beat the $O(n^2)$ brute force.)*
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A function loops once over n items, using only a running total variable. Time and space?',
+      options: ['O(n) time, O(n) space', 'O(n) time, O(1) space', 'O(1) time, O(1) space', 'O(n²) time, O(n) space'],
+      answer: 1,
+      explain: 'One pass is O(n) time; a single accumulator variable is O(1) space regardless of n.',
+    },
+    {
+      q: 'Why is a push onto a doubling array called O(1) amortized, even though some pushes copy all n items?',
+      options: [
+        'Because copies never actually happen',
+        'Because the total copy work over n pushes is under 2n, so it averages to a constant',
+        'Because the array never gets full',
+        'Because copying is free in JavaScript',
+      ],
+      answer: 1,
+      explain: 'Copies at sizes 1+2+4+…+n sum to under 2n, so all the copying spread across n pushes is under 2 per push — a constant on average.',
+    },
+    {
+      q: 'Doubly-recursive Fibonacci fib(n)=fib(n-1)+fib(n-2). Its time and space complexity?',
+      options: ['O(2^n) time, O(2^n) space', 'O(n) time, O(n) space', 'O(2^n) time, O(n) space', 'O(n²) time, O(1) space'],
+      answer: 2,
+      explain: 'It makes ~2^n calls (time), but at most n calls are alive on the stack at once, so space is only O(n).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Space complexity</strong> measures the extra memory you allocate as the input grows — O(1), O(n), O(n²), just like time.',
+    '<strong>Recursion costs stack space</strong>: a depth-n recursion is O(n) space even if it returns a single value.',
+    '<strong>Amortized analysis</strong> averages a rare expensive operation over many cheap ones across a sequence.',
+    'A <strong>doubling array</strong> pushes in amortized O(1) because total copying stays under 2n; <strong>growing by 1</strong> is O(n) per push.',
+    'The classic engineering move is <strong>trading space for time</strong> — e.g. a hash set turning O(n²) into O(n).',
+  ]}
+/>
+
+That completes the **Complexity &amp; Big-O** track. Next you'll put it to work in **Thinking
+Recursively**, where base cases, recursive cases, and the call stack you just learned to budget come
+together. (See also the Game Development course's *Big-O Notation* lesson and the ML course's
+*gradient-descent cost* for the same ideas in other settings.)

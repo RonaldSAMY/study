@@ -1,0 +1,234 @@
+---
+title: Flags & Bitmasks
+track: dsa-bit-manipulation
+summary: "Packing many yes/no settings into one integer: grant, revoke, toggle and test with OR, AND and XOR."
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - dsa-bit-manipulation/counting-bits
+leadsTo:
+  - dsa-bit-manipulation/xor-single-number
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BitFlagToggler from '../../../components/demos/BitFlagToggler.tsx';
+
+## The hook: 32 booleans for the price of one
+
+A file's UNIX permissions — read, write, execute, for owner, group and others — are nine yes/no
+answers. You *could* store nine booleans, but the operating system stores **one number**: `755`. Each
+bit is a switch, the whole set fits in a register, and checking "can the owner write?" is a single AND.
+This packing trick — a **bitmask** — is how permissions, feature toggles, game states, and graphics
+colors are stored everywhere.
+
+<Callout type="intuition" title="The one-sentence idea">
+Give each yes/no setting its own **bit position**; then one integer holds the whole set, and OR / AND /
+XOR with a mask grants, tests, or toggles any setting in one operation.
+</Callout>
+
+## Intuition: name the bits, then operate
+
+Define each flag as a distinct power of two — `1 << 0`, `1 << 1`, `1 << 2`, … — so no two overlap. Now
+the four moves from the bit-tricks lesson get *meaning*:
+
+- **Grant** a flag: `value | FLAG` — OR turns its bit on.
+- **Revoke** a flag: `value & ~FLAG` — AND with the complement turns it off.
+- **Toggle** a flag: `value ^ FLAG` — XOR flips it.
+- **Test** a flag: `(value & FLAG) !== 0` — AND keeps it only if present.
+
+Because each flag is a separate bit, you can combine masks: `READ | WRITE` is a single value meaning
+"both," and `(value & (READ | WRITE)) === (READ | WRITE)` asks "are *all* of these on?"
+
+## Play with it
+
+The panel below stores eight named permissions in one byte. Click a flag cell to flip it directly, or
+pick an operation and a target flag and step through the mask combining column by column. Grant, revoke
+and toggle commit the result back into the stored value; **check** just reports whether the bit is on.
+
+<BitFlagToggler client:visible />
+
+<Callout type="tip">
+Run <strong>revoke</strong> on a flag and watch the mask row: it shows <code>~(1&lt;&lt;i)</code> — all
+ones except the target column. ANDing keeps every other flag and forces just that one to zero.
+</Callout>
+
+## How it works
+
+Start with `READ + EXEC = 0b00000101`. Grant `WRITE` (`1 << 1 = 0b00000010`) with OR:
+
+```
+  00000101   (READ + EXEC)
+| 00000010   (WRITE mask)
+  --------
+  00000111   (READ + WRITE + EXEC)
+```
+
+Now revoke `EXEC` (`1 << 2`) by ANDing with its complement `~(1 << 2) = 0b11111011`:
+
+```
+  00000111
+& 11111011   (~EXEC)
+  --------
+  00000011   (READ + WRITE)
+```
+
+Every other bit survived untouched — that is the whole appeal of masks.
+
+<CodeRunner
+  client:visible
+  code={`const READ = 1 << 0, WRITE = 1 << 1, EXEC = 1 << 2;
+
+function grant(v, flag)  { return v | flag; }
+function revoke(v, flag) { return v & ~flag; }
+function toggle(v, flag) { return v ^ flag; }
+function has(v, flag)    { return (v & flag) !== 0; }
+
+let perms = READ | EXEC;        // 0b101 = 5
+perms = grant(perms, WRITE);    // 0b111 = 7
+perms = revoke(perms, EXEC);    // 0b011 = 3`}
+  tests={[
+    { expr: '(READ | EXEC)', label: 'READ | EXEC' },
+    { expr: 'grant(READ | EXEC, WRITE)', label: 'after grant WRITE' },
+    { expr: 'revoke(7, EXEC)', label: 'revoke EXEC from 7' },
+    { expr: 'has(5, WRITE)', label: 'does 5 have WRITE?' },
+  ]}
+/>
+
+## The real implementation
+
+The course file wraps these moves in tiny helpers — the exact functions a permissions system would
+export:
+
+```ts
+// /dsa/16-bit-manipulation/bit-flags-masks.ts
+function hasFlag(value: number, flag: number): boolean {
+    return (value & flag) !== 0;
+}
+function setFlag(value: number, flag: number): number {
+    return value | flag;
+}
+function clearFlag(value: number, flag: number): number {
+    return value & ~flag;
+}
+function toggleFlag(value: number, flag: number): number {
+    return value ^ flag;
+}
+// "are ALL of these flags set?"  vs  "is ANY set?"
+function hasAllFlags(value: number, flags: number): boolean {
+    return (value & flags) === flags;
+}
+function hasAnyFlag(value: number, flags: number): boolean {
+    return (value & flags) !== 0;
+}
+```
+
+Run the full file: `npx tsx 16-bit-manipulation/bit-flags-masks.ts`.
+
+## Complexity
+
+Every flag operation is a single masked instruction, no matter how many flags the integer holds:
+
+$$
+T(n) = O(1), \qquad S = O(1) \ \text{for up to } w \text{ flags in one } w\text{-bit word.}
+$$
+
+| Operation | Expression | Time |
+|-----------|------------|------|
+| Grant | `v \| FLAG` | $O(1)$ |
+| Revoke | `v & ~FLAG` | $O(1)$ |
+| Toggle | `v ^ FLAG` | $O(1)$ |
+| Test one / any | `(v & FLAG) !== 0` | $O(1)$ |
+| Test all | `(v & MASK) === MASK` | $O(1)$ |
+
+Compared with an array or set of booleans, a bitmask is both smaller (one word vs. many) and faster
+(no iteration, no hashing).
+
+## The same idea, different worlds
+
+<ExampleCard domain="Operating systems" icon="🗂️">
+UNIX <code>chmod 755</code> is three octal digits, each three bits of <em>rwx</em>. The kernel stores all
+nine permission bits in one integer and answers "may this process write?" with a single AND against the
+relevant mask.
+</ExampleCard>
+
+<ExampleCard domain="Product engineering" icon="🚩">
+Feature flags ship code dark: a user's enabled features are one integer. Rolling out a feature is
+ORing its bit into a cohort; killing it is ANDing the complement — instant, with no schema change.
+</ExampleCard>
+
+<ExampleCard domain="Graphics" icon="🎨">
+A 24-bit color packs red, green and blue into one number: <code>(r &lt;&lt; 16) | (g &lt;&lt; 8) | b</code>.
+Extracting green is <code>(color &gt;&gt; 8) &amp; 0xff</code> — a shift to line it up, then a mask to keep
+one byte.
+</ExampleCard>
+
+<ExampleCard domain="Calendars" icon="📅">
+A repeating reminder stores its days as a 7-bit mask. "Weekdays" is <code>0b0011111</code>; checking
+whether an alarm fires today is one AND against today's bit.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Flags must be distinct powers of two.** If two share a bit, setting one secretly sets the other.
+  Define them as `1 << 0`, `1 << 1`, … and never as `3` or `5`.
+- **"Has any" vs "has all" are different.** `(v & mask) !== 0` means *at least one*; `(v & mask) === mask`
+  means *every one*. Interviewers love this distinction.
+- **Packing fields needs shift *and* mask.** To read a sub-field, shift it down to the ones place
+  *then* AND off the higher bits: `(packed >> 8) & 0xff`. Forgetting the mask leaks neighbouring fields.
+- **Watch the 32-bit, signed ceiling.** Flag 31 sets the sign bit; beyond 32 flags you need `BigInt` or
+  multiple words.
+
+## Practice
+
+1. **Easy:** With `READ=1, WRITE=2, EXEC=4`, what integer represents read + execute?
+2. **Easy:** Given `perms = 6`, does it include `WRITE`? Include `READ`?
+3. **Medium:** Write `hasAll(value, mask)` and use it to check a user has *both* `ADMIN` and `AUDIT`.
+4. **Medium:** Pack an `(x, y)` coordinate (each 0–255) into one integer and write the extractors.
+5. **Hard:** Implement a `FilePermissions` class that converts between an octal number like `0o755` and
+   a symbolic string like `rwxr-xr-x` using shifts and masks.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How do you turn OFF a single flag while leaving the others untouched?',
+      options: ['value | flag', 'value & ~flag', 'value ^ flag', 'value & flag'],
+      answer: 1,
+      explain: 'AND with the complement of the flag keeps every other bit and forces the target bit to 0.',
+    },
+    {
+      q: 'Which expression checks that ALL flags in a combined mask are present?',
+      options: ['(value & mask) !== 0', '(value | mask) === mask', '(value & mask) === mask', '(value ^ mask) === 0'],
+      answer: 2,
+      explain: 'ANDing keeps only the bits both have; if that equals the mask, every flag in the mask was set.',
+    },
+    {
+      q: 'Why must each flag be a distinct power of two?',
+      options: [
+        'So they sort correctly',
+        'So each occupies its own bit and operations on one never disturb another',
+        'Because the CPU requires it',
+        'To save memory',
+      ],
+      answer: 1,
+      explain: 'One bit per flag means OR/AND/XOR with a flag mask affect exactly that position and nothing else.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>bitmask</strong> packs many yes/no settings into one integer — one bit per setting.',
+    '<strong>Grant</strong> with OR, <strong>revoke</strong> with <code>AND ~flag</code>, <strong>toggle</strong> with XOR, <strong>test</strong> with AND.',
+    'Combine masks: <code>(v &amp; mask) === mask</code> tests <em>all</em>, <code>(v &amp; mask) !== 0</code> tests <em>any</em>.',
+    'Reading a packed sub-field needs a <strong>shift then a mask</strong>, e.g. <code>(color &gt;&gt; 8) &amp; 0xff</code>.',
+    'Flags must be <strong>distinct powers of two</strong>, and one word holds at most ~32 of them in JS.',
+  ]}
+/>
+
+Next up: **The Magic of XOR** — one operator whose cancelling property finds a lone unpaired number in
+a single pass.
