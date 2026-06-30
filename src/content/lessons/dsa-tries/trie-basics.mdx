@@ -1,0 +1,288 @@
+---
+title: The Prefix Tree
+track: dsa-tries
+summary: "One node per character: a trie stores words along shared paths so insert, search and prefix queries all cost O(L)."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-heaps/heap-applications
+leadsTo:
+  - dsa-tries/trie-autocomplete
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import TrieWordBuilder from '../../../components/demos/TrieWordBuilder.tsx';
+
+## The hook: why does your phone finish your words?
+
+You type "car" and a menu instantly offers *card*, *care*, *careful*. Behind that is not a giant
+list being scanned on every keystroke — it is a tree of letters. Every word that shares a beginning
+shares a branch, so "car", "card" and "care" all travel the same `c → a → r` road before splitting.
+This shape is a **trie** (pronounced "try", from re-*trie*-val), and it turns "find everything that
+starts with…" from a whole-dictionary scan into a short walk down a few letters.
+
+<Callout type="intuition" title="The one-sentence idea">
+A trie is a tree where each edge is one character, so a word is a path from the root — words that
+share a prefix share the path, and looking anything up costs only as many steps as the word is long.
+</Callout>
+
+## Intuition: spelling out a word, one node at a time
+
+You already met trees with the heap, where a node's position encoded a priority. A trie encodes
+something simpler: **position is spelling**. Start at an empty root. To store "cat", you take the
+edge labelled `c`, then `a`, then `t`, creating any node that does not exist yet. The final node gets
+a little flag — *end of word* — so the trie can tell the stored word "cat" apart from the mere prefix
+"ca".
+
+Three things fall out of this for free:
+
+1. **Shared prefixes cost nothing extra.** Insert "car" after "cat" and only the `r` is new — the
+   `c → a` part is reused.
+2. **Search is just a walk.** Follow the letters; if you ever lack the next edge, the word is absent.
+3. **"Starts with" is the *same* walk** — you simply do not require an end-of-word flag at the finish.
+
+That last point is the whole reason tries exist. A hash set answers "is this exact word present?" in
+$O(1)$, but it cannot answer "what starts with *car*?" without scanning everything. A trie answers
+both by walking letters.
+
+## Play with it
+
+Build the trie from a word list and watch each letter become a node — green rings mark end-of-word
+nodes. Then switch to **Search mode** and walk a query: the path lights up and the demo tells you
+whether you landed on a stored word, a bare prefix, or nothing at all.
+
+<TrieWordBuilder client:visible />
+
+<Callout type="tip">
+Search for <code>car</code> and then <code>care</code>. The first ends on a green-ringed node (a real
+word); typing <code>ca</code> ends on an un-ringed node — a valid prefix, but <code>search("ca")</code>
+is false while <code>startsWith("ca")</code> is true. That flag is the only difference between the two.
+</Callout>
+
+## How it works
+
+Insert `["cat", "car", "card"]`, then ask a few questions:
+
+```
+insert "cat"   root─c─a─t*
+insert "car"   root─c─a─┬─t*
+                         └─r*          (only 'r' is new; c,a reused)
+insert "card"  root─c─a─┬─t*
+                         └─r*─d*       ('d' hangs off the existing 'r')
+
+search("car")      walk c,a,r → node is end-of-word  → true
+search("ca")       walk c,a   → node exists but not end-of-word → false
+startsWith("ca")   walk c,a   → node exists → true
+search("dog")      walk d → no edge → false
+```
+
+Every operation walks at most one node per character, so a word of length $L$ takes $L$ steps —
+no matter how many words the trie already holds.
+
+<CodeRunner
+  client:visible
+  code={`function makeNode() { return { children: {}, isEnd: false }; }
+
+const root = makeNode();
+
+function insert(word) {
+  let node = root;
+  for (const ch of word) {
+    if (!node.children[ch]) node.children[ch] = makeNode();
+    node = node.children[ch];
+  }
+  node.isEnd = true;
+}
+
+function findNode(prefix) {
+  let node = root;
+  for (const ch of prefix) {
+    if (!node.children[ch]) return null;
+    node = node.children[ch];
+  }
+  return node;
+}
+
+function search(word) { const n = findNode(word); return n !== null && n.isEnd; }
+function startsWith(prefix) { return findNode(prefix) !== null; }
+
+for (const w of ['cat', 'car', 'card', 'care']) insert(w);`}
+  tests={[
+    { expr: 'search("car")', label: 'search "car" (stored)' },
+    { expr: 'search("ca")', label: 'search "ca" (prefix only)' },
+    { expr: 'startsWith("ca")', label: 'startsWith "ca"' },
+    { expr: 'search("dog")', label: 'search "dog" (absent)' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses a `Map` for children (so it works for any alphabet) and tracks counts as a
+bonus. Here is its faithful core — insert, the shared `findNode` helper, and the two queries built
+on top of it:
+
+```ts
+// /dsa/11-trie/trie-basics.ts
+class TrieNode {
+    children: Map<string, TrieNode>;
+    isEndOfWord: boolean;
+    constructor() {
+        this.children = new Map();
+        this.isEndOfWord = false;
+    }
+}
+
+class Trie {
+    private root = new TrieNode();
+
+    insert(word: string): void {
+        let node = this.root;
+        for (const char of word) {
+            if (!node.children.has(char)) {
+                node.children.set(char, new TrieNode());
+            }
+            node = node.children.get(char)!;
+        }
+        node.isEndOfWord = true;
+    }
+
+    search(word: string): boolean {
+        const node = this.findNode(word);
+        return node !== null && node.isEndOfWord;
+    }
+
+    startsWith(prefix: string): boolean {
+        return this.findNode(prefix) !== null;   // same walk, no end flag needed
+    }
+
+    private findNode(prefix: string): TrieNode | null {
+        let node = this.root;
+        for (const char of prefix) {
+            if (!node.children.has(char)) return null;
+            node = node.children.get(char)!;
+        }
+        return node;
+    }
+}
+```
+
+Run the full file: `npx tsx 11-trie/trie-basics.ts`.
+
+## Complexity
+
+Let $L$ be the length of the word and $\Sigma$ the alphabet size. Every operation walks one node per
+character, and at each node a `Map` lookup is $O(1)$:
+
+$$
+T_{\text{insert}} = T_{\text{search}} = T_{\text{startsWith}} = O(L).
+$$
+
+Crucially this is **independent of $n$**, the number of stored words — a million-word dictionary is
+no slower to query than a ten-word one.
+
+| Operation | Time | Space (extra) |
+|-----------|------|---------------|
+| Insert | $O(L)$ | $O(L)$ worst case (all-new letters) |
+| Search (exact) | $O(L)$ | $O(1)$ |
+| StartsWith (prefix) | $O(L)$ | $O(1)$ |
+| Whole-trie storage | — | $O(\Sigma \cdot L \cdot n)$ worst case |
+
+A hash set matches the $O(L)$ exact-search (it must still hash all $L$ characters) but *cannot* do
+the prefix query — that is the trade you are buying with the trie's extra memory.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Networking" icon="🌐">
+Routers store IP prefixes in a binary trie and forward each packet by the <strong>longest matching
+prefix</strong>. The destination address walks the trie bit by bit; the deepest end-of-route node it
+reaches decides the next hop — prefix matching is literally how the internet routes.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+Suffix tries (and their compressed cousins, suffix trees) index a DNA strand so that searching for a
+gene fragment like <code>GATTACA</code> is a walk of length equal to the fragment, not a scan of the
+whole billion-base genome.
+</ExampleCard>
+
+<ExampleCard domain="Word games" icon="🎲">
+A Boggle or Scrabble solver loads the dictionary into a trie, then explores the board letter by
+letter. The moment the path spells a sequence that is not a prefix of any word, it stops — the trie
+prunes dead ends before they cost anything.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting the end-of-word flag.** Without it you cannot distinguish a stored word from a prefix:
+  inserting "care" must not make `search("car")` return true. The flag is what makes a node a word.
+- **Confusing `search` with `startsWith`.** They walk identically; only the final check differs. Say
+  out loud "search needs the end flag, startsWith does not" and you will not mix them up.
+- **Array vs Map children.** A fixed `Array(26)` is faster but assumes lowercase-only and wastes
+  memory on sparse nodes; a `Map` handles any alphabet. Mention the trade-off — interviewers like it.
+- **Delete is the subtle one.** Removing a word means clearing its end flag and then pruning nodes
+  upward *only while* they have no other children and are not themselves word-ends.
+- **Interview cue:** any prompt with "prefix", "starts with", "autocomplete", or "dictionary of
+  words" is almost always a trie. Reach for it before a hash map.
+
+## Practice
+
+1. **Easy:** By hand, insert `["to", "tea", "ted", "ten"]`. How many nodes does the trie have
+   (including the root)?
+2. **Easy:** After inserting `["app", "apple"]`, what do `search("app")`, `search("appl")` and
+   `startsWith("appl")` each return?
+3. **Medium:** Implement `countWordsEqualTo(word)` by adding a `count` integer to each node, bumped on
+   insert at the end-of-word node.
+4. **Medium:** Implement `delete(word)` that clears the end flag and prunes now-empty branches without
+   touching nodes still shared by other words.
+5. **Hard:** Solve *Add and Search Word* (LeetCode 211): support a `.` wildcard in queries that
+   matches any single character — at a `.`, recurse into every child.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A trie stores ["car", "care"]. What does search("car") return, and why?',
+      options: [
+        'false — "car" is only a prefix of "care"',
+        'true — the node after c-a-r is flagged end-of-word',
+        'true — every node reached counts as a word',
+        'false — search only works on leaf nodes',
+      ],
+      answer: 1,
+      explain: 'Inserting "car" set the end-of-word flag on the r node. "care" added more nodes below it but did not clear that flag, so "car" is still a stored word.',
+    },
+    {
+      q: 'Searching for a word of length L in a trie holding n words costs about…',
+      options: ['O(n)', 'O(L)', 'O(n · L)', 'O(log n)'],
+      answer: 1,
+      explain: 'You walk one node per character with O(1) work each, independent of how many words n are stored — so O(L).',
+    },
+    {
+      q: 'What is the only operational difference between search and startsWith?',
+      options: [
+        'startsWith walks the tree backwards',
+        'search requires the final node to be flagged end-of-word; startsWith does not',
+        'search is O(L) but startsWith is O(1)',
+        'startsWith needs the word sorted first',
+      ],
+      answer: 1,
+      explain: 'Both walk the same path letter by letter. search additionally checks the end-of-word flag at the finish; startsWith only needs the path to exist.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>trie stores one character per edge</strong>, so each word is a root-to-node path and shared prefixes share nodes.',
+    'Insert, search and startsWith are all <strong>O(L)</strong> walks — independent of how many words n the trie holds.',
+    'An <strong>end-of-word flag</strong> is what separates a stored word from a bare prefix; it is the only difference between search and startsWith.',
+    'Tries trade <strong>extra memory</strong> for fast <strong>prefix queries</strong> that a hash set simply cannot do.',
+    'Reach for a trie whenever a problem mentions <strong>prefixes, autocomplete, or a dictionary of words</strong>.',
+  ]}
+/>
+
+Next up: **Autocomplete & Word Search** — walking to a prefix node and then sweeping its whole
+subtree to list every word that completes it.

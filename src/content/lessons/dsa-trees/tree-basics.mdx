@@ -1,0 +1,256 @@
+---
+title: Tree Fundamentals
+track: dsa-trees
+summary: "A tree is hierarchy made of nodes: one root, parents and children, no cycles — the shape behind file systems, the DOM, and every search structure to come."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-hash-tables/hashmap-patterns
+leadsTo:
+  - dsa-trees/tree-traversals
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import TreeBasicsExplorer from '../../../components/demos/TreeBasicsExplorer.tsx';
+
+## The hook: the folder you opened this morning
+
+Open any folder on your computer and you are standing on a tree. There is one top folder (the
+**root**), each folder holds files and sub-folders (its **children**), every item except the root sits
+inside exactly one parent, and you can never loop back to where you started. That shape — one origin,
+branching downward, no cycles — is the single most reused structure in computing. Hash tables gave you
+instant lookup but threw away all order; trees give lookup *and* keep a sense of hierarchy and ordering.
+
+<Callout type="intuition" title="The one-sentence idea">
+A tree is a set of nodes where one node is the root and every other node hangs beneath exactly one
+parent, so the whole thing branches downward with no cycles.
+</Callout>
+
+## Intuition: a vocabulary you already half-know
+
+You already speak the language from family trees and org charts. The **root** is the top node with no
+parent. A node directly below another is its **child**; the one above is its **parent**; nodes sharing a
+parent are **siblings**. A node with no children is a **leaf**, and a node with children is **internal**.
+
+Two measurements matter constantly:
+
+- **Depth** of a node is how many edges separate it from the root. The root has depth 0.
+- **Height** of the tree is the depth of its deepest leaf — the longest root-to-leaf path, measured in
+  edges.
+
+A **binary tree** restricts every node to at most two children, conventionally drawn as `left` and
+`right`. That two-way split is what later lets us throw away half the tree per comparison, the same way
+a hash bucket let us skip straight to one slot.
+
+## Play with it
+
+Type a tree in **level order** (left to right, top to bottom; use `x` for a missing child), then walk it
+one node at a time. Each step highlights a node, reports its depth, and grows the running tallies of
+nodes, leaves, and depth reached.
+
+<TreeBasicsExplorer client:visible />
+
+<Callout type="tip">
+Watch the **depth reached** counter. It only ever climbs to the tree's height — the deepest leaf. A short,
+bushy tree has a small height even with many nodes, and that small height is exactly what makes tree
+operations fast.
+</Callout>
+
+## How it works
+
+Most tree facts are one tiny recursive idea: *a node's answer is itself, combined with the answers of
+its two subtrees*. Height is the cleanest example — the height of a node is one more than the taller of
+its two children, and an empty spot has height −1:
+
+```
+height(node):
+  if node is empty: return -1
+  return 1 + max(height(node.left), height(node.right))
+```
+
+Counting nodes, summing values, counting leaves — all the same template with a different combine step.
+
+<CodeRunner
+  client:visible
+  code={`// A binary node is just a value with up to two children.
+function node(value, left = null, right = null) {
+  return { value, left, right };
+}
+
+// The sample tree:   1
+//                   / \\
+//                  2   3
+//                 / \\   \\
+//                4   5   6
+const root = node(1, node(2, node(4), node(5)), node(3, null, node(6)));
+
+function height(n) {
+  if (!n) return -1;
+  return 1 + Math.max(height(n.left), height(n.right));
+}
+function countNodes(n) { return n ? 1 + countNodes(n.left) + countNodes(n.right) : 0; }
+function countLeaves(n) {
+  if (!n) return 0;
+  if (!n.left && !n.right) return 1;
+  return countLeaves(n.left) + countLeaves(n.right);
+}`}
+  tests={[
+    { expr: 'height(root)', label: 'height (edges to deepest leaf)' },
+    { expr: 'countNodes(root)', label: 'total nodes' },
+    { expr: 'countLeaves(root)', label: 'leaf nodes' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — the node classes and the recursive height, plus the balance check that
+asks whether the left and right heights ever differ by more than one (the question the AVL lesson will
+answer with rotations):
+
+```ts
+// /dsa/09-trees/tree-basics.ts
+class BinaryTreeNode<T> {
+    value: T;
+    left: BinaryTreeNode<T> | null = null;
+    right: BinaryTreeNode<T> | null = null;
+    constructor(value: T) { this.value = value; }
+    isLeaf(): boolean { return this.left === null && this.right === null; }
+}
+
+function treeHeight<T>(root: BinaryTreeNode<T> | null): number {
+    if (!root) return -1;                       // empty tree has height -1
+    return 1 + Math.max(treeHeight(root.left), treeHeight(root.right));
+}
+
+function isBalanced<T>(root: BinaryTreeNode<T> | null): boolean {
+    function checkHeight(node: BinaryTreeNode<T> | null): number {
+        if (!node) return 0;
+        const lh = checkHeight(node.left);
+        if (lh === -1) return -1;               // left subtree already unbalanced
+        const rh = checkHeight(node.right);
+        if (rh === -1) return -1;
+        if (Math.abs(lh - rh) > 1) return -1;   // this node is unbalanced
+        return 1 + Math.max(lh, rh);
+    }
+    return checkHeight(root) !== -1;
+}
+```
+
+Run the full file: `npx tsx 09-trees/tree-basics.ts`.
+
+## Complexity
+
+Every "visit each node once" operation — height, count, sum, search in an unsorted tree — is linear in
+the number of nodes. The recursion stack only goes as deep as the tree:
+
+$$
+T(n) = O(n), \qquad S(n) = O(h),
+$$
+
+where $n$ is the node count and $h$ is the height. For a balanced binary tree $h \approx \log_2 n$; for a
+degenerate one-child-per-node tree $h$ can be as large as $n - 1$.
+
+| Quantity | Balanced tree | Degenerate (chain) |
+|----------|---------------|---------------------|
+| Height $h$ | $O(\log n)$ | $O(n)$ |
+| Visit-all time | $O(n)$ | $O(n)$ |
+| Recursion space | $O(\log n)$ | $O(n)$ |
+
+The whole point of the next two lessons is keeping $h$ near $\log n$, because almost every tree operation's
+speed is really the height in disguise.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Biology" icon="🧬">
+A phylogenetic tree roots all life at a common ancestor and branches at every speciation. Leaves are
+living species; internal nodes are extinct ancestors; the depth of a leaf is how many splits separate it
+from the root of the tree of life.
+</ExampleCard>
+
+<ExampleCard domain="Sports" icon="🏆">
+A single-elimination tournament bracket is a binary tree read upward: the champion is the root, each match
+is an internal node, and the original seeds are the leaves. The number of rounds is exactly the tree's
+height.
+</ExampleCard>
+
+<ExampleCard domain="Linguistics" icon="🗣️">
+A sentence parse tree hangs words (leaves) under grammatical phrases (internal nodes) under one sentence
+root. Compilers do the same with source code, turning text into an abstract syntax tree before running it.
+</ExampleCard>
+
+<ExampleCard domain="Org design" icon="🏢">
+A company org chart is a tree: one CEO at the root, each employee reporting to exactly one manager, depth
+measuring layers of hierarchy. "Flattening the org" literally means reducing the tree's height.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Height vs depth.** Depth is measured downward *to* a node from the root; height is measured upward
+  *from* a node to its deepest leaf. The tree's height equals the depth of its deepest leaf.
+- **Height of an empty tree.** Most code uses −1 (edges) for an empty subtree so a single node has height
+  0; some texts count nodes and use 0 for empty. Pick one convention and state it.
+- **A binary tree is not a binary *search* tree.** Plain binary trees impose no ordering on values — that
+  extra rule arrives two lessons from now.
+- **Interview cue:** almost every binary-tree question is solved by the recursion *"combine my value with
+  the answers from my left and right subtrees."* Say that out loud and write the empty-node base case first.
+
+## Practice
+
+1. **Easy:** For the tree `1,2,3,4,5,x,6` in the demo, name the root, the leaves, and the height.
+2. **Easy:** Write `sumNodes(root)` using the recursive template (combine value plus both subtree sums).
+3. **Medium:** Write `countLeaves(root)`. What is the base case for an empty node versus a leaf?
+4. **Medium:** Write `maxDepth(root)` returning the number of *nodes* on the longest path (so a single node
+   is depth 1). How does it differ from the edge-based height by exactly one?
+5. **Hard:** Write `isBalanced(root)` in a single pass that returns −1 up the recursion the moment any
+   subtree's left and right heights differ by more than one.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In a tree, the height of the whole tree is best described as…',
+      options: [
+        'the number of nodes',
+        'the depth of the root',
+        'the longest path in edges from the root to a leaf',
+        'the number of leaves',
+      ],
+      answer: 2,
+      explain: 'Height is the longest root-to-leaf path measured in edges — equivalently, the depth of the deepest leaf.',
+    },
+    {
+      q: 'A binary tree with 15 nodes is perfectly balanced. Roughly what is its height?',
+      options: ['15', 'about 4', '2', 'about 8'],
+      answer: 1,
+      explain: 'A balanced binary tree of n nodes has height about log2(n); log2(15) ≈ 3.9, so the height is 3 (levels 0–3 hold 1+2+4+8 = 15 nodes).',
+    },
+    {
+      q: 'Why does inserting sorted data into a plain binary tree worry us?',
+      options: [
+        'It uses too much memory per node',
+        'It can degenerate into a chain of height n−1, making operations O(n)',
+        'Recursion is not allowed on sorted data',
+        'It violates the no-cycles rule',
+      ],
+      answer: 1,
+      explain: 'Always adding a larger value as the right child builds a straight line — height grows to n−1 and the tree behaves like a linked list.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>tree</strong> is nodes with one <strong>root</strong>, each non-root having exactly one parent, and <strong>no cycles</strong>.',
+    'Know the vocabulary: <strong>parent, child, sibling, leaf, internal node, depth, height</strong>.',
+    'A <strong>binary tree</strong> caps children at two (<code>left</code> and <code>right</code>) — the split that later enables O(log n) search.',
+    'Most tree code is one recursion: <strong>combine a node with the answers of its two subtrees</strong>, with an empty-node base case.',
+    'Operation speed tracks the <strong>height</strong>: O(log n) when balanced, O(n) when the tree degenerates into a chain.',
+  ]}
+/>
+
+Next up: **Tree Traversals** — four different orders for visiting every node, and why each one is the right
+tool for a different job.

@@ -1,0 +1,274 @@
+---
+title: AVL Trees
+track: dsa-trees
+summary: "A self-balancing BST: track each node's balance factor and, the instant it hits ±2, rotate the offending subtree back into shape — guaranteeing O(log n) height forever."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-trees/binary-search-tree
+leadsTo:
+  - dsa-heaps/heap-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import TreeAvlRotations from '../../../components/demos/TreeAvlRotations.tsx';
+
+## The hook: the BST that refuses to lean
+
+The previous lesson left us with a gnawing weakness: feed a binary search tree sorted data and it
+collapses into a leaning chain, and the dictionary trick rots back into a page-by-page scan. In 1962,
+Adelson-Velsky and Landis fixed this for good. Their idea: after every insert or delete, check how lopsided
+each node has become, and if any node tips too far, perform a small local **rotation** that restores
+balance — instantly, in constant work. The result is a BST that *cannot* lean: its height stays near
+$\log n$ no matter what order the data arrives in.
+
+<Callout type="intuition" title="The one-sentence idea">
+An AVL tree is a BST that stores a height at each node and rotates the moment any node's two subtrees
+differ in height by more than one, keeping the whole tree balanced and every operation O(log n).
+</Callout>
+
+## Intuition: one number, four rotations
+
+The watchdog is the **balance factor** of a node:
+
+$$
+\text{bf}(node) = \text{height}(node.\text{left}) - \text{height}(node.\text{right}).
+$$
+
+The AVL invariant is simply that bf stays in the set of allowed values −1, 0, +1 at every node. An insert
+can push some ancestor's bf to +2 (too left-heavy) or −2 (too right-heavy). Exactly four shapes can cause
+this, and each has a fixed repair:
+
+- **Left-Left (bf +2, new node in the left child's left):** one **right rotation**.
+- **Right-Right (bf −2, new node in the right child's right):** one **left rotation**.
+- **Left-Right (bf +2, but new node in the left child's right):** rotate the left child **left**, then the
+  node **right** — a double rotation.
+- **Right-Left (bf −2, new node in the right child's left):** rotate the right child **right**, then the
+  node **left**.
+
+A rotation just re-points three links and updates two heights — constant time — and it strictly lowers the
+subtree's height, so one fix per insert is always enough.
+
+## Play with it
+
+Insert values and watch each one drop in as a BST leaf first. The moment a node's balance factor flashes
+red (±2), the next step rotates the subtree and the factors snap back into range. Try the classic
+worst-case `1,2,3,4,5,6,7` — a plain BST would draw a straight line, but the AVL tree keeps re-balancing
+into a bush.
+
+<TreeAvlRotations client:visible />
+
+<Callout type="tip">
+Step through `3,2,1` to see a single **right rotation** (Left-Left), then reset and try `1,3,2` to see a
+**Left-Right double**: the first rotation straightens the zig-zag into a line, and the second lifts the
+middle value up to become the new root.
+</Callout>
+
+## How it works
+
+Insertion is ordinary BST insertion, plus one extra act on the way back up the recursion: update this
+node's height, read its balance factor, and if it is out of range, rotate based on which of the four shapes
+occurred.
+
+```
+insert(node, value):
+  do the normal BST insert, recursing left or right
+  updateHeight(node)
+  b = balanceFactor(node)
+  if b > 1 and value < node.left.value:   return rotateRight(node)          # LL
+  if b > 1 and value > node.left.value:   node.left  = rotateLeft(node.left);  return rotateRight(node)  # LR
+  if b < -1 and value > node.right.value: return rotateLeft(node)           # RR
+  if b < -1 and value < node.right.value: node.right = rotateRight(node.right); return rotateLeft(node)  # RL
+  return node
+```
+
+<CodeRunner
+  client:visible
+  code={`function h(n) { return n ? n.height : 0; }
+function upd(n) { n.height = 1 + Math.max(h(n.left), h(n.right)); }
+function bf(n) { return n ? h(n.left) - h(n.right) : 0; }
+
+function rotateRight(y) { const x = y.left;  y.left = x.right;  x.right = y; upd(y); upd(x); return x; }
+function rotateLeft(x)  { const y = x.right; x.right = y.left;  y.left = x;  upd(x); upd(y); return y; }
+
+function insert(node, v) {
+  if (!node) return { value: v, left: null, right: null, height: 1 };
+  if (v < node.value) node.left = insert(node.left, v);
+  else if (v > node.value) node.right = insert(node.right, v);
+  else return node;
+  upd(node);
+  const b = bf(node);
+  if (b > 1 && v < node.left.value)  return rotateRight(node);
+  if (b > 1 && v > node.left.value)  { node.left = rotateLeft(node.left);   return rotateRight(node); }
+  if (b < -1 && v > node.right.value) return rotateLeft(node);
+  if (b < -1 && v < node.right.value) { node.right = rotateRight(node.right); return rotateLeft(node); }
+  return node;
+}
+function height(n) { return n ? n.height : 0; }
+
+let root = null;
+for (const v of [1, 2, 3, 4, 5, 6, 7]) root = insert(root, v);`}
+  tests={[
+    { expr: 'root.value', label: 'root after inserting 1..7 (balanced!)' },
+    { expr: 'height(root)', label: 'AVL height of 7 nodes' },
+    { expr: 'bf(root)', label: 'balance factor at the root' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the two single rotations and the rebalance dispatcher that recognizes which of the
+four cases applies by inspecting the child's balance factor:
+
+```ts
+// /dsa/09-trees/avl-tree.ts
+private rotateRight(y: AVLNode<T>): AVLNode<T> {
+    const x = y.left!;
+    const T2 = x.right;
+    x.right = y;  y.left = T2;        // re-point three links
+    this.updateHeight(y);             // y first (now lower), then x
+    this.updateHeight(x);
+    return x;                         // x is the new subtree root
+}
+
+private rebalance(node: AVLNode<T>): AVLNode<T> {
+    this.updateHeight(node);
+    const balance = this.getBalanceFactor(node);
+    if (balance > 1) {                                   // left heavy
+        if (this.getBalanceFactor(node.left) < 0)        // Left-Right
+            node.left = this.rotateLeft(node.left!);
+        return this.rotateRight(node);                   // Left-Left finish
+    }
+    if (balance < -1) {                                  // right heavy
+        if (this.getBalanceFactor(node.right) > 0)       // Right-Left
+            node.right = this.rotateRight(node.right!);
+        return this.rotateLeft(node);                    // Right-Right finish
+    }
+    return node;                                         // already balanced
+}
+```
+
+Run the full file: `npx tsx 09-trees/avl-tree.ts`.
+
+## Complexity
+
+Because the height is held to $O(\log n)$, the BST walk is $O(\log n)$, and the rebalancing along the path
+adds only constant work per level:
+
+$$
+T_{\text{search}} = T_{\text{insert}} = T_{\text{delete}} = O(\log n), \qquad S(n) = O(n).
+$$
+
+The AVL height bound is provably tight: the worst-case AVL tree of height $h$ holds at least
+$F_{h+2} - 1$ nodes (a Fibonacci count), which forces $h \le 1.44 \log_2(n+2)$ — never more than about 44%
+taller than a perfect tree.
+
+| Operation | Plain BST (worst) | AVL (guaranteed) |
+|-----------|-------------------|------------------|
+| Search | $O(n)$ | $O(\log n)$ |
+| Insert | $O(n)$ | $O(\log n)$ |
+| Delete | $O(n)$ | $O(\log n)$ |
+| Height | up to $n - 1$ | $\le 1.44 \log_2 n$ |
+
+The price of the guarantee is bookkeeping: a height field per node and up to two rotations per update. When
+writes vastly outnumber reads, a looser red-black tree rotates less; when reads dominate, AVL's tighter
+balance makes lookups faster.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Aviation" icon="✈️">
+A loaded aircraft must keep its center of gravity inside a tight envelope; cargo is shifted between holds
+to bring it back in range — a physical "rotation" triggered the instant a balance limit is crossed, exactly
+like an AVL fixing a node at ±2.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🤖">
+A walking robot constantly measures how far its tilt strays from upright and fires a corrective ankle
+torque the moment the deviation exceeds a threshold — a local, constant-time adjustment that keeps the
+whole system from toppling, just as a rotation keeps a subtree from leaning.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="⚖️">
+A shipping company rebalances pallet weight across a truck's axles to stay under per-axle legal limits.
+Each small redistribution is local and cheap, yet it preserves a global invariant — the same bargain AVL
+strikes between local rotations and global balance.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Update heights bottom-up, in the right order.** In a rotation the demoted node becomes lower, so update
+  *its* height first, then the new subtree root's.
+- **Single vs double.** Left-Left and Right-Right need one rotation; Left-Right and Right-Left need two. The
+  giveaway is a zig-zag: if the new node went into the *opposite-side* grandchild, you need the double.
+- **Don't forget deletion.** Deletion can trigger rotations too, and unlike insertion it may cascade —
+  rebalance every node on the way back up, not just the first unbalanced one.
+- **Interview cue:** if asked for "guaranteed $O(\log n)$ ordered operations," name a self-balancing BST and
+  explain the balance factor and the four rotation cases — that, plus "inorder is still sorted," is the
+  whole story.
+
+## Practice
+
+1. **Easy:** Insert `10,20,30` into an empty AVL tree. Which single rotation fires, and what becomes the root?
+2. **Easy:** Compute the balance factor of a node whose left subtree has height 3 and right subtree has
+   height 1. Is it within the AVL invariant?
+3. **Medium:** Insert `30,10,20` and identify the case (Left-Right), then list the two rotations in order.
+4. **Medium:** Implement `rotateLeft` and `rotateRight` and verify with assertions that an inorder traversal
+   is unchanged by a rotation (rotations preserve BST order).
+5. **Hard:** Extend insertion to deletion: after removing a node, rebalance up the path and show that a
+   single deletion may require rotations at more than one ancestor.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A node’s balance factor is defined as…',
+      options: [
+        'right subtree height minus left subtree height',
+        'left subtree height minus right subtree height',
+        'number of children',
+        'depth minus height',
+      ],
+      answer: 1,
+      explain: 'bf = height(left) − height(right); the AVL invariant keeps it in {−1, 0, +1} at every node.',
+    },
+    {
+      q: 'You insert into the left child’s RIGHT subtree and a node’s balance factor becomes +2. Which fix applies?',
+      options: [
+        'A single right rotation',
+        'A single left rotation',
+        'A Left-Right double rotation (rotate the left child left, then the node right)',
+        'No rotation is needed',
+      ],
+      answer: 2,
+      explain: 'Left-heavy but the new node sits in the opposite-side grandchild — the zig-zag signature of a Left-Right case, needing two rotations.',
+    },
+    {
+      q: 'Why is an AVL tree’s height guaranteed to be O(log n)?',
+      options: [
+        'It stores values in sorted arrays',
+        'Every node has exactly two children',
+        'The balance factor is kept within ±1, so the two subtree heights can never diverge by much',
+        'It uses a hash function on the keys',
+      ],
+      answer: 2,
+      explain: 'Bounding every balance factor to ±1 forces the minimum node count for a given height to grow like Fibonacci, which pins the height to about 1.44·log2(n).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An AVL tree is a <strong>self-balancing BST</strong>: it keeps every node’s balance factor in {−1, 0, +1}.',
+    '<strong>Balance factor = height(left) − height(right)</strong>; hitting ±2 triggers a rotation.',
+    'Four cases, fixed repairs: <strong>LL→right, RR→left, LR and RL→double rotations</strong>.',
+    'A rotation is <strong>constant-time</strong> link surgery that preserves inorder (sorted) order and lowers the subtree height.',
+    'The payoff is <strong>guaranteed O(log n)</strong> search, insert, and delete — height bounded near 1.44·log₂n regardless of input order.',
+  ]}
+/>
+
+That completes the trees track. Next up: **The Binary Heap** — a different balanced tree, flattened into an
+array, where the priority always floats to the top.

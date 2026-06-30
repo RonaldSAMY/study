@@ -1,0 +1,329 @@
+---
+title: Priority Queues
+track: dsa-queues
+summary: "A priority queue serves the most urgent item first, not the oldest: a binary heap keeps the extreme element on top so insert and remove are both O(log n)."
+difficulty: intermediate
+estMinutes: 17
+prereqs:
+  - dsa-queues/deque
+leadsTo:
+  - dsa-hash-tables/hash-functions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import QuePriorityServe from '../../../components/demos/QuePriorityServe.tsx';
+
+## The hook: the emergency room
+
+Arrive at an ER with a sprained ankle and you will wait — even if you got there first — because the
+patient wheeled in behind you with chest pain goes straight through. A hospital does **not** run
+first-come-first-served. It serves by *urgency*. That is a **priority queue**: each item carries a
+priority, and `dequeue` always returns the most urgent one, regardless of when it arrived.
+
+A plain queue is fair by arrival order. A priority queue is fair by *importance*. The challenge is doing
+it fast: you could scan all waiting items for the most urgent each time, but that is $O(n)$ per removal.
+The data structure that makes it $O(\log n)$ is the **binary heap**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A priority queue always serves the highest-priority element next; a binary heap keeps that element at the
+root of a complete tree, so both insert and extract cost only $O(\log n)$.
+</Callout>
+
+## Intuition
+
+A **binary heap** is a complete binary tree (every level full, last level filled left to right) with one
+rule, the **heap property**:
+
+- **Min-heap:** every parent is $\le$ its children, so the smallest value sits at the root.
+- **Max-heap:** every parent is $\ge$ its children, so the largest sits at the root.
+
+Because the tree is complete, you can flatten it into a plain array — no pointers needed. For the node at
+index $i$:
+
+$$
+\text{parent}(i) = \left\lfloor \tfrac{i-1}{2} \right\rfloor, \qquad
+\text{left}(i) = 2i + 1, \qquad \text{right}(i) = 2i + 2.
+$$
+
+Two little repair routines keep the property intact:
+
+- **bubble up** (after insert): a new leaf swaps with its parent while it is more extreme, climbing at
+  most the tree's height.
+- **bubble down** (after extracting the root): move the last leaf to the root, then sink it past its
+  more-extreme child until the rule holds again.
+
+The tree's height is $\lfloor \log_2 n \rfloor$, so each repair — and therefore each insert and each
+extract — is $O(\log n)$. The root, the answer to "who's next," is always available in $O(1)$.
+
+A heap is *not* fully sorted; it only guarantees the extreme element is on top. That partial order is
+exactly enough, and it is why heaps beat keeping a sorted list (where every insert is $O(n)$).
+
+## Play with it
+
+List items as `name:priority` (lower number = more urgent). They arrive in list order and bubble up into
+the heap tree; then watch `extractMin` serve them in **priority** order. The blue root is always next to
+leave, and the served row collects the output.
+
+<QuePriorityServe client:visible />
+
+<Callout type="tip">
+Enter the items shuffled — say `A:5, B:3, C:8, D:1` — and notice the **served** row still comes out
+sorted: `D(1), B(3), A(5), C(8)`. The heap sorted them for you, one $O(\log n)$ step at a time. Doing
+this for the whole array on purpose is *heapsort*.
+</Callout>
+
+## How it works
+
+Insert `5, 3, 8, 1` into a min-heap (array form, root = smallest):
+
+```
+insert 5   [5]              5 is the root
+insert 3   [3, 5]           3 < 5 → bubble up, 3 becomes root
+insert 8   [3, 5, 8]        8 ≥ parent 3 → stays as right... (index 2)
+insert 1   [1, 3, 8, 5]     1 bubbles up past 5 then past 3 → new root
+```
+
+Now extract twice:
+
+```
+extractMin → 1   move last (5) to root, sink:  [3, 5, 8]
+extractMin → 3   move last (8) to root, sink:  [5, 8]
+```
+
+Out come `1, 3` — the two smallest, in order. Each operation touched only one root-to-leaf path, never
+the whole array.
+
+<CodeRunner
+  client:visible
+  code={`// Binary min-heap priority queue
+function makeMinHeap() {
+  const h = [];
+  const up = (i) => {
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (h[i] >= h[p]) break;
+      [h[i], h[p]] = [h[p], h[i]]; i = p;
+    }
+  };
+  const down = (i) => {
+    for (;;) {
+      let s = i, l = 2*i+1, r = 2*i+2;
+      if (l < h.length && h[l] < h[s]) s = l;
+      if (r < h.length && h[r] < h[s]) s = r;
+      if (s === i) break;
+      [h[i], h[s]] = [h[s], h[i]]; i = s;
+    }
+  };
+  return {
+    insert: (x) => { h.push(x); up(h.length - 1); },
+    extractMin: () => {
+      if (h.length === 0) return undefined;
+      const min = h[0], last = h.pop();
+      if (h.length) { h[0] = last; down(0); }
+      return min;
+    },
+    peek: () => h[0],
+    size: () => h.length,
+  };
+}
+
+// Kth largest: keep a min-heap of size k; its root is the answer
+function findKthLargest(nums, k) {
+  const heap = makeMinHeap();
+  for (const x of nums) {
+    heap.insert(x);
+    if (heap.size() > k) heap.extractMin();   // evict the smallest
+  }
+  return heap.peek();
+}`}
+  tests={[
+    { expr: '(() => { const h = makeMinHeap(); [5,3,8,1,9,2].forEach(x => h.insert(x)); return [h.extractMin(), h.extractMin(), h.extractMin()]; })()', label: 'three smallest in order' },
+    { expr: 'findKthLargest([3,2,1,5,6,4], 2)', label: '2nd largest' },
+    { expr: 'findKthLargest([3,2,3,1,2,4,5,5,6], 4)', label: '4th largest' },
+  ]}
+/>
+
+The `findKthLargest` trick is the heap's signature move: a size-$k$ heap answers "kth largest" in
+$O(n \log k)$ without sorting the whole array.
+
+## The real implementation
+
+From the course file — the min priority queue, where `bubbleUp` and `bubbleDown` keep the heap property
+on every insert and extract:
+
+```ts
+// /dsa/07-queue/priority-queue.ts
+class MinPriorityQueue<T> {
+    private heap: T[] = [];
+    private compare: (a: T, b: T) => number;
+
+    constructor(compare: (a: T, b: T) => number = (a, b) => (a as number) - (b as number)) {
+        this.compare = compare;
+    }
+
+    insert(item: T): void {                 // O(log n)
+        this.heap.push(item);
+        this.bubbleUp(this.heap.length - 1);
+    }
+
+    extractMin(): T | undefined {           // O(log n)
+        if (this.heap.length === 0) return undefined;
+        const min = this.heap[0];
+        const last = this.heap.pop()!;
+        if (this.heap.length > 0) {
+            this.heap[0] = last;
+            this.bubbleDown(0);
+        }
+        return min;
+    }
+
+    peek(): T | undefined { return this.heap[0]; }   // O(1)
+
+    private bubbleUp(i: number): void {
+        while (i > 0) {
+            const parent = Math.floor((i - 1) / 2);
+            if (this.compare(this.heap[i], this.heap[parent]) >= 0) break;
+            [this.heap[i], this.heap[parent]] = [this.heap[parent], this.heap[i]];
+            i = parent;
+        }
+    }
+
+    private bubbleDown(i: number): void {
+        const n = this.heap.length;
+        while (true) {
+            let smallest = i;
+            const l = 2 * i + 1, r = 2 * i + 2;
+            if (l < n && this.compare(this.heap[l], this.heap[smallest]) < 0) smallest = l;
+            if (r < n && this.compare(this.heap[r], this.heap[smallest]) < 0) smallest = r;
+            if (smallest === i) break;
+            [this.heap[i], this.heap[smallest]] = [this.heap[smallest], this.heap[i]];
+            i = smallest;
+        }
+    }
+}
+```
+
+Pass a custom `compare` and the same class becomes a max-heap or orders by any field. The file also
+builds `findKthLargest`, `topKFrequent`, `mergeKSortedArrays`, `kClosest`, and a `MedianFinder` (two
+heaps balancing a running median) on top of it.
+
+Run the full file: `npx tsx 07-queue/priority-queue.ts`.
+
+## Complexity
+
+The heap's height is logarithmic, and so are its two repair routines:
+
+$$
+T_\text{insert} = T_\text{extract} = O(\log n), \qquad T_\text{peek} = O(1), \qquad S = O(n).
+$$
+
+| Structure | insert | remove top | peek top |
+|-----------|--------|-----------|----------|
+| Unsorted array/list | $O(1)$ | $O(n)$ (scan) | $O(n)$ |
+| Sorted array | $O(n)$ | $O(1)$ | $O(1)$ |
+| **Binary heap** | $O(\log n)$ | $O(\log n)$ | $O(1)$ |
+
+<Callout type="why">
+The heap is the *balanced* choice — neither insert nor removal is allowed to be linear. That balance is
+why it sits at the core of <strong>Dijkstra's shortest path</strong>, <strong>A*</strong>, Huffman
+coding, and any "process the most promising option next" search you will write in graphs and ML.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Emergency medicine" icon="🚑">
+ER triage is a max-priority queue keyed by acuity: chest pain outranks a sprain no matter the arrival
+order. The "next patient" is the root of the heap, recomputed in $O(\log n)$ as new cases arrive.
+</ExampleCard>
+
+<ExampleCard domain="Navigation" icon="🗺️">
+Dijkstra's algorithm and A* pop the *closest unvisited* node from a min-priority queue keyed by distance.
+The heap is what makes shortest-path routing on a road network run in $O(E \log V)$ instead of $O(V^2)$.
+</ExampleCard>
+
+<ExampleCard domain="Data compression" icon="🗜️">
+Huffman coding repeatedly extracts the two **least frequent** symbols from a min-heap and merges them,
+building an optimal prefix code from the bottom up. The heap delivers the rarest pair each step.
+</ExampleCard>
+
+<ExampleCard domain="Simulation" icon="⏱️">
+Discrete-event simulators store pending events in a priority queue keyed by timestamp and always process
+the **earliest** next — the heap is the simulation's clock, jumping straight to the next thing that
+happens.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **A heap is not sorted.** It only guarantees the extreme at the root; the rest of the array is partial
+  order. Reading the array left to right does *not* give sorted output.
+- **Mind the comparator direction.** A min-heap with `a - b` becomes a max-heap with `b - a`. Getting the
+  sign backwards is the single most common heap bug.
+- **"Kth largest" wants a min-heap of size k** (and "kth smallest" a max-heap of size k). Keep only $k$
+  elements and evict the root when you exceed it — $O(n \log k)$, not $O(n \log n)$.
+- **`peek` is $O(1)$; don't extract just to look.** Extracting and re-inserting to read the top is a
+  wasteful $O(\log n)$ where $O(1)$ would do.
+- **Interview cue:** "top/kth largest", "merge k sorted lists", "schedule by priority", "running median",
+  or "shortest path" all signal a heap. Mention `bubbleUp`/`bubbleDown` and the $O(\log n)$ bound.
+
+## Practice
+
+1. **Easy:** Insert `4, 1, 7, 3` into a min-heap and list the array after each insert. Where does `1` end
+   up?
+2. **Easy:** Turn a min-heap into a max-heap by changing only the comparator. Write both one-liners.
+3. **Medium:** Find the **kth largest** element of an array with a size-$k$ min-heap (LeetCode 215) in
+   $O(n \log k)$.
+4. **Medium:** Merge $k$ sorted arrays into one sorted array using a heap seeded with each array's first
+   element (LeetCode 23 in spirit), in $O(n \log k)$.
+5. **Hard:** Build a `MedianFinder` that supports `addNum` in $O(\log n)$ and `findMedian` in $O(1)$ using
+   a max-heap for the lower half and a min-heap for the upper half, kept balanced in size.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In an array-backed binary heap, the children of index i live at which indices?',
+      options: ['i-1 and i+1', '2i and 2i+1', '2i+1 and 2i+2', 'i/2 and i/2+1'],
+      answer: 2,
+      explain: 'For a 0-indexed heap, left child = 2i+1, right child = 2i+2, and parent = floor((i-1)/2).',
+    },
+    {
+      q: 'What does extractMin do after removing the root of a min-heap?',
+      options: [
+        'Sorts the whole array',
+        'Moves the last leaf to the root and bubbles it down until the heap property holds',
+        'Shifts every element left by one',
+        'Rebuilds the heap from scratch in O(n log n)',
+      ],
+      answer: 1,
+      explain: 'The last leaf takes the root spot, then sinks past its smaller child along one path — O(log n), not a full rebuild.',
+    },
+    {
+      q: 'To find the kth LARGEST element efficiently, you keep:',
+      options: [
+        'A max-heap of all n elements',
+        'A min-heap of size k, evicting its root when size exceeds k',
+        'A sorted array updated on every insert',
+        'A plain queue of size k',
+      ],
+      answer: 1,
+      explain: 'A size-k min-heap keeps the k largest seen so far; its root is the kth largest. Cost is O(n log k).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A priority queue serves the <strong>most urgent</strong> element next, not the oldest.',
+    'A <strong>binary heap</strong> stores a complete tree in an array; parent/children are found by index arithmetic.',
+    '<strong>bubbleUp</strong> (insert) and <strong>bubbleDown</strong> (extract) keep the heap property in O(log n); peek is O(1).',
+    'A heap is <strong>partially ordered</strong> — only the root is guaranteed extreme; flip the comparator to swap min/max.',
+    'It powers <strong>Dijkstra/A*, Huffman coding, top-k, merge-k, and event simulation</strong>.',
+  ]}
+/>
+
+Next up: **Hash Functions** — leaving ordered structures behind to chase $O(1)$ lookup by *key*, turning
+any value into an array index.

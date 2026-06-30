@@ -1,0 +1,270 @@
+---
+title: Doubly Linked Lists
+track: dsa-linked-lists
+summary: "Give every node a prev pointer as well as next: you gain backward traversal and O(1) removal of any node you hold — the structure behind the LRU cache."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-linked-lists/linked-list-operations
+leadsTo:
+  - dsa-linked-lists/circular-linked-list
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import LLDoublyList from '../../../components/demos/LLDoublyList.tsx';
+
+## The hook: a one-way street that becomes two-way
+
+A singly linked list is a one-way street: you can drive forward from the head, but to back up by a
+single node you must return to the start and drive the whole way again. That's painful when you hold a
+node and just want to delete it — you have no way to reach the node *before* it to fix its `next`
+pointer. The fix is almost embarrassingly simple: give every node a second pointer, `prev`, aimed at the
+node behind it. Now the street is two-way. You can walk backward, you can delete the tail in one move,
+and — crucially — given any node, you can splice it out in O(1) because both of its neighbours are one
+hop away.
+
+<Callout type="intuition" title="The one-sentence idea">
+A doubly linked list adds a prev pointer to every node, so each node knows both its neighbours — enabling
+backward traversal and O(1) removal of any node you already have a reference to.
+</Callout>
+
+## Intuition: two pointers per node, four to re-link
+
+Every node now carries `value`, `next`, **and** `prev`. The list tracks a `head` (whose `prev` is
+`null`) and a `tail` (whose `next` is `null`). The cost is one extra pointer of memory per node and a
+little more bookkeeping: an insertion or deletion has to fix up to **four** pointers instead of two,
+because both neighbours must be told about the change.
+
+What you buy is significant. `removeLast` is now O(1) — `tail` knows its `prev`, so there's no walk to
+find the second-to-last node. Better still, `removeNode(node)` is O(1) for *any* node you hold: set
+`node.prev.next = node.next` and `node.next.prev = node.prev`, and the node is spliced out without a
+search. That single property is why a doubly linked list, paired with a hash map, is the backbone of an
+**LRU cache**: the map finds a node in O(1), and the list moves or evicts it in O(1).
+
+## Play with it
+
+Notice each node now shows a **top arrow** (`next`) and a **bottom arrow** (`prev`). Try **Remove at**
+an interior index and watch both neighbour pointers hop over the departing node. Then try **Traverse ←**
+to walk from the tail back to the head — something a singly linked list simply cannot do.
+
+<LLDoublyList client:visible />
+
+<Callout type="tip">
+Run <strong>Remove at</strong> on a middle index and count the pointer changes: exactly two arrows
+re-link and the node is gone, no matter how long the list is. Compare that to an array, where deleting
+an interior element shifts everything after it.
+</Callout>
+
+## How it works
+
+To remove an interior node `X` with neighbours `A` (before) and `B` (after):
+
+```
+before:  A  <->  X  <->  B
+step 1:  A.next = X.next      // A.next now points to B
+step 2:  B.prev = X.prev      // B.prev now points to A
+after:   A  <->  B            // X is spliced out, two writes
+```
+
+Inserting works the same way in reverse — a new node sets its own `prev` and `next`, then its two
+neighbours point back at it. The bookkeeping is symmetric, which is exactly why drawing both lanes makes
+it click.
+
+<CodeRunner
+  client:visible
+  code={`function node(v) { return { value: v, prev: null, next: null }; }
+
+function build(arr) {
+  const list = { head: null, tail: null, length: 0 };
+  for (const v of arr) {
+    const n = node(v);
+    if (!list.head) { list.head = n; list.tail = n; }
+    else { n.prev = list.tail; list.tail.next = n; list.tail = n; }
+    list.length++;
+  }
+  return list;
+}
+
+function forward(list) { const o = []; for (let c = list.head; c; c = c.next) o.push(c.value); return o; }
+function backward(list) { const o = []; for (let c = list.tail; c; c = c.prev) o.push(c.value); return o; }
+
+// O(1) removal of a node you already hold
+function removeNode(list, n) {
+  if (n.prev) n.prev.next = n.next; else list.head = n.next;
+  if (n.next) n.next.prev = n.prev; else list.tail = n.prev;
+  list.length--;
+  return n.value;
+}
+
+function demo() {
+  const list = build([8, 1, 6, 3]);
+  const mid = list.head.next;        // the node holding 1
+  removeNode(list, mid);
+  return { forward: forward(list), backward: backward(list) };
+}`}
+  tests={[
+    { expr: 'forward(build([8,1,6,3]))', label: 'forward order' },
+    { expr: 'backward(build([8,1,6,3]))', label: 'backward order (tail -> head)' },
+    { expr: 'demo()', label: 'remove the node holding 1 in O(1)' },
+  ]}
+/>
+
+## The real implementation
+
+From the course's doubly linked list — the O(1) node splice and the symmetric `removeLast` that a
+singly linked list cannot match:
+
+```ts
+// /dsa/05-linked-list/doubly-linked-list.ts
+interface DoublyListNode<T> {
+    value: T;
+    prev: DoublyListNode<T> | null;
+    next: DoublyListNode<T> | null;
+}
+
+class DoublyLinkedList<T> {
+    head: DoublyListNode<T> | null = null;
+    tail: DoublyListNode<T> | null = null;
+    length: number = 0;
+
+    // O(1) — the tail knows its prev, so no walk
+    removeLast(): T | null {
+        if (this.isEmpty()) return null;
+        const value = this.tail!.value;
+        if (this.length === 1) { this.head = null; this.tail = null; }
+        else { this.tail = this.tail!.prev; this.tail!.next = null; }
+        this.length--;
+        return value;
+    }
+
+    // O(1) — splice out a node you already hold
+    removeNode(node: DoublyListNode<T>): T | null {
+        if (node === this.head) return this.removeFirst();
+        if (node === this.tail) return this.removeLast();
+        node.prev!.next = node.next;
+        node.next!.prev = node.prev;
+        this.length--;
+        return node.value;
+    }
+
+    isEmpty(): boolean { return this.length === 0; }
+}
+```
+
+Run the full file: `npx tsx 05-linked-list/doubly-linked-list.ts`.
+
+<Callout type="why">
+The same file builds an <code>LRUCache</code> from this list plus a <code>Map</code>. The map turns a
+key into a node reference in O(1); <code>removeNode</code> then unlinks it and <code>prepend</code> moves
+it to the front — so every <code>get</code> and <code>put</code> is O(1). Without the backward pointer,
+that move-to-front would cost an O(n) search for the predecessor each time.
+</Callout>
+
+## Complexity
+
+You trade one pointer of memory per node for cheaper end-and-node operations:
+
+$$
+T_{\text{removeLast}} = O(1), \qquad T_{\text{removeNode}} = O(1), \qquad S = O(n) \ \text{with a 2}\times \ \text{pointer overhead.}
+$$
+
+| Operation | Singly | Doubly |
+|-----------|--------|--------|
+| Remove first | $O(1)$ | $O(1)$ |
+| Remove last | $O(n)$ | $O(1)$ |
+| Remove a held node | $O(n)$ | $O(1)$ |
+| Traverse backward | impossible | $O(n)$ |
+| Pointers per node | 1 | 2 |
+
+If you never walk backward and never delete from the tail, the singly list is leaner. The moment either
+appears — think LRU caches or browser history — the doubly linked list earns its extra pointer.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Web browsers" icon="🌐">
+The Back and Forward buttons are a doubly linked list of pages: <code>prev</code> walks toward older
+pages, <code>next</code> toward newer ones. Visiting a new page from the middle splices off the forward
+history in O(1).
+</ExampleCard>
+
+<ExampleCard domain="Media players" icon="⏯️">
+A playlist with Previous and Next controls is exactly a doubly linked list of tracks. Reordering or
+removing the current song re-links only its two neighbours, leaving the rest of the queue untouched.
+</ExampleCard>
+
+<ExampleCard domain="Operating systems" icon="🗃️">
+An LRU page-cache keeps frames in a doubly linked list ordered by recency. A hit moves the frame to the
+front in O(1); when memory is full, the tail — the least recently used — is evicted in O(1).
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Updating only one direction.** Every splice touches *both* lanes. Fix `next` but forget `prev` (or
+  vice versa) and the backward traversal silently breaks while the forward one looks fine.
+- **Forgetting the head/tail edge cases.** Removing the head must null the new head's `prev`; removing
+  the tail must null the new tail's `next`. Skipping these leaves dangling pointers.
+- **Order of assignment on insert.** Wire the new node's `prev` and `next` first, then redirect the
+  neighbours — otherwise you can overwrite a link you still need.
+- **Interview cue:** "move-to-front in O(1)" or "evict least-recently-used" is a flashing sign for a
+  doubly linked list plus a hash map. Name the LRU cache and explain why `prev` makes the splice O(1).
+
+## Practice
+
+1. **Easy:** Draw `A <-> B <-> C` and write the four pointer assignments to insert `X` between `A` and `B`.
+2. **Easy:** Implement `toArrayReverse` by walking from `tail` via `prev`.
+3. **Medium:** Implement `removeNode(node)` handling the head, tail, and interior cases.
+4. **Medium:** Reverse a doubly linked list in place by swapping each node's `prev` and `next`, then
+   swapping `head` and `tail`.
+5. **Hard:** Build an LRU cache: a `Map` from key to node plus a doubly linked list, with O(1) `get` and
+   `put` that evict the tail when full.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why can a doubly linked list remove a node you already hold in O(1), while a singly linked list cannot?',
+      options: [
+        'It stores nodes in an array',
+        'Each node knows its previous node, so both neighbours are reachable without a search',
+        'It is always sorted',
+        'It keeps a length counter',
+      ],
+      answer: 1,
+      explain: 'With a prev pointer you reach the predecessor directly; a singly list would have to walk from the head to find it (O(n)).',
+    },
+    {
+      q: 'What is the main cost of a doubly linked list compared to a singly linked one?',
+      options: [
+        'Slower traversal',
+        'It cannot grow',
+        'An extra pointer of memory per node and more pointers to update per operation',
+        'It loses O(1) prepend',
+      ],
+      answer: 2,
+      explain: 'Every node stores a second pointer, and inserts/deletes must fix up to four links instead of two.',
+    },
+    {
+      q: 'Which data structure pairs with a doubly linked list to build an O(1) LRU cache?',
+      options: ['A binary search tree', 'A hash map from key to node', 'A heap', 'A second array'],
+      answer: 1,
+      explain: 'The map locates a node in O(1); the list then moves it to the front or evicts the tail in O(1) thanks to prev.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Each node stores <strong>value, next, and prev</strong>, so it knows both neighbours.',
+    'Backward traversal becomes possible, and <strong>removeLast</strong> drops from O(n) to <strong>O(1)</strong>.',
+    'Removing a node you already hold is <strong>O(1)</strong>: re-link its two neighbours, no search.',
+    'The cost is one <strong>extra pointer per node</strong> and up to four pointer updates per change.',
+    'A doubly linked list plus a hash map is the classic <strong>O(1) LRU cache</strong>; it also powers browser history.',
+  ]}
+/>
+
+Next up: **Circular Linked Lists** — let the tail point back to the head so the list has no end, powering
+round-robin schedulers and the Josephus problem.

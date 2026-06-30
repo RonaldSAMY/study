@@ -1,0 +1,241 @@
+---
+title: Palindromes
+track: dsa-strings
+summary: "A palindrome reads the same both ways, so two pointers comparing inward verify it in O(1) space — and 'expand around center' finds the longest one."
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - dsa-strings/string-reversal
+leadsTo:
+  - dsa-strings/anagrams
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import StrPalindromeCheck from '../../../components/demos/StrPalindromeCheck.tsx';
+
+## The hook: a word that looks in a mirror
+
+Stand `racecar` in front of a mirror and it looks identical to itself. So do `level`, `noon`, and the whole
+phrase *"A man, a plan, a canal: Panama"*. A palindrome is a sequence with mirror symmetry, and the cleanest
+way to test for it is to walk inward from both ends, checking that each pair of facing characters agrees.
+The moment one pair disagrees, the mirror is broken and you can stop.
+
+<Callout type="intuition" title="The one-sentence idea">
+A string is a palindrome iff two pointers, starting at both ends and moving inward, see equal characters at
+every step until they cross.
+</Callout>
+
+## Intuition: compare instead of swap
+
+Last lesson the two pointers *swapped* to reverse. Here the very same converging pointers *compare*. Set
+`left = 0`, `right = n - 1`; if `s[left] === s[right]`, step both inward; if they ever differ, return
+`false` immediately. Cross the middle with no mismatch and the string is symmetric.
+
+Why is this better than "reverse it and check equality"? Both are $O(n)$ time, but reversing allocates a
+whole new string ($O(n)$ space), while the two-pointer scan keeps only two indices — $O(1)$ space — and it
+**short-circuits**: a giant non-palindrome that fails on the first pair is detected instantly.
+
+Two natural extensions build on the same symmetry:
+
+- **Clean first, then compare.** Real palindrome puzzles ignore case, spaces, and punctuation, so normalize
+  (lowercase, strip non-alphanumerics) before the scan.
+- **Expand around center.** Every palindromic *substring* has a center. Stand at each of the $2n-1$
+  possible centers (each character, and each gap between characters) and push two pointers *outward* while
+  they match — that finds the longest palindromic substring in $O(n^2)$.
+
+## Play with it
+
+Load a word or phrase and step the pointers inward. Equal pairs glow **sky**; the first mismatch flashes
+**red** and the check stops. Toggle *fold case + drop punctuation* and paste a sentence like
+"A man a plan a canal Panama".
+
+<StrPalindromeCheck client:visible />
+
+<Callout type="tip">
+Try <code>abca</code>: the very first comparison (a vs a) passes, but the second (b vs c) fails — the demo
+stops there, not at the end. That early exit is the two-pointer method's quiet advantage over reverse-and-compare.
+</Callout>
+
+## How it works
+
+Check `"racecar"` — the pointers meet in the middle with every pair equal:
+
+```
+r a c e c a r     L=0 R=6 : r == r ✓
+r a c e c a r     L=1 R=5 : a == a ✓
+r a c e c a r     L=2 R=4 : c == c ✓
+r a c e c a r     L=3 R=3 : pointers meet → palindrome ✓
+```
+
+And the short-circuit on `"hello"`:
+
+```
+h e l l o         L=0 R=4 : h != o ✗  → return false (after ONE comparison)
+```
+
+<CodeRunner
+  client:visible
+  code={`function isPalindrome(str, clean = false) {
+  const s = clean ? str.toLowerCase().replace(/[^a-z0-9]/g, '') : str;
+  let left = 0, right = s.length - 1;
+  while (left < right) {
+    if (s[left] !== s[right]) return false;   // mismatch → stop early
+    left++; right--;
+  }
+  return true;
+}
+
+// Longest palindromic substring via expand-around-center
+function longestPalindrome(s) {
+  let best = '';
+  const expand = (l, r) => {
+    while (l >= 0 && r < s.length && s[l] === s[r]) { l--; r++; }
+    return s.slice(l + 1, r);                  // widest match around this center
+  };
+  for (let i = 0; i < s.length; i++) {
+    for (const cand of [expand(i, i), expand(i, i + 1)]) if (cand.length > best.length) best = cand;
+  }
+  return best;
+}`}
+  tests={[
+    { expr: 'isPalindrome("racecar")', label: '"racecar"' },
+    { expr: 'isPalindrome("hello")', label: '"hello"' },
+    { expr: 'isPalindrome("A man, a plan, a canal: Panama", true)', label: 'phrase (cleaned)' },
+    { expr: 'longestPalindrome("babad")', label: 'longest palindrome in "babad"' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the $O(1)$-space check and the expand-around-center search:
+
+```ts
+// /dsa/02-strings/palindrome.ts
+function isPalindromeTwoPointer(str: string): boolean {
+    let left = 0;
+    let right = str.length - 1;
+    while (left < right) {
+        if (str[left] !== str[right]) return false;   // first mismatch ends it
+        left++;
+        right--;
+    }
+    return true;
+}
+
+function longestPalindromicSubstring(s: string) {
+    let start = 0, maxLength = 1;
+    const expandAroundCenter = (left: number, right: number): void => {
+        while (left >= 0 && right < s.length && s[left] === s[right]) {
+            if (right - left + 1 > maxLength) { start = left; maxLength = right - left + 1; }
+            left--;
+            right++;
+        }
+    };
+    for (let i = 0; i < s.length; i++) {
+        expandAroundCenter(i, i);      // odd-length center (a single char)
+        expandAroundCenter(i, i + 1);  // even-length center (a gap)
+    }
+    return s.substring(start, start + maxLength);
+}
+```
+
+Run the full file: `npx tsx 02-strings/palindrome.ts`.
+
+## Complexity
+
+The check is one converging scan; the longest-substring search tries every center:
+
+$$
+T_\text{check}(n) = O(n),\ S = O(1); \qquad T_\text{longest}(n) = O(n^2),\ S = O(1).
+$$
+
+| Task | Time | Space | Note |
+|------|------|-------|------|
+| Two-pointer check | $O(n)$ | $O(1)$ | short-circuits on first mismatch |
+| Reverse-and-compare | $O(n)$ | $O(n)$ | allocates a copy, no early exit |
+| Longest palindromic substring | $O(n^2)$ | $O(1)$ | $2n-1$ centers, expand each |
+| Can-rearrange-to-palindrome | $O(n)$ | $O(k)$ | at most one odd character count |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Molecular biology" icon="🧬">
+A restriction enzyme cuts DNA at a <em>reverse-complement palindrome</em> such as <code>GAATTC</code> — read
+5′→3′ on one strand it equals the other strand read 5′→3′. Finding these sites is a palindrome scan over the
+four-letter genome.
+</ExampleCard>
+
+<ExampleCard domain="Signal processing" icon="📡">
+A symmetric (linear-phase) FIR filter has coefficients that read the same forwards and backwards. Checking
+that symmetry — and exploiting it to halve the multiplications — is the two-pointer comparison on the tap array.
+</ExampleCard>
+
+<ExampleCard domain="Recreational maths" icon="🔢">
+The "196-problem" repeatedly adds a number to its digit-reversal hoping to reach a palindrome. Each step is a
+numeric palindrome test, the digit version of comparing from both ends.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Odd vs even centers.** A palindrome can have a single-character center (`aba`) or a gap center (`abba`).
+  Expand-around-center must try **both** at every index or it misses all even-length palindromes.
+- **Forgetting to normalize.** Phrase palindromes need case-folding and punctuation removal *first*; comparing
+  raw characters will reject "A man a plan…".
+- **Reverse-and-compare wastes space and never short-circuits.** Prefer the two-pointer scan unless you
+  already need the reversed string for another reason.
+- **Interview cue:** "valid palindrome", "longest palindromic substring", and "palindrome after removing one
+  character" are all two-pointer problems — start by saying *"compare from both ends"*.
+
+## Practice
+
+1. **Easy:** Is `"Was it a car or a cat I saw?"` a palindrome once cleaned? Walk the first three comparisons.
+2. **Easy:** Explain why the two-pointer check uses $O(1)$ space while reverse-and-compare uses $O(n)$.
+3. **Medium:** Implement *Valid Palindrome II*: return `true` if the string can become a palindrome by
+   deleting at most one character (hint: on a mismatch, try skipping the left or the right character).
+4. **Medium:** Count **all** palindromic substrings of a string using expand-around-center.
+5. **Hard:** Read about Manacher's algorithm and explain how it finds the longest palindromic substring in
+   $O(n)$ by reusing previously computed palindrome radii.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the space complexity of the two-pointer palindrome check?',
+      options: ['O(n)', 'O(1)', 'O(log n)', 'O(n²)'],
+      answer: 1,
+      explain: 'It keeps only two index variables and compares in place — O(1). Reverse-and-compare, by contrast, allocates an O(n) copy.',
+    },
+    {
+      q: 'Why must expand-around-center call expand twice per index (i,i) and (i,i+1)?',
+      options: [
+        'To run faster',
+        'To cover both odd-length centers (a character) and even-length centers (a gap)',
+        'To handle Unicode',
+        'To avoid recursion',
+      ],
+      answer: 1,
+      explain: '(i,i) grows odd-length palindromes around a single character; (i,i+1) grows even-length ones around the gap between two characters. Skipping either misses half of all palindromes.',
+    },
+    {
+      q: 'On the string "abca", after how many character comparisons does the two-pointer check return false?',
+      options: ['1', '2', '4', 'It returns true'],
+      answer: 1,
+      explain: 'First compares a vs a (match), then b vs c (mismatch) → false after 2 comparisons. The early exit is the method’s advantage.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A palindrome has <strong>mirror symmetry</strong>; two pointers comparing inward verify it in O(n) time, <strong>O(1) space</strong>.',
+    'The two-pointer check <strong>short-circuits</strong> on the first mismatch — strictly better than reverse-and-compare.',
+    'For phrases, <strong>normalize first</strong>: lowercase and strip non-alphanumeric characters.',
+    '<strong>Expand around center</strong> tries all 2n−1 centers (chars and gaps) to find the longest palindromic substring in O(n²).',
+    'Odd palindromes have a <strong>single-character center</strong>; even ones center on a <strong>gap</strong> — always handle both.',
+  ]}
+/>
+
+Next up: **Anagrams** — when order stops mattering and only the multiset of characters counts.

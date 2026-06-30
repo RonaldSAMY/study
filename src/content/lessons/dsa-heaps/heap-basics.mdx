@@ -1,0 +1,276 @@
+---
+title: The Binary Heap
+track: dsa-heaps
+summary: "A binary heap is a complete tree packed into a plain array: the root is always the smallest (or largest) element, reachable in O(1) and maintained in O(log n)."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-trees/avl-tree
+leadsTo:
+  - dsa-heaps/heap-operations
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import HeapBinaryHeap from '../../../components/demos/HeapBinaryHeap.tsx';
+
+## The hook: who goes next?
+
+A hospital emergency room never serves patients first-come-first-served. A heart attack jumps ahead of
+a sprained ankle, no matter who arrived first. The triage nurse needs one thing instantly: *who is the
+most urgent person right now?* — and the answer has to stay correct as new patients keep streaming in.
+A sorted list would be perfect for reading the front, but re-sorting on every arrival is far too slow.
+The **binary heap** is the data structure built for exactly this: it always knows its extreme element,
+and it absorbs new arrivals cheaply.
+
+<Callout type="intuition" title="The one-sentence idea">
+A binary heap is a complete binary tree where every parent beats its children, so the champion sits at
+the root — and because the tree is complete, it folds perfectly into an array with no pointers at all.
+</Callout>
+
+## Intuition
+
+You already know a balanced search tree like an AVL tree keeps elements in *full* sorted order so you can
+find any value fast. A heap makes a cheaper bargain: it does **not** sort everything. It enforces just
+one local rule, the **heap property**:
+
+- **Min-heap:** every parent is less than or equal to its children. The smallest value bubbles to the root.
+- **Max-heap:** every parent is greater than or equal to its children. The largest value sits at the root.
+
+That single rule is weak enough to maintain quickly, yet strong enough to guarantee the extreme element is
+always at the top. Siblings are unordered, and the left subtree has no fixed relationship to the right —
+the heap only cares about the parent-child chain.
+
+The second idea is what makes heaps so lightweight. A heap is always a **complete** tree: every level is
+full except possibly the last, which fills left to right. A complete tree has no gaps, so you can store it
+in a flat array by reading it level by level — and the parent/child links become pure arithmetic:
+
+$$
+\text{parent}(i) = \left\lfloor \frac{i-1}{2} \right\rfloor, \qquad
+\text{left}(i) = 2i + 1, \qquad
+\text{right}(i) = 2i + 2.
+$$
+
+No node objects, no left/right pointers — just an array and three index formulas.
+
+## Play with it
+
+Type your own numbers and press Play. Each value drops into the next free array slot (keeping the tree
+complete), then **sifts up** while it beats its parent. Watch the tree and the backing array move in
+lock-step — the highlighted pair is always a parent and child being compared.
+
+<HeapBinaryHeap client:visible />
+
+<Callout type="tip">
+Flip between Min-heap and Max-heap and re-run the same numbers. Only the comparison direction changes;
+the shape of the tree and the index math are identical. The root is the only element you can read in O(1) —
+everything else is deliberately left half-sorted.
+</Callout>
+
+## How it works
+
+Insert `[5, 3, 8, 1, 9, 2]` into a min-heap, one value at a time. Each new element starts at the end of
+the array and sifts up:
+
+```
+[]                      start empty
+[5]                     insert 5
+[3, 5]                  insert 3 → 3 < 5, swap up
+[3, 5, 8]               insert 8 → 8 > 3, stays
+[1, 3, 8, 5]            insert 1 → sifts past 5 then 3 to the root
+[1, 3, 8, 5, 9]         insert 9 → 9 > 3, stays
+[1, 3, 2, 5, 9, 8]      insert 2 → 2 < 8, swaps once
+```
+
+The final array `[1, 3, 2, 5, 9, 8]` is a valid min-heap: the root `1` is the minimum, and every parent is
+no larger than its children. Note it is **not** fully sorted — that is the point.
+
+<CodeRunner
+  client:visible
+  code={`// A minimal min-heap: insert + peek, stored in a plain array.
+class MinHeap {
+  constructor() { this.a = []; }
+  peek() { return this.a[0]; }            // root = minimum, O(1)
+  insert(v) {
+    this.a.push(v);                       // land in the next slot
+    let i = this.a.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;             // parent index
+      if (this.a[p] <= this.a[i]) break;  // heap order holds
+      [this.a[i], this.a[p]] = [this.a[p], this.a[i]]; // sift up
+      i = p;
+    }
+  }
+}
+
+function buildMinHeap(nums) {
+  const h = new MinHeap();
+  for (const n of nums) h.insert(n);
+  return { array: h.a, min: h.peek() };
+}`}
+  tests={[
+    { expr: 'buildMinHeap([5,3,8,1,9,2]).array', label: 'heap array' },
+    { expr: 'buildMinHeap([5,3,8,1,9,2]).min', label: 'peek (minimum)' },
+    { expr: 'buildMinHeap([42,7,7,13,1]).min', label: 'min of [42,7,7,13,1]' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds both a `MinHeap` and `MaxHeap` on the same skeleton. Here is the faithful core —
+the index helpers and the insert / sift-up that the demo animates:
+
+```ts
+// /dsa/10-heap/heap-basics.ts
+class MinHeap<T> {
+    private heap: T[] = [];
+    private compare: (a: T, b: T) => number;
+
+    constructor(compareFn?: (a: T, b: T) => number) {
+        this.compare = compareFn || ((a, b) => (a as number) - (b as number));
+    }
+
+    private parent(i: number): number { return Math.floor((i - 1) / 2); }
+    private leftChild(i: number): number { return 2 * i + 1; }
+    private rightChild(i: number): number { return 2 * i + 2; }
+    private swap(i: number, j: number): void {
+        [this.heap[i], this.heap[j]] = [this.heap[j], this.heap[i]];
+    }
+
+    insert(value: T): void {
+        this.heap.push(value);
+        this.bubbleUp(this.heap.length - 1);
+    }
+
+    private bubbleUp(index: number): void {
+        while (index > 0) {
+            const parentIdx = this.parent(index);
+            if (this.compare(this.heap[index], this.heap[parentIdx]) >= 0) break;
+            this.swap(index, parentIdx);
+            index = parentIdx;
+        }
+    }
+
+    peek(): T | undefined { return this.heap[0]; }  // O(1)
+    size(): number { return this.heap.length; }
+}
+```
+
+A `MaxHeap` is the very same code with the comparison reversed (`(a, b) => -compareFn(a, b)`), which is
+why one mental model covers both. Run the full file: `npx tsx 10-heap/heap-basics.ts`.
+
+## Complexity
+
+A heap of `n` nodes is a complete tree, so its height is tiny:
+
+$$
+h = \lfloor \log_2 n \rfloor.
+$$
+
+Sifting a value up or down walks at most one root-to-leaf path, so it touches at most `h` levels. Reading
+the champion is just `heap[0]`.
+
+| Operation | Time | Why |
+|-----------|------|-----|
+| `peek` (min/max) | $O(1)$ | it is always the root |
+| `insert` | $O(\log n)$ | one sift-up along the height |
+| `extract` | $O(\log n)$ | one sift-down along the height |
+| `buildHeap` (bulk) | $O(n)$ | heapify in place — covered next lesson |
+| search arbitrary value | $O(n)$ | siblings are unordered |
+| space | $O(n)$ | just the array |
+
+The surprise is build-heap: constructing a heap from a raw array of `n` items costs $O(n)$, not
+$O(n \log n)$ — the next lesson proves why.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Medicine" icon="🏥">
+Emergency-room triage is a max-heap keyed by acuity. A new critical patient sifts straight to the root
+and is seen next; a minor case settles near the leaves. The nurse only ever reads the root — "who is
+most urgent right now?" — in constant time.
+</ExampleCard>
+
+<ExampleCard domain="Aviation" icon="🛫">
+An airport's departure sequencer is a min-heap keyed by scheduled takeoff time (with priority bumps for
+fuel-critical or delayed flights). The next aircraft to release is always the root, and a re-prioritised
+flight just sifts to its new slot.
+</ExampleCard>
+
+<ExampleCard domain="Networking" icon="📡">
+A router's quality-of-service scheduler keeps outbound packets in a heap ordered by priority class, so a
+voice-call packet leapfrogs a bulk download. Each packet enqueues in O(log n) and the highest-priority one
+dequeues from the root.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **A heap is not sorted.** `[1, 3, 2, 5, 9, 8]` is a perfectly valid min-heap even though it is not in
+  order. Only the root is guaranteed; do not expect `heap[1] < heap[2]` to mean anything global.
+- **Complete, not full.** The last level fills left to right with no gaps — that gappless-ness is exactly
+  what lets the array indexing work. Leave a hole and the parent/child arithmetic breaks.
+- **Off-by-one on indices.** For 0-based arrays it is `2i+1` and `2i+2` for children and `⌊(i-1)/2⌋` for
+  the parent. For 1-based arrays the formulas shift to `2i`, `2i+1`, `⌊i/2⌋` — state which convention you use.
+- **Heaps do not support fast search or arbitrary lookup.** If the interviewer asks you to find or update
+  some middle element quickly, a heap is the wrong tool — reach for a balanced BST or a hash map.
+- **Interview cue:** the phrases "k largest", "k smallest", "next most urgent", "merge sorted streams",
+  or "running median" almost always mean *heap / priority queue*.
+
+## Practice
+
+1. **Easy:** Insert `[4, 8, 1, 6]` into a min-heap by hand. Write down the final array.
+2. **Easy:** For the array `[10, 6, 9, 2, 4, 8]`, what are the children of index 1, and who is the parent
+   of index 5?
+3. **Medium:** Is `[2, 7, 4, 9, 8, 5]` a valid min-heap? If not, name the first parent that violates the rule.
+4. **Medium:** Insert the same six numbers into a max-heap instead and compare the resulting root.
+5. **Hard:** Given only the heap array, explain why you can list every leaf without any comparisons —
+   which indices are guaranteed to be leaves?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In a 0-indexed binary heap, what is the index of the left child of node 4?',
+      options: ['5', '8', '9', '2'],
+      answer: 2,
+      explain: 'Left child of i is 2i + 1 = 2·4 + 1 = 9.',
+    },
+    {
+      q: 'Which statement about a valid min-heap is always true?',
+      options: [
+        'The array is fully sorted ascending',
+        'The smallest element is at the root (index 0)',
+        'The largest element is the last array entry',
+        'Every left child is smaller than its right sibling',
+      ],
+      answer: 1,
+      explain: 'A heap only guarantees the root extreme. The array is not sorted, the max can be at any leaf, and siblings are unordered.',
+    },
+    {
+      q: 'Why can a complete binary tree be stored in a plain array with no pointers?',
+      options: [
+        'Because it is always perfectly balanced',
+        'Because it has no gaps, so level-order positions map directly to indices via 2i+1 / 2i+2',
+        'Because every node has exactly two children',
+        'Because arrays are faster than trees',
+      ],
+      answer: 1,
+      explain: 'Completeness (no gaps, last level filled left to right) means each index has a fixed parent and children, so the structure is implicit in the arithmetic.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A binary heap is a <strong>complete binary tree</strong> obeying the heap property: every parent beats its children.',
+    'A <strong>min-heap</strong> keeps the smallest value at the root; a <strong>max-heap</strong> keeps the largest — both peek in O(1).',
+    'Completeness lets the tree live in a flat array with <strong>parent ⌊(i-1)/2⌋, children 2i+1 and 2i+2</strong> — no pointers.',
+    'A heap is <strong>not sorted</strong>: only the root is guaranteed, which is the trade that makes it fast to maintain.',
+    'Insert and extract are <strong>O(log n)</strong> (one path along the height), peek is O(1), and bulk build is O(n).',
+  ]}
+/>
+
+Next up: **Sift-Up, Sift-Down & Build-Heap** — the three movements that keep the heap property alive when
+you add, remove, or heapify a whole array at once.

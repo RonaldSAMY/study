@@ -1,0 +1,301 @@
+---
+title: Deques
+track: dsa-queues
+summary: "A deque is a double-ended queue: you add and remove at both the front and the rear in O(1), which makes it a stack, a queue, and the engine behind sliding-window algorithms."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-queues/circular-queue
+leadsTo:
+  - dsa-queues/priority-queue
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import QueDequePlayground from '../../../components/demos/QueDequePlayground.tsx';
+
+## The hook: the browser's back and forward buttons
+
+Your browser remembers where you have been. Click **back** and it pops the most recent page off one end;
+keep browsing and it pushes new pages onto that same end; the **forward** stack grows from the other
+side. The history is a line you can grow and shrink from *both* ends. That structure — open at the front
+*and* the rear — is a **deque** (pronounced "deck"), a double-ended queue.
+
+A stack opens one end. A queue opens two ends but assigns them fixed jobs (add rear, remove front). A
+deque removes the rules: **all four** operations — add front, add rear, remove front, remove rear — are
+fair game, each in $O(1)$.
+
+<Callout type="intuition" title="The one-sentence idea">
+A deque is a queue with both ends unlocked: `addFront`, `addRear`, `removeFront`, and `removeRear` are
+all constant-time, so it can act as a stack, a queue, or both at once.
+</Callout>
+
+## Intuition
+
+You already have the machinery. A circular queue tracks a `front` and a `rear` pointer and advances them
+modulo capacity. A deque simply lets each pointer move **backward** as well as forward:
+
+- **addRear** — `rear` steps forward (as before).
+- **addFront** — `front` steps *backward*: `front = (front - 1 + cap) % cap`.
+- **removeFront** — `front` steps forward.
+- **removeRear** — `rear` steps backward.
+
+That negative-direction step is exactly the "subtract then mod" you met with circular queues, and it is
+why deques are usually built on a **circular array** or a **doubly linked list** (where every node knows
+its `prev` and `next`, so either end pops in $O(1)$).
+
+Why care? Because a deque is a superset of the structures you know:
+
+- Use only `addRear` + `removeFront` and it *is* a FIFO queue.
+- Use only `addRear` + `removeRear` (one end) and it *is* a LIFO stack.
+
+But the real payoff is the **monotonic deque**: a sliding window where you shove new items in the back,
+evict stale items from the front, and discard now-useless items from the back — all the moves a plain
+queue forbids. That is how you get the running maximum of every window of size $k$ in $O(n)$.
+
+## Play with it
+
+Below, grow and shrink the deque from either side. `F+x` adds at the front, `R+x` adds at the rear, `F-`
+removes from the front, and `R-` removes from the rear. Step through and watch both ends light up.
+
+<QueDequePlayground client:visible />
+
+<Callout type="tip">
+Try a script of only `R+1, R+2, R+3, F-, F-` — that is pure queue behaviour (FIFO). Now try
+`R+1, R+2, R+3, R-, R-` — only the rear moves, so it is a stack (LIFO). One structure, both personalities.
+</Callout>
+
+## How it works: the sliding-window maximum
+
+The famous deque trick keeps a window's **maximum** in $O(n)$. Store **indices**, and maintain the rule
+that values in the deque are strictly **decreasing** from front to rear. Then the front index is always
+the current window's max.
+
+For each new index `i`:
+
+1. **Evict from the front** any index that has slid out of the window (`deque[0] < i - k + 1`).
+2. **Pop from the rear** every index whose value is `<= nums[i]` — they can never be the max again now
+   that a bigger, newer value exists.
+3. **Push `i`** at the rear.
+4. Once the first window is full, the front index holds the window's maximum.
+
+Every index is pushed once and popped once, so the total work is linear.
+
+<CodeRunner
+  client:visible
+  code={`// Sliding window maximum with a monotonic deque (stores indices)
+function maxSlidingWindow(nums, k) {
+  const dq = [];       // indices, values decreasing front → rear
+  const out = [];
+  for (let i = 0; i < nums.length; i++) {
+    // 1. drop indices that fell out of the window (front)
+    while (dq.length && dq[0] < i - k + 1) dq.shift();
+    // 2. drop smaller values — they can't be the max anymore (rear)
+    while (dq.length && nums[dq[dq.length - 1]] <= nums[i]) dq.pop();
+    // 3. add current index at the rear
+    dq.push(i);
+    // 4. front is the max of the current window
+    if (i >= k - 1) out.push(nums[dq[0]]);
+  }
+  return out;
+}
+
+// Deque also makes palindrome checks trivial: compare both ends inward
+function isPalindrome(s) {
+  const dq = [...s.toLowerCase().replace(/[^a-z0-9]/g, '')];
+  while (dq.length > 1) if (dq.shift() !== dq.pop()) return false;
+  return true;
+}`}
+  tests={[
+    { expr: 'maxSlidingWindow([1,3,-1,-3,5,3,6,7], 3)', label: 'window maxima, k=3' },
+    { expr: "isPalindrome('A man, a plan, a canal: Panama')", label: 'palindrome?' },
+    { expr: "isPalindrome('race a car')", label: 'palindrome?' },
+  ]}
+/>
+
+The first test returns `[3, 3, 5, 5, 6, 7]` — the max of each width-3 window — computed in a single pass.
+
+## The real implementation
+
+From the course file — the efficient deque on a **circular array**, with all four operations in $O(1)$
+and a doubling resize when it fills:
+
+```ts
+// /dsa/07-queue/deque.ts
+class CircularDeque<T> {
+    private items: (T | undefined)[];
+    private front: number;
+    private rear: number;
+    private _size = 0;
+    private capacity: number;
+
+    constructor(capacity = 16) {
+        this.capacity = capacity;
+        this.items = new Array(capacity);
+        this.front = 0;
+        this.rear = capacity - 1;
+    }
+
+    addFront(item: T): void {
+        if (this._size === this.capacity) this.resize();
+        this.front = (this.front - 1 + this.capacity) % this.capacity;  // step back
+        this.items[this.front] = item;
+        this._size++;
+    }
+
+    addRear(item: T): void {
+        if (this._size === this.capacity) this.resize();
+        this.rear = (this.rear + 1) % this.capacity;                    // step forward
+        this.items[this.rear] = item;
+        this._size++;
+    }
+
+    removeFront(): T | undefined {
+        if (this._size === 0) return undefined;
+        const item = this.items[this.front];
+        this.items[this.front] = undefined;
+        this.front = (this.front + 1) % this.capacity;
+        this._size--;
+        return item;
+    }
+
+    removeRear(): T | undefined {
+        if (this._size === 0) return undefined;
+        const item = this.items[this.rear];
+        this.items[this.rear] = undefined;
+        this.rear = (this.rear - 1 + this.capacity) % this.capacity;    // step back
+        this._size--;
+        return item;
+    }
+}
+```
+
+The same file also ships a `LinkedDeque` (doubly linked list, no resizing) and the `slidingWindowMaximum`
+/ `slidingWindowMinimum` / `isPalindrome` helpers built on top of the deque.
+
+Run the full file: `npx tsx 07-queue/deque.ts`.
+
+## Complexity
+
+Every end operation is constant time; the sliding-window algorithm built on it is linear because each
+element enters and leaves the deque exactly once:
+
+$$
+T_\text{addFront} = T_\text{addRear} = T_\text{removeFront} = T_\text{removeRear} = O(1),
+$$
+$$
+T_\text{slidingWindowMax} = O(n), \qquad S = O(k).
+$$
+
+| Operation | Array `shift`/`unshift` deque | Circular-array / linked deque |
+|-----------|-------------------------------|-------------------------------|
+| addRear / removeRear | $O(1)$ | $O(1)$ |
+| addFront / removeFront | $O(n)$ | $O(1)$ |
+| Sliding-window max ($k$) | $O(nk)$ naive | $O(n)$ |
+
+<Callout type="why">
+The brute-force sliding-window maximum re-scans each window in $O(nk)$. The monotonic deque drops it to
+$O(n)$ by *throwing away* values that can never win again — a recurring trick (next-greater-element,
+stock-span, histogram problems) that all rest on cheap two-ended access.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Web browsing" icon="🌐">
+Browser history is a deque: new pages push on one end, **back** pops from it, and a bounded history drops
+the oldest entry from the *other* end once it grows too long. Back/forward is two-ended editing.
+</ExampleCard>
+
+<ExampleCard domain="Quantitative finance" icon="📈">
+A trading dashboard tracks the highest price in the last $k$ ticks with a monotonic deque: each new tick
+enters the rear, stale ticks leave the front, and dominated prices are discarded — an $O(n)$ rolling
+high used in momentum signals.
+</ExampleCard>
+
+<ExampleCard domain="Parallel computing" icon="🧵">
+Work-stealing schedulers give each worker a deque of tasks. The owner pushes and pops at one end (cache-
+friendly LIFO); idle threads **steal** from the *other* end, minimising contention. Both ends, two
+different users.
+</ExampleCard>
+
+<ExampleCard domain="Text processing" icon="🔁">
+Palindrome checking compares characters from both ends inward — `removeFront` and `removeRear` until they
+meet. A deque turns "is this a palindrome?" into a four-line loop.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Store indices, not values, in a monotonic deque.** You need the index to know when an element has
+  slid out of the window; the value alone cannot tell you.
+- **Pick the right comparison.** Sliding-window *maximum* keeps the deque **decreasing** (pop smaller
+  from the rear); *minimum* keeps it **increasing**. Flip the comparator, flip the problem.
+- **Don't dequeue front/back with `shift`/`unshift` on huge inputs.** Those are $O(n)$ on a plain array;
+  use a circular-array or linked deque (or accept that the LeetCode-style array deque is fine only
+  because each index is touched twice total).
+- **Remember the backward step is `(p - 1 + cap) % cap`.** A bare `p - 1` underflows to `-1`.
+- **Interview cue:** "maximum/minimum of every window", "first negative in each window", or "shortest
+  subarray with sum ≥ target" are monotonic-deque problems. Saying "I'll keep a decreasing deque of
+  indices" signals you know the pattern.
+
+## Practice
+
+1. **Easy:** Using a deque, run `addRear(1), addRear(2), addFront(0), removeRear()`. What is left, front
+   to rear?
+2. **Easy:** Show how to make a deque behave exactly like a stack, then exactly like a queue, by
+   restricting which operations you call.
+3. **Medium:** Implement `maxSlidingWindow(nums, k)` (LeetCode 239) in $O(n)$ with a monotonic deque of
+   indices.
+4. **Medium:** Check whether a string is a palindrome by adding its alphanumeric characters to a deque
+   and comparing both ends inward.
+5. **Hard:** Design `SnakeGame`: model the snake's body as a deque (head pushes at one end, tail pops at
+   the other) plus a set for $O(1)$ self-collision checks.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which set of operations makes a deque behave exactly like a FIFO queue?',
+      options: ['addFront + removeFront', 'addRear + removeFront', 'addRear + removeRear', 'addFront + removeRear only'],
+      answer: 1,
+      explain: 'Add at the rear and remove at the front is the definition of FIFO. (addRear + removeRear, by contrast, is a stack.)',
+    },
+    {
+      q: 'In the sliding-window-maximum deque, why do we pop elements from the rear when a larger value arrives?',
+      options: [
+        'To keep the deque sorted ascending',
+        'Because a smaller, older value can never be the maximum again once a bigger, newer one exists',
+        'To save memory only',
+        'Because the window has not filled yet',
+      ],
+      answer: 1,
+      explain: 'Any element smaller than the incoming one — and older — is dominated forever, so it is discarded. That keeps the deque decreasing and the front as the max.',
+    },
+    {
+      q: 'Why must a monotonic deque store indices rather than the values themselves?',
+      options: [
+        'Indices use less memory',
+        'Values cannot be compared',
+        'You need the index to detect when an element slides out of the window',
+        'Indices are always sorted',
+      ],
+      answer: 2,
+      explain: 'The window boundary is expressed in indices (deque[0] < i - k + 1); without the index you cannot tell when to evict from the front.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A deque is a <strong>double-ended queue</strong>: addFront, addRear, removeFront, removeRear all run in O(1).',
+    'It generalises both stack and queue — <strong>restrict the operations</strong> and you get either one.',
+    'Build it on a <strong>circular array or doubly linked list</strong>; stepping a pointer back uses (p - 1 + cap) % cap.',
+    'The <strong>monotonic deque</strong> computes sliding-window max/min in O(n) by discarding dominated values.',
+    'It underlies <strong>browser history, work-stealing schedulers, rolling statistics, and palindrome checks</strong>.',
+  ]}
+/>
+
+Next up: **Priority Queues** — when "first in" is the wrong rule and you instead want "most urgent
+first," served by a binary heap in $O(\log n)$.

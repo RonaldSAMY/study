@@ -1,0 +1,265 @@
+---
+title: Sliding Window
+track: dsa-arrays
+summary: "Let two same-direction pointers bound a window that grows on the right and shrinks on the left, and contiguous-subarray questions collapse from O(n^2) to a single O(n) pass."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-arrays/two-pointers
+leadsTo:
+  - dsa-arrays/kadane
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import ArrSlidingWindow from '../../../components/demos/ArrSlidingWindow.tsx';
+
+## The hook: the shortest burst that crosses the line
+
+A smart meter logs your electricity use minute by minute, and you want the **shortest** stretch of consecutive
+minutes whose total crosses some threshold — the briefest spike. Checking every possible stretch is O(n²).
+Instead, imagine a stretchy window over the timeline: push its right edge out to add minutes until the total
+is big enough, then pull its left edge in to throw away minutes you no longer need. The window breathes
+across the data exactly once.
+
+<Callout type="intuition" title="The one-sentence idea">
+A sliding window is two same-direction pointers bounding a contiguous run; you expand the right edge to
+include more and contract the left edge to drop what you do not need, answering subarray questions in one
+O(n) pass.
+
+</Callout>
+
+## Intuition: two pointers, but chasing instead of converging
+
+In the last lesson the pointers moved *toward* each other. A sliding window keeps them moving the *same*
+direction, and the gap between them — the elements from `left` to `right` — is the window. Two flavours show
+up constantly:
+
+- **Fixed size:** the window is always `k` wide. Slide it one step by adding the new right element and
+  subtracting the one that fell off the left. That is how a moving average is computed without re-summing.
+- **Variable size:** grow `right` until the window satisfies a condition (sum reaches a target, or it still
+  holds only distinct items), then shrink `left` while it stays satisfied, recording the best window as you
+  go.
+
+The magic is that each pointer only ever moves forward. Across the whole run `right` advances $n$ times and
+`left` advances at most $n$ times, so even though the window resizes constantly, the total work is $O(n)$ —
+not the $O(n \times k)$ you would pay by re-scanning each window from scratch.
+
+## Play with it
+
+Load positive numbers and a target. The window grows on the right until its sum reaches the target, then
+squeezes from the left while it still qualifies, tracking the **shortest** valid width.
+
+<ArrSlidingWindow client:visible />
+
+<Callout type="tip">
+Notice the left pointer never rewinds. Every element is added once (when `right` passes it) and removed at
+most once (when `left` passes it), which is the whole reason the scan stays linear even as the window
+pulses.
+</Callout>
+
+## How it works
+
+Find the shortest subarray of `[2, 3, 1, 2, 4, 3]` with sum at least `7`:
+
+```
+window [2]              sum 2  < 7   grow →
+window [2,3]            sum 5  < 7   grow →
+window [2,3,1]          sum 6  < 7   grow →
+window [2,3,1,2]        sum 8 ≥ 7    length 4, shrink ← (drop 2)
+window [3,1,2]          sum 6  < 7   grow →
+window [3,1,2,4]        sum 10 ≥ 7   length 4, shrink ← (drop 3)
+window [1,2,4]          sum 7 ≥ 7    length 3, shrink ← (drop 1)
+window [2,4]            sum 6  < 7   grow →
+window [2,4,3]          sum 9 ≥ 7    length 3, shrink ← (drop 2)
+window [4,3]            sum 7 ≥ 7    length 2  ← best!
+```
+
+The answer is `2` (the window `[4, 3]`). Here is that variable window, plus the fixed-size moving maximum sum:
+
+<CodeRunner
+  client:visible
+  code={`// Shortest subarray with sum ≥ target — variable window, O(n)
+function minSubArrayLen(target, nums) {
+  let left = 0, sum = 0, best = Infinity;
+  for (let right = 0; right < nums.length; right++) {
+    sum += nums[right];               // expand
+    while (sum >= target) {           // contract while still valid
+      best = Math.min(best, right - left + 1);
+      sum -= nums[left];
+      left++;
+    }
+  }
+  return best === Infinity ? 0 : best;
+}
+
+// Max sum of any fixed window of size k — slide, don't re-sum, O(n)
+function maxSumSubarray(arr, k) {
+  let windowSum = 0;
+  for (let i = 0; i < k; i++) windowSum += arr[i];
+  let maxSum = windowSum;
+  for (let i = k; i < arr.length; i++) {
+    windowSum += arr[i] - arr[i - k]; // add new, drop old
+    maxSum = Math.max(maxSum, windowSum);
+  }
+  return maxSum;
+}`}
+  tests={[
+    { expr: 'minSubArrayLen(7, [2,3,1,2,4,3])', label: 'shortest window ≥ 7' },
+    { expr: 'minSubArrayLen(11, [1,1,1,1])', label: 'impossible → 0' },
+    { expr: 'maxSumSubarray([2,1,5,1,3,2], 3)', label: 'max sum of any window of 3' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the variable window above, and the classic "longest substring without repeating
+characters", which slides `left` past the previous occurrence of a repeat:
+
+```ts
+// /dsa/01-arrays/sliding-window.ts
+function minSubArrayLen(target: number, nums: number[]): number {
+    let left = 0, sum = 0, minLength = Infinity;
+    for (let right = 0; right < nums.length; right++) {
+        sum += nums[right];                                  // expand right
+        while (sum >= target) {                              // shrink left while valid
+            minLength = Math.min(minLength, right - left + 1);
+            sum -= nums[left];
+            left++;
+        }
+    }
+    return minLength === Infinity ? 0 : minLength;
+}
+
+function lengthOfLongestSubstring(s: string): number {
+    const charIndex = new Map<string, number>();
+    let left = 0, maxLength = 0;
+    for (let right = 0; right < s.length; right++) {
+        const char = s[right];
+        if (charIndex.has(char) && charIndex.get(char)! >= left) {
+            left = charIndex.get(char)! + 1;                 // jump past the repeat
+        }
+        charIndex.set(char, right);
+        maxLength = Math.max(maxLength, right - left + 1);
+    }
+    return maxLength;
+}
+```
+
+Run the full file: `npx tsx 01-arrays/sliding-window.ts`.
+
+## Complexity
+
+`right` makes $n$ moves; `left` makes at most $n$ moves; nothing is revisited:
+
+$$
+T(n) = O(n), \qquad S(n) = O(1)\ \text{(fixed window)} \ \text{or}\ O(k)\ \text{(distinct-element window)}.
+$$
+
+| Approach | Time | Space |
+|----------|------|-------|
+| Recompute every subarray | $O(n^2)$ | $O(1)$ |
+| Re-sum each fixed window | $O(n \cdot k)$ | $O(1)$ |
+| **Sliding window** | $O(n)$ | $O(1)$–$O(k)$ |
+
+The space is $O(1)$ when you track a single running sum, and $O(k)$ when the window must remember which
+elements (or characters) it currently contains.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Fitness tech" icon="🏃">
+A heart-rate watch shows your average over the last 30 seconds. Rather than re-add 30 readings each tick, it
+slides a fixed window: add the newest reading, drop the one now 31 seconds old. One add, one subtract, per
+tick.
+</ExampleCard>
+
+<ExampleCard domain="Energy monitoring" icon="⚡">
+The hook in miniature: a smart meter finds the shortest run of minutes whose combined draw exceeds a safety
+threshold by growing the window until it trips and shrinking it while it still trips — pinpointing the
+briefest spike in one pass.
+</ExampleCard>
+
+<ExampleCard domain="Social media" icon="📺">
+A feed wants the longest recent streak with no repeated post. A window grows post by post; the moment a
+duplicate enters, the left edge jumps just past the earlier copy, so the window always holds a streak of
+all-distinct posts.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Variable windows need positive contributions.** The "grow until valid, then shrink" pattern relies on
+  adding an element never *hurting* the condition. With negative numbers the window can shrink the sum, so
+  `minSubArrayLen` assumes positives — use Kadane (next lesson) when negatives appear.
+- **Off-by-one in the width.** The window length is `right - left + 1`, not `right - left`.
+- **Shrink with `while`, not `if`.** After expanding once you may need to contract several times before the
+  window is valid (or minimal) again.
+- **Fixed vs variable.** "Subarray/substring of size k" → fixed window; "longest/shortest satisfying a
+  condition" → variable window. Spotting which is half the battle.
+- **Interview cue:** the words "contiguous", "subarray/substring", and "at most / at least K" almost always
+  mean sliding window.
+
+## Practice
+
+1. **Easy (Maximum Average Subarray I, LeetCode 643):** fixed window of size `k`; slide the sum.
+2. **Easy (Contains Duplicate II, LeetCode 219):** a window of width `k` plus a `Set` to detect a nearby
+   repeat.
+3. **Medium (Longest Substring Without Repeating Characters, LeetCode 3):** variable window with a last-seen
+   map.
+4. **Medium (Minimum Size Subarray Sum, LeetCode 209):** the `minSubArrayLen` above — grow then shrink.
+5. **Hard (Minimum Window Substring, LeetCode 76):** the smallest window containing all characters of a
+   pattern, tracking a `have`/`need` count as the window breathes.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In a fixed-size window of width k, how do you slide it one step in O(1)?',
+      options: [
+        'Re-sum all k elements',
+        'Add the new right element and subtract the element that just left on the left',
+        'Sort the window',
+        'Double the window then halve it',
+      ],
+      answer: 1,
+      explain: 'One add and one subtract update the running sum, so each slide is O(1) and the whole pass is O(n).',
+    },
+    {
+      q: 'Why does the variable window stay O(n) even though it constantly grows and shrinks?',
+      options: [
+        'The window never shrinks',
+        'Each element is added once and removed at most once, so both pointers move forward at most n times',
+        'Because the array is sorted',
+        'It secretly uses recursion',
+      ],
+      answer: 1,
+      explain: 'left and right each advance a total of at most n steps and never rewind, so total work is linear.',
+    },
+    {
+      q: 'Why does the grow-then-shrink minSubArrayLen pattern assume positive numbers?',
+      options: [
+        'Negatives overflow',
+        'Adding an element must never reduce the sum, or "shrink while valid" breaks',
+        'It only works on sorted data',
+        'Negatives make it O(n^2)',
+      ],
+      answer: 1,
+      explain: 'The pattern relies on the sum only rising as the window grows; a negative element can lower it, voiding the invariant.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A sliding window is <strong>two same-direction pointers</strong> bounding a contiguous run.',
+    '<strong>Fixed windows</strong> slide with one add and one subtract; <strong>variable windows</strong> grow on the right and shrink on the left.',
+    'Each element enters and leaves the window at most once → <strong>O(n) time</strong>.',
+    'Window length is <strong>right − left + 1</strong>, and you shrink with a <strong>while</strong> loop, not an if.',
+    'The pattern wants <strong>contiguous</strong> subarrays with <strong>positive</strong> contributions — negatives call for Kadane.',
+  ]}
+/>
+
+Next up: **Kadane's Algorithm** — when the array contains negatives, a one-line running-sum decision finds
+the maximum-sum contiguous subarray in a single pass.

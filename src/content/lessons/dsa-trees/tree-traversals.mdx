@@ -1,0 +1,245 @@
+---
+title: Tree Traversals
+track: dsa-trees
+summary: "Four ways to visit every node — preorder, inorder, postorder, and level order — and the rule for picking the right one: when do you touch the root, before or after its children?"
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - dsa-trees/tree-basics
+leadsTo:
+  - dsa-trees/binary-search-tree
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import TreeTraversalOrders from '../../../components/demos/TreeTraversalOrders.tsx';
+
+## The hook: same tree, four different to-do lists
+
+You have a tree of folders and you want to do something to every item. Copying the structure, you must
+create a folder *before* its contents — touch the parent first. Computing each folder's total size, you
+need every child's size *before* the parent — touch the parent last. Listing a sorted index, you want a
+left-to-right sweep. Printing the table of contents level by level, you go breadth-first. Same tree, four
+visiting orders, each one exactly right for a different task.
+
+<Callout type="intuition" title="The one-sentence idea">
+A traversal visits every node exactly once; the only choice is *when you process the root relative to its
+children* — before (preorder), between (inorder), after (postorder), or whole-level-at-a-time (level
+order).
+</Callout>
+
+## Intuition: where does the root go?
+
+Three of the four traversals are depth-first: dive down one branch fully before backing up. They differ
+only in where the root sits in the recursion:
+
+- **Preorder** — Root, Left, Right. Process the node, *then* its subtrees. Great for copying or
+  serializing a tree (you must make a parent before its children).
+- **Inorder** — Left, Root, Right. Process the left subtree, then the node, then the right. On a search
+  tree this spits out values in **sorted order** — the fact the next lesson leans on.
+- **Postorder** — Left, Right, Root. Process both subtrees, *then* the node. Great for deleting a tree or
+  computing a folder's size, where children must finish first.
+
+The fourth, **level order**, is breadth-first: visit depth 0, then all of depth 1, then depth 2. It uses a
+**queue** instead of recursion's stack, and it is how you find the shallowest leaf or read a tree row by
+row.
+
+## Play with it
+
+Pick an order and step through. The active node glows; the **output** list grows in the exact sequence the
+traversal produces. Switch orders on the *same* tree and notice only the visit sequence changes.
+
+<TreeTraversalOrders client:visible />
+
+<Callout type="tip">
+Build a search tree like `8,3,10,1,6,x,14` and run **inorder** — the output comes out perfectly sorted.
+That is not a coincidence; it is the defining payoff of the binary-search-tree ordering you will meet next.
+</Callout>
+
+## How it works
+
+The three depth-first orders are *the same three lines in a different order*. Look how only the position of
+the `visit` line moves:
+
+```
+preorder(n):  visit(n); preorder(n.left);  preorder(n.right)
+inorder(n):   inorder(n.left);  visit(n);  inorder(n.right)
+postorder(n): postorder(n.left); postorder(n.right); visit(n)
+```
+
+Level order breaks the pattern: it pulls nodes from a queue and pushes their children, so siblings come
+out together before any of their children do.
+
+<CodeRunner
+  client:visible
+  code={`function node(value, left = null, right = null) { return { value, left, right }; }
+// Tree:        1
+//             / \\
+//            2   3
+//           / \\   \\
+//          4   5   6
+const root = node(1, node(2, node(4), node(5)), node(3, null, node(6)));
+
+function preorder(n, out = []) { if (!n) return out; out.push(n.value); preorder(n.left, out); preorder(n.right, out); return out; }
+function inorder(n, out = [])  { if (!n) return out; inorder(n.left, out);  out.push(n.value); inorder(n.right, out);  return out; }
+function postorder(n, out = []){ if (!n) return out; postorder(n.left, out); postorder(n.right, out); out.push(n.value); return out; }
+
+function levelOrder(root) {
+  if (!root) return [];
+  const out = [], queue = [root];
+  while (queue.length) {
+    const n = queue.shift();
+    out.push(n.value);
+    if (n.left) queue.push(n.left);
+    if (n.right) queue.push(n.right);
+  }
+  return out;
+}`}
+  tests={[
+    { expr: 'preorder(root).join(" ")', label: 'preorder (Root,Left,Right)' },
+    { expr: 'inorder(root).join(" ")', label: 'inorder (Left,Root,Right)' },
+    { expr: 'postorder(root).join(" ")', label: 'postorder (Left,Right,Root)' },
+    { expr: 'levelOrder(root).join(" ")', label: 'level order (BFS)' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the recursive trio and the queue-based level order that returns one array per
+level:
+
+```ts
+// /dsa/09-trees/tree-traversals.ts
+function inorderRecursive<T>(root: TreeNode<T> | null): T[] {
+    const result: T[] = [];
+    function traverse(node: TreeNode<T> | null): void {
+        if (!node) return;
+        traverse(node.left);        // Left
+        result.push(node.value);    // Root
+        traverse(node.right);       // Right
+    }
+    traverse(root);
+    return result;
+}
+
+function levelOrderLevels<T>(root: TreeNode<T> | null): T[][] {
+    if (!root) return [];
+    const result: T[][] = [];
+    const queue: TreeNode<T>[] = [root];
+    while (queue.length > 0) {
+        const levelSize = queue.length;          // freeze this level's width
+        const currentLevel: T[] = [];
+        for (let i = 0; i < levelSize; i++) {
+            const node = queue.shift()!;
+            currentLevel.push(node.value);
+            if (node.left) queue.push(node.left);
+            if (node.right) queue.push(node.right);
+        }
+        result.push(currentLevel);
+    }
+    return result;
+}
+```
+
+Run the full file: `npx tsx 09-trees/tree-traversals.ts`.
+
+## Complexity
+
+Every traversal touches each node once. Depth-first uses stack space proportional to the height; level
+order uses queue space proportional to the tree's widest level:
+
+$$
+T(n) = O(n), \qquad S_{\text{DFS}}(n) = O(h), \qquad S_{\text{BFS}}(n) = O(w),
+$$
+
+where $h$ is the height and $w$ is the maximum width (which can reach $n/2$ at the bottom of a full tree).
+
+| Traversal | Time | Extra space | Signature use |
+|-----------|------|-------------|---------------|
+| Preorder | $O(n)$ | $O(h)$ | copy / serialize |
+| Inorder | $O(n)$ | $O(h)$ | sorted output of a BST |
+| Postorder | $O(n)$ | $O(h)$ | delete / evaluate |
+| Level order | $O(n)$ | $O(w)$ | shallowest node, row-by-row |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cooking" icon="🍳">
+A recipe with sub-recipes is a tree. To execute it you need <strong>postorder</strong>: finish the sauce
+and the dough (the children) before you assemble the dish (the parent). You can't plate what isn't cooked.
+</ExampleCard>
+
+<ExampleCard domain="Publishing" icon="📚">
+Printing a book's table of contents is <strong>preorder</strong>: write the chapter title, then recurse
+into its sections and subsections in order — parent heading before its contents.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+Spreading news through a reporting hierarchy "one management layer at a time" is <strong>level order</strong>:
+the queue holds everyone at the current layer before reaching anyone below — the same wavefront as a BFS.
+</ExampleCard>
+
+<ExampleCard domain="Mathematics" icon="🧮">
+Evaluating an arithmetic expression tree is <strong>postorder</strong>: compute both operand subtrees
+before applying the operator at the node. Reverse Polish notation is literally a postorder reading.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Inorder = sorted only for a BST.** On an arbitrary binary tree, inorder is just Left-Root-Right with no
+  sortedness promised.
+- **Level order needs a queue, not a stack.** Swap in a stack and you get a depth-first order instead. To
+  return one array *per level*, freeze `levelSize = queue.length` before the inner loop.
+- **Recursion depth is the height.** A degenerate tree of height $n$ can blow the call stack; an iterative
+  traversal with an explicit stack avoids it.
+- **Interview cue:** reconstructing a tree needs **two** traversals, and one of them must be inorder —
+  preorder (or postorder) alone is ambiguous because it can't tell left subtree from right.
+
+## Practice
+
+1. **Easy:** For `1,2,3,4,5,x,6`, write out preorder, inorder, and postorder by hand, then check in the demo.
+2. **Easy:** Which traversal lists a binary search tree's values in increasing order?
+3. **Medium:** Convert the recursive preorder to an iterative one using an explicit stack. Why do you push
+   the right child before the left?
+4. **Medium:** Modify level order to return a 2-D array, one inner array per level (freeze the level size).
+5. **Hard:** Given a tree's preorder and inorder arrays, reconstruct it. Why is inorder indispensable, and
+   why is preorder-plus-postorder generally not enough?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which traversal yields a binary search tree’s values in sorted ascending order?',
+      options: ['Preorder', 'Inorder', 'Postorder', 'Level order'],
+      answer: 1,
+      explain: 'Inorder is Left-Root-Right; on a BST that visits everything smaller, then the node, then everything larger — i.e. sorted.',
+    },
+    {
+      q: 'You want to compute the total size of every directory, where a folder’s size needs its children’s sizes first. Which order?',
+      options: ['Preorder', 'Inorder', 'Postorder', 'Level order'],
+      answer: 2,
+      explain: 'Postorder processes both subtrees before the node, so each folder already has its children’s totals when you reach it.',
+    },
+    {
+      q: 'What data structure makes level-order (breadth-first) traversal work?',
+      options: ['A stack', 'A queue (FIFO)', 'A hash map', 'A second tree'],
+      answer: 1,
+      explain: 'A FIFO queue releases nodes in arrival order, so an entire level is emitted before any of its children.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Three depth-first orders differ only in <strong>where the root is processed</strong>: preorder (first), inorder (middle), postorder (last).',
+    '<strong>Inorder on a BST is sorted</strong> — the bridge to the next lesson.',
+    '<strong>Preorder</strong> copies/serializes; <strong>postorder</strong> deletes/evaluates; <strong>level order</strong> reads row by row.',
+    'Depth-first uses a <strong>stack</strong> (or recursion, O(h) space); level order uses a <strong>queue</strong> (O(w) space).',
+    'Rebuilding a tree takes <strong>two traversals, one of which must be inorder</strong> to separate left from right.',
+  ]}
+/>
+
+Next up: **Binary Search Trees** — add one ordering rule to a binary tree and search, insert, and delete
+all collapse to walking a single root-to-leaf path.

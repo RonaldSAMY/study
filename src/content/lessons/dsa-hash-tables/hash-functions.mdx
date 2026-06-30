@@ -1,0 +1,238 @@
+---
+title: Hash Functions
+track: dsa-hash-tables
+summary: "A hash function does one job: turn any key into an array index — deterministically, uniformly, and fast."
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - dsa-queues/priority-queue
+leadsTo:
+  - dsa-hash-tables/hash-table-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import HashFunctionExplorer from '../../../components/demos/HashFunctionExplorer.tsx';
+
+## The hook: a coat-check that never searches
+
+You hand your coat to an attendant. Instead of remembering where it goes, they glance at your ticket
+number, do a tiny calculation, and walk *straight* to the right hook — no scanning the rack. When you
+come back, the same calculation sends them to the same hook. That calculation is a **hash function**:
+a rule that turns a key (your ticket, a word, a user id) into a slot number. Get it right and every
+lookup becomes a single step instead of a search.
+
+<Callout type="intuition" title="The one-sentence idea">
+A hash function maps an arbitrary key to a bucket index in a fixed range, so the same key always points
+to the same slot and different keys spread out evenly.
+</Callout>
+
+## Intuition: a priority queue ranked by a heap; a hash table *located* by a function
+
+In the queues track you saw a priority queue use a heap to decide *order*. A hash table uses a function
+to decide *location*. There is no comparing and no ordering here — just arithmetic that collapses a
+huge space of possible keys down to a small set of indices `0 .. m-1`.
+
+A good hash function has three must-haves:
+
+1. **Deterministic** — the same key must always produce the same index, or you could never find anything back.
+2. **Uniform** — keys should scatter evenly across the buckets; clumping creates collisions (two keys, one slot).
+3. **Fast** — ideally proportional to the key's length, using only cheap operations.
+
+The workhorse for strings is the **polynomial rolling hash**. Treat the characters as digits in base
+$p$ (a small prime, classically 31) and reduce modulo the table size $m$:
+
+$$
+h(s) = \left( \sum_{i=0}^{n-1} s_i \cdot p^{\,n-1-i} \right) \bmod m.
+$$
+
+Multiplying by a prime at each step mixes position into the result, so `"cat"` and `"act"` — same
+letters, different order — land on different buckets.
+
+## Play with it
+
+Type a key and a bucket count, then fold it one character at a time. Watch the running value
+$h = (h \cdot 31 + \text{code}) \bmod m$ update, and see the highlighted bucket jump until the key
+finally settles on its index.
+
+<HashFunctionExplorer client:visible />
+
+<Callout type="tip">
+Change the bucket count and every index moves — the same key hashes differently into a table of a
+different size. That is exactly why a hash table must rehash all its keys when it resizes (next lesson).
+</Callout>
+
+## How it works
+
+Hash `"cat"` into a table of size 12, processing left to right with $h = (h \cdot 31 + \text{code}) \bmod 12$:
+
+```
+h = 0
+'c' (99):  (0  * 31 + 99)  % 12 = 99  % 12 = 3
+'a' (97):  (3  * 31 + 97)  % 12 = 190 % 12 = 10
+'t' (116): (10 * 31 + 116) % 12 = 426 % 12 = 6
+hash("cat") = 6
+```
+
+Because every step keeps the value in `0..11`, the arithmetic never overflows the table, and the
+sequence of multiplications bakes each letter's *position* into the answer.
+
+<CodeRunner
+  client:visible
+  code={`// Polynomial rolling hash for strings
+function hashString(key, size) {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) {
+    h = (h * 31 + key.charCodeAt(i)) % size;
+  }
+  return h;
+}
+
+// A naive "sum of codes" hash — looks fine, but ignores order
+function sumHash(key, size) {
+  let sum = 0;
+  for (const ch of key) sum += ch.charCodeAt(0);
+  return sum % size;
+}`}
+  tests={[
+    { expr: 'hashString("cat", 12)', label: 'hash("cat")' },
+    { expr: 'hashString("act", 12)', label: 'hash("act") — different!' },
+    { expr: 'sumHash("cat", 12)', label: 'sumHash("cat")' },
+    { expr: 'sumHash("act", 12)', label: 'sumHash("act") — same, a clue it is weak' },
+  ]}
+/>
+
+Notice `sumHash` gives `"cat"` and `"act"` the *same* bucket — order is lost, so anagrams always collide.
+The polynomial hash keeps them apart.
+
+## The real implementation
+
+From the course file — the polynomial hash plus DJB2, a classic by Dan Bernstein that uses a bit-shift
+(`hash * 33`) for speed:
+
+```ts
+// /dsa/08-hash-table/hash-functions.ts
+function polynomialHash(key: string, size: number): number {
+    const PRIME = 31;  // Common choice for strings
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) {
+        const charCode = key.charCodeAt(i);
+        hash = (hash * PRIME + charCode) % size;
+    }
+    return hash;
+}
+
+function djb2Hash(key: string, size: number): number {
+    let hash = 5381;
+    for (const char of key) {
+        hash = ((hash << 5) + hash) + char.charCodeAt(0); // hash * 33 + c
+    }
+    return Math.abs(hash) % size;
+}
+```
+
+Run the full file: `npx tsx 08-hash-table/hash-functions.ts`.
+
+## Complexity
+
+Hashing reads each character once and does constant work per character:
+
+$$
+T(n) = O(L), \qquad S(n) = O(1),
+$$
+
+where $L$ is the key's length. The table size $m$ does not change this — `mod m` is one operation.
+
+| Hash function | Cost | Distribution |
+|---------------|------|--------------|
+| Sum of codes | $O(L)$ | Poor — anagrams collide |
+| Polynomial (base 31) | $O(L)$ | Good (general purpose) |
+| DJB2 / FNV-1a | $O(L)$ | Good, very fast |
+| Cryptographic (SHA-256) | $O(L)$ but large constant | Excellent, but overkill for tables |
+
+For a hash *table*, distribution quality matters as much as speed: a uniform hash keeps the **average**
+bucket tiny, which is what makes lookups $O(1)$ on average. We will make that precise next lesson.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Music streaming" icon="🎵">
+Audio fingerprinting (think Shazam) hashes short slices of a song's spectrogram into compact codes.
+Matching a clip becomes a hash lookup against millions of tracks instead of comparing waveforms second
+by second.
+</ExampleCard>
+
+<ExampleCard domain="Version control" icon="🔀">
+Git names every commit by the SHA-1/SHA-256 hash of its contents. The same content always yields the
+same id (deterministic), and a one-character change yields a wildly different one (the avalanche effect).
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A warehouse can assign each SKU to a shelf by hashing its barcode. Pickers compute the shelf directly
+from the code rather than walking aisles, and the same barcode always routes to the same shelf.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Order-insensitive hashes are weak.** Summing character codes makes every anagram collide. Always
+  fold position in (multiply by a prime each step).
+- **Pick a table size that is not a power of two for simple hashes.** With `mod m` where $m$ is a power
+  of two you only keep the low bits; a prime size mixes all of them. Many libraries use primes for this reason.
+- **Determinism is non-negotiable.** Never seed a table's hash with something that changes between runs
+  unless you store the seed — otherwise yesterday's index is not today's.
+- **Avalanche vs speed is a real trade-off.** Cryptographic hashes resist tampering but are slow; for an
+  in-memory table you want a cheap, well-distributing hash, not a secure one.
+- **Interview cue:** if asked to "design a hash function," say the three properties out loud —
+  deterministic, uniform, fast — then write the polynomial hash.
+
+## Practice
+
+1. **Easy:** By hand, compute `hashString("hi", 10)` with base 31. (Codes: `h`=104, `i`=105.)
+2. **Easy:** Show that `sumHash` gives `"listen"` and `"silent"` the same bucket, but `polynomialHash` does not.
+3. **Medium:** Modify the polynomial hash to hash an array of integers (order matters) instead of a string.
+4. **Medium:** Write a tiny experiment that hashes 100 random keys into 20 buckets and reports the largest bucket.
+5. **Hard:** Implement a rolling hash that updates in $O(1)$ when a sliding window moves by one character (the Rabin–Karp trick).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which property guarantees you can find a stored key again later?',
+      options: ['Uniform distribution', 'Determinism', 'Avalanche effect', 'Cryptographic strength'],
+      answer: 1,
+      explain: 'If the same key did not always produce the same index, you could store a value but never compute where to look for it.',
+    },
+    {
+      q: 'Why does summing character codes make a poor string hash?',
+      options: [
+        'It is too slow',
+        'It can produce negative numbers',
+        'It ignores character order, so all anagrams collide',
+        'It only works for short strings',
+      ],
+      answer: 2,
+      explain: 'Addition is commutative, so "cat" and "act" sum to the same value and always land in the same bucket.',
+    },
+    {
+      q: 'Computing hashString on a key of length L costs about:',
+      options: ['O(1)', 'O(L)', 'O(m) where m is the table size', 'O(L log L)'],
+      answer: 1,
+      explain: 'The loop does constant work per character, so the cost is proportional to the key length L, independent of table size.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A hash function maps any key to a bucket index in <strong>0 .. m-1</strong>.',
+    'Good hashes are <strong>deterministic, uniform, and fast</strong> — all three matter.',
+    'The <strong>polynomial rolling hash</strong> (multiply by a prime, add the code, mod the size) folds character order into the result.',
+    'Summing codes is a classic mistake — <strong>anagrams collide</strong> because addition ignores order.',
+    'Hashing a key costs <strong>O(L)</strong> in the key length, independent of the table size.',
+  ]}
+/>
+
+Next up: **Building a Hash Table** — wiring this function to an array of buckets, tracking the load
+factor, and resizing when the table gets crowded.

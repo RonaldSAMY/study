@@ -1,0 +1,253 @@
+---
+title: Binary Search Trees
+track: dsa-trees
+summary: "One ordering rule — left smaller, right larger — turns a binary tree into a structure where search, insert, and delete are each a single walk down one root-to-leaf path."
+difficulty: intermediate
+estMinutes: 17
+prereqs:
+  - dsa-trees/tree-traversals
+leadsTo:
+  - dsa-trees/avl-tree
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import TreeBstOperations from '../../../components/demos/TreeBstOperations.tsx';
+
+## The hook: the dictionary trick, made into a structure
+
+Looking up a word in a paper dictionary, you never start at page one. You flip to the middle, see whether
+your word falls before or after, and throw away half the book — then repeat. That is binary search, and it
+needs sorted data. A **binary search tree** bakes that trick into the structure itself: every node says
+"smaller things are to my left, larger to my right," so each comparison discards an entire subtree. Search,
+insert, and delete all become the same thing — a single walk from the root toward a leaf.
+
+<Callout type="intuition" title="The one-sentence idea">
+A binary search tree is a binary tree with one invariant — every value in a node's left subtree is smaller
+and every value in its right subtree is larger — so each comparison sends you down exactly one side and
+prunes the other.
+</Callout>
+
+## Intuition: the invariant does the work
+
+A plain binary tree imposed no order on values. A BST adds exactly one rule, applied at **every** node:
+
+$$
+\text{left subtree} \;<\; \text{node} \;<\; \text{right subtree}.
+$$
+
+That single rule has outsized consequences. To **search** for a value, compare it with the root: equal
+means found; smaller means recurse left; larger means recurse right — each step halves the remaining tree
+on a balanced tree. To **insert**, do the same walk until you fall off the bottom, and hang the new node
+there. The leftmost node is the **minimum**, the rightmost is the **maximum**, and — recalling the last
+lesson — an **inorder** traversal reads every value out in sorted order, for free.
+
+The catch, which the next lesson exists to fix: this is only fast if the tree stays bushy. Insert values in
+sorted order and you build a leaning chain of height $n$, and the dictionary trick degrades back into
+scanning page by page.
+
+## Play with it
+
+In **Insert** mode, type values and watch each one walk down from the root — left when smaller, right when
+larger — until it finds an empty spot. Switch to **Search** mode, enter a target, and watch the same
+left/right walk hunt it down.
+
+<TreeBstOperations client:visible />
+
+<Callout type="tip">
+Build the tree with `8,3,10,1,6,14,4,7,13` and search for `13`: the walk visits only a handful of nodes,
+never the entire left half. Now press Build with `1,2,3,4,5` and watch the tree lean into a chain — that
+lopsided shape is the worst case the AVL lesson rotates away.
+</Callout>
+
+## How it works
+
+Search for `7` in the demo tree by following the comparisons: start at `8` (7 < 8, go left), reach `3`
+(7 > 3, go right), reach `6` (7 > 6, go right), reach `7` — found, after visiting 4 of 9 nodes. Insert
+works identically, placing the value where the walk runs off a null branch:
+
+```
+search(node, target):
+  if node is empty: return null            # ran off the tree → not found
+  if target == node.value: return node     # found it
+  if target <  node.value: return search(node.left,  target)   # prune the right
+  else:                    return search(node.right, target)   # prune the left
+```
+
+<CodeRunner
+  client:visible
+  code={`function insert(root, v) {
+  if (!root) return { value: v, left: null, right: null };
+  if (v < root.value) root.left = insert(root.left, v);
+  else if (v > root.value) root.right = insert(root.right, v);
+  return root;            // duplicates ignored
+}
+function buildBST(values) { let r = null; for (const v of values) r = insert(r, v); return r; }
+
+function contains(root, target) {
+  let cur = root;
+  while (cur) {
+    if (target === cur.value) return true;
+    cur = target < cur.value ? cur.left : cur.right;   // half the tree drops away
+  }
+  return false;
+}
+function inorder(n, out = []) { if (!n) return out; inorder(n.left, out); out.push(n.value); inorder(n.right, out); return out; }
+
+const tree = buildBST([8, 3, 10, 1, 6, 14, 4, 7, 13]);`}
+  tests={[
+    { expr: 'contains(tree, 7)', label: 'contains 7?' },
+    { expr: 'contains(tree, 5)', label: 'contains 5?' },
+    { expr: 'inorder(tree).join(" ")', label: 'inorder = sorted' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — recursive insert, the search that prunes one side per step, and the genuinely tricky
+case: deleting a node with two children, which you replace by its **inorder successor** (the smallest value
+in its right subtree):
+
+```ts
+// /dsa/09-trees/binary-search-tree.ts
+private insertNode(node: BSTNode<T> | null, value: T): BSTNode<T> {
+    if (!node) return new BSTNode(value);
+    const cmp = this.compareFn(value, node.value);
+    if (cmp < 0)      node.left  = this.insertNode(node.left,  value);
+    else if (cmp > 0) node.right = this.insertNode(node.right, value);
+    return node;                                   // equal → no duplicate
+}
+
+private deleteNode(node: BSTNode<T> | null, value: T): BSTNode<T> | null {
+    if (!node) return null;
+    const cmp = this.compareFn(value, node.value);
+    if (cmp < 0)      node.left  = this.deleteNode(node.left,  value);
+    else if (cmp > 0) node.right = this.deleteNode(node.right, value);
+    else {
+        if (!node.left)  return node.right;        // 0 or 1 child
+        if (!node.right) return node.left;
+        const successor = this.findMinNode(node.right)!;   // smallest on the right
+        node.value = successor.value;              // copy it up...
+        node.right = this.deleteNode(node.right, successor.value);  // ...and delete it
+    }
+    return node;
+}
+```
+
+Run the full file: `npx tsx 09-trees/binary-search-tree.ts`.
+
+## Complexity
+
+Every operation is a walk down one path, so its cost is the path length — the height. On a balanced tree
+that is logarithmic; on a degenerate chain it is linear:
+
+$$
+T_{\text{balanced}}(n) = O(\log n), \qquad T_{\text{worst}}(n) = O(n).
+$$
+
+| Operation | Average (balanced) | Worst (skewed) |
+|-----------|--------------------|----------------|
+| Search | $O(\log n)$ | $O(n)$ |
+| Insert | $O(\log n)$ | $O(n)$ |
+| Delete | $O(\log n)$ | $O(n)$ |
+| Min / Max | $O(\log n)$ | $O(n)$ |
+
+A hash table beats this with $O(1)$ membership — but it cannot do ordered work. A BST keeps data sorted, so
+it answers range queries, floor/ceiling, and successor/predecessor that a hash table simply can't.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Databases" icon="🗄️">
+Relational databases index columns with B-trees — a wide, disk-friendly cousin of the BST. A query like
+"all orders between two dates" is a BST range walk: descend to the low end, then sweep right in sorted
+order until you pass the high end.
+</ExampleCard>
+
+<ExampleCard domain="Gaming" icon="🎮">
+A leaderboard keyed by score is a balanced BST: insert a new score in O(log n), and "what rank is this
+player?" becomes a count of nodes to the left — ordered queries a hash set could never answer.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💹">
+An exchange order book keeps resting bids and asks in a sorted tree. Matching an incoming order means
+finding the best price (the min ask or max bid) and walking outward — find-min and successor, the BST's
+bread and butter.
+</ExampleCard>
+
+<ExampleCard domain="Networking" icon="🌐">
+IP routing tables resolve an address to the longest matching prefix using ordered tree structures, so a
+router can answer "which route covers this address?" by walking down comparisons instead of scanning every
+rule.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The whole-subtree rule, not just the children.** A valid BST needs *every* left-subtree value below the
+  node and *every* right-subtree value above it. Validate with a descending min/max bound, not by comparing
+  a node only to its immediate children.
+- **Deleting a two-child node.** Replace it with its inorder successor (min of the right subtree) or
+  predecessor (max of the left), then delete that helper node. Just unlinking it corrupts the tree.
+- **Sorted input is the trap.** Inserting already-sorted data yields a height-$n$ chain and $O(n)$
+  operations — the exact failure the next lesson fixes with rotations.
+- **Interview cue:** if a problem mentions a BST, your first instinct should be "inorder gives me sorted
+  order" — it cracks *kth smallest*, *validate BST*, and *range sum* almost immediately.
+
+## Practice
+
+1. **Easy:** Insert `5,3,8,2,4` into an empty BST and draw the result. What does an inorder traversal print?
+2. **Easy:** Search for `4` in that tree and list every node the walk compares against.
+3. **Medium:** Write `findMin` and `findMax` iteratively (walk all the way left, all the way right).
+4. **Medium:** Validate whether a binary tree is a BST using a recursive `(min, max)` bound that tightens as
+   you descend.
+5. **Hard:** Implement delete for all three cases (leaf, one child, two children) using the inorder
+   successor, and confirm an inorder traversal stays sorted afterward.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the defining invariant of a binary search tree?',
+      options: [
+        'Every node has exactly two children',
+        'Left subtree values < node < right subtree values, at every node',
+        'All leaves are at the same depth',
+        'The tree is always perfectly balanced',
+      ],
+      answer: 1,
+      explain: 'A BST requires, at every node, that the entire left subtree is smaller and the entire right subtree is larger.',
+    },
+    {
+      q: 'You insert 1, 2, 3, 4, 5 in that order into an empty BST. What is its height (in edges)?',
+      options: ['about log2(5) ≈ 2', '0', '4', '5'],
+      answer: 2,
+      explain: 'Each value is larger than the last, so every node becomes the right child of the previous — a chain of 5 nodes has height 4.',
+    },
+    {
+      q: 'To delete a node that has two children, you replace its value with…',
+      options: [
+        'the root’s value',
+        'its inorder successor (smallest value in the right subtree)',
+        'a random leaf',
+        'the deepest node',
+      ],
+      answer: 1,
+      explain: 'The inorder successor — the minimum of the right subtree — is the next-larger value, so swapping it in preserves the BST ordering; then you delete that successor node.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A BST adds one rule — <strong>left &lt; node &lt; right</strong> at every node — turning each comparison into a half-the-tree prune.',
+    '<strong>Search, insert, and delete</strong> are all a single walk down one root-to-leaf path, costing the tree’s height.',
+    'An <strong>inorder traversal of a BST is sorted</strong>; min and max are the leftmost and rightmost nodes.',
+    'Deleting a two-child node uses its <strong>inorder successor</strong> to keep the ordering intact.',
+    'Performance is <strong>O(log n) when balanced but O(n) when skewed</strong> — sorted input is the worst case the AVL lesson cures.',
+  ]}
+/>
+
+Next up: **AVL Trees** — track a balance factor at every node and rotate the moment it slips out of range,
+guaranteeing the height stays near log n no matter what order the data arrives in.

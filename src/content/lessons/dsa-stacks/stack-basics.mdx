@@ -1,0 +1,248 @@
+---
+title: The Stack (LIFO)
+track: dsa-stacks
+summary: "A stack is the last-in, first-out box: you only ever touch the top, and that one rule powers undo, the call stack, and backtracking."
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - dsa-linked-lists/circular-linked-list
+leadsTo:
+  - dsa-stacks/balanced-parentheses
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import StkLifoStack from '../../../components/demos/StkLifoStack.tsx';
+
+## The hook: a stack of plates
+
+Picture a tall stack of clean plates in a cafeteria. You add a washed plate to the **top**, and the
+next customer takes one from the **top**. Nobody ever slides a plate out of the middle — that would
+topple the pile. The plate you used *last* is the one that gets taken *first*. That single, almost
+boringly obvious rule is one of the most useful ideas in all of computing. It is the structure behind
+the Undo button, the function call stack your code runs on, and the backtracking that solves mazes.
+
+<Callout type="intuition" title="The one-sentence idea">
+A stack is a collection where you only add and remove from one end — the top — so the **last item in is
+the first item out** (LIFO).
+</Callout>
+
+## Intuition
+
+In the linked-list lessons you could insert or read at the head, the tail, or by walking to the middle.
+A stack deliberately throws most of that power away. It exposes just three real operations:
+
+- **push(x)** — put `x` on the top.
+- **pop()** — remove and return the top item.
+- **peek()** — look at the top item without removing it.
+
+Plus the small helpers **isEmpty()** and **size()**. That is the whole interface. By refusing random
+access, a stack guarantees order: whatever you pushed most recently is the only thing you can reach.
+
+Why give up power on purpose? Because LIFO order is *exactly* what many problems need. When you open a
+function that calls another function that calls another, you must finish the innermost one first and
+unwind outward — last called, first returned. When you hit "undo" five times, you reverse your most
+recent action first. A stack models "the thing I was most recently in the middle of," and that comes up
+constantly.
+
+## Play with it
+
+Type a sequence of operations and watch the pile grow and shrink. Pushes drop a new cell on top; pops
+lift the top cell off; peek just glances at it. Notice you can never touch anything below the top.
+
+<StkLifoStack client:visible />
+
+<Callout type="tip">
+Add a few extra <code>pop</code>s at the end so the stack empties and then pops again. Popping an empty
+stack is called **underflow** — most implementations return <code>undefined</code>, so always check
+<code>isEmpty()</code> before you trust a pop in real code.
+</Callout>
+
+## How it works
+
+Trace `push 5, push 3, pop, push 8, peek` by hand. The top is on the right:
+
+```
+start:      []
+push 5:     [5]            top = 5
+push 3:     [5, 3]         top = 3
+pop:        [5]            removed 3  (the most recent push)
+push 8:     [5, 8]         top = 8
+peek:       [5, 8]         reads 8, removes nothing
+```
+
+The `3` left before the `5` did, even though `5` was pushed first — last in, first out. Here is the
+whole structure in plain JavaScript, built on a normal array. Because `push` and `pop` act on the *end*
+of a JS array, every operation is O(1):
+
+<CodeRunner
+  client:visible
+  code={`class Stack {
+  constructor() { this.items = []; }
+  push(x)   { this.items.push(x); }
+  pop()     { return this.items.pop(); }       // undefined if empty
+  peek()    { return this.items[this.items.length - 1]; }
+  isEmpty() { return this.items.length === 0; }
+  size()    { return this.items.length; }
+}
+
+const s = new Stack();
+s.push(5); s.push(3);
+const first = s.pop();   // 3 comes off first
+s.push(8);
+const top = s.peek();    // 8, not removed`}
+  tests={[
+    { expr: 'first', label: 'first pop()' },
+    { expr: 'top', label: 'peek() after push 8' },
+    { expr: 's.size()', label: 'size()' },
+    { expr: 's.isEmpty()', label: 'isEmpty()' },
+  ]}
+/>
+
+## The real implementation
+
+The course ships two faithful versions. The array-based stack above is what you will use 95% of the
+time. The linked-list version pushes and pops at the *head* of a singly linked list, giving a true
+worst-case O(1) with no array resizing — handy in latency-sensitive code:
+
+```ts
+// /dsa/06-stack/stack-linked-list.ts
+class StackNode<T> {
+    value: T;
+    next: StackNode<T> | null = null;
+    constructor(value: T) { this.value = value; }
+}
+
+class LinkedStack<T> {
+    private top: StackNode<T> | null = null;
+    private _size = 0;
+
+    push(item: T): void {                 // O(1)
+        const node = new StackNode(item);
+        node.next = this.top;             // new node points at old top
+        this.top = node;                  // new node becomes the top
+        this._size++;
+    }
+
+    pop(): T | undefined {                // O(1)
+        if (!this.top) return undefined;  // underflow guard
+        const value = this.top.value;
+        this.top = this.top.next;         // unlink the old top
+        this._size--;
+        return value;
+    }
+
+    peek(): T | undefined { return this.top?.value; }
+    isEmpty(): boolean { return this.top === null; }
+    size(): number { return this._size; }
+}
+```
+
+Run the full file: `npx tsx 06-stack/stack-linked-list.ts`.
+
+## Complexity
+
+Every core operation touches only the top, so nothing depends on how many items are below it:
+
+$$
+T_{\text{push}} = T_{\text{pop}} = T_{\text{peek}} = O(1), \qquad S(n) = O(n).
+$$
+
+| Operation | Array stack | Linked stack |
+|-----------|-------------|--------------|
+| push      | $O(1)$ amortized | $O(1)$ worst case |
+| pop       | $O(1)$      | $O(1)$ |
+| peek      | $O(1)$      | $O(1)$ |
+| search    | $O(n)$      | $O(n)$ |
+
+The array version is "amortized" O(1) because the underlying array occasionally doubles its capacity
+and copies — averaged over many pushes, still constant. The linked version never resizes, so its O(1)
+is worst-case, at the cost of a pointer per node and worse cache behaviour.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cooking" icon="🥞">
+A short-order cook flips pancakes onto a warming plate. The cook grabs the **top** pancake to serve —
+the freshest one, cooked last, leaves first. A spotless LIFO stack you can eat.
+</ExampleCard>
+
+<ExampleCard domain="Programming language runtime" icon="⚙️">
+Every running program keeps a **call stack**. Calling a function pushes a frame (its local variables and
+return address); returning pops it. Infinite recursion pushes frames until you run out of room — the
+famous "stack overflow".
+</ExampleCard>
+
+<ExampleCard domain="Warehousing" icon="📦">
+Goods stored **LIFO** — last pallet in, first pallet out — like boxes stacked in a narrow garage. You
+must move the newest box to reach an older one, which is exactly why perishable goods use FIFO instead.
+</ExampleCard>
+
+<ExampleCard domain="Rock climbing" icon="🧗">
+A climber clips quickdraws going up and must **unclip them in reverse** coming down — the last one
+placed is the first one removed. Backtracking any path retraces your most recent step first.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting the underflow check.** Calling `pop()` or `peek()` on an empty stack returns `undefined`
+  in JS — guard with `isEmpty()` before you use the value, or you will get cryptic `undefined` bugs.
+- **Reaching into the middle.** If you find yourself wanting `stack[2]`, a stack is the wrong tool — use
+  an array or deque. The whole point of a stack is that only the top is reachable.
+- **Array vs linked choice.** In interviews, a plain array (`push`/`pop`) is the expected default; mention
+  the linked-list version only to show you know it avoids resizing for guaranteed O(1).
+- **Interview cue:** whenever a problem says "most recent", "reverse order", "nested", "undo", or "matching",
+  reach for a stack first.
+
+## Practice
+
+1. **Easy:** Push `1, 2, 3, 4`, then pop twice. What is the new top, and what two values came off?
+2. **Easy:** Implement `isEmpty()` and `size()` for the array stack without using a separate counter.
+3. **Medium:** Reverse a string using only a stack — push every character, then pop them all.
+4. **Medium:** Build a `MinStack` that also returns the current minimum in O(1) (hint: keep a second
+   stack of running minimums).
+5. **Hard:** Implement a queue (FIFO) using two stacks, so `enqueue` and `dequeue` are amortized O(1).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You push 7, 8, 9 onto an empty stack, then pop once. What does pop() return?',
+      options: ['7', '8', '9', 'undefined'],
+      answer: 2,
+      explain: '9 was pushed last, so under LIFO it is the first to come off the top.',
+    },
+    {
+      q: 'Which operation reads the top element WITHOUT removing it?',
+      options: ['pop()', 'push()', 'peek()', 'size()'],
+      answer: 2,
+      explain: 'peek() returns the top value and leaves the stack unchanged; pop() also returns it but removes it.',
+    },
+    {
+      q: 'Why is push on an array-backed stack called amortized O(1) rather than strictly O(1)?',
+      options: [
+        'Because pop is slower than push',
+        'Because the array occasionally resizes and copies, but that cost averages out over many pushes',
+        'Because peek must scan the array',
+        'Because arrays cannot grow at all',
+      ],
+      answer: 1,
+      explain: 'Most pushes are O(1); the rare capacity-doubling copy is O(n), but spread across all the pushes it averages to O(1).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A stack is <strong>LIFO</strong>: you add and remove only at the top, so the last item in is the first out.',
+    'The whole interface is <strong>push, pop, peek</strong> plus <code>isEmpty</code> and <code>size</code> — all O(1).',
+    'It can be built on an <strong>array</strong> (amortized O(1), cache-friendly) or a <strong>linked list</strong> (worst-case O(1), no resizing).',
+    'Always guard against <strong>underflow</strong> — popping an empty stack returns <code>undefined</code>.',
+    'Reach for a stack when a problem mentions <strong>most-recent, reverse, nested, undo, or matching</strong>.',
+  ]}
+/>
+
+Next up: **Balanced Brackets** — the canonical stack problem, where every opening symbol waits on the
+stack for its matching close.

@@ -1,0 +1,272 @@
+---
+title: Reversal & Cycle Detection
+track: dsa-linked-lists
+summary: "Two pointer tricks define linked-list interviews: flip every next in place to reverse, and run a fast and slow runner to detect a loop in O(1) space."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-linked-lists/singly-linked-list
+leadsTo:
+  - dsa-linked-lists/doubly-linked-list
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import LLReverseCycle from '../../../components/demos/LLReverseCycle.tsx';
+
+## The hook: turning the trail around, and catching a runaway loop
+
+You already know a list is a treasure hunt of nodes, each pointing to the next. Two questions dominate
+every linked-list interview. First: can you make the trail run *backward* — last clue first — without
+copying anything into a new list? Second: what if some prankster made the last clue point back to an
+earlier one, so the trail loops forever? You need to detect that loop **without** marking nodes or
+keeping a set of everything you've seen. Both answers come from carefully choreographed pointers, and
+both run in O(1) extra space.
+
+<Callout type="intuition" title="The one-sentence idea">
+Reversal walks the list once, flipping each node's next pointer to the previous node; cycle detection
+sends a slow runner and a fast runner through the list, and if they ever meet, there is a loop.
+</Callout>
+
+## Intuition: three pointers to reverse, two speeds to detect
+
+**Reversal.** The danger is that the moment you flip a node's `next` to point backward, you've lost the
+link to the rest of the list. So you hold three references at once: `prev` (the part already reversed),
+`curr` (the node you're flipping now), and a saved `next` (so you don't lose the unprocessed tail).
+Each step: stash `next = curr.next`, redirect `curr.next = prev`, then slide both `prev` and `curr`
+forward. When `curr` falls off the end, `prev` is the new head.
+
+**Cycle detection (Floyd's "tortoise and hare").** Move `slow` one node per step and `fast` two. If the
+list ends, `fast` reaches `null` and there is no cycle. But if there's a loop, `fast` is gaining exactly
+one node on `slow` every step, so inside the loop it must eventually lap and *land on the same node* as
+`slow`. A meeting is a mathematical certainty, no bookkeeping required — that's why it needs only O(1)
+space, beating the obvious hash-set approach.
+
+## Play with it
+
+Switch between the two modes. In **Reverse**, watch each next-pointer flip one step at a time as `prev`
+and `curr` march forward. In **Detect cycle**, set where the tail loops back and watch the fast runner
+chase down the slow one — or fall off the end when there's no loop.
+
+<LLReverseCycle client:visible />
+
+<Callout type="tip">
+In cycle mode, set "loops to" to <strong>-1</strong> first and watch <code>fast</code> run off the end —
+that's the no-cycle case. Then point it back into the list and notice the two runners always collide
+*inside* the loop, never before it.
+</Callout>
+
+## How it works
+
+Reversing `1 -> 2 -> 3 -> null`, tracking the three pointers each step:
+
+```
+prev=null  curr=1            // start
+prev=1     curr=2   (1 -> null)
+prev=2     curr=3   (2 -> 1 -> null)
+prev=3     curr=null (3 -> 2 -> 1 -> null)
+return prev = 3   // new head
+```
+
+For cycle detection on `1 -> 2 -> 3 -> 4 -> back to 2`, the runners march `slow=2,fast=3`, then
+`slow=3,fast=2`, then `slow=4,fast=4` — collision, so a loop exists.
+
+<CodeRunner
+  client:visible
+  code={`function node(v) { return { value: v, next: null }; }
+function fromArray(a) {
+  let h = null, t = null;
+  for (const v of a) { const n = node(v); if (!h) { h = n; t = n; } else { t.next = n; t = n; } }
+  return h;
+}
+function toArray(h) { const o = []; for (let c = h; c; c = c.next) o.push(c.value); return o; }
+
+// Reverse in place: O(n) time, O(1) space
+function reverse(head) {
+  let prev = null, curr = head;
+  while (curr) {
+    const next = curr.next;   // save the rest
+    curr.next = prev;         // flip the link
+    prev = curr;              // advance prev
+    curr = next;              // advance curr
+  }
+  return prev;                // new head
+}
+
+// Floyd's cycle detection: O(n) time, O(1) space
+function hasCycle(head) {
+  let slow = head, fast = head;
+  while (fast && fast.next) {
+    slow = slow.next;
+    fast = fast.next.next;
+    if (slow === fast) return true;
+  }
+  return false;
+}
+
+// build a list whose tail links back to index 1 (a cycle)
+function withCycle(a, backTo) {
+  const h = fromArray(a);
+  let tail = h; while (tail.next) tail = tail.next;
+  let target = h; for (let i = 0; i < backTo; i++) target = target.next;
+  tail.next = target;
+  return h;
+}`}
+  tests={[
+    { expr: 'toArray(reverse(fromArray([1,2,3,4,5])))', label: 'reverse [1..5]' },
+    { expr: 'hasCycle(fromArray([1,2,3,4]))', label: 'no cycle -> false' },
+    { expr: 'hasCycle(withCycle([1,2,3,4], 1))', label: 'tail loops to index 1 -> true' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course's operations file — the iterative reverse, plus the variant that returns the
+exact node where a cycle begins:
+
+```js
+// /dsa/05-linked-list/linked-list-operations.js
+function reverseIterative(head) {
+    let prev = null;
+    let current = head;
+    while (current) {
+        const nextTemp = current.next;   // don't lose the rest
+        current.next = prev;             // flip the pointer
+        prev = current;                  // step prev forward
+        current = nextTemp;              // step current forward
+    }
+    return prev;                         // prev is the new head
+}
+
+function detectCycleStart(head) {
+    if (!head || !head.next) return null;
+    let slow = head, fast = head;
+    while (fast && fast.next) {          // phase 1: find a meeting point
+        slow = slow.next;
+        fast = fast.next.next;
+        if (slow === fast) break;
+    }
+    if (!fast || !fast.next) return null;   // fell off the end: no cycle
+    slow = head;                            // phase 2: walk to the entrance
+    while (slow !== fast) {
+        slow = slow.next;
+        fast = fast.next;
+    }
+    return slow;                            // the node where the loop starts
+}
+```
+
+Run the full file: `npx tsx 05-linked-list/linked-list-operations.js` (or `node`).
+
+<Callout type="why">
+Phase 2 of `detectCycleStart` looks like magic but is pure arithmetic: when the runners first meet, the
+distance from the head to the loop entrance equals the distance from the meeting point to that same
+entrance. So resetting `slow` to the head and stepping both one at a time lands them together exactly at
+the loop's start.
+</Callout>
+
+## Complexity
+
+Both algorithms make a constant number of passes with a fixed handful of pointers:
+
+$$
+T_{\text{reverse}} = O(n), \quad S_{\text{reverse}} = O(1), \qquad T_{\text{cycle}} = O(n), \quad S_{\text{cycle}} = O(1).
+$$
+
+| Task | Approach | Time | Space |
+|------|----------|------|-------|
+| Reverse | Three-pointer flip | $O(n)$ | $O(1)$ |
+| Reverse | Recursion | $O(n)$ | $O(n)$ stack |
+| Detect cycle | Hash set of nodes | $O(n)$ | $O(n)$ |
+| Detect cycle | Floyd fast/slow | $O(n)$ | $O(1)$ |
+
+The fast/slow trick matches the hash-set's time while crushing its space from O(n) to O(1) — the reason
+it is the textbook answer.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Memory management" icon="♻️">
+Garbage collectors must spot reference loops — objects that point at each other in a ring — so they can
+free them. Floyd-style pointer chasing detects such cycles without allocating extra tracking memory,
+which is precious mid-collection.
+</ExampleCard>
+
+<ExampleCard domain="Athletics" icon="🏃">
+On a running track, a sprinter laps a jogger precisely because they share the same closed loop and move
+at different speeds. The faster runner gains a fixed amount each lap and inevitably catches up — exactly
+the tortoise-and-hare guarantee.
+</ExampleCard>
+
+<ExampleCard domain="Text editing" icon="↩️">
+"Reverse the word order" or undoing a sequence of edits is a list reversal: re-point each step at its
+predecessor rather than copying the whole history into a fresh buffer.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Saving `next` too late.** In reversal you must stash `curr.next` *before* overwriting it. Forget,
+  and you sever the unprocessed tail and loop forever on a one-node ring.
+- **Wrong fast-pointer guard.** It's `while (fast && fast.next)`. Checking only `fast.next` throws a null
+  dereference the moment `fast` is already `null`.
+- **Assuming a meeting point is the loop entrance.** It usually isn't — you still need phase two (reset
+  `slow` to head, step both by one) to find where the cycle actually begins.
+- **Interview cue:** "constant extra space" plus "linked list" almost always means a two-pointer
+  technique. Say "fast and slow" or "three-pointer reverse" early and narrate the pointer moves.
+
+## Practice
+
+1. **Easy:** Reverse `5 -> 4 -> 3 -> 2 -> 1` by hand, writing `prev`, `curr`, `next` after each step.
+2. **Easy:** Explain why recursive reversal uses O(n) space while the iterative version uses O(1).
+3. **Medium:** Find the middle node of a list in one pass using fast/slow pointers.
+4. **Medium:** Detect whether a list is a palindrome by reversing its second half, then comparing.
+5. **Hard:** Implement `detectCycleStart` and prove the phase-two distance equality on a small example.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the three-pointer reverse, why must you save curr.next before flipping curr.next = prev?',
+      options: [
+        'To make the code shorter',
+        'Otherwise you lose the reference to the rest of the unprocessed list',
+        'Because prev might be null',
+        'To keep the list sorted',
+      ],
+      answer: 1,
+      explain: 'Overwriting curr.next first would orphan every node after curr, so you stash it in next beforehand.',
+    },
+    {
+      q: 'Inside a cycle, why are the fast and slow pointers guaranteed to meet?',
+      options: [
+        'They start at the same node',
+        'Fast gains exactly one node on slow each step, so it must eventually land on slow',
+        'The list is sorted',
+        'Slow eventually stops moving',
+      ],
+      answer: 1,
+      explain: 'With a +1 relative gain per step inside a finite loop, the gap closes to zero, forcing a collision.',
+    },
+    {
+      q: 'What is the space complexity of Floyd\'s cycle detection?',
+      options: ['O(n)', 'O(log n)', 'O(1)', 'O(n^2)'],
+      answer: 2,
+      explain: 'It uses only two pointers regardless of list length, so the extra space is constant.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Reverse a list in place with <strong>three pointers</strong>: save <code>next</code>, flip <code>curr.next = prev</code>, then advance both.',
+    'Iterative reversal is <strong>O(n) time, O(1) space</strong>; the recursive version costs O(n) stack space.',
+    "Floyd's <strong>fast/slow</strong> runners detect a cycle: a meeting means a loop, falling off the end means none.",
+    'Cycle detection needs only <strong>O(1) space</strong>, beating the O(n) hash-set approach at the same time cost.',
+    'To find the loop\'s <strong>entrance</strong>, reset slow to the head after they meet and step both one at a time.',
+  ]}
+/>
+
+Next up: **Doubly Linked Lists** — add a backward pointer to every node and unlock O(1) removal from the
+tail and from any node you already hold.

@@ -1,0 +1,263 @@
+---
+title: Singly Linked Lists
+track: dsa-linked-lists
+summary: "A linked list trades an array's contiguous block for scattered nodes joined by next pointers: O(1) inserts at the front, but no random access."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-strings/pattern-matching-kmp
+leadsTo:
+  - dsa-linked-lists/linked-list-operations
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import LLSinglyList from '../../../components/demos/LLSinglyList.tsx';
+
+## The hook: a treasure hunt, not a bookshelf
+
+An array is a bookshelf — every book sits in a numbered slot, side by side, and you can grab slot 47
+instantly. But shoving a new book into the middle means sliding every later book over by one. A
+**linked list** is a treasure hunt instead: each clue holds a prize *and* tells you where the next clue
+is hidden. The clues can be scattered anywhere in memory. To insert a new clue you just rewrite one
+"go here next" note — no sliding, no shelf-shuffling. The price you pay: there are no slot numbers, so
+to reach the 47th clue you must follow the trail from the very first one.
+
+<Callout type="intuition" title="The one-sentence idea">
+A singly linked list stores each value in a node that also holds a pointer to the next node, so the
+list is reached entirely through a single head reference and walked one hop at a time.
+</Callout>
+
+## Intuition: nodes, the head, and the null at the end
+
+A **node** is a tiny package with two fields: a `value` and a `next` pointer. The list itself is just a
+**head** reference to the first node. Follow `head.next`, then that node's `next`, and so on, until you
+hit `null` — the signal that the trail has ended.
+
+Because nodes are linked by pointers rather than packed into one block, two things flip compared to an
+array. Inserting at the front is now trivially cheap: make your new node point at the old head, then
+move the head — nothing else moves. But indexing is now expensive: there is no arithmetic that jumps to
+"element 47", so reaching it costs a walk of 47 hops. A linked list optimizes for *restructuring* at the
+cost of *random access*. Many implementations also cache a **tail** pointer so that appending to the end
+is O(1) instead of an O(n) walk.
+
+## Play with it
+
+Load your own values, then pick an operation and step through it. Watch the `head` pointer anchor the
+list while a `curr` pointer walks the chain; on Prepend, see the new node's arrow swing to the old head
+before `head` moves.
+
+<LLSinglyList client:visible />
+
+<Callout type="tip">
+Run <strong>Prepend</strong> and count the steps, then run <strong>Append</strong>. Prepend finishes in
+a couple of moves no matter how long the list is; Append has to walk all the way to the last node first.
+That single difference is the whole personality of a singly linked list.
+</Callout>
+
+## How it works
+
+Suppose `head -> 7 -> 3 -> 9 -> 5 -> null` and we prepend `4`:
+
+```
+new = Node(4)
+new.next = head        // 4 -> 7 -> 3 -> 9 -> 5 -> null
+head = new             // head now points at 4
+result: 4 -> 7 -> 3 -> 9 -> 5 -> null
+```
+
+Two pointer writes, done — the rest of the list never moved. Traversal to collect every value is the
+mirror image: start at the head and keep following `next` until you fall off the end into `null`.
+
+<CodeRunner
+  client:visible
+  code={`// Minimal singly linked list (plain JS)
+function node(value) { return { value, next: null }; }
+
+function fromArray(arr) {
+  let head = null, tail = null;
+  for (const v of arr) {
+    const n = node(v);
+    if (!head) { head = n; tail = n; }
+    else { tail.next = n; tail = n; }
+  }
+  return head;
+}
+
+function prepend(head, value) {
+  const n = node(value);
+  n.next = head;          // point at the old front
+  return n;               // the new node is the new head
+}
+
+function toArray(head) {
+  const out = [];
+  for (let cur = head; cur; cur = cur.next) out.push(cur.value);
+  return out;
+}
+
+function get(head, index) {
+  let cur = head, i = 0;
+  while (cur && i < index) { cur = cur.next; i++; }
+  return cur ? cur.value : undefined;   // O(n): no jump to an index
+}`}
+  tests={[
+    { expr: 'toArray(fromArray([7,3,9,5]))', label: 'build then read back' },
+    { expr: 'toArray(prepend(fromArray([7,3,9,5]), 4))', label: 'prepend 4 (O(1))' },
+    { expr: 'get(fromArray([7,3,9,5]), 2)', label: 'get index 2 (walks 2 hops)' },
+    { expr: 'get(fromArray([7,3,9,5]), 9)', label: 'get out-of-range' },
+  ]}
+/>
+
+## The real implementation
+
+The course's `SinglyLinkedList` keeps both a `head` and a `tail` so `append` is O(1), and bumps a
+`length` counter on every change. Here is the faithful core:
+
+```ts
+// /dsa/05-linked-list/singly-linked-list.ts
+interface SinglyListNode<T> {
+    value: T;
+    next: SinglyListNode<T> | null;
+}
+
+class SinglyLinkedList<T> {
+    head: SinglyListNode<T> | null = null;
+    tail: SinglyListNode<T> | null = null;
+    length: number = 0;
+
+    // O(1) thanks to the cached tail
+    append(value: T): this {
+        const newNode = { value, next: null };
+        if (!this.head) { this.head = newNode; this.tail = newNode; }
+        else { this.tail!.next = newNode; this.tail = newNode; }
+        this.length++;
+        return this;
+    }
+
+    // O(1): rewire the front, no shifting
+    prepend(value: T): this {
+        const newNode = { value, next: this.head };
+        if (!this.head) this.tail = newNode;
+        this.head = newNode;
+        this.length++;
+        return this;
+    }
+
+    // O(n): there is no random access — we must walk
+    get(index: number): T | undefined {
+        if (index < 0 || index >= this.length) return undefined;
+        let current = this.head!;
+        for (let i = 0; i < index; i++) current = current.next!;
+        return current.value;
+    }
+}
+```
+
+Run the full file: `npx tsx 05-linked-list/singly-linked-list.ts`.
+
+## Complexity
+
+The defining trade-off, in one table. Inserts and deletes at a known end are constant; anything
+requiring a position is linear because you must walk there:
+
+$$
+T_{\text{prepend}} = O(1), \qquad T_{\text{append}} = O(1)\ \text{with a tail}, \qquad T_{\text{get}} = O(n).
+$$
+
+| Operation | Linked list | Dynamic array |
+|-----------|-------------|---------------|
+| Insert at front | $O(1)$ | $O(n)$ |
+| Insert at back | $O(1)$ (with tail) | $O(1)$ amortized |
+| Access by index | $O(n)$ | $O(1)$ |
+| Search by value | $O(n)$ | $O(n)$ |
+| Memory per element | value + pointer | value only |
+
+Arrays win on indexing and cache locality; linked lists win when you restructure the front a lot and
+never need slot numbers.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Music streaming" icon="🎵">
+A playlist's "next track" is a single forward link. Dropping a song into the queue just rewires one
+pointer — the songs after it never shift, exactly like prepending or inserting into a node chain.
+</ExampleCard>
+
+<ExampleCard domain="Rail freight" icon="🚂">
+A train is a chain of cars, each coupled to the one behind it; the locomotive is the head. To add a
+wagon you re-couple two links — but to reach the caboose you walk the whole train, because there is no
+"car number 12" shortcut.
+</ExampleCard>
+
+<ExampleCard domain="Operating systems" icon="🧠">
+A memory allocator threads its free blocks into a "free list": each free chunk stores a pointer to the
+next free chunk. Freeing memory prepends a block in O(1), with no compaction of the surrounding heap.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Losing the rest of the list.** When inserting, set `new.next = head` *before* you move `head`. Flip
+  the order and the tail of the list is orphaned and garbage-collected.
+- **Forgetting the tail on append.** Without a cached `tail`, every append silently becomes an O(n)
+  walk — fine once, disastrous in a loop that builds a big list (that is an accidental O(n^2)).
+- **Null checks while walking.** The traversal guard is `while (cur)`, not `while (cur.next)`. The
+  latter skips the last node or throws on an empty list.
+- **Interview cue:** if the prompt stresses "frequent insertions/deletions at the front" or "no random
+  access needed," a linked list is the intended structure. Mention the head/tail/length bookkeeping out
+  loud.
+
+## Practice
+
+1. **Easy:** Draw `head -> 1 -> 2 -> 3 -> null`. Prepend `0` and write the two pointer assignments in
+   order.
+2. **Easy:** Write `toArray` from scratch using a `while (cur)` loop.
+3. **Medium:** Implement `get(index)` and explain why it is O(n) while an array's is O(1).
+4. **Medium:** Implement `removeFirst` and return the removed value, fixing `tail` when the list becomes
+   empty.
+5. **Hard:** Implement `insertAt(index, value)` for any valid index, reusing `prepend` and `append` for
+   the two ends and walking to `index - 1` otherwise.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why is prepending to a singly linked list O(1) but inserting into the middle of an array O(n)?',
+      options: [
+        'Linked lists are always faster',
+        'Prepend only rewires two pointers, while the array must shift every later element',
+        'Arrays cannot insert at the front at all',
+        'The list is sorted and the array is not',
+      ],
+      answer: 1,
+      explain: 'A prepend sets new.next = head and moves head — constant work. An array insert slides every following element over by one slot.',
+    },
+    {
+      q: 'Without a cached tail pointer, what is the cost of appending to the end of a singly linked list?',
+      options: ['O(1)', 'O(log n)', 'O(n)', 'O(n^2)'],
+      answer: 2,
+      explain: 'You must walk from the head to the last node before you can attach the new one, which is O(n).',
+    },
+    {
+      q: 'What does the last node\'s next pointer hold?',
+      options: ['The head', 'Itself', 'null', 'The tail pointer'],
+      answer: 2,
+      explain: 'In a singly linked list the final node points to null, which is the signal that traversal has reached the end.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A node bundles a <strong>value</strong> with a <strong>next</strong> pointer; the list is reached through a single <strong>head</strong> reference.',
+    'Insertion and deletion at a known end are <strong>O(1)</strong> — just rewire pointers, nothing shifts.',
+    'There is no random access: reaching index k costs an <strong>O(n)</strong> walk down the chain.',
+    'Cache a <strong>tail</strong> pointer to keep <code>append</code> at O(1); always set <code>new.next</code> before moving <code>head</code>.',
+    'Lists beat arrays for <strong>front-heavy restructuring</strong>; arrays beat lists for <strong>indexing and cache locality</strong>.',
+  ]}
+/>
+
+Next up: **Reversal & Cycle Detection** — flipping every pointer in place, and catching a loop with two
+runners moving at different speeds.

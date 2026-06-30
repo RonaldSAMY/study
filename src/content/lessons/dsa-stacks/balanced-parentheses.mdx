@@ -1,0 +1,246 @@
+---
+title: Balanced Brackets
+track: dsa-stacks
+summary: "Validating nested brackets is the canonical stack problem: push every opener, and make each closer cancel the most recent unmatched open."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-stacks/stack-basics
+leadsTo:
+  - dsa-stacks/stack-applications
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import StkBracketMatcher from '../../../components/demos/StkBracketMatcher.tsx';
+
+## The hook: the editor that catches your typo
+
+You are deep in a function, brackets nested four levels deep, and you fat-finger an extra `)`. Before
+you even hit save, your editor underlines it in red: *unbalanced bracket*. How does it know, instantly,
+across thousands of characters? It is not magic and it is not regular expressions — a plain regex
+**cannot** do this. It is a stack, scanning your code once, matching every close to the most recent
+still-open bracket.
+
+<Callout type="intuition" title="The one-sentence idea">
+Push each opening bracket; when you meet a closing bracket it must match the bracket on **top** of the
+stack — pop it off — and the string is balanced only if the stack ends empty.
+</Callout>
+
+## Intuition
+
+In the last lesson you learned that a stack remembers "the thing I was most recently in the middle of."
+Nested brackets are *exactly* that: the bracket you must close next is always the most recent one you
+opened. `{ [ ( ` means you are now inside a paren, inside a bracket, inside a brace — and the first
+thing you are allowed to close is that innermost paren.
+
+So scan left to right:
+
+- An **opening** bracket `(`, `[`, `{` starts a new "context" → push it.
+- A **closing** bracket `)`, `]`, `}` ends the current context → it must match whatever is on top. If it
+  matches, pop. If it does not match — or the stack is empty — the string is broken.
+
+Two ways to fail: a closer that meets the **wrong** opener (`( ]`), and a closer that meets an **empty**
+stack (`)` with nothing open). And one more subtle failure: reaching the end with the stack **non-empty**
+means you opened brackets you never closed (`( ( )`). All three are caught by the same tiny algorithm.
+
+## Play with it
+
+Feed the scanner a bracket string and step through it. Watch openers stack up and closers cancel them
+from the top down. Then deliberately break it — swap a bracket or delete a close — and find the exact
+character where it turns red.
+
+<StkBracketMatcher client:visible />
+
+<Callout type="tip">
+The stack's height at any moment is your **current nesting depth**. A valid string returns to depth zero
+exactly at the end — and never tries to go below zero. That "never below zero, ends at zero" picture is
+the whole proof of correctness.
+</Callout>
+
+## How it works
+
+Trace `{ [ ( ) ] }`. The stack holds the still-open brackets, top on the right:
+
+```
+{   push {        stack: {
+[   push [        stack: { [
+(   push (        stack: { [ (
+)   matches ( →   pop    stack: { [
+]   matches [ →   pop    stack: {
+}   matches { →   pop    stack: (empty)
+end stack empty → BALANCED ✅
+```
+
+Now trace the broken `( ]`: we push `(`, then `]` arrives, the top is `(`, but `]` needs a `[` — mismatch,
+reject immediately. The map from each closer to its required opener is the heart of the code:
+
+<CodeRunner
+  client:visible
+  code={`function isBalanced(s) {
+  const stack = [];
+  const pairs = { ')': '(', ']': '[', '}': '{' };
+  for (const char of s) {
+    if (char === '(' || char === '[' || char === '{') {
+      stack.push(char);                       // open a context
+    } else if (char in pairs) {
+      if (stack.pop() !== pairs[char]) {      // must match the top
+        return false;                          // wrong match or empty
+      }
+    }
+  }
+  return stack.length === 0;                   // nothing left open
+}`}
+  tests={[
+    { expr: 'isBalanced("()[]{}")', label: '()[]{}' },
+    { expr: 'isBalanced("{[()]}")', label: '{[()]}' },
+    { expr: 'isBalanced("([)]")', label: '([)] (interleaved)' },
+    { expr: 'isBalanced("(((")', label: '((( (never closed)' },
+  ]}
+/>
+
+Note how `([)]` fails even though it has equal numbers of each bracket: order matters, and only a stack
+captures that. `pop()` on an empty array returns `undefined`, which never equals an opener, so the
+empty-stack case is handled for free.
+
+## The real implementation
+
+Straight from the course file — the same validator, plus a neat O(1)-space cousin that counts the
+**minimum insertions** needed to *fix* an unbalanced string instead of just rejecting it:
+
+```ts
+// /dsa/06-stack/stack-applications.ts
+function isBalanced(s: string): boolean {
+    const stack: string[] = [];
+    const pairs: Record<string, string> = { ')': '(', '}': '{', ']': '[' };
+
+    for (const char of s) {
+        if (char === '(' || char === '{' || char === '[') {
+            stack.push(char);                            // opening: push
+        } else if (char === ')' || char === '}' || char === ']') {
+            if (stack.length === 0 || stack.pop() !== pairs[char]) {
+                return false;                            // mismatch or empty
+            }
+        }
+        // ignore any non-bracket character
+    }
+    return stack.length === 0;                           // all matched?
+}
+
+// Minimum '(' or ')' to insert so a paren string becomes balanced.
+function minInsertions(s: string): number {
+    let open = 0;          // unmatched '('
+    let insertions = 0;
+    for (const char of s) {
+        if (char === '(') open++;
+        else if (open > 0) open--;     // match an existing '('
+        else insertions++;             // need to insert a '('
+    }
+    return insertions + open;          // plus closers for leftovers
+}
+```
+
+Run the full file: `npx tsx 06-stack/stack-applications.ts`.
+
+## Complexity
+
+One left-to-right pass, with each character pushed or popped at most once:
+
+$$
+T(n) = O(n), \qquad S(n) = O(n).
+$$
+
+| Approach | Time | Space | Handles nesting? |
+|----------|------|-------|------------------|
+| Regular expression | — | — | **No** — brackets aren't a regular language |
+| Count opens vs closes | $O(n)$ | $O(1)$ | No — misses `([)]` |
+| **Stack** | $O(n)$ | $O(n)$ | **Yes** |
+
+The space is O(n) because a string like `(((((` pushes everything before any pop. Just counting opens
+and closes is O(1) space but silently accepts `([)]` — it cannot see the *interleaving*, which is the
+whole problem. Only a stack remembers the order of what is still open.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Chemistry" icon="🧪">
+Molecular formulas nest brackets too: <code>Ca(OH)2</code> or <code>K4[Fe(CN)6]</code>. A parser pushes
+each opening group and pops on its close to expand the atom counts — malformed brackets mean a malformed
+formula.
+</ExampleCard>
+
+<ExampleCard domain="Web / markup" icon="🌐">
+HTML and XML tags must nest, not cross: <code>&lt;b&gt;&lt;i&gt;…&lt;/i&gt;&lt;/b&gt;</code> is valid,
+but <code>&lt;b&gt;&lt;i&gt;…&lt;/b&gt;&lt;/i&gt;</code> is not. Browsers and linters push open tags and
+pop matching closes — the exact bracket algorithm with longer "brackets".
+</ExampleCard>
+
+<ExampleCard domain="Mathematics" icon="➗">
+A well-formed expression like <code>[3 + (4 − 1)] × 2</code> needs every grouping symbol matched before
+it can be evaluated. Calculators validate the parentheses with a stack before they ever compute.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The empty-stack close.** A `)` arriving when the stack is empty must be rejected. Forgetting this
+  makes `())` wrongly pass. Check `stack.length === 0` *or* rely on `pop()` returning `undefined`.
+- **The leftover-opens ending.** Don't return `true` the moment you finish the loop — you must also check
+  the stack is empty, or `(((` slips through.
+- **Counting is not matching.** Equal counts of `(` and `)` do **not** imply balance (`)(` has equal
+  counts). Interviewers love this trap; the order is what matters.
+- **Multiple bracket types share one stack.** Use a single stack and a closer→opener map; you do *not*
+  need a separate stack per bracket type.
+
+## Practice
+
+1. **Easy:** By hand, is `{[]}()` balanced? What about `{[(])}`? Trace the stack for each.
+2. **Easy:** Modify `isBalanced` to ignore letters and spaces so it validates `a(b[c]d)e`.
+3. **Medium:** Return the **index** of the first offending character instead of just `true`/`false`.
+4. **Medium:** Given a string of only `(` and `)`, compute the minimum insertions to balance it
+   (the `minInsertions` idea above), in O(1) space.
+5. **Hard:** "Longest valid parentheses" — find the length of the longest balanced substring of a
+   `()` string using a stack of indices (LeetCode 32).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which string is NOT balanced?',
+      options: ['{[()]}', '()[]{}', '([)]', '(())'],
+      answer: 2,
+      explain: '([)] interleaves the brackets: the ) tries to close a [, which is a mismatch. Equal counts do not mean balanced.',
+    },
+    {
+      q: 'When a closing bracket arrives and the stack is empty, the string is...',
+      options: ['Balanced', 'Not balanced — reject immediately', 'Balanced only if it ends with an opener', 'Undefined behaviour'],
+      answer: 1,
+      explain: 'A closer with nothing open can never be matched, so the string is invalid right away.',
+    },
+    {
+      q: 'After scanning the whole string with no mismatch, what final check confirms balance?',
+      options: [
+        'The stack is empty',
+        'The stack has exactly one item',
+        'The last character was a closer',
+        'Opens and closes are equal in count',
+      ],
+      answer: 0,
+      explain: 'A non-empty stack means some opening brackets were never closed, so balance requires the stack to end empty.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Push every <strong>opening</strong> bracket; each <strong>closing</strong> bracket must match and pop the top.',
+    'The string is balanced only if <strong>no mismatch occurs AND the stack ends empty</strong>.',
+    'A single stack plus a <strong>closer→opener map</strong> handles all bracket types at once.',
+    'Order matters: <code>([)]</code> has equal counts yet is invalid — only a stack sees the interleaving.',
+    'The stack height is the live <strong>nesting depth</strong>; the algorithm is O(n) time, O(n) space.',
+  ]}
+/>
+
+Next up: **Expression Evaluation** — we keep numbers on the stack instead of brackets, and the same
+push-and-pop rhythm turns `2 3 + 4 *` into an answer.

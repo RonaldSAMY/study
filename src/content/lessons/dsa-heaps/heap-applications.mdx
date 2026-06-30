@@ -1,0 +1,273 @@
+---
+title: Heaps at Work
+track: dsa-heaps
+summary: "The heap is the engine behind the priority queue: top-K selection, k-way merges, and a running median that updates in O(log n) per number using two heaps that straddle the middle."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-heaps/heap-operations
+leadsTo:
+  - dsa-tries/trie-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import HeapRunningMedian from '../../../components/demos/HeapRunningMedian.tsx';
+
+## The hook: the median of a firehose
+
+Sensor readings stream in by the thousand every second, and you need the **median** at every instant — the
+typical value, robust to the wild outliers a simple average would chase. Re-sorting the whole history on
+each new reading is hopeless. But two heaps, balanced against each other, can hand you the median in
+constant time and absorb each new number in O(log n). The same machinery — a heap exposing its extreme
+element on demand — quietly runs priority queues, top-K dashboards, and k-way merges all over computing.
+
+<Callout type="intuition" title="The one-sentence idea">
+A heap *is* a priority queue, and pointing it cleverly solves a family of problems: a size-k heap finds the
+top K, and two opposing heaps split a stream at its median so the middle is always one peek away.
+</Callout>
+
+## Intuition
+
+A **priority queue** is an abstract promise: "give me the most important item next." A heap is its standard
+implementation — `insert` to enqueue, `extract` to dequeue the extreme, both O(log n). From that one tool,
+three patterns cover a huge fraction of interview and production problems:
+
+- **Top-K / Kth largest.** To find the K largest of `n` numbers, keep a **min-heap of size K**. Each new
+  number is pushed; if the heap grows past K, pop the smallest. Whatever survives is the top K, and the root
+  is the Kth largest. Cost: $O(n \log k)$, space $O(k)$ — far cheaper than sorting when `k ≪ n`. (Use a
+  max-heap of size K for the K *smallest*.)
+- **Merge K sorted streams.** Put the head of each of the K lists into a min-heap. Repeatedly extract the
+  smallest and push the next element from the list it came from. Each output costs one O(log k) step.
+- **Running median.** Keep a **max-heap for the lower half** and a **min-heap for the upper half**, balanced
+  so their sizes differ by at most one. The two roots straddle the middle: the median is the larger heap's
+  root (odd count) or the average of both roots (even count).
+
+The median trick is worth dwelling on: the max-heap's root is the *biggest* of the small values, the
+min-heap's root is the *smallest* of the big values — together they fence in the exact center.
+
+## Play with it
+
+Feed your own stream and step through it. The left **max-heap** holds the smaller half, the right
+**min-heap** the larger half; each highlighted root is one side of the median. Watch the two heaps trade a
+value whenever they fall out of balance — that rebalancing is what keeps the median one or two peeks away.
+
+<HeapRunningMedian client:visible />
+
+<Callout type="tip">
+Add the numbers in a different order and the heaps fill differently, but the median at each step is
+identical — the median depends only on the multiset seen so far, not the arrival order. The heaps are just
+a way to keep the middle cheap to read.
+</Callout>
+
+## How it works
+
+Stream `[5, 2, 8, 1, 9]` through the two-heap median finder. `lower` is a max-heap, `upper` a min-heap,
+kept balanced after every insert:
+
+| add | lower (max-heap) | upper (min-heap) | median |
+|-----|------------------|------------------|--------|
+| 5 | `[5]` | `[]` | 5 |
+| 2 | `[2]` | `[5]` | (2 + 5) / 2 = 3.5 |
+| 8 | `[2]` | `[5, 8]` → rebalanced `[5]` ↦ lower | 5 |
+| 1 | `[2, 1]` | `[5, 8]` | (2 + 5) / 2 = 3.5 |
+| 9 | `[5, 2, 1]` | `[8, 9]` | 5 |
+
+At every step the median is just `lower`'s root, or the average of the two roots — never a re-sort.
+
+<CodeRunner
+  client:visible
+  code={`// Min-heap, then "Kth largest" by keeping only the k largest seen.
+class MinHeap {
+  constructor() { this.a = []; }
+  size() { return this.a.length; }
+  peek() { return this.a[0]; }
+  push(v) {
+    this.a.push(v); let i = this.a.length - 1;
+    while (i > 0) { const p = (i - 1) >> 1; if (this.a[p] <= this.a[i]) break;
+      [this.a[i], this.a[p]] = [this.a[p], this.a[i]]; i = p; }
+  }
+  pop() {
+    const top = this.a[0], last = this.a.pop();
+    if (this.a.length) { this.a[0] = last; let i = 0, n = this.a.length;
+      while (true) { const l = 2*i+1, r = 2*i+2; let b = i;
+        if (l < n && this.a[l] < this.a[b]) b = l;
+        if (r < n && this.a[r] < this.a[b]) b = r;
+        if (b === i) break; [this.a[i], this.a[b]] = [this.a[b], this.a[i]]; i = b; } }
+    return top;
+  }
+}
+
+function findKthLargest(nums, k) {
+  const h = new MinHeap();
+  for (const x of nums) { h.push(x); if (h.size() > k) h.pop(); }
+  return h.peek();             // root of the size-k min-heap
+}`}
+  tests={[
+    { expr: 'findKthLargest([3,2,1,5,6,4], 2)', label: '2nd largest' },
+    { expr: 'findKthLargest([3,2,1,5,6,4], 4)', label: '4th largest' },
+    { expr: 'findKthLargest([7,7,7], 1)', label: 'largest of [7,7,7]' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the two-heap `MedianFinder`, and `findKthLargest` keeping a min-heap of size k:
+
+```ts
+// /dsa/10-heap/heap-basics.ts
+class MedianFinder {
+    private lower: MaxHeap<number>;  // max-heap for the smaller half
+    private upper: MinHeap<number>;  // min-heap for the larger half
+
+    constructor() { this.lower = new MaxHeap<number>(); this.upper = new MinHeap<number>(); }
+
+    addNum(num: number): void {
+        this.lower.insert(num);                       // tentatively add to lower
+        this.upper.insert(this.lower.extractMax()!);  // hand its max to upper
+        if (this.upper.size() > this.lower.size())    // rebalance so lower >= upper
+            this.lower.insert(this.upper.extractMin()!);
+    }
+
+    findMedian(): number {
+        if (this.lower.size() > this.lower.size() + this.upper.size() - this.lower.size())
+            return this.lower.peek()!;
+        return this.lower.size() > this.upper.size()
+            ? this.lower.peek()!
+            : (this.lower.peek()! + this.upper.peek()!) / 2;
+    }
+}
+
+function findKthLargest(nums: number[], k: number): number {
+    const minHeap = new MinHeap<number>();
+    for (const num of nums) {
+        minHeap.insert(num);
+        if (minHeap.size() > k) minHeap.extractMin();  // drop the smallest, keep top k
+    }
+    return minHeap.peek()!;
+}
+```
+
+Run the full file: `npx tsx 10-heap/heap-basics.ts`.
+
+## Complexity
+
+Each heap operation is O(log n), and the patterns inherit that cost:
+
+$$
+\text{top-}K:\; O(n \log k), \quad \text{merge } K:\; O(N \log k), \quad \text{median add}:\; O(\log n),\; \text{query}:\; O(1).
+$$
+
+| Task | Time | Space |
+|------|------|-------|
+| `peek` extreme | $O(1)$ | — |
+| Kth largest (size-k heap) | $O(n \log k)$ | $O(k)$ |
+| Merge K sorted lists (N items) | $O(N \log k)$ | $O(k)$ |
+| Running median: add / query | $O(\log n)$ / $O(1)$ | $O(n)$ |
+| Full sort for comparison | $O(n \log n)$ | $O(n)$ |
+
+<Callout type="why">
+Top-K's $O(n \log k)$ beats a full $O(n \log n)$ sort whenever you only need a handful of extremes from a
+huge stream — the everyday case for "trending now", "nearest results", and "top errors" dashboards that
+never need the whole ranking.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Finance" icon="📈">
+A stock exchange's matching engine is two priority queues: a max-heap of buy orders (highest bid on top)
+and a min-heap of sell orders (lowest ask on top). A trade fires the instant the two roots cross — the
+extremes are exactly the prices that matter.
+</ExampleCard>
+
+<ExampleCard domain="Social media" icon="📱">
+"Trending now" is top-K over a firehose of hashtag counts. A size-K min-heap keeps only the K most-used
+tags; each new count pushes in and the least-popular falls out the root, so the board updates without ever
+ranking the millions of tags nobody is using.
+</ExampleCard>
+
+<ExampleCard domain="Environment" icon="🌡️">
+Air-quality and seismic stations report a **running median** to resist sensor spikes. Two balanced heaps
+fold each reading in at O(log n) and surface the current median instantly — a single bad reading shifts the
+median far less than it would shift a mean.
+</ExampleCard>
+
+<ExampleCard domain="E-commerce" icon="🛒">
+"K nearest stores" keeps a max-heap of size K ordered by distance. Each candidate location is pushed; once
+the heap exceeds K, the farthest (the root) is dropped, leaving the K closest in O(n log k) without sorting
+every store in the country.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Top-K uses the *opposite* heap.** K largest needs a min-heap (you discard the smallest); K smallest
+  needs a max-heap. Picking the wrong polarity silently keeps the wrong end.
+- **Keep the median heaps balanced after *every* insert.** If sizes drift apart by more than one, the roots
+  no longer straddle the middle and the median is wrong. Always rebalance before reading.
+- **Even vs. odd count.** With an even total, the median is the average of both roots; with an odd total it
+  is the root of the larger heap. Mixing these up is the classic median bug.
+- **Heaps need a custom comparator for objects.** For `[value, priority]` pairs or points, supply a compare
+  function — a default numeric compare will misorder tuples.
+- **Interview cue:** "stream", "k most/least", "merge sorted", or "median so far" → reach for one or two
+  heaps before you consider sorting.
+
+## Practice
+
+1. **Easy:** Using a size-2 min-heap, find the 2nd largest of `[4, 1, 7, 3, 8]`. Trace the heap contents.
+2. **Easy:** For the running-median heaps `lower = [6, 4]`, `upper = [9, 11]`, what is the current median?
+3. **Medium:** Stream `[1, 2, 3, 4]` through the two-heap median finder and give the median after each add.
+4. **Medium:** You must merge 5 sorted lists totalling N elements. Describe the heap contents at any moment
+   and justify the O(N log 5) cost.
+5. **Hard:** Design a sliding-window median over the last W readings. Which extra operation must your heaps
+   support, and why does a plain binary heap make it awkward?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'To find the K largest elements of a large stream, which heap do you keep?',
+      options: ['A max-heap of size n', 'A min-heap of size k', 'A max-heap of size k', 'A min-heap of size n'],
+      answer: 1,
+      explain: 'A size-k min-heap holds the k largest seen so far; whenever it overflows you pop the smallest, and the root is the kth largest.',
+    },
+    {
+      q: 'In the two-heap running median with an even number of elements, the median is…',
+      options: [
+        'the root of the max-heap',
+        'the root of the min-heap',
+        'the average of the two heap roots',
+        'the larger of the two roots',
+      ],
+      answer: 2,
+      explain: 'Even count means equal halves, so the median sits between the max-heap root (largest small value) and the min-heap root (smallest large value): their average.',
+    },
+    {
+      q: 'Why is top-K with a heap (O(n log k)) preferable to sorting (O(n log n)) for large n and small k?',
+      options: [
+        'Heaps are always faster than sorting',
+        'It avoids ranking the whole input, doing only O(log k) work per element and O(k) space',
+        'Sorting cannot find the kth largest',
+        'Heaps use no memory',
+      ],
+      answer: 1,
+      explain: 'You never order the full input — each element does O(log k) work against a small size-k heap, so when k ≪ n it is a large saving in both time and space.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A heap <strong>is</strong> a priority queue: insert/extract the extreme in O(log n), peek in O(1).',
+    '<strong>Top-K</strong>: a size-K min-heap finds the K largest (max-heap for the K smallest) in O(n log k).',
+    '<strong>Merge K sorted streams</strong> with a heap of the K heads — one O(log k) step per output element.',
+    '<strong>Running median</strong> uses a max-heap (lower half) and min-heap (upper half), kept balanced so the median is one or two peeks.',
+    'Reach for heaps on cues like <strong>stream, k most/least, merge sorted, or median-so-far</strong> — they beat full sorting when you need only extremes.',
+  ]}
+/>
+
+That wraps the heap track: a complete tree in an array, two sifting movements, and a priority queue that
+powers top-K and streaming medians. Next, **The Prefix Tree** — a different shape entirely, where one node
+per character turns text into lightning-fast prefix search.

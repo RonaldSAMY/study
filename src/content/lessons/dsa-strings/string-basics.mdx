@@ -1,0 +1,232 @@
+---
+title: String Fundamentals
+track: dsa-strings
+summary: "Strings are immutable indexed sequences of code units: knowing that explains their costs and unlocks the one-pass frequency trick."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-arrays/kadane
+leadsTo:
+  - dsa-strings/string-reversal
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import StrCharAnatomy from '../../../components/demos/StrCharAnatomy.tsx';
+
+## The hook: a wall you can read but never edit
+
+A string is like a row of carved stone tiles. You can stand in front of any tile and read it instantly,
+but you can't re-carve one in place — to "change" the wall you must build a brand-new wall. That single
+fact, **immutability**, quietly decides why some string code is fast and some is accidentally quadratic.
+Master the tile-wall mental model and most string algorithms become obvious.
+
+<Callout type="intuition" title="The one-sentence idea">
+A string is an immutable, zero-indexed sequence of character code units — random-access to read, but every
+"edit" actually allocates a fresh string.
+</Callout>
+
+## Intuition: indexing, code units, and the cost of "+="
+
+You already met arrays in the previous track: contiguous slots you can index in $O(1)$. A string is the
+same shape — `s[i]` reads the character at position `i` in constant time — with one twist: you cannot
+assign `s[i] = 'x'`. The characters are frozen.
+
+Three consequences follow, and they explain almost every string pitfall:
+
+1. **Reading is cheap, rewriting is not.** `s[i]` is $O(1)$, but producing a modified copy is $O(n)$.
+2. **Building with `+=` in a loop is a trap.** Each `result += char` copies everything built so far, so a
+   loop of length $n$ silently costs $O(n^2)$. Push into an array and `join('')` once instead.
+3. **A "character" is a UTF-16 code unit.** For plain English that equals one letter, but emoji and many
+   scripts span two code units (a *surrogate pair*), so `[...str]` is the Unicode-safe way to split.
+
+The workhorse pattern for this lesson is the **frequency tally**: sweep the string once, counting how
+often each character appears in a hash map. That single pass powers "first unique character", anagram
+checks, and more — all in $O(n)$ time.
+
+## Play with it
+
+Type a word and step through it. Each box is a character locked to a fixed index; as the pointer visits
+each one, watch its **code unit** appear and the **running frequency map** grow. At the end, the first
+character whose count is exactly 1 lights up — that's the *first non-repeating character*.
+
+<StrCharAnatomy client:visible />
+
+<Callout type="tip">
+Try a word with a repeat near the front, like <code>letter</code>. Notice that the answer ('r') is only
+knowable after the whole string is tallied — you need the *final* counts, so a single full pass, not an
+early exit, is what solves "first unique character".
+</Callout>
+
+## How it works
+
+Take `"letter"` and build the frequency map in one sweep, then scan once more for the first count of 1:
+
+```
+index:  0   1   2   3   4   5
+char:   l   e   t   t   e   r
+tally after the pass:  l:1  e:2  t:2  r:1
+first char whose count is 1  →  'l' at index 0
+```
+
+Two linear passes, no nested loop. Here is that logic you can run:
+
+<CodeRunner
+  client:visible
+  code={`// First non-repeating character (LeetCode 387)
+function firstNonRepeating(str) {
+  const count = new Map();
+  for (const ch of str) count.set(ch, (count.get(ch) || 0) + 1);
+  for (let i = 0; i < str.length; i++) {
+    if (count.get(str[i]) === 1) return i;   // index of first unique
+  }
+  return -1;
+}
+
+// The += trap vs. the array-join fix produce the SAME string...
+function buildSlow(n) { let s = ''; for (let i = 0; i < n; i++) s += 'x'; return s.length; }
+function buildFast(n) { const a = []; for (let i = 0; i < n; i++) a.push('x'); return a.join('').length; }`}
+  tests={[
+    { expr: 'firstNonRepeating("leetcode")', label: 'first unique in "leetcode"' },
+    { expr: 'firstNonRepeating("aabb")', label: 'first unique in "aabb" (none)' },
+    { expr: 'buildSlow(1000)', label: 'buildSlow length' },
+    { expr: 'buildFast(1000)', label: 'buildFast length' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — the frequency map and the first-unique scan, fully typed:
+
+```ts
+// /dsa/02-strings/string-basics.ts
+function getCharFrequency(str: string): Map<string, number> {
+    const freq = new Map<string, number>();
+    for (const char of str) {
+        freq.set(char, (freq.get(char) || 0) + 1);
+    }
+    return freq;
+}
+
+function firstNonRepeating(str: string): string | null {
+    const count = new Map<string, number>();
+    for (const char of str) {
+        count.set(char, (count.get(char) || 0) + 1);   // pass 1: tally
+    }
+    for (const char of str) {
+        if (count.get(char) === 1) return char;        // pass 2: first count of 1
+    }
+    return null;
+}
+
+// Unicode-safe split: spread handles surrogate pairs that str[i] would cut in half
+function toCharArray(str: string): string[] {
+    return [...str];
+}
+```
+
+Run the full file: `npx tsx 02-strings/string-basics.ts`.
+
+## Complexity
+
+A frequency tally is one pass plus a hash map keyed by the alphabet:
+
+$$
+T(n) = O(n), \qquad S(n) = O(k),
+$$
+
+where $k$ is the number of *distinct* characters (at most the alphabet size, so $O(1)$ for ASCII).
+
+| Operation | Time | Space | Note |
+|-----------|------|-------|------|
+| Index read `s[i]` | $O(1)$ | $O(1)$ | random access, like an array |
+| Frequency map (one pass) | $O(n)$ | $O(k)$ | the core string trick |
+| Build with `+=` in a loop | $O(n^2)$ | $O(n)$ | copies on every step — avoid |
+| Build with array + `join` | $O(n)$ | $O(n)$ | the fix |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Genomics" icon="🧬">
+A DNA strand is a string over just four code units, `A C G T`. A single frequency pass gives the GC-content
+(the share of G and C), a number biologists use to estimate how tightly a genome's double helix binds.
+</ExampleCard>
+
+<ExampleCard domain="Linguistics & typing" icon="⌨️">
+Keyboard layouts like Dvorak are designed from letter-frequency tables of a language — exactly the map this
+lesson builds, but tallied over millions of words so the commonest letters land under the strongest fingers.
+</ExampleCard>
+
+<ExampleCard domain="Data compression" icon="🗜️">
+Huffman coding first does one frequency pass over the bytes of a file, then gives the most frequent symbols
+the shortest bit-codes. The whole compression scheme starts from the same character tally.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The `+=`-in-a-loop quadratic.** Because strings are immutable, each concatenation copies the prefix.
+  For anything bigger than a few characters, collect parts in an array and `join('')` once.
+- **`str.length` counts code units, not glyphs.** `"😀".length` is `2`. Use `[...str]` when you need true
+  characters, and never split a string at an arbitrary `i` if emoji might be present.
+- **`charCodeAt` vs `codePointAt`.** `charCodeAt` returns one UTF-16 unit; `codePointAt` returns the full
+  Unicode code point. Reach for the latter when working beyond the Basic Multilingual Plane.
+- **Interview cue:** the moment a question says "first unique", "all unique", or "counts of characters",
+  say *"one frequency-map pass, O(n)"* — it's almost always the intended answer.
+
+## Practice
+
+1. **Easy:** By hand, build the frequency map of `"banana"`. Which character is the first non-repeating one?
+2. **Easy:** Explain in one sentence why `let s=''; for (…) s += c;` over $n$ characters is $O(n^2)$.
+3. **Medium:** Write `areAllUnique(str)` that returns `true` iff no character repeats, in one pass.
+4. **Medium:** Given a string, return the character with the **highest** frequency (ties → the earliest).
+5. **Hard:** Stream characters one at a time (you can't re-read the past) and after each one report the
+   current first-unique character. Which data structures keep this $O(1)$ amortized per character?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why can you read s[i] in O(1) but not change a character in place?',
+      options: [
+        'Reading uses a cache and writing does not',
+        'Strings are immutable, so any edit must allocate a new string',
+        'Indexing is only defined for arrays',
+        'Writing is O(log n) because of the index tree',
+      ],
+      answer: 1,
+      explain: 'Characters are stored contiguously (so reads are O(1)), but the sequence is frozen — modifying it produces a brand-new string of length n.',
+    },
+    {
+      q: 'Building a string with result += char inside a loop over n characters costs:',
+      options: ['O(n)', 'O(log n)', 'O(n^2)', 'O(1)'],
+      answer: 2,
+      explain: 'Each += copies everything accumulated so far. Summing 1 + 2 + … + n copies gives O(n^2). Push to an array and join once for O(n).',
+    },
+    {
+      q: 'What does "😀".length evaluate to in JavaScript, and why?',
+      options: [
+        '1, because it is one character',
+        '2, because the emoji is a surrogate pair of two UTF-16 code units',
+        '4, one per byte',
+        '0, because emoji are not letters',
+      ],
+      answer: 1,
+      explain: 'length counts UTF-16 code units. Many emoji sit outside the Basic Multilingual Plane and take two units, so length is 2. Use [...str] for true characters.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A string is an <strong>immutable, zero-indexed sequence of code units</strong>: O(1) to read, O(n) to copy-with-changes.',
+    'The <strong>frequency-map pass</strong> is the foundational string trick — one sweep, O(n) time, O(k) space.',
+    'Never build strings with <strong>+= in a loop</strong> (O(n²)); collect parts in an array and <code>join</code> once.',
+    '<strong>length counts UTF-16 units</strong>, not glyphs — use <code>[...str]</code> to stay Unicode-safe.',
+    'Questions about <strong>unique or counted characters</strong> almost always reduce to a single frequency pass.',
+  ]}
+/>
+
+Next up: **Reversing & Rotating** — your first two-pointer algorithm, swapping characters inward to flip a
+string in place.

@@ -1,0 +1,247 @@
+---
+title: Array Fundamentals
+track: dsa-arrays
+summary: An array is one contiguous block of memory, which buys O(1) access by index but charges O(n) whenever you insert or delete near the front.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-bit-manipulation/bitmask-dp
+leadsTo:
+  - dsa-arrays/two-pointers
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import ArrArrayBasics from '../../../components/demos/ArrArrayBasics.tsx';
+
+## The hook: why is seat 14F instant but boarding so slow?
+
+You walk into a stadium and find seat 14F without scanning a single other seat — the seat number *is* the
+address. Yet if one more guest squeezes into the front of your row, everyone already seated has to shuffle
+down one place. An array behaves exactly like that row of seats: it is a single, unbroken strip of memory.
+That one design choice explains both its superpower (instant lookup) and its weakness (shifting on insert
+and delete).
+
+<Callout type="intuition" title="The one-sentence idea">
+Because an array stores elements back-to-back in memory, the position of element `i` is pure arithmetic —
+so reading it is O(1) — but making room at the front means physically sliding every other element, which is
+O(n).
+</Callout>
+
+## Intuition: an address, not a search
+
+An array reserves a contiguous block of memory and lays the elements out in order. If the block starts at
+address `start` and each element takes `elementSize` bytes, then element `i` lives at
+
+$$
+\text{address}(i) = \text{start} + i \times \text{elementSize}.
+$$
+
+No scanning, no comparisons — one multiply and one add. That is why `arr[i]` is O(1) no matter how big the
+array is. The flip side: there are no gaps. To insert at the front you must first move every existing
+element one slot to the right to free up index 0, and to delete the front you slide everyone left to close
+the hole. Appending or removing at the *end* touches nothing else, so it stays O(1). Keep that asymmetry in
+mind — it drives almost every array technique that follows.
+
+## Play with it
+
+Load an array, pick an operation, and step through it. Watch how **access** and **push** light up a single
+cell, while **insert at front** and **delete front** ripple across every cell — and count the moves.
+
+<ArrArrayBasics client:visible />
+
+<Callout type="tip">
+Run "Insert 9 @ front" and "Push 9 @ end" back to back on the same array. Same result length, wildly
+different work: one shifts every element, the other shifts none. When you control where data goes, prefer
+the end.
+</Callout>
+
+## How it works
+
+Insert `9` at the front of `[3, 1, 4, 1, 5]`. We work from the right so we never overwrite a value we still
+need:
+
+```
+[3, 1, 4, 1, 5, _]      start: one free slot at the end
+[3, 1, 4, 1, _, 5]      move index 4 → 5
+[3, 1, 4, _, 1, 5]      move index 3 → 4
+[3, 1, _, 4, 1, 5]      move index 2 → 3
+[3, _, 1, 4, 1, 5]      move index 1 → 2
+[_, 3, 1, 4, 1, 5]      move index 0 → 1
+[9, 3, 1, 4, 1, 5]      write 9 into slot 0   → 5 shifts for ONE insert
+```
+
+Five elements, five shifts — for an array of length $n$ that is $n$ moves, i.e. O(n). Now compare a few of
+the cheap, end-or-index operations that cost only O(1) or a single O(n) scan:
+
+<CodeRunner
+  client:visible
+  code={`// Sum every element — one linear scan, O(n)
+function sumArray(arr) {
+  return arr.reduce((sum, num) => sum + num, 0);
+}
+
+// Rotate right by k (LeetCode 189) — O(n) using slicing
+function rotateArray(arr, k) {
+  if (arr.length === 0) return [];
+  k = ((k % arr.length) + arr.length) % arr.length;
+  return [...arr.slice(-k), ...arr.slice(0, -k)];
+}
+
+// Direct index access — O(1), no scanning
+function get(arr, i) {
+  return arr[i];
+}`}
+  tests={[
+    { expr: 'sumArray([3,1,4,1,5])', label: 'sum of [3,1,4,1,5]' },
+    { expr: 'rotateArray([1,2,3,4,5], 2)', label: 'rotate [1..5] right by 2' },
+    { expr: 'get([10,20,30,40], 2)', label: 'arr[2] of [10,20,30,40]' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — the linear-scan and constant-time helpers, including the two-pointer
+`reverseInPlace` you will lean on in the next lesson:
+
+```ts
+// /dsa/01-arrays/array-basics.ts
+function sumArray(arr: number[]): number {
+    return arr.reduce((sum, num) => sum + num, 0);     // O(n) scan
+}
+
+function rotateArray<T>(arr: T[], k: number): T[] {    // O(n)
+    if (arr.length === 0) return [];
+    k = k % arr.length;
+    if (k < 0) k += arr.length;
+    return [...arr.slice(-k), ...arr.slice(0, -k)];
+}
+
+function swap<T>(arr: T[], i: number, j: number): void {   // O(1)
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+}
+
+function reverseInPlace<T>(arr: T[]): T[] {             // O(n) time, O(1) space
+    let left = 0, right = arr.length - 1;
+    while (left < right) {
+        swap(arr, left, right);
+        left++;
+        right--;
+    }
+    return arr;
+}
+```
+
+Run the full file: `npx tsx 01-arrays/array-basics.ts`.
+
+## Complexity
+
+The whole story is in *where* you touch the array:
+
+$$
+\text{access} = O(1), \qquad \text{insert/delete at front} = O(n), \qquad \text{append at end} = O(1)\ \text{(amortized)}.
+$$
+
+| Operation | Best | Average | Worst |
+|-----------|------|---------|-------|
+| Access by index | $O(1)$ | $O(1)$ | $O(1)$ |
+| Search (unsorted) | $O(1)$ | $O(n)$ | $O(n)$ |
+| Insert / delete at end | $O(1)$ | $O(1)$ | $O(n)$ (resize) |
+| Insert / delete at front | $O(n)$ | $O(n)$ | $O(n)$ |
+
+The "worst" for an end-append is the rare moment the underlying buffer is full and must be copied to a
+bigger one — averaged over many appends, that cost vanishes, which is what *amortized O(1)* means.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Live events" icon="🎟️">
+Stadium seats are numbered so an usher computes <code>row × seatsPerRow + seat</code> and walks you straight
+there — O(1) addressing. But sell a standing-room spot at the front of a packed row and everyone slides down
+one: an O(n) shuffle.
+</ExampleCard>
+
+<ExampleCard domain="Libraries" icon="📚">
+A shelf keeps books in call-number order. Finding the third book is instant, but slotting a brand-new title
+into the middle forces the librarian to nudge every later book one space along the shelf — the array's
+front-insert cost made physical.
+</ExampleCard>
+
+<ExampleCard domain="Restaurant kitchens" icon="🍳">
+A ticket rail clips new orders at the end (cheap, O(1)) and the line cook pulls the oldest ticket from the
+front. Pulling the front means every remaining ticket shifts down one clip — which is exactly why busy
+kitchens use a queue, not a front-loaded array.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **`splice`/`unshift`/`shift` hide an O(n) loop.** `arr.unshift(x)` looks like one call but shifts every
+  element. In a loop that quietly becomes O(n²).
+- **Length is not capacity.** Dynamic arrays over-allocate; an append is usually O(1) but occasionally
+  triggers a full O(n) copy to a larger buffer. Amortized, appends are O(1).
+- **Prefer the end.** If you are building a result, `push` to the end and reverse once at the end rather
+  than `unshift`-ing repeatedly.
+- **Interview cue:** if a problem says "in place" and "O(1) extra space", it is hinting you should move data
+  with index arithmetic or two pointers — not allocate a second array.
+
+## Practice
+
+1. **Easy (Two Sum, LeetCode 1):** return the indices of the two numbers that add to a target. Brute force
+   is O(n²); a hash map gets you to O(n).
+2. **Easy (Contains Duplicate, LeetCode 217):** return `true` if any value appears at least twice. A `Set`
+   solves it in O(n).
+3. **Medium (Rotate Array, LeetCode 189):** rotate right by `k`. Can you do it in O(1) extra space with the
+   reverse-three-times trick?
+4. **Medium (Product of Array Except Self, LeetCode 238):** build the prefix-and-suffix product array with
+   no division and O(1) extra space (output aside).
+5. **Hard (Trapping Rain Water, LeetCode 42):** compute trapped water; the O(1)-space answer uses two
+   pointers walking inward — a perfect bridge to the next lesson.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why is reading arr[5000] just as fast as reading arr[2]?',
+      options: [
+        'The array caches recent reads',
+        'The position is computed as start + index × elementSize — pure arithmetic',
+        'Modern CPUs scan arrays in parallel',
+        'Because the array is sorted',
+      ],
+      answer: 1,
+      explain: 'Contiguous layout means any index maps to an address with one multiply-add, independent of how large the index is.',
+    },
+    {
+      q: 'You insert a value at the front of an array of length n. How many existing elements must move?',
+      options: ['0', '1', 'about n/2', 'n'],
+      answer: 3,
+      explain: 'Every existing element shifts one slot right to free index 0, so all n of them move — O(n).',
+    },
+    {
+      q: 'An end-append is described as "amortized O(1)". What does that mean?',
+      options: [
+        'It is always exactly one step',
+        'Most appends are O(1); the rare buffer resize is O(n), but averaged over many appends the cost is O(1)',
+        'It is O(1) only for small arrays',
+        'It is really O(log n)',
+      ],
+      answer: 1,
+      explain: 'Dynamic arrays occasionally copy to a larger buffer (O(n)), but that cost spread across all the cheap appends averages to O(1).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An array is one <strong>contiguous block</strong>; element i sits at <strong>start + i × elementSize</strong>.',
+    'That layout makes <strong>access by index O(1)</strong> — no scanning, any index, same cost.',
+    '<strong>Insert/delete at the front is O(n)</strong> because every element must shift to close or open a gap.',
+    '<strong>Append at the end is amortized O(1)</strong> — favour the end when you control placement.',
+    'Watch for <code>unshift</code>/<code>splice</code> in loops — they hide O(n) shifts and can make code O(n²).',
+  ]}
+/>
+
+Next up: **The Two-Pointer Technique** — once the data is in a sorted array, two indices walking toward each
+other solve pair-sum and partition problems in a single O(n) pass.

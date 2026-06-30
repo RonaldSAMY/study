@@ -1,0 +1,251 @@
+---
+title: Collision Handling
+track: dsa-hash-tables
+summary: "Two keys, one bucket: resolve the clash by chaining a list in the bucket or by probing the array for the next free slot."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-hash-tables/hash-table-basics
+leadsTo:
+  - dsa-hash-tables/hashmap-patterns
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import HashCollisionResolver from '../../../components/demos/HashCollisionResolver.tsx';
+
+## The hook: two coats, one hook
+
+The cloakroom ticket for "Dolores" and the one for "Bernard" happen to compute to the *same* hook. Now
+what? You cannot refuse the coat. You have exactly two sane options: hang both on that hook (one behind
+the other) and check each when someone returns, or walk down the rack to the next empty hook and use
+that instead. Those two instincts are the only two collision strategies that matter:
+**separate chaining** and **open addressing**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A collision is two keys hashing to the same index; you either store a list of entries inside that bucket
+(chaining) or probe forward to the next empty slot in the array (open addressing).
+</Callout>
+
+## Intuition: collisions are guaranteed, so plan for them
+
+Collisions are not a bug — they are arithmetic. By the **pigeonhole principle**, once you have more keys
+than buckets, two must share. And it happens far sooner than you would guess: by the **birthday paradox**,
+just 23 keys give a coin-flip chance of a clash among 365 buckets. The collision probability is roughly
+$n^2 / 2m$. So the question is never *if* but *how you cope*.
+
+**Separate chaining.** Each bucket holds a linked list. On a collision you append to the list; on lookup
+you scan the (short) list. Simple, tolerates load factors above 1, and deletion is trivial — but it
+costs pointer memory and scatters data across the heap.
+
+**Open addressing.** Every entry lives in the array itself. On a collision you **probe** for another
+slot. With *linear probing* you try $h, h+1, h+2, \dots$ (wrapping around) until you find an empty one:
+
+$$
+\text{slot}_i = (h(k) + i) \bmod m, \qquad i = 0, 1, 2, \dots
+$$
+
+Cache-friendly and pointer-free, but it suffers **clustering** (filled runs that grow and merge) and
+deletion needs a *tombstone* marker so probe chains do not break.
+
+## Play with it
+
+Same keys, two strategies. In **chaining**, watch colliding keys stack into a linked list inside one
+bucket. Switch to **linear probing** and watch a collision trigger a scan — amber slots — until the key
+finds the next open slot.
+
+<HashCollisionResolver client:visible />
+
+<Callout type="tip">
+Find a key that collides, then flip between strategies. Chaining grows a chain in place; probing walks the
+key to a different slot entirely. Same hash, two completely different resolutions.
+</Callout>
+
+## How it works
+
+Insert keys that collide at bucket 3, into a table of size 7.
+
+```
+Chaining (bucket 3 holds a list):
+  bucket 3:  dog → cat → owl        (each new collision appended)
+  get("cat"): hash→3, scan the list, found.
+
+Linear probing (scan forward):
+  hash("dog")=3 → slot 3 free      → place at 3
+  hash("cat")=3 → slot 3 taken     → probe 4 (free) → place at 4
+  hash("owl")=3 → slot 3,4 taken   → probe 5 (free) → place at 5
+  get("owl"): hash→3, probe 3,4,5 until match.
+```
+
+Both find every key; they differ in *where* the extra entries live — inside the bucket, or spilled into
+neighbouring slots.
+
+<CodeRunner
+  client:visible
+  code={`// Linear probing: place keys, resolving collisions by scanning forward
+function makeProbeTable(capacity = 7) {
+  const slots = new Array(capacity).fill(null);
+  const hash = (key) => {
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % capacity;
+    return h;
+  };
+  const probes = {};
+  function set(key) {
+    let i = hash(key), steps = 0;
+    while (slots[i] !== null && steps < capacity) { i = (i + 1) % capacity; steps++; }
+    slots[i] = key; probes[key] = steps;  // steps = how far we probed
+  }
+  return { set, slots, probes, hash };
+}
+
+const t = makeProbeTable(7);
+['dog', 'cat', 'owl'].forEach(t.set);`}
+  tests={[
+    { expr: 't.hash("dog")', label: 'home bucket of dog' },
+    { expr: 't.hash("cat")', label: 'home bucket of cat' },
+    { expr: 'JSON.stringify(t.slots)', label: 'final slot array' },
+    { expr: 'JSON.stringify(t.probes)', label: 'probe distance per key' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — chaining inserts at the head of a linked list; linear probing scans forward and
+deletes with a tombstone so it never severs a probe chain:
+
+```ts
+// /dsa/08-hash-table/collision-handling.ts
+
+// Separate chaining: prepend to the bucket's linked list
+set(key: K, value: V): void {
+    const index = this.getIndex(key);
+    let current = this.buckets[index];
+    while (current) {                       // update if key already present
+        if (current.key === key) { current.value = value; return; }
+        current = current.next;
+    }
+    this.buckets[index] = { key, value, next: this.buckets[index] }; // new head
+    this._size++;
+}
+
+// Linear probing: scan h, h+1, h+2 … and tombstone on delete
+delete(key: string): boolean {
+    let index = this.hash(key);
+    while (this.keys[index] !== null) {
+        if (this.keys[index] === key) {
+            this.keys[index] = this.DELETED;  // tombstone, not null
+            this.values[index] = undefined;
+            this._size--;
+            return true;
+        }
+        index = (index + 1) % this.capacity;
+    }
+    return false;
+}
+```
+
+Run the full file: `npx tsx 08-hash-table/collision-handling.ts`.
+
+## Complexity
+
+With load factor $\lambda$ and a good hash, the expected probe/scan length stays small:
+
+$$
+\text{chaining: } O(1 + \lambda), \qquad \text{linear probing: } O\!\left(\frac{1}{1 - \lambda}\right) \text{ (expected)}.
+$$
+
+Chaining degrades gently as $\lambda$ grows; open addressing degrades sharply as $\lambda \to 1$ — which is
+why probing tables resize at a *lower* threshold (often 0.5–0.7).
+
+| Strategy | Avg lookup | Worst | Memory | Deletion |
+|----------|-----------|-------|--------|----------|
+| Separate chaining | $O(1 + \lambda)$ | $O(n)$ | extra pointers | easy |
+| Linear probing | $O\!\left(\tfrac{1}{1-\lambda}\right)$ | $O(n)$ | cache-friendly | tombstones |
+| Quadratic / double hashing | better spread | $O(n)$ | cache-friendly | tombstones |
+
+Both share the same $O(n)$ worst case: an adversary (or an awful hash) that forces every key into one
+chain or one cluster.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Air travel" icon="✈️">
+You are bumped from a full flight to the next available seat — linear probing in the sky. The airline
+scans forward through departures until it finds an open slot, exactly like a probe sequence.
+</ExampleCard>
+
+<ExampleCard domain="Parking" icon="🅿️">
+Your numbered spot is taken, so you drive to the next free space and the app records where you actually
+parked. Finding your car later means checking from your assigned spot onward — open addressing on asphalt.
+</ExampleCard>
+
+<ExampleCard domain="Libraries" icon="📚">
+Two books map to the same shelf label, so the librarian stacks both there and you flip through the small
+pile to find yours. That little pile is a chain hanging off one bucket.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Deleting by setting a slot to null breaks open addressing.** A `null` in the middle of a probe chain
+  makes later keys unreachable. Use a `DELETED` tombstone and skip it while probing.
+- **Primary clustering bites linear probing.** Long filled runs merge and slow everything; quadratic probing
+  or double hashing spreads keys out to fix it.
+- **Open addressing needs headroom.** Performance falls off a cliff near $\lambda = 1$, so keep these tables
+  under ~0.7 full and resize early.
+- **Chaining can degrade too.** A bad hash funnels everything into one bucket, turning the table into a single
+  linked list — $O(n)$ again. Good hash + resize still matter.
+- **Interview cue:** "chaining vs open addressing?" → chaining for high/variable load and easy deletes; open
+  addressing for cache performance and tight memory. Mention tombstones to score points.
+
+## Practice
+
+1. **Easy:** Keys hash to `[3, 3, 3]` in a size-7 table. List the slots used by linear probing.
+2. **Easy:** Why is deleting a key in a chained bucket simpler than in an open-addressed table?
+3. **Medium:** Implement `get` for the linear-probing table that stops at the first empty (non-tombstone) slot.
+4. **Medium:** Add quadratic probing (`h + i*i`) to the demo's strategy and compare clustering against linear.
+5. **Hard:** Implement double hashing with a second hash for the step size and explain why the step must be coprime to the capacity.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In linear probing, a key whose home bucket is 5 (capacity 8) and is full at 5 and 6 lands at:',
+      options: ['4', '7', '0', '5'],
+      answer: 1,
+      explain: 'Probe sequence is (5+i) mod 8: slot 5 (full), slot 6 (full), slot 7 (free) → placed at 7.',
+    },
+    {
+      q: 'Why does open addressing use a tombstone marker on deletion instead of setting the slot to null?',
+      options: [
+        'To save memory',
+        'A null would cut off probe chains, hiding keys placed after the deleted one',
+        'Tombstones sort the table',
+        'Null is not allowed in arrays',
+      ],
+      answer: 1,
+      explain: 'Lookups stop at the first null. A null left by a deletion would make any key that probed past that slot unreachable.',
+    },
+    {
+      q: 'As the load factor approaches 1, which strategy degrades more sharply?',
+      options: ['Separate chaining', 'Linear probing', 'Both identically', 'Neither degrades'],
+      answer: 1,
+      explain: 'Linear probing cost is about 1/(1-λ), which explodes near λ=1, whereas chaining grows only linearly as 1+λ.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Collisions are <strong>guaranteed</strong> (pigeonhole + birthday paradox) — design for them.',
+    '<strong>Separate chaining</strong> stores a linked list per bucket: simple, high-λ tolerant, easy deletes.',
+    '<strong>Open addressing</strong> probes for the next free slot: cache-friendly and pointer-free, but clusters.',
+    'Open addressing needs <strong>tombstones</strong> on delete so probe chains stay intact.',
+    'Average cost is <strong>O(1 + λ)</strong> for chaining and <strong>O(1/(1-λ))</strong> for probing; both are O(n) worst case.',
+  ]}
+/>
+
+Next up: **Hash-Map Problem Patterns** — turning these tables into the handful of tricks (frequency
+counts, seen-sets, the two-sum scan) that crack a huge share of coding interviews.

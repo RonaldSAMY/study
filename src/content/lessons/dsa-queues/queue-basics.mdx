@@ -1,0 +1,280 @@
+---
+title: The Queue (FIFO)
+track: dsa-queues
+summary: "A queue serves in arrival order: the first element in is the first one out, with enqueue at the rear and dequeue at the front."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-stacks/stack-applications
+leadsTo:
+  - dsa-queues/circular-queue
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import QueFifoVisualizer from '../../../components/demos/QueFifoVisualizer.tsx';
+
+## The hook: the line at the coffee shop
+
+You walk into a busy café and join the back of the line. The barista serves whoever has waited
+longest — the person at the **front** — and everyone else shuffles forward. Nobody who arrived after
+you gets served before you (or there would be a riot). That fairness rule, *first come, first served*,
+is exactly a **queue**: you add at the rear, you remove from the front, and order is preserved.
+
+You just left the **stack**, where the *last* thing in came *first* out (LIFO). A queue is its mirror
+image: **first in, first out (FIFO)**. Same two operations — add and remove — but they happen at
+opposite ends.
+
+<Callout type="intuition" title="The one-sentence idea">
+A queue adds new items at the **rear** and removes the oldest item from the **front**, so elements
+leave in exactly the order they arrived.
+</Callout>
+
+## Intuition
+
+A stack has one open end: you push and pop from the top. A queue has **two** ends with fixed jobs:
+
+- **enqueue(x)** — append `x` at the rear (the back of the line).
+- **dequeue()** — remove and return the element at the front (the one that has waited longest).
+- **peek()** / **front()** — look at the front without removing it.
+
+Because additions and removals happen at opposite ends, the *relative* order never changes. The third
+person to arrive is always the third to be served. That single guarantee is why queues sit underneath
+fair scheduling, buffering, and **breadth-first search** — anywhere "handle things in the order they
+showed up" matters.
+
+The catch is *how* you store the line. If you keep it in a plain array and remove the front with
+`shift()`, every remaining element slides down one slot — that is $O(n)$ work per dequeue. The fix is
+to stop shifting and instead track two indices, a **head** and a **tail**, that only ever move forward.
+That makes both operations $O(1)$.
+
+## Play with it
+
+Write your own script of operations below. Use `+x` to enqueue the value `x` at the rear and `-` to
+dequeue from the front, then step through it. Watch the **front** (blue, next to leave) and the
+**rear** (green, just arrived) markers.
+
+<QueFifoVisualizer client:visible />
+
+<Callout type="tip">
+Try enqueuing three values and then dequeuing twice. The values come out `5, 3, 8…` in the same order
+you put them in — never reversed. If you wanted them reversed, you would want a stack, not a queue.
+</Callout>
+
+## How it works
+
+Let's trace the efficient two-pointer queue on the script `+1, +2, +3, -, +4, -`. `head` marks the
+front, `tail` marks the next free slot at the rear:
+
+```
+enqueue(1)   [1]            head=0 tail=1
+enqueue(2)   [1,2]          head=0 tail=2
+enqueue(3)   [1,2,3]        head=0 tail=3
+dequeue() →1 [_,2,3]        head=1 tail=3   (front leaves, head moves up)
+enqueue(4)   [_,2,3,4]      head=1 tail=4
+dequeue() →2 [_,_,3,4]      head=2 tail=4
+```
+
+Nothing ever shifts. Dequeue just reads `items[head]` and advances `head`; enqueue writes `items[tail]`
+and advances `tail`. The queue is everything between them, and `size = tail - head`.
+
+<CodeRunner
+  client:visible
+  code={`// Two-pointer queue: every operation is O(1)
+function makeQueue() {
+  const items = {};
+  let head = 0, tail = 0;
+  return {
+    enqueue: (x) => { items[tail] = x; tail++; },
+    dequeue: () => {
+      if (head === tail) return undefined;     // empty
+      const v = items[head]; delete items[head]; head++; return v;
+    },
+    peek: () => items[head],
+    size: () => tail - head,
+  };
+}
+
+// Breadth-first search uses a queue to visit level by level
+function bfsOrder(graph, start) {
+  const seen = new Set([start]);
+  const order = [];
+  const q = makeQueue();
+  q.enqueue(start);
+  while (q.size() > 0) {
+    const node = q.dequeue();
+    order.push(node);
+    for (const next of graph[node] || []) {
+      if (!seen.has(next)) { seen.add(next); q.enqueue(next); }
+    }
+  }
+  return order;
+}`}
+  tests={[
+    { expr: '(() => { const q = makeQueue(); q.enqueue(1); q.enqueue(2); q.enqueue(3); const a = q.dequeue(); return [a, q.peek(), q.size()]; })()', label: 'dequeue, peek, size' },
+    { expr: "bfsOrder({A:['B','C'], B:['D'], C:['D'], D:[]}, 'A')", label: 'BFS from A' },
+  ]}
+/>
+
+The BFS result `["A","B","C","D"]` visits everything one ring at a time — the signature behaviour a
+queue gives you for free.
+
+## The real implementation
+
+From the course file — the object-backed queue with head/tail pointers, where every operation is
+genuine $O(1)$:
+
+```ts
+// /dsa/07-queue/queue.ts
+class Queue<T> {
+    private items: { [key: number]: T } = {};
+    private head: number = 0;
+    private tail: number = 0;
+
+    enqueue(item: T): void {          // add at the rear — O(1)
+        this.items[this.tail] = item;
+        this.tail++;
+    }
+
+    dequeue(): T | undefined {        // remove from the front — O(1)
+        if (this.isEmpty()) return undefined;
+        const item = this.items[this.head];
+        delete this.items[this.head];
+        this.head++;
+        return item;
+    }
+
+    peek(): T | undefined {           // look without removing — O(1)
+        return this.items[this.head];
+    }
+
+    isEmpty(): boolean {
+        return this.tail === this.head;
+    }
+
+    size(): number {
+        return this.tail - this.head;
+    }
+}
+```
+
+The naive alternative, `SimpleQueue`, stores a plain array and calls `items.shift()` to dequeue — clean
+to read, but each shift is $O(n)$. The same file also ships a `LinkedQueue` that keeps `front` and
+`rear` node pointers for the same $O(1)$ guarantee without an ever-growing index.
+
+Run the full file: `npx tsx 07-queue/queue.ts`.
+
+## Complexity
+
+With head/tail pointers (or a linked list), the queue hits the ideal numbers:
+
+$$
+T_\text{enqueue} = O(1), \qquad T_\text{dequeue} = O(1), \qquad S(n) = O(n).
+$$
+
+| Operation | Array + `shift()` | Two pointers / linked list |
+|-----------|-------------------|----------------------------|
+| enqueue   | $O(1)$ amortized  | $O(1)$ |
+| dequeue   | $O(n)$            | $O(1)$ |
+| peek / size | $O(1)$          | $O(1)$ |
+
+<Callout type="why">
+The $O(n)$ dequeue of the naive array queue is a classic hidden cost: a loop that "just removes the
+first element" each iteration can silently turn an $O(n)$ algorithm into $O(n^2)$. Reaching for the
+two-pointer or linked queue is what keeps breadth-first search and scheduling linear.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Office printing" icon="🖨️">
+A shared printer holds a **print spool** — a queue of jobs. Your document prints after everyone who
+hit "print" before you, regardless of file size. First submitted, first on paper.
+</ExampleCard>
+
+<ExampleCard domain="Customer support" icon="📞">
+A call centre puts callers on hold in a FIFO line ("your call is in the order it was received"). The
+next free agent always takes the caller who has waited longest — fairness encoded as a queue.
+</ExampleCard>
+
+<ExampleCard domain="Networking" icon="🛰️">
+A router buffers incoming packets in a queue while the link is busy, forwarding them in arrival order.
+When the buffer fills, new packets are dropped from the tail — the origin of "tail drop" congestion.
+</ExampleCard>
+
+<ExampleCard domain="Social graphs" icon="🕸️">
+"Degrees of separation" is breadth-first search: a queue holds the people one hop away, then two hops,
+then three. Processing the queue in order visits the network ring by ring outward from you.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Never dequeue with `array.shift()` in a hot loop.** It is $O(n)$, so an otherwise-linear BFS
+  becomes $O(n^2)$. Use head/tail indices or a linked list.
+- **Always check empty before dequeue/peek.** Removing from an empty queue should return `undefined`
+  (or throw deliberately), not crash with `head` running past `tail`.
+- **Front and rear are not interchangeable.** Enqueue at the rear, dequeue at the front. Swapping them
+  by accident turns your queue into a broken stack.
+- **Interview cue:** the words *level-order*, *breadth-first*, *shortest path in an unweighted graph*,
+  or *"process in arrival order"* almost always mean "reach for a queue."
+
+## Practice
+
+1. **Easy:** Enqueue `A, B, C`, then dequeue twice. What does the second dequeue return, and what is
+   left at the front?
+2. **Easy:** Implement `RecentCounter.ping(t)` that returns how many pings happened in the last 3000 ms
+   by dropping timestamps older than `t - 3000` from the front of a queue.
+3. **Medium:** Implement a queue using **two stacks** so that `dequeue` is $O(1)$ amortized (transfer
+   from the in-stack to the out-stack only when the out-stack is empty).
+4. **Medium:** Do a level-order (BFS) traversal of a binary tree, returning a separate array per level.
+5. **Hard:** Given a grid of rooms (gates, walls, empty), fill every empty room with its distance to the
+   nearest gate using a single multi-source BFS that seeds the queue with **all** gates at once.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You enqueue 7, 8, 9 and then dequeue once. What is returned, and what is the new front?',
+      options: ['Returns 9, front is 8', 'Returns 7, front is 8', 'Returns 7, front is 9', 'Returns 8, front is 7'],
+      answer: 1,
+      explain: 'FIFO removes the oldest element first: 7 leaves, and 8 — the next-oldest — becomes the front.',
+    },
+    {
+      q: 'Why is dequeuing with array.shift() considered a performance trap?',
+      options: [
+        'It uses extra memory',
+        'It reverses the order of elements',
+        'It is O(n) because every remaining element shifts down one index',
+        'It only works on sorted arrays',
+      ],
+      answer: 2,
+      explain: 'shift() re-indexes the whole array, so each dequeue is O(n); in a loop that becomes O(n^2). Head/tail pointers avoid the shift.',
+    },
+    {
+      q: 'Which task is a queue the natural fit for?',
+      options: [
+        'Undoing the most recent action first',
+        'Breadth-first / level-order traversal of a graph',
+        'Evaluating a postfix expression',
+        'Reversing a string',
+      ],
+      answer: 1,
+      explain: 'BFS processes nodes in the order they were discovered — exactly FIFO. The other three are last-in-first-out, i.e. stack jobs.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A queue is <strong>FIFO</strong>: enqueue at the rear, dequeue at the front, order preserved.',
+    'It is the mirror of a stack — same two operations, but at <strong>opposite ends</strong>.',
+    'Use <strong>head/tail pointers or a linked list</strong> for O(1) enqueue and dequeue; avoid array.shift() (O(n)).',
+    'Queues power <strong>BFS, scheduling, and buffering</strong> — anything served in arrival order.',
+    'Always guard against the <strong>empty queue</strong> before dequeue or peek.',
+  ]}
+/>
+
+Next up: **Circular Queue** — wrapping that head/tail pair around a fixed-size array so the freed space
+at the front gets reused instead of wasted.

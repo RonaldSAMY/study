@@ -1,0 +1,283 @@
+---
+title: Circular Queue
+track: dsa-queues
+summary: "A circular queue wraps a fixed array into a ring: front and rear advance modulo the capacity, so freed space at the start gets reused instead of wasted."
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - dsa-queues/queue-basics
+leadsTo:
+  - dsa-queues/deque
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import QueCircularRing from '../../../components/demos/QueCircularRing.tsx';
+
+## The hook: the buffer that never runs out of room
+
+A microphone records audio into a small fixed buffer while your speakers read from it a beat behind.
+Recording fills the buffer from the front toward the back — but reads empty it from the front too. In a
+plain array queue, the read pointer keeps marching right, and the space *behind* it becomes dead, unusable
+real estate. After a few seconds the buffer is "full" even though most of it is empty.
+
+The trick is to bend the array into a **ring**. When the rear pointer reaches the last slot, it wraps
+back to index 0 and reuses the space the front has already vacated. The buffer becomes a loop that can
+run forever inside a fixed amount of memory.
+
+<Callout type="intuition" title="The one-sentence idea">
+A circular queue stores items in a fixed array and advances both pointers **modulo the capacity**, so
+`rear` wraps from the end back to the start and reclaims the slots `front` has freed.
+</Callout>
+
+## Intuition
+
+In the basic queue, `head` and `tail` only ever increase. That is fine when the array can grow, but a
+**fixed-size** buffer would leak its capacity: dequeued slots at the front are abandoned forever.
+
+A circular queue fixes this with one operator — the modulo. Instead of `tail++`, you write:
+
+$$
+\texttt{rear} \leftarrow (\texttt{rear} + 1) \bmod \texttt{capacity}.
+$$
+
+Now when `rear` falls off the end it lands back on index 0. The same goes for `front`. The "queue" is no
+longer a contiguous block — it is a window that slides around the ring, possibly wrapping across the
+seam between the last index and index 0.
+
+One subtlety: when `front === rear`, is the ring **empty** or **full**? Both look identical. There are
+two standard fixes:
+
+1. **Sacrifice one slot.** Keep one cell always empty, so full means `(rear + 1) mod cap === front`.
+   With capacity `k` you allocate `k + 1` cells.
+2. **Keep a count.** Track `size` explicitly; empty is `size === 0`, full is `size === capacity`.
+
+The count version uses every slot, so most production ring buffers prefer it.
+
+## Play with it
+
+The array below is drawn as a **ring**. Enqueue with `+x`, dequeue with `-`, and set the capacity. Fill
+it, dequeue a couple of items, then keep enqueuing — and watch the green **rear** pointer wrap past the
+end back to slot 0, reusing the freed space.
+
+<QueCircularRing client:visible />
+
+<Callout type="tip">
+Fill the ring to full and try one more enqueue: it fails instead of overwriting. Then dequeue once and
+enqueue again — the new item lands in the slot that was just freed at the front, on the *other* side of
+the ring. That wrap-around is the whole point.
+</Callout>
+
+## How it works
+
+Trace a ring of capacity 5 (so `front` and `rear` live in `0..4`). `rear` points at the **next** write
+slot; `size` disambiguates full from empty:
+
+```
+start            [ _ _ _ _ _ ]   front=0 rear=0 size=0
+enqueue(A,B,C)   [ A B C _ _ ]   front=0 rear=3 size=3
+dequeue() → A    [ _ B C _ _ ]   front=1 rear=3 size=2
+dequeue() → B    [ _ _ C _ _ ]   front=2 rear=3 size=2 ... size=1
+enqueue(D,E)     [ _ _ C D E ]   front=2 rear=0 size=3   ← rear wrapped to 0
+enqueue(F)       [ F _ C D E ]   front=2 rear=1 size=4   ← F reuses slot 0
+```
+
+`F` landed in index 0 — the seat `A` vacated. The live queue is now `C, D, E, F`, wrapping across the
+end of the array. Reading it back means walking `front, front+1, …` all **mod capacity**.
+
+<CodeRunner
+  client:visible
+  code={`// Circular queue with an explicit count (every slot usable)
+function makeRing(capacity) {
+  const items = new Array(capacity);
+  let front = 0, rear = 0, size = 0;
+  return {
+    enqueue: (x) => {
+      if (size === capacity) return false;        // full
+      items[rear] = x;
+      rear = (rear + 1) % capacity;               // wrap
+      size++;
+      return true;
+    },
+    dequeue: () => {
+      if (size === 0) return undefined;           // empty
+      const v = items[front];
+      items[front] = undefined;
+      front = (front + 1) % capacity;             // wrap
+      size--;
+      return v;
+    },
+    toArray: () => {
+      const out = [];
+      for (let i = 0; i < size; i++) out.push(items[(front + i) % capacity]);
+      return out;
+    },
+    size: () => size,
+  };
+}`}
+  tests={[
+    { expr: '(() => { const r = makeRing(3); r.enqueue("A"); r.enqueue("B"); r.enqueue("C"); return r.enqueue("D"); })()', label: 'enqueue when full → false' },
+    { expr: '(() => { const r = makeRing(3); r.enqueue("A"); r.enqueue("B"); r.enqueue("C"); r.dequeue(); r.enqueue("D"); return r.toArray(); })()', label: 'wrap-around contents' },
+  ]}
+/>
+
+The second test returns `["B","C","D"]`: `A` left, `D` wrapped into slot 0, and `toArray` walks the ring
+mod capacity to read them back in order.
+
+## The real implementation
+
+From the course file — the "sacrifice one slot" variant. It allocates `k + 1` cells so that `front ===
+rear` unambiguously means empty, and a full ring is detected without a separate counter:
+
+```ts
+// /dsa/07-queue/circular-queue.ts
+class CircularQueue<T> {
+    private items: (T | undefined)[];
+    private front: number = 0;
+    private rear: number = 0;
+    private readonly capacity: number;
+
+    constructor(k: number) {
+        this.capacity = k + 1;            // one slot always empty
+        this.items = new Array(this.capacity);
+    }
+
+    enqueue(value: T): boolean {
+        if (this.isFull()) return false;
+        this.items[this.rear] = value;
+        this.rear = (this.rear + 1) % this.capacity;   // wrap
+        return true;
+    }
+
+    dequeue(): T | undefined {
+        if (this.isEmpty()) return undefined;
+        const value = this.items[this.front];
+        this.items[this.front] = undefined;
+        this.front = (this.front + 1) % this.capacity; // wrap
+        return value;
+    }
+
+    isEmpty(): boolean { return this.front === this.rear; }
+    isFull(): boolean  { return (this.rear + 1) % this.capacity === this.front; }
+    size(): number     { return (this.rear - this.front + this.capacity) % this.capacity; }
+}
+```
+
+The same file also includes `CircularQueueWithCount` (uses every slot via a `size` field) and an
+`OverwritingCircularBuffer` that, when full, *overwrites* the oldest item instead of refusing — the
+pattern behind "keep the last N" loggers.
+
+Run the full file: `npx tsx 07-queue/circular-queue.ts`.
+
+## Complexity
+
+Wrapping costs nothing extra — every operation stays constant time, and the memory is fixed up front:
+
+$$
+T_\text{enqueue} = T_\text{dequeue} = O(1), \qquad S = O(k).
+$$
+
+| Property | Growing array queue | Circular queue |
+|----------|---------------------|----------------|
+| enqueue / dequeue | $O(1)$ (amortized) | $O(1)$ (worst case) |
+| Memory | grows on demand | fixed at $k$ |
+| Reuses freed front slots | only after compaction | yes, immediately |
+| Overflow behaviour | never (resizes) | reject or overwrite |
+
+<Callout type="why">
+Fixed, predictable memory and true worst-case $O(1)$ are why ring buffers dominate real-time and
+embedded systems: audio pipelines, network cards, and operating-system schedulers cannot afford an
+unpredictable resize pause in the middle of a deadline.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Audio & streaming" icon="🎧">
+Sound cards use a ring buffer: the app writes samples to the rear while the hardware reads from the
+front, both wrapping around a fixed block of memory. Underflow (reader catches writer) is the cause of
+that dreaded audio crackle.
+</ExampleCard>
+
+<ExampleCard domain="Operating systems" icon="⚙️">
+Round-robin CPU scheduling treats ready processes as a ring: each gets a fixed time slice, then is sent
+to the rear while the next runs. The pointer cycles endlessly around the same fixed set of slots.
+</ExampleCard>
+
+<ExampleCard domain="Hardware input" icon="⌨️">
+Your keyboard controller stores keystrokes in a small circular buffer until the OS reads them. Type
+faster than it can drain and the buffer wraps to full — the origin of the old "keyboard buffer overflow"
+beep.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The empty-vs-full ambiguity.** `front === rear` is both states at once. Resolve it with a wasted
+  slot *or* an explicit `size` counter — pick one and be consistent.
+- **Forgetting a `mod` somewhere.** Every advance of `front` or `rear` must be `(p + 1) % capacity`. A
+  single missing modulo lets a pointer run off the end and corrupt the ring.
+- **Negative modulo when moving backward.** To step a pointer back (as a deque does), use
+  `(p - 1 + capacity) % capacity`, never a bare `p - 1` that can go negative.
+- **Interview cue:** "fixed-size buffer", "ring buffer", "design a circular queue / our recent-N
+  window", or "round-robin" all point straight here. LeetCode 622 is the canonical implement-it task.
+
+## Practice
+
+1. **Easy:** With capacity 4, run `+1, +2, +3, +4` then `+5`. Why does the last enqueue fail?
+2. **Easy:** Continue from a full ring of `[1,2,3,4]`: dequeue twice, then enqueue `5, 6`. Which array
+   indices do `5` and `6` occupy?
+3. **Medium:** Implement `CircularQueue` (LeetCode 622) with `enQueue`, `deQueue`, `Front`, `Rear`,
+   `isEmpty`, `isFull` using the one-empty-slot trick.
+4. **Medium:** Build an `OverwritingCircularBuffer` that keeps only the most recent `N` log lines,
+   discarding the oldest when full.
+5. **Hard:** Design a `HitCounter` for the last 300 seconds using a circular array of buckets indexed by
+   `timestamp % 300`, so each `hit` and `getHits` is $O(1)$ amortized.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'After the rear pointer is at the last index of a capacity-5 ring and you enqueue, where does rear go next?',
+      options: ['It throws an out-of-bounds error', 'It stays put', 'It wraps to index 0 via (rear + 1) % 5', 'It grows the array to size 6'],
+      answer: 2,
+      explain: 'The modulo wraps the pointer from the last slot back to index 0, reusing space the front has freed.',
+    },
+    {
+      q: 'Why can front === rear be ambiguous in a circular queue?',
+      options: [
+        'It can mean either empty or full, depending on history',
+        'It always means the queue is corrupted',
+        'It only happens when capacity is odd',
+        'Pointers can never be equal',
+      ],
+      answer: 0,
+      explain: 'An empty ring and a full ring both leave the two pointers coincident. A wasted slot or a size counter tells them apart.',
+    },
+    {
+      q: 'Compared with a dynamically growing array queue, the circular queue mainly gives you:',
+      options: [
+        'Unlimited capacity',
+        'O(log n) operations',
+        'Fixed memory and true worst-case O(1) with reuse of freed slots',
+        'Automatic sorting of elements',
+      ],
+      answer: 2,
+      explain: 'A ring buffer trades growth for predictability: bounded memory and constant-time ops with no resize pause — ideal for real-time systems.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A circular queue is a fixed array whose <strong>pointers advance modulo capacity</strong>, so rear wraps back to 0.',
+    'Wrapping <strong>reuses the slots dequeue frees</strong> at the front, eliminating the wasted space of a linear array queue.',
+    'Resolve the <strong>empty-vs-full ambiguity</strong> with one sacrificed slot or an explicit size counter.',
+    'Every operation is <strong>worst-case O(1)</strong> in <strong>fixed O(k) memory</strong> — perfect for real-time buffers.',
+    'It powers <strong>audio buffers, round-robin scheduling, and keyboard buffers</strong>; an overwriting variant keeps the last N items.',
+  ]}
+/>
+
+Next up: **Deques** — let the pointers move *both* directions so you can push and pop at either end, and
+a queue becomes the swiss-army structure behind sliding-window algorithms.

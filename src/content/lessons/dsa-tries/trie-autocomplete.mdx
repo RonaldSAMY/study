@@ -1,0 +1,283 @@
+---
+title: Autocomplete & Word Search
+track: dsa-tries
+summary: "Autocomplete in two moves: walk to the prefix node in O(P), then sweep its subtree to list every word that completes it."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-tries/trie-basics
+leadsTo:
+  - dsa-sorting/bubble-sort
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import TrieAutocompleteExplorer from '../../../components/demos/TrieAutocompleteExplorer.tsx';
+
+## The hook: the dropdown that reads your mind
+
+Type *car* into any search box and a list drops down: *card*, *care*, *careful*, *cape*… wait, not
+*cape* — that does not start with *car*. How does the box know, in a blink, exactly which stored words
+continue your prefix and which to leave out? In the last lesson you built a trie and learned that
+`startsWith("car")` is a quick walk down three letters. Autocomplete is that walk plus one more idea:
+**once you reach the prefix node, every word underneath it is a valid completion.** Collect that
+subtree and you have your dropdown.
+
+<Callout type="intuition" title="The one-sentence idea">
+Autocomplete is a walk then a sweep: descend to the prefix node, then gather every end-of-word in the
+subtree hanging below it — those, and only those, are the words that start with your prefix.
+</Callout>
+
+## Intuition: the prefix node is the doorway
+
+A trie already groups words by what they share at the front. So all the words beginning with "car"
+do not live scattered across the structure — they all hang under a single node, the one you reach by
+walking `c → a → r`. That node is a **doorway** into exactly the matching words and nothing else.
+
+So autocomplete splits cleanly into two phases:
+
+1. **Walk to the prefix node** (`P` steps for a prefix of length `P`). If any letter is missing, the
+   prefix matches nothing and you stop early.
+2. **Sweep the subtree** below that node with a depth-first traversal, collecting a word every time
+   you pass an end-of-word flag, building the string up as you descend.
+
+Word search problems are the same machinery wearing a hat: *does any stored word match this pattern?*
+is a walk that branches at a wildcard; *which products match what I have typed so far?* is a walk to a
+prefix followed by a sweep, capped at the top few results.
+
+## Play with it
+
+Pick a prefix and press Play. Watch the indigo path march down to the prefix node, then the sky-blue
+sweep fan out through the subtree — each green-ringed node it touches drops a word into the live
+suggestions list.
+
+<TrieAutocompleteExplorer client:visible />
+
+<Callout type="tip">
+Try the prefix <code>car</code>: the sweep visits <code>card</code>, <code>care</code> and
+<code>careful</code> but never leaves the "car" branch, so <code>cape</code> and <code>dog</code>
+are never even looked at. Now try <code>z</code> — the walk falls off the trie at the first letter and
+returns nothing, instantly. The work scales with the answer, not the dictionary.
+</Callout>
+
+## How it works
+
+Dictionary `["cat", "car", "card", "care", "careful", "cape", "dog"]`, prefix `"car"`:
+
+```
+Phase 1 — walk to the prefix node:
+  root ─c─ a ─ r          three steps; the 'r' node is the doorway
+
+Phase 2 — DFS sweep below 'r' (build the string as you go):
+  r          not end-of-word → keep going
+  r-d        "card"   ✓ end-of-word → collect "card"
+  r-e        "care"   ✓ end-of-word → collect "care"
+  r-e-f-u-l  "careful" ✓ end-of-word → collect "careful"
+
+suggestions = ["card", "care", "careful"]
+```
+
+The sweep visits one node per character *in the matching words only*. "cape", "cat" and "dog" sit on
+other branches and are never touched — that is why autocomplete stays fast even in a huge dictionary.
+
+<CodeRunner
+  client:visible
+  code={`function makeNode() { return { children: {}, isEnd: false }; }
+const root = makeNode();
+
+function insert(word) {
+  let node = root;
+  for (const ch of word) {
+    if (!node.children[ch]) node.children[ch] = makeNode();
+    node = node.children[ch];
+  }
+  node.isEnd = true;
+}
+
+function collect(node, prefix, out) {
+  if (node.isEnd) out.push(prefix);
+  for (const ch of Object.keys(node.children).sort())
+    collect(node.children[ch], prefix + ch, out);
+}
+
+function autocomplete(prefix) {
+  let node = root;
+  for (const ch of prefix) {            // phase 1: walk to prefix node
+    if (!node.children[ch]) return [];  // prefix absent → no matches
+    node = node.children[ch];
+  }
+  const out = [];
+  collect(node, prefix, out);           // phase 2: sweep the subtree
+  return out;
+}
+
+for (const w of ['cat','car','card','care','careful','cape','dog']) insert(w);`}
+  tests={[
+    { expr: 'autocomplete("car")', label: 'complete "car"' },
+    { expr: 'autocomplete("ca")', label: 'complete "ca"' },
+    { expr: 'autocomplete("z")', label: 'complete "z" (none)' },
+    { expr: 'autocomplete("car").slice(0, 2)', label: 'top 2 for "car"' },
+  ]}
+/>
+
+## The real implementation
+
+The course file exposes autocomplete as `getWordsWithPrefix`, which reuses the same `findNode` walk
+from the basics lesson and then recurses with `collectWords`. The `suggestedProducts` function on top
+shows the real-world variant: sort, then return the top 3 after each keystroke (LeetCode 1268).
+
+```ts
+// /dsa/11-trie/trie-basics.ts
+getWordsWithPrefix(prefix: string): string[] {
+    const node = this.findNode(prefix);   // phase 1: walk to the prefix node
+    if (!node) return [];                 // prefix not present at all
+    const results: string[] = [];
+    this.collectWords(node, prefix, results);   // phase 2: sweep the subtree
+    return results;
+}
+
+private collectWords(node: TrieNode, prefix: string, results: string[]): void {
+    if (node.isEndOfWord) results.push(prefix);
+    for (const [char, child] of node.children) {
+        this.collectWords(child, prefix + char, results);
+    }
+}
+
+// Search-as-you-type: top 3 suggestions after every character (LeetCode 1268)
+function suggestedProducts(products: string[], searchWord: string): string[][] {
+    products.sort();
+    const trie = new Trie();
+    for (const product of products) trie.insert(product);
+
+    const result: string[][] = [];
+    let prefix = '';
+    for (const char of searchWord) {
+        prefix += char;
+        const words = trie.getWordsWithPrefix(prefix);
+        words.sort();
+        result.push(words.slice(0, 3));   // cap at three suggestions
+    }
+    return result;
+}
+```
+
+Run the full file: `npx tsx 11-trie/trie-basics.ts`.
+
+## Complexity
+
+Let $P$ be the prefix length, $k$ the number of matching words, and $m$ their average length. Phase
+one walks the prefix; phase two visits every character of every match:
+
+$$
+T_{\text{autocomplete}} = O(P + k \cdot m), \qquad S = O(k \cdot m)\ \text{for the result list}.
+$$
+
+The headline is that the cost depends on the **size of the answer**, not on $n$, the size of the
+dictionary. If you only need the top few suggestions, capping the sweep makes it cheaper still.
+
+| Step | Time | Notes |
+|------|------|-------|
+| Walk to prefix node | $O(P)$ | one node per prefix character |
+| Sweep subtree | $O(k \cdot m)$ | touches only the matching words |
+| Top-$t$ cap (sorted trie) | $O(P + t)$ | stop after $t$ completions |
+| Brute-force scan (no trie) | $O(n \cdot P)$ | check every word's prefix |
+
+For search-as-you-type over a fixed catalogue, sorting once and walking the trie per keystroke beats
+re-scanning the whole list on every letter.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Developer tools" icon="⌨️">
+IDE code completion loads every identifier in scope into a trie. As you type <code>get</code>, it
+walks to that node and sweeps the subtree for <code>getUser</code>, <code>getToken</code>,
+<code>getConfig</code> — the same walk-then-sweep, ranked by how recently you used each.
+</ExampleCard>
+
+<ExampleCard domain="E-commerce" icon="🛒">
+A storefront's search bar is exactly <code>suggestedProducts</code>: the catalogue goes into a sorted
+trie, and after every keystroke it returns the top three completions. Capping at three means the
+sweep stops early — you never pay to enumerate ten thousand matching SKUs.
+</ExampleCard>
+
+<ExampleCard domain="Maps & places" icon="📍">
+Typing a destination into a maps app autocompletes place names from a trie of cities and streets.
+Because matches all hang under one prefix node, "San" instantly narrows to *San Francisco*, *San
+Diego*, *San Jose* without touching the millions of unrelated place names.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Re-walking the prefix on every keystroke.** For search-as-you-type, advance from the *previous*
+  prefix node by one character instead of restarting at the root — you already paid for the path.
+- **Unbounded sweeps.** A prefix like the empty string or a single common letter can match a huge
+  subtree. If you only need the top few, stop the DFS once you have collected enough.
+- **Ordering surprises.** A `Map`'s children come out in insertion order, not alphabetical. Sort the
+  children (or the result) when the problem wants lexicographic suggestions, as `suggestedProducts`
+  does.
+- **The prefix node itself can be a word.** Completing "car" should still include "car" if it is
+  stored — collect at the prefix node too, not only at deeper nodes.
+- **Interview cue:** "return all words with prefix", "search suggestions", "type-ahead", or "design
+  autocomplete" all map to walk-to-prefix-then-DFS. State the two phases and their $O(P + k m)$ cost.
+
+## Practice
+
+1. **Easy:** For the dictionary in the demo, list by hand every completion of the prefix `"ca"`.
+2. **Easy:** What should `autocomplete("")` return, and why is that a useful (but potentially
+   expensive) special case?
+3. **Medium:** Modify `getWordsWithPrefix` to return only the first $t$ completions, stopping the DFS
+   as soon as it has collected $t$ words.
+4. **Medium:** Solve *Search Suggestions System* (LeetCode 1268): after each character of the search
+   word, return up to three lexicographically smallest products that match.
+5. **Hard:** Solve *Word Search II* (LeetCode 212): given a board of letters and a dictionary, find
+   every word on the board by walking a trie alongside a DFS of the grid, pruning whenever the current
+   path is not a prefix of any word.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'After walking to the prefix node, how does autocomplete find the completions?',
+      options: [
+        'It scans the whole dictionary and keeps words with the prefix',
+        'It DFS-sweeps the subtree below the prefix node, collecting every end-of-word',
+        'It walks back up to the root collecting flags',
+        'It binary-searches the children',
+      ],
+      answer: 1,
+      explain: 'Every word starting with the prefix hangs under the prefix node, so a depth-first sweep of that subtree gathers exactly the matches and nothing else.',
+    },
+    {
+      q: 'A prefix of length P yields k matching words of average length m. The cost is about…',
+      options: ['O(n)', 'O(P + k · m)', 'O(P · n)', 'O(log n)'],
+      answer: 1,
+      explain: 'Phase one walks P characters; phase two visits every character of each of the k matches, giving O(P + k·m) — independent of the dictionary size n.',
+    },
+    {
+      q: 'Why does suggestedProducts sort the products and cap each result at three?',
+      options: [
+        'Sorting is required for the trie to work at all',
+        'To return the lexicographically smallest matches and stop the sweep early',
+        'Because tries can only hold sorted data',
+        'To make insertion O(1)',
+      ],
+      answer: 1,
+      explain: 'Sorting makes the trie sweep emit words in order, and slicing to three lets the search stop as soon as it has enough — cheap even for huge catalogues.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Autocomplete is <strong>walk then sweep</strong>: descend to the prefix node, then DFS its subtree collecting every end-of-word.',
+    'All words sharing a prefix hang under <strong>one prefix node</strong>, so non-matching branches are never even visited.',
+    'The cost is <strong>O(P + k·m)</strong> — it scales with the size of the answer, not the size of the dictionary.',
+    'For search-as-you-type, <strong>advance from the previous prefix node</strong> and <strong>cap the results</strong> instead of re-scanning.',
+    'Sort children or results when you need <strong>lexicographic suggestions</strong>; a Map yields insertion order, not alphabetical.',
+  ]}
+/>
+
+Next up: **Bubble Sort** — the simplest sort there is, swapping neighbours until the whole list falls
+into order.

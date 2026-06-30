@@ -1,0 +1,284 @@
+---
+title: Pattern Matching (KMP)
+track: dsa-strings
+summary: "KMP finds a pattern in O(n+m) by precomputing a failure function, so on a mismatch it slides the pattern smartly instead of rescanning the text."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-strings/anagrams
+leadsTo:
+  - dsa-linked-lists/singly-linked-list
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import StrKmpMatch from '../../../components/demos/StrKmpMatch.tsx';
+
+## The hook: stop re-reading what you already read
+
+You're searching a long text for the pattern `abcaby`. The naive way lines the pattern up at position 0,
+compares until it fails, then shrugs and slides the pattern one step right — **throwing away everything it
+just learned** and re-reading the same text characters again and again. That redundant backtracking is what
+makes brute force $O(n \cdot m)$. Knuth-Morris-Pratt's idea: when a mismatch happens after matching a few
+characters, those matched characters already tell you exactly how far you can safely jump — so the text
+pointer **never moves backward**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Precompute, for each prefix of the pattern, the longest proper prefix that is also a suffix; on a mismatch
+that number tells you how far to slide the pattern without rescanning any text.
+
+</Callout>
+
+## Intuition: the failure function (LPS)
+
+Brute force wastes work because it forgets matched characters. KMP remembers them with a tiny table called
+the **LPS array** (Longest proper Prefix that is also a Suffix), sometimes called the *failure function*.
+
+For each position `j` in the pattern, `lps[j]` is the length of the longest string that is **both** a proper
+prefix and a suffix of `pattern[0..j]`. Why does that help? Suppose we've matched `j` characters of the
+pattern against the text and then character `j` mismatches. The last `lps[j-1]` matched characters are, by
+definition, also a prefix of the pattern — so we can slide the pattern forward to reuse them and resume
+comparing at `j = lps[j-1]`, **keeping the text pointer where it is**. No character of the text is ever read
+twice.
+
+Two pointers drive the search: `i` over the text (only ever moves forward) and `j` over the pattern (jumps
+back via the LPS table on a mismatch). When `j` reaches `m`, the whole pattern matched and we record an
+occurrence — then jump `j` to `lps[m-1]` to keep finding overlapping matches.
+
+## Play with it
+
+This visualizer runs both halves of KMP. **Phase 1** fills the LPS table cell by cell (green = extend a
+prefix match, red = fall back). **Phase 2** slides the pattern under the text: on a **red** mismatch, watch
+`j` jump by `lps[j-1]` while the text pointer `i` stays put.
+
+<StrKmpMatch client:visible />
+
+<Callout type="tip">
+Step slowly through the mismatch in the default example. The text pointer <code>i</code> never decreases —
+not once across the whole search. That single invariant is the entire reason KMP is linear: each text
+character is examined a bounded number of times.
+</Callout>
+
+## How it works
+
+First the LPS table for `abcaby`. No prefix repeats until the second `a`/`b`, which echo the start:
+
+```
+pattern:  a  b  c  a  b  y
+index:    0  1  2  3  4  5
+lps:      0  0  0  1  2  0
+                   ^  ^
+              "ab" is both a prefix and the suffix ending at index 4 → lps=2
+```
+
+Now search `abxabcabcaby`. At the mismatch on `x`, instead of restarting we consult the table and slide:
+
+```
+text:    a b x a b c a b c a b y
+pat:     a b ↑                      mismatch at text[2]='x', pat[2]='c'
+                                    j was 2 → j = lps[1] = 0, i stays at 2
+text:    a b x a b c a b c a b y
+pat:         a b c a b y            re-anchor, keep matching forward → match at index 6
+```
+
+<CodeRunner
+  client:visible
+  code={`function buildLPS(pattern) {
+  const m = pattern.length;
+  const lps = new Array(m).fill(0);
+  let len = 0, i = 1;
+  while (i < m) {
+    if (pattern[i] === pattern[len]) { len++; lps[i] = len; i++; }
+    else if (len !== 0) len = lps[len - 1];     // fall back, don't reset to 0
+    else { lps[i] = 0; i++; }
+  }
+  return lps;
+}
+
+function kmpSearch(text, pattern) {
+  const matches = [];
+  const n = text.length, m = pattern.length;
+  if (m === 0 || m > n) return matches;
+  const lps = buildLPS(pattern);
+  let i = 0, j = 0;                              // i over text, j over pattern
+  while (i < n) {
+    if (text[i] === pattern[j]) { i++; j++; }
+    if (j === m) { matches.push(i - j); j = lps[j - 1]; }       // full match
+    else if (i < n && text[i] !== pattern[j]) {
+      if (j !== 0) j = lps[j - 1];               // jump, i stays put
+      else i++;
+    }
+  }
+  return matches;
+}`}
+  tests={[
+    { expr: 'JSON.stringify(buildLPS("abcaby"))', label: 'LPS of "abcaby"' },
+    { expr: 'JSON.stringify(buildLPS("aabaa"))', label: 'LPS of "aabaa"' },
+    { expr: 'JSON.stringify(kmpSearch("abxabcabcaby","abcaby"))', label: 'matches of "abcaby"' },
+    { expr: 'JSON.stringify(kmpSearch("aaaaa","aa"))', label: 'overlapping "aa" in "aaaaa"' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the failure function and the linear-time search, exactly as the demo runs them:
+
+```ts
+// /dsa/02-strings/pattern-matching.ts
+function buildLPS(pattern: string): number[] {
+    const m = pattern.length;
+    const lps = new Array(m).fill(0);
+    let length = 0;
+    let i = 1;
+    while (i < m) {
+        if (pattern[i] === pattern[length]) {
+            length++;
+            lps[i] = length;
+            i++;
+        } else {
+            if (length !== 0) {
+                length = lps[length - 1];   // reuse a shorter prefix instead of resetting
+            } else {
+                lps[i] = 0;
+                i++;
+            }
+        }
+    }
+    return lps;
+}
+
+function kmpSearch(text: string, pattern: string): number[] {
+    const matches: number[] = [];
+    const n = text.length, m = pattern.length;
+    if (m === 0 || m > n) return matches;
+    const lps = buildLPS(pattern);
+    let i = 0, j = 0;
+    while (i < n) {
+        if (text[i] === pattern[j]) { i++; j++; }
+        if (j === m) {
+            matches.push(i - j);            // occurrence found
+            j = lps[j - 1];                 // continue (allows overlaps)
+        } else if (i < n && text[i] !== pattern[j]) {
+            if (j !== 0) j = lps[j - 1];    // slide pattern; i never decreases
+            else i++;
+        }
+    }
+    return matches;
+}
+```
+
+Run the full file: `npx tsx 02-strings/pattern-matching.ts`.
+
+## Complexity
+
+Building the table is linear in the pattern; the search is linear in the text because `i` only moves forward
+and `j` decreases at most as often as it increases:
+
+$$
+T(n, m) = O(n + m), \qquad S(m) = O(m).
+$$
+
+| Algorithm | Time | Space | Note |
+|-----------|------|-------|------|
+| Naive search | $O(n \cdot m)$ | $O(1)$ | re-reads text after each mismatch |
+| **KMP** | $O(n + m)$ | $O(m)$ | failure function, no text backtracking |
+| Rabin–Karp | $O(n + m)$ avg, $O(n m)$ worst | $O(1)$ | rolling hash, great for multi-pattern |
+| Boyer–Moore | $O(n/m)$ best, $O(n m)$ worst | $O(\sigma)$ | skips ahead, fast in practice |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Bioinformatics" icon="🧬">
+Aligning a short gene probe against a chromosome of billions of bases needs linear-time search — quadratic
+rescanning is hopeless at that scale. KMP-style exact matching (and its hashed cousins) underpins the
+seed-finding stage of read aligners.
+</ExampleCard>
+
+<ExampleCard domain="Network security" icon="🛰️">
+An intrusion-detection system scans every passing packet for known attack signatures at line rate. It can't
+afford to back up over bytes it already saw, so it uses failure-function automata (Aho–Corasick generalizes
+KMP to many patterns at once).
+</ExampleCard>
+
+<ExampleCard domain="Version control" icon="🔀">
+Diff and `grep` engines locate a query inside huge source files repeatedly. Linear, no-backtrack matching
+keeps an editor's "find in files" responsive even across a multi-gigabyte repository.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **"Proper" prefix matters.** `lps[j]` excludes the whole substring itself — the prefix must be strictly
+  shorter — otherwise every `lps` value would trivially equal its index.
+- **On a mismatch, fall back with `lps[length-1]`; don't reset to 0.** Resetting is the bug that quietly
+  turns KMP back into something slower and sometimes wrong. The fall-back chain is what reuses partial matches.
+- **The text pointer `i` must never decrease.** If you find yourself moving `i` backward, you've reverted to
+  brute force; only `j` jumps.
+- **Record the match at `i - j`, then set `j = lps[m-1]`** to catch overlapping occurrences (e.g. `"aa"` in
+  `"aaaa"` matches at 0, 1, 2).
+- **Interview cue:** "find all occurrences in linear time" or "no extra rescanning" points straight at KMP;
+  if they say "multiple patterns at once", reach for Aho–Corasick.
+
+## Practice
+
+1. **Easy:** Compute the LPS array of `"aabaa"` by hand and explain the value at the last index.
+2. **Easy:** Why is the naive matcher $O(n \cdot m)$? Give a text/pattern pair that hits the worst case.
+3. **Medium:** Use KMP to detect whether string `a` is a **rotation** of string `b` (hint: search `b` inside
+   `a + a`).
+4. **Medium:** Solve *Implement strStr()* — return the index of the first occurrence — using `kmpSearch` and
+   returning `matches[0]` or `-1`.
+5. **Hard:** Find the **shortest** string that, when repeated, yields the pattern (LeetCode 459, "Repeated
+   Substring Pattern"), using only the LPS array — no extra search.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does lps[j] store in KMP?',
+      options: [
+        'The number of matches found so far',
+        'The length of the longest proper prefix of pattern[0..j] that is also a suffix',
+        'The index of the next mismatch',
+        'The hash of the prefix',
+      ],
+      answer: 1,
+      explain: 'lps[j] is the length of the longest proper prefix-which-is-also-a-suffix of the pattern up to index j. That overlap is exactly what lets the pattern slide forward on a mismatch.',
+    },
+    {
+      q: 'On a mismatch after matching j characters (j > 0), KMP sets:',
+      options: [
+        'i back to i − j and j to 0',
+        'j to lps[j − 1], leaving the text pointer i unchanged',
+        'both i and j to 0',
+        'j to j − 1 and i to i − 1',
+      ],
+      answer: 1,
+      explain: 'It jumps j to lps[j−1] to reuse the matched prefix and keeps i fixed. Because i never moves backward, the search is O(n).',
+    },
+    {
+      q: 'Why is KMP O(n + m) rather than O(n·m)?',
+      options: [
+        'It hashes the pattern',
+        'It sorts the text first',
+        'The text pointer never backtracks and the failure function is built once in O(m)',
+        'It compares from both ends',
+      ],
+      answer: 2,
+      explain: 'Building the LPS table is O(m); during search i only advances and j’s total decreases are bounded by its increases, so the comparisons sum to O(n). Together: O(n + m).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'KMP matches in <strong>O(n + m)</strong> by never letting the text pointer backtrack.',
+    'The <strong>LPS / failure function</strong> stores, per prefix, the longest proper prefix that is also a suffix.',
+    'On a mismatch, jump <strong>j = lps[j−1]</strong> to reuse matched characters; reset-to-0 is the classic bug.',
+    'Record a hit at <strong>i − j</strong> and continue from <code>lps[m−1]</code> to capture overlapping matches.',
+    'The same no-backtrack idea scales to <strong>Aho–Corasick</strong> for many patterns and powers grep, IDS, and DNA search.',
+  ]}
+/>
+
+That wraps the Strings track. Next you'll switch data structures entirely: **Singly Linked Lists** — where
+elements are no longer contiguous in memory but chained by pointers, and traversal replaces indexing.

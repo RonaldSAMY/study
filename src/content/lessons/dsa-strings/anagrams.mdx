@@ -1,0 +1,244 @@
+---
+title: Anagrams
+track: dsa-strings
+summary: "Two strings are anagrams iff their character multisets match, so a single signed frequency tally decides it in O(n) time and O(1) space."
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - dsa-strings/palindromes
+leadsTo:
+  - dsa-strings/pattern-matching-kmp
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import StrAnagramTally from '../../../components/demos/StrAnagramTally.tsx';
+
+## The hook: same tiles, new word
+
+Empty a bag of Scrabble tiles spelling `listen` onto the table and rearrange them — you can spell `silent`.
+Same tiles, different order: that's an anagram. The crucial insight is that *order is irrelevant*; the only
+thing that matters is **how many of each tile** you hold. So to test whether two words are anagrams, don't
+look at their arrangement at all — just compare their tile counts.
+
+<Callout type="intuition" title="The one-sentence idea">
+Two strings are anagrams exactly when they have the same multiset of characters — so equal character counts,
+checked in one pass, is all you need.
+</Callout>
+
+## Intuition: from order to a multiset
+
+Palindromes cared about position; anagrams throw position away. Once you decide that only counts matter,
+three approaches appear:
+
+1. **Sort both and compare** — `O(n \log n)`, simple but slower than necessary.
+2. **Two frequency maps** — build a count map for each, compare them: `O(n)` time.
+3. **One signed tally** — the slick version. Walk a single index across both strings at once: for the
+   character from `s` do `count[c]++`, and for the character from `t` do `count[c]--`. If the strings are
+   anagrams, every increment is eventually cancelled by a matching decrement and **every bucket ends at
+   zero**. Any leftover nonzero bucket proves they differ.
+
+Before any of that, a one-line guard: **different lengths can't be anagrams**, so compare lengths first and
+bail out for free. With a fixed alphabet (say lowercase a–z) the tally is a 26-slot array, making the whole
+thing $O(n)$ time and $O(1)$ space.
+
+## Play with it
+
+Load two words. The demo sweeps index `i` across both: `s` adds (**indigo**), `t` subtracts (**sky**), and
+each letter bucket shows its signed count. Anagrams drain every bucket back to **green** zero; a mismatch
+leaves a bucket stranded.
+
+<StrAnagramTally client:visible />
+
+<Callout type="tip">
+Try <code>rat</code> vs <code>car</code>: same length, but the 'c' bucket goes to −1 and 't' to +1 and they
+never recover — not anagrams. Equal length is necessary but <em>not</em> sufficient; the counts must all zero out.
+</Callout>
+
+## How it works
+
+Run the signed tally on `listen` and `silent` (only the touched buckets shown):
+
+```
+i:  l/s    s adds     t subtracts    nonzero buckets
+0   l / s   l:+1        s:-1           l:+1 s:-1
+1   i / i   i:+1        i:-1           l:+1 s:-1   (i cancels)
+2   s / l   s:0         l:0            all paired so far
+3   t / e   t:+1        e:-1           t:+1 e:-1
+4   e / n   e:0         n:-1           t:+1 n:-1
+5   n / t   n:0         t:0            ALL ZERO  → anagrams ✓
+```
+
+<CodeRunner
+  client:visible
+  code={`// LeetCode 242 — valid anagram, single signed tally over a–z
+function isAnagram(s, t) {
+  if (s.length !== t.length) return false;     // cheap necessary check
+  const count = new Array(26).fill(0);
+  for (let i = 0; i < s.length; i++) {
+    count[s.charCodeAt(i) - 97]++;             // s adds
+    count[t.charCodeAt(i) - 97]--;             // t subtracts
+  }
+  return count.every((c) => c === 0);          // all cancelled → anagram
+}
+
+// LeetCode 49 — group words by their character-count signature
+function groupAnagrams(strs) {
+  const map = new Map();
+  for (const str of strs) {
+    const count = new Array(26).fill(0);
+    for (const ch of str) count[ch.charCodeAt(0) - 97]++;
+    const key = count.join('#');               // same counts → same key
+    (map.get(key) || map.set(key, []).get(key)).push(str);
+  }
+  return [...map.values()];
+}`}
+  tests={[
+    { expr: 'isAnagram("listen","silent")', label: '"listen" vs "silent"' },
+    { expr: 'isAnagram("rat","car")', label: '"rat" vs "car"' },
+    { expr: 'JSON.stringify(groupAnagrams(["eat","tea","tan","ate","nat","bat"]))', label: 'group anagrams' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the $O(1)$-space array method and the count-signature grouping:
+
+```ts
+// /dsa/02-strings/anagram.ts
+function isAnagramArray(s: string, t: string): boolean {
+    if (s.length !== t.length) return false;
+    const count = new Array(26).fill(0);
+    for (let i = 0; i < s.length; i++) {
+        count[s.charCodeAt(i) - 97]++;   // s contributes +1
+        count[t.charCodeAt(i) - 97]--;   // t contributes -1
+    }
+    return count.every(c => c === 0);    // balanced ⇒ anagram
+}
+
+function groupAnagramsCount(strs: string[]): string[][] {
+    const map = new Map<string, string[]>();
+    for (const str of strs) {
+        const count = new Array(26).fill(0);
+        for (const char of str) count[char.charCodeAt(0) - 97]++;
+        const key = count.join('#');     // canonical signature, O(k) not O(k log k)
+        if (!map.has(key)) map.set(key, []);
+        map.get(key)!.push(str);
+    }
+    return Array.from(map.values());
+}
+```
+
+Run the full file: `npx tsx 02-strings/anagram.ts`.
+
+## Complexity
+
+One pass over each string with a fixed-size counter:
+
+$$
+T(n) = O(n), \qquad S(n) = O(1)\ \text{for a fixed alphabet (}O(k)\text{ in general).}
+$$
+
+| Approach | Time | Space | Note |
+|----------|------|-------|------|
+| Sort both, compare | $O(n \log n)$ | $O(n)$ | simplest to write |
+| Two hash maps | $O(n)$ | $O(k)$ | works for any alphabet |
+| **Signed 26-array tally** | $O(n)$ | $O(1)$ | the textbook answer |
+| Group anagrams by count key | $O(n \cdot k)$ | $O(n \cdot k)$ | count signature beats sorted key |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Chemistry" icon="⚗️">
+Two molecules are <em>structural isomers</em> when they share a chemical formula but differ in arrangement —
+C₂H₆O is both ethanol and dimethyl ether. The formula is an atom-count tally, so "same formula" is precisely
+an anagram check over chemical elements.
+</ExampleCard>
+
+<ExampleCard domain="Cybersecurity" icon="🛡️">
+Some malware hides by permuting bytes that decode to the same payload. Count-based signatures (a histogram of
+byte values) flag files that are byte-anagrams of a known sample even when the order is scrambled.
+</ExampleCard>
+
+<ExampleCard domain="Music theory" icon="🎼">
+A "pitch-class set" describes a chord by which of the 12 notes it contains, ignoring octave and order. Two
+voicings that are transposition-equivalent share the same 12-slot count vector — an anagram over pitch classes.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Check lengths first.** Unequal lengths can't be anagrams; skipping this guard wastes a whole pass and can
+  index out of bounds in the paired-loop version.
+- **Normalize consistently.** If the problem ignores case or spaces, lowercase and strip *both* strings the
+  same way before tallying.
+- **The 26-array assumes lowercase a–z.** For Unicode, mixed case, or arbitrary symbols, switch to a hash map
+  keyed by the character (still $O(n)$, now $O(k)$ space).
+- **Group anagrams by the count signature, not the sorted string.** The count key is $O(k)$ to build versus
+  $O(k \log k)$ to sort — a real speedup when words are long.
+- **Interview cue:** "are these anagrams / group the anagrams / find all anagrams of p in s" all reduce to
+  comparing character counts; the last one is a **sliding window** of counts.
+
+## Practice
+
+1. **Easy:** By hand, tally `"abba"` vs `"baba"`. Do all buckets reach zero?
+2. **Easy:** Give two same-length strings that are *not* anagrams and name the bucket that stays nonzero.
+3. **Medium:** Implement *Find All Anagrams in a String* (LeetCode 438): return every start index where a
+   window of `s` is an anagram of `p`, using a sliding count window in $O(n)$.
+4. **Medium:** Compute the minimum number of character replacements to turn `s` into an anagram of `t`
+   (same length).
+5. **Hard:** Group anagrams for a stream of words arriving one at a time, supporting "give me the current
+   group for this word" in expected $O(k)$ per query.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Two strings are anagrams if and only if they have the same:',
+      options: [
+        'length only',
+        'first and last characters',
+        'multiset of characters (equal counts of each)',
+        'sorted prefix',
+      ],
+      answer: 2,
+      explain: 'Anagrams ignore order entirely; what must match is the count of every character — the multiset. Equal length is necessary but not sufficient.',
+    },
+    {
+      q: 'In the single signed-tally method, what indicates that s and t are anagrams?',
+      options: [
+        'The tally array sums to the string length',
+        'Every bucket in the tally is zero after the pass',
+        'No bucket ever goes negative',
+        'The first and last buckets match',
+      ],
+      answer: 1,
+      explain: 'count[c]++ for s and count[c]-- for t means every character is cancelled exactly when the counts match — so all buckets end at zero.',
+    },
+    {
+      q: 'Why prefer a character-count key over a sorted-string key when grouping anagrams?',
+      options: [
+        'It uses less memory always',
+        'Building the count key is O(k) vs O(k log k) to sort each word',
+        'Sorted keys break on Unicode',
+        'Count keys are shorter to type',
+      ],
+      answer: 1,
+      explain: 'A fixed-size count vector is built in O(k) by one pass, while producing a sorted key costs O(k log k). For long words the count signature is meaningfully faster.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Anagrams depend only on the <strong>multiset of characters</strong>, never the order.',
+    'A <strong>single signed tally</strong> (s adds, t subtracts) decides it in O(n) time, O(1) space for a fixed alphabet.',
+    'Always <strong>compare lengths first</strong> — unequal lengths can never be anagrams.',
+    'Group anagrams by a <strong>character-count signature</strong> (O(k)) rather than a sorted key (O(k log k)).',
+    'For Unicode or mixed case, swap the 26-array for a <strong>hash map</strong> and normalize both strings the same way.',
+  ]}
+/>
+
+Next up: **Pattern Matching (KMP)** — finding a needle in a haystack in linear time by never re-examining a
+character, using a precomputed failure function.

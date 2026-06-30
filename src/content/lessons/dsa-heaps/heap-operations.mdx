@@ -1,0 +1,273 @@
+---
+title: Sift-Up, Sift-Down & Build-Heap
+track: dsa-heaps
+summary: "Two tiny movements keep a heap honest: sift-up restores order after an insert, sift-down after an extract — and running sift-down from the middle of the array heapifies everything in O(n)."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-heaps/heap-basics
+leadsTo:
+  - dsa-heaps/heap-applications
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import HeapBuildHeapify from '../../../components/demos/HeapBuildHeapify.tsx';
+
+## The hook: one swap out of place
+
+You run a leaderboard for an online game. A player finishes a match and their score jumps — suddenly they
+belong higher up. You do not want to re-sort ten million entries for one change. You want to nudge just
+that one player into their correct spot and leave everyone else untouched. That nudge — a value walking up
+or down a single path until the heap property holds again — is the entire mechanics of a heap. Master the
+two nudges and you can insert, delete, sort, and bulk-build with the same handful of comparisons.
+
+<Callout type="intuition" title="The one-sentence idea">
+Every heap update is one out-of-place value walking a single root-to-leaf path: it sifts up if it is too
+strong for its parent, or sifts down if it is too weak for its children — at most ⌊log n⌋ swaps either way.
+</Callout>
+
+## Intuition
+
+In the last lesson you saw **sift-up** (also called bubble-up) carry a freshly inserted value toward the
+root. Its mirror image is **sift-down** (bubble-down), and it powers everything else.
+
+- **Sift-up** runs after an `insert`. The new value sits at the bottom and may be stronger than its parent,
+  so it climbs: compare with the parent, swap if it wins, repeat. It only ever moves *up one path*.
+- **Sift-down** runs after an `extract`. To remove the root, you overwrite it with the last leaf (keeping
+  the tree complete), then let that interloper sink: compare it with its **best** child — the smaller child
+  for a min-heap — swap if the child wins, repeat. It only ever moves *down one path*.
+
+Now the beautiful part: **build-heap**. Suppose you already have a raw, unordered array and want to turn it
+into a heap. The naive way is `n` separate inserts, costing $O(n \log n)$. The clever way runs sift-down
+on every node, but starting from the **last parent** (index `⌊n/2⌋ - 1`) and walking back to the root. Why
+start there? Because the bottom half of the array is all leaves — single-node heaps that are already valid.
+You only need to fix the internal nodes, and you fix each one *after* its children are already heaps. That
+bottom-up order is what makes it cost only $O(n)$.
+
+## Play with it
+
+Switch between **Build-heap** and **Extract-root** and feed your own numbers. In build mode, watch
+sift-down fire from the last parent up to the root; in extract mode, watch the last leaf take the throne and
+then sink. The highlighted pair is always the parent and the child it is being compared against.
+
+<HeapBuildHeapify client:visible />
+
+<Callout type="tip">
+In Build-heap mode, notice how many nodes barely move — the entire bottom row never sifts at all, and the
+row above it sifts at most one step. Only a handful of nodes near the root do real work. That lopsided
+distribution is the whole reason build-heap is O(n) and not O(n log n).
+</Callout>
+
+## How it works
+
+Heapify `[9, 4, 7, 1, 8, 2, 6, 3]` into a min-heap. With `n = 8`, the last parent is index
+`⌊8/2⌋ - 1 = 3`. Sift down from index 3 back to 0:
+
+```
+[9, 4, 7, 1, 8, 2, 6, 3]   start (raw array)
+i=3: 1 vs child 3      → stays           [9, 4, 7, 1, 8, 2, 6, 3]
+i=2: 7 vs child 2      → swap            [9, 4, 2, 1, 8, 7, 6, 3]
+i=1: 4 sinks past 1, 3 → two swaps       [9, 1, 2, 3, 8, 7, 6, 4]
+i=0: 9 sinks past 1, 3, 4 → three swaps  [1, 3, 2, 4, 8, 7, 6, 9]
+```
+
+The root `1` is now the minimum. And here is the bonus: if you repeatedly **extract** the root from a heap,
+the values come out in sorted order — that is **heapsort**.
+
+<CodeRunner
+  client:visible
+  code={`// Build a min-heap in place (O(n)) then extract repeatedly (heapsort).
+function siftDown(a, i, n) {
+  while (true) {
+    const l = 2 * i + 1, r = 2 * i + 2;
+    let best = i;
+    if (l < n && a[l] < a[best]) best = l;
+    if (r < n && a[r] < a[best]) best = r;
+    if (best === i) break;
+    [a[i], a[best]] = [a[best], a[i]];   // sift down one level
+    i = best;
+  }
+}
+
+function buildHeap(arr) {
+  const a = [...arr];
+  for (let i = (a.length >> 1) - 1; i >= 0; i--) siftDown(a, i, a.length);
+  return a;                              // a valid min-heap array
+}
+
+function heapExtractAll(arr) {
+  const a = buildHeap(arr), out = [];
+  for (let n = a.length; n > 0; n--) {
+    out.push(a[0]);                      // serve the root...
+    a[0] = a[n - 1]; a.pop();            // ...replace with last leaf...
+    siftDown(a, 0, a.length);           // ...and let it sink
+  }
+  return out;                           // sorted ascending
+}`}
+  tests={[
+    { expr: 'buildHeap([9,4,7,1,8,2,6,3])', label: 'heapified array' },
+    { expr: 'buildHeap([9,4,7,1,8,2,6,3])[0]', label: 'root (minimum)' },
+    { expr: 'heapExtractAll([9,4,7,1,8,2,6,3])', label: 'extract order' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — `extractMin` with its `bubbleDown`, and the static `fromArray` that performs the
+O(n) build by heapifying from the last parent:
+
+```ts
+// /dsa/10-heap/heap-basics.ts
+extractMin(): T | undefined {
+    if (this.heap.length === 0) return undefined;
+    const min = this.heap[0];
+    const last = this.heap.pop()!;
+    if (this.heap.length > 0) {
+        this.heap[0] = last;        // last leaf takes the root...
+        this.bubbleDown(0);         // ...then sinks into place
+    }
+    return min;
+}
+
+private bubbleDown(index: number): void {
+    const length = this.heap.length;
+    while (true) {
+        const left = this.leftChild(index);
+        const right = this.rightChild(index);
+        let smallest = index;
+        if (left < length && this.compare(this.heap[left], this.heap[smallest]) < 0) smallest = left;
+        if (right < length && this.compare(this.heap[right], this.heap[smallest]) < 0) smallest = right;
+        if (smallest === index) break;
+        this.swap(index, smallest);
+        index = smallest;
+    }
+}
+
+// Build a heap from a raw array in O(n)
+static fromArray<T>(arr: T[], compareFn?: (a: T, b: T) => number): MinHeap<T> {
+    const heap = new MinHeap<T>(compareFn);
+    heap.heap = [...arr];
+    for (let i = Math.floor(arr.length / 2) - 1; i >= 0; i--) {
+        heap.bubbleDown(i);         // heapify from the last parent up to the root
+    }
+    return heap;
+}
+```
+
+Run the full file: `npx tsx 10-heap/heap-basics.ts`.
+
+## Complexity
+
+Sift-up and sift-down each walk one path, so they cost $O(\log n)$. Building by `n` separate inserts is
+therefore $O(n \log n)$. Build-heap does better. A node at height `h` sifts down at most `h` levels, and a
+complete tree has about `n / 2^{h+1}` nodes at height `h`. Summing the work:
+
+$$
+\sum_{h=0}^{\lfloor \log_2 n \rfloor} \frac{n}{2^{h+1}} \cdot O(h)
+\;=\; O\!\left( n \sum_{h=0}^{\infty} \frac{h}{2^{h}} \right)
+\;=\; O(2n) \;=\; O(n).
+$$
+
+The infinite series $\sum h / 2^h$ converges to 2 — the tall, expensive sifts are rare because almost every
+node lives near the bottom where sifts are cheap.
+
+| Operation | Time | Note |
+|-----------|------|------|
+| sift-up / sift-down | $O(\log n)$ | one path along the height |
+| `insert` / `extract` | $O(\log n)$ | one sift each |
+| build by `n` inserts | $O(n \log n)$ | the naive way |
+| **build-heap (heapify)** | $O(n)$ | bottom-up sift-down |
+| heapsort | $O(n \log n)$ | build once, then `n` extracts |
+
+<Callout type="why">
+Build-heap's O(n) is why heapsort can sort in place with O(1) extra space and a guaranteed O(n log n)
+worst case — handy when you cannot afford quicksort's worst case or mergesort's extra array, such as inside
+memory-constrained schedulers and embedded systems.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Sports" icon="🏆">
+Seeding a knockout bracket is build-heap in disguise: from a raw list of player ratings you heapify once,
+then repeatedly extract the current best to fill seed 1, 2, 3… That repeated-extract pass is exactly
+heapsort producing a ranked order.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A warehouse robot fleet boots each morning with a fresh dump of pending orders. Rather than inserting them
+one by one, the dispatcher heapifies the whole batch in O(n), then sift-down keeps the next-urgent order at
+the root as new ones trickle in through the day.
+</ExampleCard>
+
+<ExampleCard domain="Gaming" icon="🎮">
+When a player's score changes on a heap-backed leaderboard, only that entry is out of place. A single
+sift-up or sift-down walks it to its new home in O(log n), leaving the millions of other entries — and the
+expensive full re-sort — completely untouched.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Sift-down must compare against the *better* child, not just the left one.** For a min-heap you swap
+  with the smaller of the two children; swapping with the left child blindly can violate the heap property.
+- **Forgetting to shrink before sifting on extract.** Pop the last leaf into the root and reduce the size
+  *first*; if `bubbleDown` still sees the old length it can read a stale slot.
+- **Build-heap goes bottom-up, deletion-style top-down.** Heapify starts at `⌊n/2⌋ - 1` and decreases to 0
+  (children finished before parents). Starting from the top instead gives a wrong heap.
+- **"n inserts" is not build-heap.** Inserting one at a time is O(n log n); the O(n) result needs the
+  in-place heapify. Interviewers love this distinction — state both costs.
+- **Heapsort is not stable.** Equal keys can be reordered. If stability matters, heapsort is the wrong pick.
+
+## Practice
+
+1. **Easy:** Extract the minimum once from the min-heap `[1, 3, 2, 4, 8, 7, 6]`. Show the array afterward.
+2. **Easy:** Which array indices are leaves in a heap of 8 elements, and so are skipped by build-heap?
+3. **Medium:** Build a min-heap from `[6, 5, 3, 1, 8, 7, 2, 4]` using bottom-up heapify. Give the final array.
+4. **Medium:** Run heapsort on `[3, 1, 2]` with a max-heap and trace why the output lands in ascending order.
+5. **Hard:** Prove that inserting `n` elements one by one is $\Theta(n \log n)$ in the worst case, while
+   build-heap on the same `n` elements is $\Theta(n)$ — what structural difference causes the gap?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'After removing the root of a min-heap, which value is moved into the root position before sifting down?',
+      options: ['The smaller child of the root', 'The last leaf in the array', 'A new minimum value', 'The parent of the root'],
+      answer: 1,
+      explain: 'You overwrite the root with the last array element (the rightmost leaf) to keep the tree complete, then sift it down.',
+    },
+    {
+      q: 'Why does build-heap run sift-down starting from index ⌊n/2⌋ - 1 down to 0?',
+      options: [
+        'To save memory',
+        'Because the second half of the array are leaves (already valid heaps), so only internal nodes need fixing, bottom-up',
+        'Because sift-up is faster than sift-down',
+        'To make the sort stable',
+      ],
+      answer: 1,
+      explain: 'Indices from ⌊n/2⌋ to n-1 are leaves — trivially valid one-node heaps. Fixing internal nodes from the bottom up means each node\'s children are already heaps.',
+    },
+    {
+      q: 'What is the time complexity of build-heap on n elements?',
+      options: ['O(n log n)', 'O(n)', 'O(log n)', 'O(n²)'],
+      answer: 1,
+      explain: 'The summed sift-down work telescopes to O(n) because most nodes are near the bottom where sifts are short.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Sift-up</strong> restores order after an insert; <strong>sift-down</strong> restores it after an extract — each walks one path in O(log n).',
+    'To extract the root, move the <strong>last leaf into the root</strong> and sift it down.',
+    'Sift-down always swaps with the <strong>better child</strong> (smaller for a min-heap, larger for a max-heap).',
+    '<strong>Build-heap</strong> sift-downs bottom-up from ⌊n/2⌋-1, costing <strong>O(n)</strong> — beating n separate O(n log n) inserts.',
+    'Building once and extracting repeatedly is <strong>heapsort</strong>: in-place, O(n log n), but not stable.',
+  ]}
+/>
+
+Next up: **Heaps at Work** — turning these two movements into priority queues, top-K selection, and a
+running median that updates in O(log n) per number.

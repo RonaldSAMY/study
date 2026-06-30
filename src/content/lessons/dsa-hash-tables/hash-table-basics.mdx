@@ -1,0 +1,255 @@
+---
+title: Building a Hash Table
+track: dsa-hash-tables
+summary: "Wire a hash function to an array of buckets and one number rules it all: the load factor that triggers resizing."
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - dsa-hash-tables/hash-functions
+leadsTo:
+  - dsa-hash-tables/collision-handling
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import HashTableBuilder from '../../../components/demos/HashTableBuilder.tsx';
+
+## The hook: the cloakroom that grows itself
+
+Back at the coat-check. The hash function tells the attendant *which hook* to use — but what happens
+when the rack fills up and three coats keep landing on the same hook? Service slows to a crawl. A smart
+cloakroom watches how full it is and, once it passes a threshold, wheels in a bigger rack and
+re-distributes every coat. A hash table does exactly this, and the threshold has a name: the
+**load factor**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A hash table is an array of buckets indexed by a hash function; it stays fast by keeping the load factor
+(items ÷ buckets) low, doubling its size and rehashing everything when it gets too crowded.
+</Callout>
+
+## Intuition: function + array + a growth rule
+
+You already have the hash function. A hash table adds two things around it:
+
+- **An array of buckets.** `set(key, value)` computes `index = hash(key) % capacity` and stores the pair there.
+  `get(key)` recomputes the same index and reads it back. Same key, same index — that is the whole trick.
+- **A growth rule.** Define the **load factor**
+
+$$
+\lambda = \frac{n}{m},
+$$
+
+the number of entries $n$ over the number of buckets $m$. As $\lambda$ rises, buckets hold more than one
+item and operations slow down. So when $\lambda$ crosses a threshold (commonly $0.75$), the table
+**doubles its capacity and rehashes** every key into the larger array. Bigger $m$ means smaller
+$\lambda$, and speed is restored.
+
+Resizing is the price you pay for staying fast on average — and because it only happens occasionally, that
+price is tiny when spread out (we will quantify this under Complexity).
+
+## Play with it
+
+Load a list of keys and step through the inserts. Watch each key hash to a bucket, the load-factor bar
+fill, and — the moment it passes 0.75 — the table double in size and rehash everything into new buckets.
+
+<HashTableBuilder client:visible />
+
+<Callout type="tip">
+Notice that after a resize the same key can land in a *different* bucket. That is unavoidable: the index
+is <code>hash(key) % capacity</code>, and capacity just changed. Rehashing is not optional — it is what
+keeps lookups correct.
+</Callout>
+
+## How it works
+
+Insert `apple, banana, cherry, date` into a table that starts at capacity 4 with threshold 0.75:
+
+```
+cap=4  set apple   → bucket 1   size=1  λ=0.25
+cap=4  set banana  → bucket 3   size=2  λ=0.50
+cap=4  set cherry  → bucket 3   size=3  λ=0.75
+cap=4  set date    → bucket 0   size=4  λ=1.00 > 0.75
+       RESIZE → cap=8, rehash all 4 keys into the bigger table
+```
+
+The fourth insert pushes $\lambda$ to 1.0, tripping the threshold, so the table grows to 8 and every key
+is re-placed using `% 8` instead of `% 4`.
+
+<CodeRunner
+  client:visible
+  code={`// Minimal hash table with chaining + load-factor resize
+function makeTable(capacity = 4) {
+  let buckets = Array.from({ length: capacity }, () => []);
+  let size = 0;
+  const hash = (key) => {
+    let h = 0;
+    for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % buckets.length;
+    return h;
+  };
+  const resize = () => {
+    const old = buckets;
+    buckets = Array.from({ length: old.length * 2 }, () => []);
+    size = 0;
+    for (const b of old) for (const [k, v] of b) set(k, v);
+  };
+  function set(key, value) {
+    if (size / buckets.length > 0.75) resize();
+    const b = buckets[hash(key)];
+    const found = b.find((e) => e[0] === key);
+    if (found) { found[1] = value; return; }
+    b.push([key, value]); size++;
+  }
+  const get = (key) => {
+    const e = buckets[hash(key)].find((e) => e[0] === key);
+    return e ? e[1] : undefined;
+  };
+  return { set, get, stats: () => ({ size, capacity: buckets.length }) };
+}
+
+const t = makeTable(4);
+for (const k of ['apple','banana','cherry','date','fig']) t.set(k, k.length);`}
+  tests={[
+    { expr: 't.get("banana")', label: 'get("banana")' },
+    { expr: 't.get("fig")', label: 'get("fig")' },
+    { expr: 't.get("missing")', label: 'get("missing")' },
+    { expr: 'JSON.stringify(t.stats())', label: 'final stats (note capacity grew)' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the `set` path with its load-factor check and the `resize` that rehashes
+everything. Prime capacities (53, then the next prime after doubling) improve distribution:
+
+```ts
+// /dsa/08-hash-table/hash-table.ts
+set(key: string, value: V): void {
+    if (this._size / this.capacity >= this.loadFactorThreshold) { // 0.75
+        this.resize();
+    }
+    const index = this.hash(key);
+    if (!this.buckets[index]) this.buckets[index] = [];
+    const bucket = this.buckets[index]!;
+    for (let i = 0; i < bucket.length; i++) {
+        if (bucket[i][0] === key) { bucket[i][1] = value; return; } // update
+    }
+    bucket.push([key, value]);  // insert
+    this._size++;
+}
+
+private resize(): void {
+    const oldBuckets = this.buckets;
+    this.capacity = this.nextPrime(this.capacity * 2);
+    this.buckets = new Array(this.capacity);
+    this._size = 0;
+    for (const bucket of oldBuckets) {
+        if (bucket) for (const [key, value] of bucket) this.set(key, value); // rehash
+    }
+}
+```
+
+Run the full file: `npx tsx 08-hash-table/hash-table.ts`.
+
+## Complexity
+
+With a good hash and a bounded load factor, each bucket holds a constant number of items on average:
+
+$$
+T_{\text{avg}}(\text{get, set, delete}) = O(1), \qquad T_{\text{worst}} = O(n).
+$$
+
+A single resize copies all $n$ entries, costing $O(n)$ — but it only happens after the table has doubled,
+so those costs spread out to $O(1)$ **amortized** per insert.
+
+| Operation | Average | Worst case |
+|-----------|---------|------------|
+| get / has | $O(1)$ | $O(n)$ |
+| set (insert) | $O(1)$ amortized | $O(n)$ (on a resize) |
+| delete | $O(1)$ | $O(n)$ |
+| space | — | $O(n)$ |
+
+The worst case ($O(n)$) happens when every key collides into one bucket — which is exactly the problem
+the next lesson tackles.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Web infrastructure" icon="🗄️">
+A cache like Redis or Memcached is a giant hash table: it hashes a request key to a slot and returns the
+stored response in one hop, turning a slow database query into a microsecond lookup.
+</ExampleCard>
+
+<ExampleCard domain="Compilers" icon="⚙️">
+A compiler's symbol table hashes each variable name to its type and scope. Every time the parser meets
+an identifier, one hash lookup answers "have I seen this name, and what is it?"
+</ExampleCard>
+
+<ExampleCard domain="Biology" icon="🧬">
+Genome search tools (BLAST and friends) index DNA by hashing short k-mers — fixed-length substrings — so
+a query sequence finds its candidate matches by bucket lookup instead of scanning billions of bases.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Resizing is mandatory, not cosmetic.** Skip it and the load factor climbs, buckets grow, and your
+  "O(1)" table quietly becomes a linked-list scan.
+- **You must rehash on resize.** Indices are computed `% capacity`; once capacity changes, old indices are
+  wrong. Copying buckets verbatim corrupts the table.
+- **Insert must check for an existing key.** Otherwise `set(k, 1)` then `set(k, 2)` leaves two entries and
+  `get(k)` is ambiguous.
+- **"O(1)" is average and amortized, not guaranteed.** Say this in interviews. A single insert can trigger an
+  $O(n)$ resize, and adversarial keys can force $O(n)$ lookups.
+- **Interview cue:** when asked "how does a hash table stay fast as it grows?", answer "load factor + resize +
+  rehash" — that triplet is the whole story.
+
+## Practice
+
+1. **Easy:** A table has capacity 16 and 11 entries. What is its load factor? Will an insert at threshold 0.75 trigger a resize?
+2. **Easy:** Trace inserting `a, b, c` into a capacity-2 table with threshold 0.75. When does it resize?
+3. **Medium:** Add a `delete(key)` to the minimal table above that removes a pair and decrements size.
+4. **Medium:** Change the threshold to 0.5 and explain how it affects speed vs memory.
+5. **Hard:** Implement *incremental* resizing that moves a few entries per operation instead of all at once (how real databases avoid latency spikes).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A hash table has 6 entries across 8 buckets. Its load factor is:',
+      options: ['0.6', '0.75', '1.33', '8'],
+      answer: 1,
+      explain: 'Load factor = entries / buckets = 6 / 8 = 0.75.',
+    },
+    {
+      q: 'Why must every key be rehashed when the table resizes?',
+      options: [
+        'To free memory',
+        'Because the index is hash(key) % capacity, and capacity changed',
+        'To sort the keys',
+        'To remove duplicates',
+      ],
+      answer: 1,
+      explain: 'An index computed with the old capacity points to the wrong slot in the new array, so each key must be re-placed using the new capacity.',
+    },
+    {
+      q: 'Insertion into a hash table is best described as:',
+      options: ['O(1) worst case', 'O(log n) average', 'O(1) amortized average', 'O(n) average'],
+      answer: 2,
+      explain: 'Most inserts are O(1); the occasional O(n) resize spreads out to O(1) amortized. The non-amortized worst case is still O(n).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A hash table is a <strong>hash function over an array of buckets</strong>: index = hash(key) % capacity.',
+    'The <strong>load factor λ = n / m</strong> measures crowding; low λ keeps operations fast.',
+    'When λ crosses a threshold (often <strong>0.75</strong>), the table <strong>doubles and rehashes</strong> every key.',
+    'Operations are <strong>O(1) average</strong>, with resizing giving inserts O(1) <strong>amortized</strong>; the worst case is O(n).',
+    'Resizing without rehashing corrupts the table — new capacity means new indices.',
+  ]}
+/>
+
+Next up: **Collision Handling** — what to actually do when two keys insist on the same bucket, with
+chaining and open addressing going head to head.

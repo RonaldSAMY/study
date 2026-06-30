@@ -1,0 +1,245 @@
+---
+title: Reversing & Rotating
+track: dsa-strings
+summary: "Two pointers swapping inward reverse a sequence in place, and three nested reversals rotate it: one tiny primitive, two classic results."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-strings/string-basics
+leadsTo:
+  - dsa-strings/palindromes
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import StrReversalTwoPointer from '../../../components/demos/StrReversalTwoPointer.tsx';
+
+## The hook: flip a line of dancers without a second stage
+
+Picture dancers in a line who must end up in reverse order — but the stage only has room for the line they
+already occupy. No spare stage (no extra array). The fix is wonderfully simple: the two dancers at the ends
+trade places, then the next two in, then the next, until the two walkers meet in the middle. Half as many
+swaps as you'd guess, and not one inch of extra space.
+
+<Callout type="intuition" title="The one-sentence idea">
+Reverse a sequence by swapping the outermost pair and walking two pointers inward until they meet — ⌊n/2⌋
+swaps, no extra array.
+</Callout>
+
+## Intuition: the two-pointer primitive
+
+In the last lesson a string was a frozen row of tiles. To reverse one we first copy it into a mutable array
+of characters (strings themselves can't be edited in place), then run the move that will reappear all over
+this track: **two pointers converging**.
+
+Set `left = 0` and `right = n - 1`. Swap `arr[left]` with `arr[right]`, then `left++` and `right--`. Each
+swap fixes *two* positions at once, so after $\lfloor n/2 \rfloor$ swaps the pointers cross and the whole
+sequence is reversed. The middle character of an odd-length string never moves — it's already where it
+belongs.
+
+That same primitive composes into something slicker: **rotation by reversal**. To rotate a string left by
+`k`, reverse the first `k` characters, reverse the rest, then reverse the whole thing. Three in-place
+reversals and the block has slid around — the trick behind rotating an array "by hand" without a buffer.
+
+## Play with it
+
+Load any word and step through the swaps. **Indigo** is the left pointer, **sky** is the right; each frame
+swaps the pair and marches both inward. Count the swaps — it's always half the length.
+
+<StrReversalTwoPointer client:visible />
+
+<Callout type="tip">
+Reverse an odd-length word like <code>level</code> and watch the centre tile: the pointers cross *over* it
+without ever swapping it. That single fixed point is why odd palindromes have a lone middle character — the
+idea you'll use in the next lesson.
+</Callout>
+
+## How it works
+
+Reverse `"stressed"` (it becomes `"desserts"`), tracing the pointers:
+
+```
+start:  s t r e s s e d     L=0  R=7
+swap:   d t r e s s e s     swap 0,7 → L=1 R=6
+swap:   d e r e s s t s     swap 1,6 → L=2 R=5
+swap:   d e s e s r t s     swap 2,5 → L=3 R=4
+swap:   d e s s e r t s     swap 3,4 → L=4 R=3  (crossed → stop)
+result: desserts
+```
+
+Four swaps for eight characters. Here it is alongside rotation-by-reversal:
+
+<CodeRunner
+  client:visible
+  code={`function reverseTwoPointer(str) {
+  const arr = str.split('');
+  let left = 0, right = arr.length - 1;
+  while (left < right) {
+    [arr[left], arr[right]] = [arr[right], arr[left]];   // swap the outer pair
+    left++; right--;                                     // walk inward
+  }
+  return arr.join('');
+}
+
+// Rotate left by k using three reversals: rev(0,k-1), rev(k,n-1), rev(0,n-1)
+function rotateLeft(str, k) {
+  const a = str.split('');
+  k = ((k % a.length) + a.length) % a.length;
+  const rev = (i, j) => { while (i < j) { [a[i], a[j]] = [a[j], a[i]]; i++; j--; } };
+  rev(0, k - 1); rev(k, a.length - 1); rev(0, a.length - 1);
+  return a.join('');
+}`}
+  tests={[
+    { expr: 'reverseTwoPointer("stressed")', label: 'reverse "stressed"' },
+    { expr: 'reverseTwoPointer("abcde")', label: 'reverse "abcde"' },
+    { expr: 'rotateLeft("abcdef", 2)', label: 'rotate "abcdef" left by 2' },
+    { expr: 'rotateLeft("hello", 3)', label: 'rotate "hello" left by 3' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the canonical two-pointer reversal and the three-reversal rotation:
+
+```ts
+// /dsa/02-strings/string-reversal.ts
+function reverseTwoPointer(str: string): string {
+    const arr = str.split('');
+    let left = 0;
+    let right = arr.length - 1;
+    while (left < right) {
+        [arr[left], arr[right]] = [arr[right], arr[left]];   // swap fixes two slots
+        left++;
+        right--;
+    }
+    return arr.join('');
+}
+
+function rotateLeft(str: string, n: number): string {
+    if (str.length === 0) return str;
+    n = n % str.length;
+    if (n === 0) return str;
+    const arr = str.split('');
+    const reverseArr = (start: number, end: number): void => {
+        while (start < end) {
+            [arr[start], arr[end]] = [arr[end], arr[start]];
+            start++;
+            end--;
+        }
+    };
+    reverseArr(0, n - 1);            // reverse first n
+    reverseArr(n, arr.length - 1);   // reverse the rest
+    reverseArr(0, arr.length - 1);   // reverse the whole
+    return arr.join('');
+}
+```
+
+Run the full file: `npx tsx 02-strings/string-reversal.ts`.
+
+## Complexity
+
+Every character is touched a constant number of times:
+
+$$
+T(n) = O(n), \qquad S_\text{array}(n) = O(1)\ \text{extra (beyond the char array)}.
+$$
+
+| Approach | Time | Extra space | Note |
+|----------|------|-------------|------|
+| Two-pointer swap (in array) | $O(n)$ | $O(1)$ | the reference method |
+| `[...str].reverse().join('')` | $O(n)$ | $O(n)$ | terse, allocates a copy |
+| Prepend `c + reversed` in a loop | $O(n^2)$ | $O(n)$ | immutability bites again |
+| Rotate by 3 reversals | $O(n)$ | $O(1)$ | reuses the same primitive |
+
+The $O(1)$ figure is "extra beyond the character buffer" — strings can't be mutated, so you always pay for
+that one array, but you never need a *second* one.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Aerospace controls" icon="🛩️">
+Avionics buses send some fields most-significant-byte-first and others least-significant-first. Converting
+between big- and little-endian is exactly an in-place reverse of a fixed-width byte block — the two-pointer
+swap on hardware registers.
+</ExampleCard>
+
+<ExampleCard domain="Music production" icon="🎚️">
+A reverse-reverb effect literally reverses a slice of audio samples, applies reverb, then reverses it back.
+The "samples" are a numeric array, and the engine flips them with the same converging-pointer swap.
+</ExampleCard>
+
+<ExampleCard domain="Puzzle & toy design" icon="🧩">
+Rotating a ring of beads by k positions without lifting them off the wire is the three-reversal trick made
+physical: flip one arc, flip the other, flip the whole ring, and the pattern has rotated.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Strings are immutable — you must copy to a char array first.** `s[i] = x` silently fails (or throws in
+  strict mode). Reverse the array, then `join('')`.
+- **Unicode breakage.** `arr[i]` over a UTF-16 string can split an emoji's surrogate pair and corrupt it.
+  Split with `[...str]` for true characters if non-ASCII is possible.
+- **Rotation amount must be reduced mod n** — and made non-negative — or you index out of bounds. The
+  `((k % n) + n) % n` idiom handles negative `k` too.
+- **Interview cue:** "reverse in place" or "rotate without extra space" is a direct signal for the
+  converging two-pointer swap; mention the $\lfloor n/2 \rfloor$ swap count to show you see the symmetry.
+
+## Practice
+
+1. **Easy:** Trace the swaps that turn `"abcd"` into its reverse. How many swaps, and which indices?
+2. **Easy:** Why does the middle character of an odd-length string never move during reversal?
+3. **Medium:** Implement `reverseVowels(str)` that reverses only the vowels and leaves other characters in
+   place (two pointers that skip non-vowels).
+4. **Medium:** Reverse the **words** of `"the sky is blue"` to `"blue is sky the"` without using a second
+   large buffer (hint: reverse the whole string, then each word).
+5. **Hard:** Prove that rotating left by `k` via `rev(0,k-1); rev(k,n-1); rev(0,n-1)` equals the desired
+   rotation, and adapt it to rotate **right** by `k`.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How many swaps does the two-pointer method use to reverse a string of length n?',
+      options: ['n', 'n − 1', '⌊n/2⌋', 'n²'],
+      answer: 2,
+      explain: 'Each swap places two characters correctly, so you need only ⌊n/2⌋ swaps; the middle of an odd-length string is already in place.',
+    },
+    {
+      q: 'To rotate a string LEFT by k with three reversals, the correct order is:',
+      options: [
+        'reverse whole, then first k, then the rest',
+        'reverse first k, then the rest, then the whole string',
+        'reverse the rest, then the whole, then first k',
+        'reverse the whole string twice',
+      ],
+      answer: 1,
+      explain: 'rev(0,k-1) then rev(k,n-1) then rev(0,n-1). The first two flip each block internally; the final full reversal swaps the two blocks into rotated order.',
+    },
+    {
+      q: 'Why must you copy a string into an array before reversing with swaps?',
+      options: [
+        'Arrays index faster than strings',
+        'Strings are immutable, so individual characters cannot be reassigned',
+        'join is required before any loop',
+        'Swapping needs a numeric type',
+      ],
+      answer: 1,
+      explain: 'You cannot do s[i] = s[j] on a string — it is frozen. Splitting into a char array gives you mutable slots to swap, then you join back.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>converging two-pointer swap</strong> reverses a sequence in ⌊n/2⌋ swaps with O(1) extra space.',
+    'Strings are immutable: <strong>copy to a char array</strong>, swap, then <code>join</code> back.',
+    '<strong>Rotation by three reversals</strong> — first k, the rest, then the whole — slides a block without a buffer.',
+    'Always <strong>reduce the rotation amount mod n</strong> (and keep it non-negative) before indexing.',
+    'The middle element of an odd-length sequence is a <strong>fixed point</strong> — the seed of odd palindromes.',
+  ]}
+/>
+
+Next up: **Palindromes** — the same two pointers, but now they *compare* instead of swap, proving symmetry
+from both ends.

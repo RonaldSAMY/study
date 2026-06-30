@@ -1,0 +1,244 @@
+---
+title: The Two-Pointer Technique
+track: dsa-arrays
+summary: Two indices walking a sorted array — one from each end, or one chasing the other — collapse many O(n^2) scans into a single O(n) pass with no extra memory.
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - dsa-arrays/array-basics
+leadsTo:
+  - dsa-arrays/sliding-window
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import ArrTwoPointers from '../../../components/demos/ArrTwoPointers.tsx';
+
+## The hook: finding a pair without checking every pair
+
+You have a sorted price list and a budget, and you want two items that together cost *exactly* the budget.
+The brute-force instinct is to try every pair — that is O(n²). But because the list is sorted, you can be
+smarter: put one finger on the cheapest item and one on the most expensive, look at their sum, and slide
+*one* finger inward depending on whether the sum is too small or too big. Each comparison eliminates a whole
+range of pairs at once.
+
+<Callout type="intuition" title="The one-sentence idea">
+On a sorted array, a left pointer and a right pointer move toward each other; comparing their two values
+tells you which one to move, so the pair you want is found in a single O(n) sweep.
+</Callout>
+
+## Intuition: sorting turns the sum into a steering wheel
+
+From the previous lesson you know `arr[i]` is O(1) and that "in place, O(1) space" is a hint to use index
+arithmetic. Two pointers are that hint made concrete. Sort the array, then keep two indices: `left` at the
+start, `right` at the end. Their sum has a wonderful monotonic property:
+
+- moving `left` rightward can only **increase** the sum (you swap in a larger value),
+- moving `right` leftward can only **decrease** it.
+
+So the comparison `sum` versus `target` becomes a steering wheel. Sum too small? You need more, so `left++`.
+Too big? You need less, so `right--`. Equal? You found the pair. Every step retires one element for good,
+which is why `left` and `right` together cross the array exactly once. The same skeleton — two converging
+pointers — also reverses an array, checks a palindrome, and computes the largest container of water.
+
+## Play with it
+
+Load any numbers (they get sorted) and a target. Step through and watch the pointers steer: when the sum is
+too small the **left** marker advances, when it is too big the **right** marker retreats.
+
+<ArrTwoPointers client:visible />
+
+<Callout type="tip">
+There is no going back. Once a pointer moves past an element, that element is gone forever — which is exactly
+why the technique is O(n) and not O(n²). Try a target with no valid pair and watch the pointers simply cross.
+</Callout>
+
+## How it works
+
+Find a pair summing to `18` in the sorted array `[2, 7, 8, 11, 15]`:
+
+```
+[2, 7, 8, 11, 15]   L=2, R=15 → 2 + 15 = 17 < 18 → too small, L++
+[2, 7, 8, 11, 15]   L=7, R=15 → 7 + 15 = 22 > 18 → too big,   R--
+[2, 7, 8, 11, 15]   L=7, R=11 → 7 + 11 = 18 = 18 → found it! indices 1 and 3
+```
+
+Three steps instead of the ten pairs a double loop would test. The same opposite-direction pattern reverses
+an array in place — left and right swap, then march inward:
+
+<CodeRunner
+  client:visible
+  code={`// Two Sum on a SORTED array — opposite-direction pointers, O(n)
+function twoSumSorted(arr, target) {
+  let left = 0, right = arr.length - 1;
+  while (left < right) {
+    const sum = arr[left] + arr[right];
+    if (sum === target) return [left, right];
+    if (sum < target) left++;   // need a bigger sum
+    else right--;               // need a smaller sum
+  }
+  return [-1, -1];
+}
+
+// Reverse in place — same two-pointer skeleton, O(1) extra space
+function reverseInPlace(arr) {
+  let left = 0, right = arr.length - 1;
+  while (left < right) {
+    [arr[left], arr[right]] = [arr[right], arr[left]];
+    left++; right--;
+  }
+  return arr;
+}`}
+  tests={[
+    { expr: 'twoSumSorted([2,7,8,11,15], 18)', label: 'pair summing to 18' },
+    { expr: 'twoSumSorted([1,2,3,4], 100)', label: 'no pair sums to 100' },
+    { expr: 'reverseInPlace([1,2,3,4,5])', label: 'reverse [1..5]' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the sorted two-sum and "container with most water", which moves the pointer at the
+*shorter* line because that is the only side that could ever improve the area:
+
+```ts
+// /dsa/01-arrays/two-pointer-technique.ts
+function twoSumSorted(arr: number[], target: number): TwoSumResult {
+    let left = 0;
+    let right = arr.length - 1;
+    while (left < right) {
+        const sum = arr[left] + arr[right];
+        if (sum === target) {
+            return { indices: [left, right], values: [arr[left], arr[right]], found: true };
+        } else if (sum < target) {
+            left++;            // sum too small → grow it
+        } else {
+            right--;           // sum too big → shrink it
+        }
+    }
+    return { indices: null, values: null, found: false };
+}
+
+function maxArea(heights: number[]): number {
+    let left = 0, right = heights.length - 1, maxWater = 0;
+    while (left < right) {
+        const area = (right - left) * Math.min(heights[left], heights[right]);
+        maxWater = Math.max(maxWater, area);
+        if (heights[left] < heights[right]) left++;   // move the shorter wall
+        else right--;
+    }
+    return maxWater;
+}
+```
+
+Run the full file: `npx tsx 01-arrays/two-pointer-technique.ts`.
+
+## Complexity
+
+Each pointer advances at most $n$ times and they never revisit an element:
+
+$$
+T(n) = O(n), \qquad S(n) = O(1) \quad (\text{plus } O(n \log n) \text{ once if you must sort first}).
+$$
+
+| Approach | Time | Space |
+|----------|------|-------|
+| Brute force (all pairs) | $O(n^2)$ | $O(1)$ |
+| Hash map (unsorted input) | $O(n)$ | $O(n)$ |
+| **Two pointers (sorted input)** | $O(n)$ | $O(1)$ |
+
+If the array is already sorted, two pointers beat the hash map on memory. If it is unsorted and you cannot
+afford to sort, the hash map's O(n) time without the sort may win — know both.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Woodworking" icon="🪚">
+Planks sit on a rack sorted by length. To find two that together span a doorway exactly, hold the shortest
+and longest: too short, swap up from the bottom; too long, swap down from the top. You converge on the pair
+without measuring every combination.
+</ExampleCard>
+
+<ExampleCard domain="Climate engineering" icon="💧">
+"Container with most water" is a reservoir question: two walls hold water bounded by the shorter one. Start
+at the widest gap and always move the shorter wall inward — the only move that could ever trap more water —
+to find the maximum capacity in one pass.
+</ExampleCard>
+
+<ExampleCard domain="Linguistics" icon="🔤">
+Checking whether "racecar" is a palindrome is two pointers from both ends comparing characters as they march
+toward the middle. A single mismatch ends it early; meeting in the middle confirms it — O(n), no copy of the
+string needed.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The array must be sorted** for the opposite-direction sum trick. If the question gives unsorted input
+  and forbids sorting (because you must return *original* indices), reach for a hash map instead.
+- **`while (left < right)`, not `<=`.** Using `<=` lets a single element pair with itself, which is usually
+  wrong for "two distinct elements".
+- **Skip duplicates in 3Sum.** When extending two pointers to triplets, advance past equal neighbours after
+  a hit, or you will emit the same triplet many times.
+- **Fast/slow is two pointers too.** Same-direction pointers (a `slow` writer and a `fast` reader) do
+  in-place removal — `removeDuplicates`, `moveZeroes` — in O(n)/O(1).
+- **Interview cue:** "sorted array" + "find a pair/triplet" + "O(1) space" is a near-certain two-pointer
+  prompt. Say "move the pointer that can improve the answer" out loud.
+
+## Practice
+
+1. **Easy (Valid Palindrome, LeetCode 125):** ignore non-alphanumerics and compare from both ends.
+2. **Easy (Two Sum II, LeetCode 167):** the sorted-input two-sum exactly as above; return 1-based indices.
+3. **Medium (Container With Most Water, LeetCode 11):** maximize `width × min(height)` by moving the shorter
+   wall inward.
+4. **Medium (3Sum, LeetCode 15):** fix one element, then two-pointer the rest; remember to skip duplicates.
+5. **Hard (Trapping Rain Water, LeetCode 42):** two pointers with running `leftMax`/`rightMax` give the
+   O(1)-space solution.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In sorted two-sum, the current sum is LESS than the target. Which move helps?',
+      options: ['Move right pointer left', 'Move left pointer right', 'Move both inward', 'Restart from the middle'],
+      answer: 1,
+      explain: 'A bigger sum is needed; moving left rightward swaps in a larger value, increasing the sum.',
+    },
+    {
+      q: 'Why does the converging two-pointer scan run in O(n) rather than O(n^2)?',
+      options: [
+        'It checks every pair but faster',
+        'Each step permanently retires one element, so the pointers cross the array only once',
+        'Sorting makes comparisons free',
+        'It uses recursion',
+      ],
+      answer: 1,
+      explain: 'Every comparison advances exactly one pointer and discards that element forever, so total work is linear.',
+    },
+    {
+      q: 'You are given an UNSORTED array and must return the original indices of a pair summing to a target. Best tool?',
+      options: [
+        'Sort then two pointers',
+        'A hash map of value → index in one pass',
+        'Brute-force double loop',
+        'Binary search',
+      ],
+      answer: 1,
+      explain: 'Sorting destroys the original indices; a hash map finds the complement in O(n) while preserving indices.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'On a <strong>sorted</strong> array, left/right pointers converge and the sum versus target tells you which to move.',
+    'Each step <strong>retires one element</strong>, so the scan is <strong>O(n) time and O(1) space</strong>.',
+    'The same skeleton powers <strong>reverse-in-place, palindrome checks, and container-with-most-water</strong>.',
+    '<strong>Same-direction</strong> (slow/fast) pointers do in-place removal like moveZeroes and removeDuplicates.',
+    'No sort allowed but need original indices? Use a <strong>hash map</strong> instead — know when each wins.',
+  ]}
+/>
+
+Next up: **Sliding Window** — let the two pointers move in the *same* direction and the gap between them
+becomes a window you grow and shrink to answer subarray questions in one pass.

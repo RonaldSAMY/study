@@ -1,0 +1,255 @@
+---
+title: Kadane’s Algorithm
+track: dsa-arrays
+summary: "Walk the array once keeping a running sum, and at each step make one decision — extend the current run or start fresh — to find the maximum-sum contiguous subarray in O(n) time and O(1) space."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-arrays/sliding-window
+leadsTo:
+  - dsa-strings/string-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import ArrKadane from '../../../components/demos/ArrKadane.tsx';
+
+## The hook: the best stretch of a roller-coaster month
+
+A trader's daily profit-and-loss swings between gains and losses, and you want the single best *consecutive*
+streak — the run of days with the largest total. The sliding window from the previous lesson stalls here:
+once negatives are in play, adding a day can *lower* the total, so "grow then shrink" loses its footing.
+Kadane's algorithm replaces the window with one crisp question asked at every day: *is the running streak
+still helping me, or should I cut my losses and start a new streak right here?*
+
+<Callout type="intuition" title="The one-sentence idea">
+Carry a running sum of the current streak; at each element, if the streak has gone negative it can only drag
+you down, so throw it away and start fresh — the best running sum ever seen is the maximum subarray.
+</Callout>
+
+## Intuition: never carry a losing streak forward
+
+The key realisation is local and greedy. Suppose you know the best subarray *ending exactly at* the previous
+index has sum `current`. What is the best subarray ending at the next element `x`? You have only two
+choices:
+
+1. **Extend** the previous streak: `current + x`.
+2. **Start fresh** at `x` alone: `x`.
+
+You pick whichever is larger. And notice *why* you would ever start fresh: only when `current` is negative,
+because a negative prefix can only shrink any sum it is glued to. So the rule is
+
+$$
+\text{current} = \max\bigl(x,\ \text{current} + x\bigr),
+$$
+
+and you keep a separate `best` that records the largest `current` you have ever seen. That `best` is the
+answer. Unlike the sliding window, there is no left pointer to drag back — a losing streak is simply
+abandoned the moment it turns against you, which is exactly what lets negatives be handled in one pass.
+
+## Play with it
+
+Load any numbers — negatives encouraged. Step through and watch the **current run** (indigo) either extend
+or reset, while the **best run so far** (emerald bar) locks onto the winning stretch.
+
+<ArrKadane client:visible />
+
+<Callout type="tip">
+Watch the moment the indigo run collapses to a single cell: that is `current` having gone negative, so
+extending would be worse than starting over. The emerald bar only ever moves when a new record is set.
+</Callout>
+
+## How it works
+
+Run Kadane on `[-2, 1, -3, 4, -1, 2, 1, -5, 4]`:
+
+```
+i  x    current = max(x, current+x)     best
+0  -2   -2                              -2
+1   1   max(1, -2+1=-1)   = 1   ↺reset   1
+2  -3   max(-3, 1-3=-2)   = -2  extend   1
+3   4   max(4, -2+4=2)    = 4   ↺reset   4
+4  -1   max(-1, 4-1=3)    = 3   extend   4
+5   2   max(2, 3+2=5)     = 5   extend   5
+6   1   max(1, 5+1=6)     = 6   extend   6   ← best
+7  -5   max(-5, 6-5=1)    = 1   extend   6
+8   4   max(4, 1+4=5)     = 5   extend   6
+```
+
+The winner is `6`, the subarray `[4, -1, 2, 1]`. Here is the one-liner, plus the variant that also reports
+*where* the best subarray sits:
+
+<CodeRunner
+  client:visible
+  code={`// Kadane — maximum subarray SUM, O(n) time, O(1) space
+function maxSubarray(nums) {
+  let current = nums[0], best = nums[0];
+  for (let i = 1; i < nums.length; i++) {
+    current = Math.max(nums[i], current + nums[i]); // extend or restart
+    best = Math.max(best, current);
+  }
+  return best;
+}
+
+// Same idea, also tracking the start/end indices
+function maxSubarrayRange(nums) {
+  let current = nums[0], best = nums[0];
+  let start = 0, tempStart = 0, end = 0;
+  for (let i = 1; i < nums.length; i++) {
+    if (nums[i] > current + nums[i]) { current = nums[i]; tempStart = i; }
+    else current = current + nums[i];
+    if (current > best) { best = current; start = tempStart; end = i; }
+  }
+  return { best, start, end, sub: nums.slice(start, end + 1) };
+}`}
+  tests={[
+    { expr: 'maxSubarray([-2,1,-3,4,-1,2,1,-5,4])', label: 'max subarray sum' },
+    { expr: 'maxSubarray([5,4,-1,7,8])', label: 'mostly positive → 23' },
+    { expr: 'maxSubarray([-3,-1,-2])', label: 'all negative → -1' },
+    { expr: 'maxSubarrayRange([-2,1,-3,4,-1,2,1,-5,4])', label: 'best subarray + indices' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the canonical Kadane, and `maxProductSubarray`, which tracks both a max *and* a min
+because multiplying by a negative flips them:
+
+```ts
+// /dsa/01-arrays/kadane-algorithm.ts
+function maxSubarrayKadane(nums: number[]): number {
+    if (nums.length === 0) return 0;
+    let currentSum = nums[0];
+    let maxSum = nums[0];
+    for (let i = 1; i < nums.length; i++) {
+        currentSum = Math.max(nums[i], currentSum + nums[i]); // extend or start fresh
+        maxSum = Math.max(maxSum, currentSum);
+    }
+    return maxSum;
+}
+
+function maxProductSubarray(nums: number[]): number {
+    if (nums.length === 0) return 0;
+    let maxProduct = nums[0], currentMax = nums[0], currentMin = nums[0];
+    for (let i = 1; i < nums.length; i++) {
+        const num = nums[i];
+        if (num < 0) [currentMax, currentMin] = [currentMin, currentMax]; // negative flips roles
+        currentMax = Math.max(num, currentMax * num);
+        currentMin = Math.min(num, currentMin * num);
+        maxProduct = Math.max(maxProduct, currentMax);
+    }
+    return maxProduct;
+}
+```
+
+Run the full file: `npx tsx 01-arrays/kadane-algorithm.ts`.
+
+## Complexity
+
+One pass, two scalars — you cannot do better than touching each element once:
+
+$$
+T(n) = O(n), \qquad S(n) = O(1).
+$$
+
+| Approach | Time | Space |
+|----------|------|-------|
+| Brute force (all subarrays) | $O(n^3)$ | $O(1)$ |
+| Better brute (running inner sum) | $O(n^2)$ | $O(1)$ |
+| **Kadane** | $O(n)$ | $O(1)$ |
+
+Kadane is also a tiny dynamic program: `dp[i]` = best subarray sum *ending at* `i` equals
+$\max(nums[i],\ dp[i-1] + nums[i])$, and the answer is the maximum over all `dp[i]`. The O(1) version just
+keeps the one `dp` value it still needs.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Hiking" icon="🥾">
+A trail's elevation changes step by step, some up, some down. The best continuous climb is Kadane over the
+per-step deltas: keep adding while the run still gains height, abandon it the instant the accumulated change
+turns negative.
+</ExampleCard>
+
+<ExampleCard domain="Esports" icon="🎮">
+A match log records point swings, positive and negative. The team's strongest momentum streak is the
+maximum-sum contiguous run — a single pass that ignores any earlier slump once it has dragged the streak
+below zero.
+</ExampleCard>
+
+<ExampleCard domain="Retail" icon="🛒">
+Daily store profit bounces between good and bad days. The best consecutive trading period is Kadane over the
+profit series; a stretch of losses gets cut the moment carrying it forward would hurt the next good run.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Initialise to `nums[0]`, not `0`.** Seeding `best = 0` returns `0` for an all-negative array, but the
+  correct answer is the largest (least negative) element. Start both `current` and `best` at `nums[0]`.
+- **"At least one element."** Maximum subarray means non-empty; do not let an empty window of sum `0` sneak
+  in unless the problem explicitly allows it.
+- **Product is not sum.** For maximum *product*, track both the running max and min, because a negative
+  number swaps which is which.
+- **Circular arrays.** The best wrap-around subarray is `total − (minimum subarray)`; take the max of that
+  and plain Kadane, with a guard for the all-negative case.
+- **Interview cue:** "maximum/largest sum of a contiguous subarray" is the canonical Kadane prompt — state
+  the extend-or-restart decision and that you seed from the first element.
+
+## Practice
+
+1. **Easy (Maximum Subarray, LeetCode 53):** the canonical Kadane — return the largest contiguous sum.
+2. **Easy (Best Time to Buy and Sell Stock, LeetCode 121):** track the running minimum price and best
+   profit — Kadane's cousin on price deltas.
+3. **Medium (Maximum Product Subarray, LeetCode 152):** carry both max and min through negatives.
+4. **Medium (Maximum Sum Circular Subarray, LeetCode 918):** combine Kadane's max and min with the total.
+5. **Hard (Maximum Sum of Two Non-Overlapping Subarrays, LeetCode 1031):** prefix sums plus a best-so-far
+   sweep from each side.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'At each element, Kadane sets current = max(x, current + x). When does it effectively "start fresh"?',
+      options: [
+        'When x is negative',
+        'When the previous current is negative, so x alone beats extending',
+        'Every other step',
+        'Only at the last element',
+      ],
+      answer: 1,
+      explain: 'x alone exceeds current + x exactly when current is negative — a losing streak that can only drag the sum down.',
+    },
+    {
+      q: 'For the array [-4, -2, -5], what does correct Kadane return?',
+      options: ['0', '-2', '-11', '-4'],
+      answer: 1,
+      explain: 'All negative, so the answer is the largest single element, -2. Seeding best = 0 would wrongly give 0.',
+    },
+    {
+      q: 'Why does maximum PRODUCT subarray track both a running max and a running min?',
+      options: [
+        'To save memory',
+        'Multiplying by a negative swaps the largest and smallest, so a min can become the new max',
+        'Products are always positive',
+        'Because the array must be sorted',
+      ],
+      answer: 1,
+      explain: 'A negative factor flips signs, so the most-negative running product can suddenly become the most-positive — you must keep both.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Kadane keeps a running sum and at each step chooses <strong>extend</strong> (current + x) or <strong>restart</strong> (x).',
+    'You restart precisely when <strong>current is negative</strong> — a losing prefix can only hurt.',
+    'A separate <strong>best</strong> records the largest running sum ever seen: that is the answer, in <strong>O(n)/O(1)</strong>.',
+    '<strong>Seed from nums[0]</strong>, never 0, or all-negative arrays give a wrong answer.',
+    'It is a one-state DP: <strong>dp[i] = max(nums[i], dp[i-1] + nums[i])</strong>; product needs both a max and a min.',
+  ]}
+/>
+
+Next up: **String Fundamentals** — the array techniques you have built carry straight over to text, where
+immutability and character codes add a fresh twist.

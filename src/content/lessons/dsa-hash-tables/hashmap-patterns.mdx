@@ -1,0 +1,232 @@
+---
+title: Hash-Map Problem Patterns
+track: dsa-hash-tables
+summary: "A handful of hash-map moves crack a huge share of interviews: frequency counts, seen-sets, grouping, and the two-sum complement scan."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-hash-tables/collision-handling
+leadsTo:
+  - dsa-trees/tree-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import HashTwoSumScanner from '../../../components/demos/HashTwoSumScanner.tsx';
+
+## The hook: the brute-force tax
+
+Asked to find two numbers in a list that sum to a target, the first instinct is two nested loops:
+compare every pair. That is $O(n^2)$ — a million comparisons for a thousand items. But there is a
+"tax-free" route: as you walk the list once, *remember what you have seen* in a hash map and ask, for
+each number, "have I already passed the number that completes this pair?" One pass, $O(n)$. That single
+move — trade memory for time by remembering — is the engine behind almost every hash-map pattern.
+
+<Callout type="intuition" title="The one-sentence idea">
+A hash map turns "have I seen this before / how many times / which group?" into an O(1) question, which
+collapses many O(n²) search problems down to a single O(n) pass.
+
+</Callout>
+
+## Intuition: four moves cover most problems
+
+Everything you saw — fast lookup, $O(1)$ membership — now becomes a toolkit. Four recurring patterns:
+
+1. **Frequency counting.** A `Map` from item to count. Powers "most common element," "first unique
+   character," "valid anagram."
+2. **Seen-set / membership.** A `Set` of things encountered. Powers "contains duplicate," "longest
+   consecutive sequence," cycle detection.
+3. **Complement lookup (two-sum).** While scanning, store each value; for the current value $x$ check
+   whether the **complement** $t - x$ is already in the map. Powers two-sum and its many cousins.
+4. **Grouping / bucketing.** A `Map` from a derived key to a list. Powers "group anagrams" (key = sorted
+   letters) and "group by" anything.
+
+The two-sum complement scan is the one to internalize. For target $t$ and array $a$, you want indices
+$i, j$ with $a_i + a_j = t$. Rearranged, $a_j = t - a_i$. So at each $j$, the question is simply: *did an
+earlier index already hold $t - a_j$?* The map answers in $O(1)$.
+
+## Play with it
+
+Edit the array and target, then scan. For each element the demo computes the complement $t - x$ and asks
+the seen-map whether it is already there — lighting up the match the instant a pair is found.
+
+<HashTwoSumScanner client:visible />
+
+<Callout type="tip">
+Insert <em>after</em> you check. If you record the current number before looking up its complement, an
+element could falsely pair with itself. Check first, then store.
+</Callout>
+
+## How it works
+
+Scan `[2, 7, 11, 15]` for target `9`, keeping a map of value → index:
+
+```
+i=0  x=2   need 9-2=7    map={}            7 not seen → store 2→0
+i=1  x=7   need 9-7=2    map={2:0}         2 IS seen at 0 → pair (0, 1)
+```
+
+Two iterations, done — versus six comparisons for the nested-loop version. The map remembered that `2`
+lived at index 0, so when `7` arrived, completing the pair was a single lookup.
+
+<CodeRunner
+  client:visible
+  code={`// Two Sum — complement scan with a seen map
+function twoSum(nums, target) {
+  const seen = new Map();           // value -> index
+  for (let i = 0; i < nums.length; i++) {
+    const complement = target - nums[i];
+    if (seen.has(complement)) return [seen.get(complement), i];
+    seen.set(nums[i], i);           // store AFTER checking
+  }
+  return null;
+}
+
+// Frequency counting — first non-repeating character
+function firstUniqChar(s) {
+  const count = new Map();
+  for (const ch of s) count.set(ch, (count.get(ch) || 0) + 1);
+  for (let i = 0; i < s.length; i++) if (count.get(s[i]) === 1) return i;
+  return -1;
+}`}
+  tests={[
+    { expr: 'JSON.stringify(twoSum([2,7,11,15], 9))', label: 'twoSum target 9' },
+    { expr: 'JSON.stringify(twoSum([3,2,4], 6))', label: 'twoSum target 6' },
+    { expr: 'twoSum([1,2,3], 99)', label: 'twoSum no pair → null' },
+    { expr: 'firstUniqChar("leetcode")', label: 'first unique char index' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the two-sum complement scan and `subarraySum`, which generalizes the trick with a
+**prefix-sum** map (count subarrays summing to $k$ in one pass):
+
+```ts
+// /dsa/08-hash-table/hash-map-usage.ts
+function twoSum(nums: number[], target: number): [number, number] | null {
+    const seen = new Map<number, number>();        // value → index
+    for (let i = 0; i < nums.length; i++) {
+        const complement = target - nums[i];
+        if (seen.has(complement)) return [seen.get(complement)!, i];
+        seen.set(nums[i], i);
+    }
+    return null;
+}
+
+function subarraySum(nums: number[], k: number): number {
+    const prefixCount = new Map<number, number>();
+    prefixCount.set(0, 1);                          // empty prefix
+    let count = 0, sum = 0;
+    for (const num of nums) {
+        sum += num;
+        if (prefixCount.has(sum - k)) count += prefixCount.get(sum - k)!; // complement on prefixes
+        prefixCount.set(sum, (prefixCount.get(sum) || 0) + 1);
+    }
+    return count;
+}
+```
+
+Run the full file: `npx tsx 08-hash-table/hash-map-usage.ts`.
+
+## Complexity
+
+Each pattern makes one pass, doing $O(1)$ expected work per element:
+
+$$
+T(n) = O(n), \qquad S(n) = O(n).
+$$
+
+That $O(n)$ space is the "memory for time" trade — it is what buys the drop from $O(n^2)$.
+
+| Problem | Brute force | With a hash map |
+|---------|-------------|-----------------|
+| Two Sum | $O(n^2)$ | $O(n)$ time, $O(n)$ space |
+| Contains duplicate | $O(n^2)$ or $O(n \log n)$ | $O(n)$ |
+| Group anagrams | — | $O(n \cdot k \log k)$ |
+| Subarray sum = k | $O(n^2)$ | $O(n)$ |
+
+Remember these are **average** bounds: hashing is $O(1)$ expected, $O(n)$ in a pathological worst case.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Retail analytics" icon="🛒">
+A point-of-sale system counts items sold with a frequency map — product id → units. "Best seller today"
+is just the max-count entry, computed in one pass over the receipts instead of re-sorting everything.
+</ExampleCard>
+
+<ExampleCard domain="Cybersecurity" icon="🛡️">
+Intrusion detection keeps a seen-set of recent request fingerprints. A repeat within the window is an
+instant O(1) hit — flagging replay attacks or duplicate transactions without rescanning the log.
+</ExampleCard>
+
+<ExampleCard domain="Personal finance" icon="💳">
+Splitting a bill so two people's shares hit an exact total is two-sum in disguise: store each share, and
+for the next one check whether its complement to the target is already on the table.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Order of check-then-store matters.** In two-sum, look up the complement *before* inserting the current
+  value, or a single element can pair with itself.
+- **Reach for a Set, not a Map, when you only need membership.** "Have I seen this?" wants a `Set`; "how
+  many / which index?" wants a `Map`. Picking the lean structure signals fluency.
+- **Mutable objects make treacherous keys.** JavaScript `Map` keys compare by reference, so two equal-looking
+  arrays are different keys. Use a stringified or canonical key when content equality is what you mean.
+- **`Map` vs plain object.** Prefer `Map` for non-string keys, frequent add/delete, insertion order, and a
+  real `.size`; objects risk prototype-key collisions (`"constructor"`).
+- **Interview cue:** the phrases "find a pair," "count occurrences," "seen before," "group by," and "O(1)
+  lookup" are flares for a hash map. Name the pattern, then the one-pass solution falls out.
+
+## Practice
+
+1. **Easy:** Use a frequency map to decide whether `"anagram"` and `"nagaram"` are anagrams.
+2. **Easy:** With a seen-set, return `true` if an array contains any duplicate in one pass.
+3. **Medium:** Group `["eat","tea","tan","ate","nat","bat"]` into anagram lists using a sorted-letters key.
+4. **Medium:** Count the subarrays of `[1, 1, 1]` that sum to `2` using the prefix-sum map.
+5. **Hard:** Find the length of the longest consecutive sequence in an unsorted array in $O(n)$ using only a set.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the two-sum scan, why do we store each number AFTER checking for its complement?',
+      options: [
+        'To save memory',
+        'So an element cannot be matched with itself',
+        'Because Map.set is slow',
+        'To keep the map sorted',
+      ],
+      answer: 1,
+      explain: 'If you stored the current value first, its complement could be itself at the same index, producing a false pair.',
+    },
+    {
+      q: 'Which structure best fits "has this value appeared before?" with no associated data?',
+      options: ['Array', 'Map', 'Set', 'Sorted list'],
+      answer: 2,
+      explain: 'A Set stores only keys and answers membership in O(1) — ideal when you do not need an associated value.',
+    },
+    {
+      q: 'The hash-map version of Two Sum improves the time complexity from:',
+      options: ['O(n) to O(log n)', 'O(n²) to O(n)', 'O(n log n) to O(1)', 'O(2ⁿ) to O(n²)'],
+      answer: 1,
+      explain: 'The nested-loop brute force is O(n²); one pass with a complement map is O(n) time (and O(n) space).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Hash maps turn <strong>"seen / count / group / complement"</strong> questions into O(1) lookups.',
+    'The <strong>two-sum scan</strong> stores values while scanning and checks for the complement t − x — one pass, O(n).',
+    'Always <strong>check the complement before storing</strong> the current value to avoid self-pairing.',
+    'Use a <strong>Set</strong> for membership, a <strong>Map</strong> for counts/indices, and a derived key for grouping.',
+    'These patterns trade <strong>O(n) space for O(n) time</strong>, collapsing many O(n²) problems.',
+  ]}
+/>
+
+That wraps the Hash Tables track. Next up: **Tree Fundamentals** — leaving flat, unordered buckets behind
+for hierarchies of nodes, where structure brings back the ordering hash tables gave up.

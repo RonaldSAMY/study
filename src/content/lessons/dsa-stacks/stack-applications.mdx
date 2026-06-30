@@ -1,0 +1,304 @@
+---
+title: Expression Evaluation
+track: dsa-stacks
+summary: "Swap brackets for numbers and the same stack evaluates arithmetic: postfix notation pops operands, the shunting-yard reorders infix, and a monotonic stack scans for the next greater element."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-stacks/balanced-parentheses
+leadsTo:
+  - dsa-queues/queue-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import StkPostfixEval from '../../../components/demos/StkPostfixEval.tsx';
+
+## The hook: how a calculator really thinks
+
+Type `2 + 3 * 4` into a calculator and it answers `14`, not `20` — it respected precedence and did the
+multiply first. But computers do not actually evaluate left to right with precedence rules baked in.
+Internally they rewrite the expression into a form with **no parentheses and no precedence at all**,
+called postfix, and then a stack chews through it in one clean left-to-right pass. The same machinery
+that matched brackets last lesson now does arithmetic.
+
+<Callout type="intuition" title="The one-sentence idea">
+In **postfix** notation an operator comes after its operands, so evaluation is just: push numbers, and
+when you see an operator pop the top two, combine them, and push the result back.
+
+</Callout>
+
+## Intuition
+
+Infix — the notation humans write, like `3 + 4 * 2` — is awkward for a machine because the meaning of
+`+` depends on what comes *later* (`*` binds tighter, so it happens first). **Postfix** (also called
+Reverse Polish Notation) removes that ambiguity by writing the operator *after* its operands:
+`3 4 2 * +`. Read it aloud: "take 4 and 2, multiply, then add 3." No parentheses, no precedence table —
+the order of the tokens already encodes everything.
+
+That makes evaluation almost trivial with a stack:
+
+- A **number** has nothing to combine yet → push it.
+- An **operator** needs its two operands, and they are the two most recent numbers → pop two, apply the
+  operator, push the single result.
+
+When the tokens run out, exactly one value is left: the answer. The stack quietly holds all the
+"pending operands" — the partial results waiting for an operator, which is precisely the most-recent
+bookkeeping a stack is built for.
+
+## Play with it
+
+Step through a postfix expression. Numbers stack up; each operator collapses the top two into one. Watch
+the height shrink by one on every operation, until a single value remains.
+
+<StkPostfixEval client:visible />
+
+<Callout type="tip">
+Order matters for non-commutative operators. <code>5 3 -</code> means "pop 3, pop 5, compute 5 − 3 = 2" —
+the operand popped <em>second</em> is the left-hand side. Get that backwards and subtraction or division
+silently gives the wrong sign.
+</Callout>
+
+## How it works
+
+Evaluate `5 1 2 + 4 * + 3 -`. The stack top is on the right:
+
+```
+5    push           [5]
+1    push           [5, 1]
+2    push           [5, 1, 2]
++    1 + 2 = 3      [5, 3]
+4    push           [5, 3, 4]
+*    3 * 4 = 12     [5, 12]
++    5 + 12 = 17    [17]
+3    push           [17, 3]
+-    17 - 3 = 14    [14]
+result = 14
+```
+
+Here is the evaluator, plus the **shunting-yard** algorithm that converts ordinary infix into postfix —
+notice it is *also* a stack, this time holding operators until something of lower-or-equal precedence
+forces them out:
+
+<CodeRunner
+  client:visible
+  code={`function evaluatePostfix(expr) {
+  const stack = [];
+  for (const token of expr.split(' ')) {
+    if (/^-?\\d+$/.test(token)) {
+      stack.push(Number(token));          // operand → push
+    } else {
+      const b = stack.pop();              // right operand
+      const a = stack.pop();              // left operand
+      if (token === '+') stack.push(a + b);
+      else if (token === '-') stack.push(a - b);
+      else if (token === '*') stack.push(a * b);
+      else stack.push(Math.trunc(a / b));
+    }
+  }
+  return stack.pop();
+}
+
+function infixToPostfix(expr) {
+  const out = [], ops = [];
+  const prec = { '+': 1, '-': 1, '*': 2, '/': 2 };
+  for (const t of expr.split(' ')) {
+    if (/^-?\\d+$/.test(t)) out.push(t);
+    else if (t === '(') ops.push(t);
+    else if (t === ')') { while (ops.at(-1) !== '(') out.push(ops.pop()); ops.pop(); }
+    else { while (ops.length && ops.at(-1) !== '(' && prec[ops.at(-1)] >= prec[t]) out.push(ops.pop()); ops.push(t); }
+  }
+  while (ops.length) out.push(ops.pop());
+  return out.join(' ');
+}`}
+  tests={[
+    { expr: "evaluatePostfix('2 3 + 4 *')", label: '(2+3)*4' },
+    { expr: "evaluatePostfix('5 1 2 + 4 * + 3 -')", label: '5+1+2 then *4...' },
+    { expr: "infixToPostfix('3 + 4 * 2')", label: 'infix 3 + 4 * 2' },
+    { expr: "infixToPostfix('( 3 + 4 ) * 2')", label: 'infix (3 + 4) * 2' },
+  ]}
+/>
+
+## A second pattern: the monotonic stack
+
+Stacks evaluate expressions, but the same "pop while the top is dominated" rhythm solves a whole family
+of array problems. The classic is **next greater element**: for each number, what is the first larger
+number to its right? A *monotonic* stack keeps indices whose values strictly decrease; when a bigger
+value arrives, it pops everything it beats and records itself as their answer — each index pushed and
+popped once, so O(n) overall:
+
+<CodeRunner
+  client:visible
+  code={`function nextGreaterElement(arr) {
+  const result = new Array(arr.length).fill(-1);
+  const stack = [];                       // indices, values decreasing
+  for (let i = 0; i < arr.length; i++) {
+    while (stack.length && arr[i] > arr[stack.at(-1)]) {
+      result[stack.pop()] = arr[i];       // arr[i] is the next greater
+    }
+    stack.push(i);
+  }
+  return result;                          // -1 where none exists
+}`}
+  tests={[
+    { expr: 'nextGreaterElement([4, 5, 2, 25])', label: '[4,5,2,25]' },
+    { expr: 'nextGreaterElement([13, 7, 6, 12])', label: '[13,7,6,12]' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the postfix evaluator and the monotonic-stack scanner exactly as shipped:
+
+```ts
+// /dsa/06-stack/stack-applications.ts
+function evaluatePostfix(expression: string): number {
+    const stack: number[] = [];
+    for (const token of expression.split(' ')) {
+        if (/^\d+$/.test(token)) {
+            stack.push(parseInt(token));
+        } else {
+            const b = stack.pop()!;          // right operand (popped first)
+            const a = stack.pop()!;          // left operand
+            switch (token) {
+                case '+': stack.push(a + b); break;
+                case '-': stack.push(a - b); break;
+                case '*': stack.push(a * b); break;
+                case '/': stack.push(Math.trunc(a / b)); break;
+            }
+        }
+    }
+    return stack.pop()!;
+}
+
+// Monotonic decreasing stack of indices → next greater element, O(n).
+function nextGreaterElement(arr: number[]): number[] {
+    const n = arr.length;
+    const result = new Array(n).fill(-1);
+    const stack: number[] = [];
+    for (let i = 0; i < n; i++) {
+        while (stack.length > 0 && arr[i] > arr[stack[stack.length - 1]]) {
+            result[stack.pop()!] = arr[i];
+        }
+        stack.push(i);
+    }
+    return result;
+}
+```
+
+Run the full file: `npx tsx 06-stack/stack-applications.ts`.
+
+## Complexity
+
+Every token (or array index) is pushed once and popped at most once, so all three algorithms are linear:
+
+$$
+T(n) = O(n), \qquad S(n) = O(n).
+$$
+
+| Algorithm | Time | Space | Stack holds |
+|-----------|------|-------|-------------|
+| Evaluate postfix | $O(n)$ | $O(n)$ | pending operands |
+| Infix → postfix (shunting-yard) | $O(n)$ | $O(n)$ | pending operators |
+| Next greater element | $O(n)$ | $O(n)$ | indices, decreasing |
+
+The monotonic-stack O(n) can surprise people: the inner `while` looks nested, but across the whole run
+each index enters and leaves the stack just once, so the total pop count is at most $n$.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Vintage computing" icon="🧮">
+HP calculators famously used <strong>RPN</strong> — you key in <code>5 1 2 + 4 * +</code> with no
+equals or parentheses. Engineers loved it precisely because the stack made long expressions fast and
+unambiguous to enter.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="📈">
+The <strong>stock span</strong> problem — how many consecutive prior days was a stock's price at or
+below today's? — is a monotonic stack of days, the same pop-while-dominated scan as next greater
+element.
+</ExampleCard>
+
+<ExampleCard domain="Weather" icon="🌡️">
+"Days until a warmer temperature" for each day in a forecast is next-greater-element in disguise: a
+decreasing stack of day indices, popped the moment a hotter day appears.
+</ExampleCard>
+
+<ExampleCard domain="Virtual machines" icon="🖥️">
+Stack-based bytecode VMs (the JVM, CPython, WebAssembly) run on postfix-style instructions:
+<code>IADD</code> pops two operands and pushes their sum. Your compiled code is essentially RPN for the
+machine.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Operand order.** For `-` and `/`, the operand popped **first** is the right-hand side. `a = pop()`
+  second, `b = pop()` first, then compute `a - b`. Swapping them flips the sign or inverts the division.
+- **Integer division.** Use `Math.trunc(a / b)`, not plain `/`, when the problem wants integer results —
+  and watch the sign of truncation toward zero.
+- **Left- vs right-associativity.** In shunting-yard, left-associative operators pop on `>=` precedence;
+  right-associative ones (like `^`) pop only on strictly `>`. Mixing these up misplaces operators.
+- **Monotonic direction.** "Next greater" wants a *decreasing* stack scanned left to right; "next
+  smaller" or "previous greater" flips the comparison or the scan direction. State the invariant out
+  loud before coding.
+
+## Practice
+
+1. **Easy:** Evaluate `4 13 5 / +` by hand (integer division). What is the result?
+2. **Easy:** Convert `3 + 4 * 2 - 1` to postfix using the precedence rules, then evaluate it.
+3. **Medium:** Implement a basic calculator for `+`, `-`, `(`, `)` over a string like `(1+(4+5+2)-3)`
+   using one stack (LeetCode 224).
+4. **Medium:** "Daily temperatures" — for `[73,74,75,71,69,72,76,73]`, return days-to-warmer using a
+   monotonic stack.
+5. **Hard:** "Largest rectangle in histogram" for `[2,1,5,6,2,3]` — extend the monotonic stack to track
+   widths and return the maximum area (answer: 10).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the postfix expression "5 1 2 + 4 * +" evaluate to?',
+      options: ['14', '17', '20', '12'],
+      answer: 1,
+      explain: '1+2=3, then 3*4=12, then 5+12=17.',
+    },
+    {
+      q: 'Why is postfix easier for a machine to evaluate than infix?',
+      options: [
+        'It uses fewer digits',
+        'It needs no parentheses or precedence rules — token order fixes the meaning',
+        'It can be evaluated right to left only',
+        'It avoids using a stack',
+      ],
+      answer: 1,
+      explain: 'The operator-after-operands order already encodes precedence and grouping, so a single stack pass suffices.',
+    },
+    {
+      q: 'In next-greater-element, why is the algorithm O(n) despite the inner while loop?',
+      options: [
+        'The array is always sorted',
+        'Each index is pushed and popped at most once across the whole run',
+        'The while loop never runs more than twice',
+        'It uses binary search inside the loop',
+      ],
+      answer: 1,
+      explain: 'Total work is bounded by total pushes and pops; every index enters and leaves the stack once, so it is linear overall.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'In <strong>postfix</strong>, push numbers and let each operator pop its two operands and push the result — one left-to-right pass.',
+    'Postfix needs <strong>no parentheses or precedence</strong>; the <strong>shunting-yard</strong> algorithm (also a stack) converts infix to postfix.',
+    'For non-commutative ops, the operand popped <strong>first is the right-hand side</strong> — order is easy to get wrong.',
+    'A <strong>monotonic stack</strong> solves next-greater-element, stock span, and daily temperatures in <strong>O(n)</strong>.',
+    'Each token or index is pushed and popped <strong>at most once</strong>, so these algorithms are linear time and space.',
+  ]}
+/>
+
+That completes the Stacks track. Next up: **The Queue (FIFO)** — flip the rule so the *first* item in is
+the first out, the structure behind buffers, scheduling, and breadth-first search.
