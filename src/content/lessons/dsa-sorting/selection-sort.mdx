@@ -1,0 +1,233 @@
+---
+title: Selection Sort
+track: dsa-sorting
+summary: Scan the unsorted region for its single smallest value and drop it into place — fewest writes of any simple sort, but always O(n²) comparisons.
+difficulty: beginner
+estMinutes: 12
+prereqs:
+  - dsa-sorting/bubble-sort
+leadsTo:
+  - dsa-sorting/insertion-sort
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SortSelection from '../../../components/demos/SortSelection.tsx';
+
+## The hook: pick the best, then repeat
+
+Casting a play, you do not shuffle actors around endlessly. You look at everyone still waiting,
+pick the single best fit for the lead, give them the role, and then repeat the search for the next
+role with one fewer person in the room. Selection sort works exactly like that: find the smallest
+value in the unsorted part, place it at the front, and shrink the unsorted part by one. Bubble sort
+made many tiny swaps; selection sort scans a lot but **commits only one swap per pass**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Repeatedly find the minimum of the unsorted region and swap it to the boundary, growing a sorted
+prefix one element at a time with at most $n-1$ swaps total.
+</Callout>
+
+## Intuition
+
+You already know bubble sort grows a sorted region at the *right* end. Selection sort grows a sorted
+prefix at the *left* end, but it gets there differently. Instead of fixing local disorder with many
+adjacent swaps, it does a full linear scan to locate the true minimum, then performs **one** swap to
+drop it into position.
+
+That trade-off has a sharp consequence: the scan happens regardless of how the data looks, so
+selection sort always does about $n^2/2$ comparisons — even on a sorted array. It is **not
+adaptive**. What it *is* good at is minimising data movement: exactly one swap per pass, so at most
+$n-1$ swaps total. When a "write" is far more expensive than a "compare" — think flash memory with
+limited write cycles — that property suddenly matters.
+
+## Play with it
+
+Amber marks the smallest value found so far in the current scan; sky is the element being compared
+against it. Notice the swap only happens once, at the very end of each pass.
+
+<SortSelection client:visible />
+
+<Callout type="tip">
+Load an already-sorted array and step through. The comparison count does not drop at all — selection
+sort scans the whole tail every pass no matter what. That is the price of its "always the same" behaviour.
+</Callout>
+
+## How it works
+
+Trace `[64, 25, 12, 22, 11]`, growing the sorted prefix on the left:
+
+```
+start:  [64 25 12 22 11]   scan all → min is 11 → swap with 64
+        [11 |25 12 22 64]  scan 25.. → min is 12 → swap with 25
+        [11 12 |22 64 25] wait — scan 25,12,22,64 → min 12 → swap with 25
+        [11 12 |22 64 25]  scan 22,64,25 → min 22 → already in place
+        [11 12 22 |25 64]  scan 64,25 → min 25 → swap with 64
+        [11 12 22 25 |64]  one element left → sorted ✓
+```
+
+The runnable version returns the sorted array and does one swap per pass:
+
+<CodeRunner
+  client:visible
+  code={`function selectionSort(arr) {
+  const a = [...arr];
+  const n = a.length;
+  for (let i = 0; i < n - 1; i++) {
+    let min = i;
+    for (let j = i + 1; j < n; j++) {
+      if (a[j] < a[min]) min = j;     // remember the smallest so far
+    }
+    if (min !== i) {
+      [a[i], a[min]] = [a[min], a[i]]; // a single swap into place
+    }
+  }
+  return a;
+}`}
+  tests={[
+    { expr: 'selectionSort([64,25,12,22,11]).join(",")', label: 'sort [64,25,12,22,11]' },
+    { expr: 'selectionSort([5,1,4,2,8]).join(",")', label: 'sort [5,1,4,2,8]' },
+    { expr: 'selectionSort([3,3,1,2]).join(",")', label: 'with duplicates' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the basic version, plus the *stable* variant that shifts instead of swapping:
+
+```ts
+// /dsa/sort/selectionsort.ts
+function selectionSort<T>(arr: T[]): T[] {
+    const result = [...arr];
+    const n = result.length;
+    for (let i = 0; i < n - 1; i++) {
+        let minIndex = i;
+        for (let j = i + 1; j < n; j++) {
+            if (result[j] < result[minIndex]) minIndex = j;
+        }
+        if (minIndex !== i) {
+            [result[i], result[minIndex]] = [result[minIndex], result[i]];
+        }
+    }
+    return result;
+}
+
+// A long-range swap can reorder equal keys. Shifting instead keeps it stable:
+function stableSelectionSort<T>(arr: T[]): T[] {
+    const result = [...arr];
+    const n = result.length;
+    for (let i = 0; i < n - 1; i++) {
+        let minIndex = i;
+        for (let j = i + 1; j < n; j++) if (result[j] < result[minIndex]) minIndex = j;
+        const minValue = result[minIndex];
+        for (let k = minIndex; k > i; k--) result[k] = result[k - 1]; // shift right
+        result[i] = minValue;
+    }
+    return result;
+}
+```
+
+Run the full file: `npx tsx sort/selectionsort.ts`.
+
+## Complexity
+
+Best, average, and worst are identical because the scan never gets shorter:
+
+$$
+T_\text{best}(n) = T_\text{avg}(n) = T_\text{worst}(n) = O(n^2), \qquad S(n) = O(1).
+$$
+
+| Metric | Count |
+|--------|-------|
+| Comparisons (every case) | $n(n-1)/2 = O(n^2)$ |
+| Swaps | at most $n-1 = O(n)$ |
+| Extra space | $O(1)$ |
+
+It is **in place**. The textbook swap-based version is **not stable** (a far swap can leapfrog an
+equal key); the shifting variant above restores stability. Its headline feature is the **minimum
+number of writes** among the simple sorts.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Hardware / Storage" icon="💾">
+On flash memory and EEPROM, each cell tolerates only a limited number of writes. Selection sort's
+$O(n)$ swaps — versus bubble sort's $O(n^2)$ — make it a sensible choice when reads are cheap but
+every physical write wears out the chip.
+</ExampleCard>
+
+<ExampleCard domain="Recruiting" icon="🧑‍💼">
+Filling a ranked shortlist: interview everyone, pick the single strongest candidate for slot 1, then
+re-scan the remaining pool for slot 2. You scan a lot but "place" each hire exactly once.
+</ExampleCard>
+
+<ExampleCard domain="Cooking" icon="🍓">
+Plating a fruit tart, you scan the punnet for the ripest strawberry, place it, then scan again for
+the next — handling each berry as few times as possible because every touch bruises it.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Expecting it to be adaptive.** It is not — a sorted array costs the same as a random one. If the
+  data is nearly sorted, reach for insertion sort instead.
+- **Assuming it is stable.** The standard swap version is *unstable*: swapping a distant minimum into
+  place can jump it past an equal key. Mention the shifting fix if asked.
+- **Off-by-one in the inner loop.** Start the minimum search at `j = i + 1`; comparing `a[i]` with
+  itself wastes a comparison and confuses the index bookkeeping.
+- **Interview hook:** "fewest swaps of any simple sort." Then connect it to **heap sort** — replacing
+  the linear minimum-search with a heap turns $O(n^2)$ into $O(n \log n)$.
+
+## Practice
+
+1. **Easy:** Trace selection sort on `[3, 1, 2]`. How many comparisons and how many swaps?
+2. **Easy:** Modify the loop to select the **maximum** each pass and build the sorted region from the
+   right instead. Does the result change?
+3. **Medium:** *Top-k* — adapt selection sort to return only the `k` smallest elements without sorting
+   the rest. What is the running time in terms of `n` and `k`?
+4. **Medium:** Give a concrete 3-element array of `(value, label)` pairs where swap-based selection
+   sort reorders two equal values, proving it is unstable.
+5. **Hard:** *Double selection* — find the min **and** the max in one pass and place both. How many
+   passes does it now need, and why is the constant factor better?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How many swaps does selection sort perform on an array of n elements, at most?',
+      options: ['n²', 'n − 1', 'n log n', 'n²/2'],
+      answer: 1,
+      explain: 'One swap per pass, and there are n − 1 passes — the fewest writes among the simple sorts.',
+    },
+    {
+      q: 'Why is selection sort NOT adaptive?',
+      options: [
+        'It uses recursion',
+        'It always scans the entire unsorted region for the minimum, regardless of order',
+        'It needs O(n) extra space',
+        'It compares non-adjacent elements',
+      ],
+      answer: 1,
+      explain: 'The minimum search is a full linear scan every pass, so a sorted input costs the same ~n²/2 comparisons as a random one.',
+    },
+    {
+      q: 'Which property makes selection sort attractive when writes are expensive (e.g. flash memory)?',
+      options: ['It is stable', 'O(1) space', 'Only O(n) swaps', 'O(n) best case'],
+      answer: 2,
+      explain: 'It commits at most n − 1 swaps total, minimising physical writes even though it does O(n²) comparisons.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Selection sort repeatedly finds the <strong>minimum</strong> of the unsorted region and swaps it to the front.',
+    'It always does <strong>~n²/2 comparisons</strong> — best, average and worst are all <strong>O(n²)</strong>; it is <strong>not adaptive</strong>.',
+    'It makes at most <strong>n − 1 swaps</strong>, the <strong>fewest writes</strong> of any simple sort.',
+    'In place (<strong>O(1)</strong>); the swap version is <strong>unstable</strong>, but shifting instead restores stability.',
+    'Swap the linear minimum-search for a <strong>heap</strong> and you get O(n log n) — that is heap sort.',
+  ]}
+/>
+
+Next up: **Insertion Sort** — instead of selecting the global minimum, grow a sorted region by
+slipping each new value into its correct spot, the way you tidy a hand of cards.

@@ -1,0 +1,255 @@
+---
+title: Network Reliability
+track: dsa-network-algorithms
+summary: "Single points of failure, exposed: one depth-first pass finds every bridge and cut vertex, telling you exactly which link or router would split the network if it died."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-network-algorithms/network-flow-app
+leadsTo:
+  - dsa-network-algorithms/network-topology
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NetAlgReliabilityExplorer from '../../../components/demos/NetAlgReliabilityExplorer.tsx';
+
+## The hook: the link nobody noticed was load-bearing
+
+In 2021 a single misconfigured backbone router took Facebook, Instagram and WhatsApp offline for six
+hours. The deeper lesson is structural: some links and nodes are **load-bearing** — cut them and the
+network shatters into disconnected islands. A reliability engineer's first job is to find those single
+points of failure *before* they fail. Remarkably, one depth-first traversal locates **every** critical
+link (a **bridge**) and **every** critical node (an **articulation point / cut vertex**) at once.
+
+<Callout type="intuition" title="The one-sentence idea">
+A tree-edge is a bridge exactly when the subtree below it has **no back-edge** climbing above the edge
+— so DFS timestamps each node and tracks the highest ancestor its subtree can still reach.
+
+</Callout>
+
+## Intuition: discovery time and the low-link
+
+Run a DFS. Give each node a **discovery time** `disc` — the tick when you first arrive. As you return
+from recursion, compute each node's **low-link** `low`: the smallest `disc` it can reach using its
+subtree's tree-edges plus *one* back-edge to an ancestor.
+
+Now the test. For a tree-edge `u → v`:
+
+- If `low[v] > disc[u]`, nothing in `v`'s subtree can loop back to `u` or above. The only way down
+  there is through this edge — it is a **bridge**.
+- If `low[v] ≥ disc[u]` (and `u` is not the root), removing `u` strands `v`'s subtree — `u` is a
+  **cut vertex**. The root is a cut vertex only if it has two or more DFS subtrees.
+
+A **back-edge** is the hero: every back-edge is an alternative route, lowering some node's `low` and
+*protecting* the edges above it from being bridges. Redundancy, made precise.
+
+## Play with it
+
+Step through Tarjan's DFS. Each node shows `d` (discovery) and `l` (low-link). Bridges turn red and
+cut vertices get a yellow ring. Then **toggle a link**: switch on the redundant `E-F` or `A-D` to
+watch a bridge stop being critical, or switch off `C-D` and watch the network split.
+
+<NetAlgReliabilityExplorer client:visible />
+
+<Callout type="tip">
+Turn on <strong>A-D</strong>. The bridge <code>C-D</code> vanishes — you have given the right-hand side
+a second way home, so no single cut isolates it any more. That is exactly how real networks buy
+resilience: add a parallel path across every bridge.
+</Callout>
+
+## How it works
+
+Take a triangle `A-B-C` with a tail `C-D-E`. DFS from `A`:
+
+```
+A disc0 low0
+  B disc1 low1
+    C disc2 low2 ; back-edge C→A lowers low[C]=0
+      D disc3 low3
+        E disc4 low4
+        return E: low[D]=min(3,4)=3 ; low[E]=4 > disc[D]=3 → BRIDGE D-E
+      return D: low[C]=min(2,3)=2 ; low[D]=3 > disc[C]=2 → BRIDGE C-D
+```
+
+The triangle's back-edge `C→A` pulls `low[C]` down to 0, so none of `A-B`, `B-C`, `C-A` is a bridge —
+the cycle protects them. The tail `C-D-E` has no such loop, so every tail edge is critical.
+
+<CodeRunner
+  client:visible
+  code={`// Tarjan: find all bridges in one DFS — plain JS
+function findBridges(adj) {
+  const disc = {}, low = {}, bridges = [];
+  let t = 0;
+  const dfs = (u, parent) => {
+    disc[u] = low[u] = t++;
+    for (const v of adj[u]) {
+      if (disc[v] === undefined) {
+        dfs(v, u);
+        low[u] = Math.min(low[u], low[v]);
+        if (low[v] > disc[u]) bridges.push([u, v].sort().join('-'));
+      } else if (v !== parent) {
+        low[u] = Math.min(low[u], disc[v]);   // back-edge
+      }
+    }
+  };
+  for (const u of Object.keys(adj)) if (disc[u] === undefined) dfs(u, null);
+  return bridges;
+}
+
+const adj = {
+  A:['B','C'], B:['A','C'], C:['A','B','D'],
+  D:['C','E'], E:['D','F'], F:['E'],
+};`}
+  tests={[
+    { expr: "findBridges(adj).join(', ')", label: 'bridges' },
+    { expr: "findBridges({P:['Q'], Q:['P']}).join(', ')", label: 'single link P-Q' },
+  ]}
+/>
+
+## The real implementation
+
+The course file keeps `disc`, `low` and `parent` maps and reports bridges as it unwinds the DFS:
+
+```ts
+// /dsa/27-network-algorithms/network-reliability.ts
+private dfs(u, visited, disc, low, parent, bridges) {
+  visited.add(u);
+  disc.set(u, this.time);
+  low.set(u, this.time);
+  this.time++;
+
+  for (const v of this.graph.get(u) || []) {
+    if (!visited.has(v)) {
+      parent.set(v, u);
+      this.dfs(v, visited, disc, low, parent, bridges);
+      low.set(u, Math.min(low.get(u)!, low.get(v)!));
+      if (low.get(v)! > disc.get(u)!) bridges.push([u, v]);   // u–v is a bridge
+    } else if (v !== parent.get(u)) {
+      low.set(u, Math.min(low.get(u)!, disc.get(v)!));         // back-edge
+    }
+  }
+}
+```
+
+The sibling `ArticulationPoints` class swaps the bridge test for the cut-vertex test
+(`low[v] >= disc[u]`, plus the root-with-two-children rule). The file also includes
+`NetworkConnectivity` (edge/vertex connectivity), Monte-Carlo `NetworkReliability` (probability the
+net stays connected under random failures), and a maximum-reliability MST.
+Run the full file: `npx tsx 27-network-algorithms/network-reliability.ts`.
+
+## Complexity
+
+It is a single DFS that touches every vertex and edge once:
+
+$$
+T(V, E) = O(V + E), \qquad S(V, E) = O(V).
+$$
+
+| Question | Tool | Time |
+|----------|------|------|
+| Which links are single points of failure? | bridges (Tarjan) | $O(V+E)$ |
+| Which routers are single points of failure? | articulation points | $O(V+E)$ |
+| How many links to cut to disconnect S–T? | min-cut (max flow) | $O(V E^2)$ |
+| Probability the net survives random failures? | Monte-Carlo simulation | $O(\text{sims}\cdot(V+E))$ |
+
+<Callout type="why">
+Bridges and the min-cut answer related but different questions. A bridge is a *single* edge whose loss
+disconnects the graph; the **min-cut** from the flow lesson is the *smallest set* of edges whose
+combined loss disconnects two specific endpoints. A graph with no bridges can still have a small cut.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Power grids" icon="⚡">
+A transmission line whose failure islands part of the grid is a bridge. Operators run exactly this
+analysis to find lines that need a redundant parallel circuit before a heat wave spikes demand.
+</ExampleCard>
+
+<ExampleCard domain="Road networks" icon="🌉">
+A literal bridge over a river is often a graph bridge too: if it is the only crossing, its closure
+splits the town's road network. Planners target these for seismic retrofits first.
+</ExampleCard>
+
+<ExampleCard domain="Supply chains" icon="🏭">
+A sole-source supplier is an articulation point in the supplier graph — lose it and downstream
+factories disconnect from their parts. Dual-sourcing adds the protective back-edge.
+</ExampleCard>
+
+<ExampleCard domain="Biology" icon="🧬">
+In protein-interaction networks, articulation proteins are often **lethal** when knocked out: their
+removal fragments the network, mirroring their structural indispensability.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Skip the *parent* edge, not all visited nodes.** When you meet a visited neighbour, treat it as a
+  back-edge *unless* it is the edge you arrived on. Forgetting this wrongly lowers `low` and hides
+  bridges. (Watch out for parallel edges — then even the parent can give a real back-edge.)
+- **`low` uses `disc[v]`, not `low[v]`, on a back-edge.** A back-edge reaches `v` itself, not whatever
+  `v`'s subtree could reach. Mixing these up is the classic bug.
+- **Bridge vs cut vertex tests differ by one symbol.** Bridge: `low[v] > disc[u]`. Cut vertex:
+  `low[v] >= disc[u]` (plus the special root rule).
+- **A bridge's endpoints need not be cut vertices** (a leaf endpoint of degree 1 is not), and a cut
+  vertex need not touch a bridge. Keep the two notions separate.
+- **Interview cue:** "critical connection", "single point of failure", "remove one edge/node to
+  disconnect" → Tarjan's `disc`/`low` DFS (LeetCode 1192 is the canonical bridges problem).
+
+## Practice
+
+1. **Easy:** Draw a 4-cycle. How many bridges does it have, and why?
+2. **Easy:** Add one pendant edge to that cycle. Which edge is now a bridge?
+3. **Medium:** *Critical Connections in a Network* (LeetCode 1192) — return all bridges.
+4. **Medium:** Modify the DFS to return **articulation points** instead, handling the root specially.
+5. **Hard:** Estimate two-terminal reliability by Monte-Carlo: drop each edge with its failure
+   probability, BFS for S–T connectivity, and average over thousands of trials.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A tree-edge u→v in a DFS is a bridge when:',
+      options: [
+        'disc[v] > disc[u]',
+        'low[v] > disc[u] — nothing in v’s subtree reaches u or above',
+        'v has degree 1',
+        'u is the DFS root',
+      ],
+      answer: 1,
+      explain: 'If the lowest node v’s subtree can reach is still below u, this edge is the only way in or out — cutting it disconnects the subtree.',
+    },
+    {
+      q: 'What role does a back-edge play?',
+      options: [
+        'It always creates a bridge',
+        'It provides an alternative route that lowers a node’s low-link and protects the edges above it',
+        'It has no effect on reliability',
+        'It increases the diameter',
+      ],
+      answer: 1,
+      explain: 'Back-edges are redundancy: they let a subtree loop back to an ancestor, so the edges along that loop are no longer single points of failure.',
+    },
+    {
+      q: 'How many bridges does a simple cycle of any length have?',
+      options: ['Exactly one', 'Two', 'Zero', 'One per node'],
+      answer: 2,
+      explain: 'Every edge of a cycle has an alternative path the other way around, so no single edge removal disconnects it — zero bridges.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>bridge</strong> is a link, and a <strong>cut vertex</strong> a node, whose loss disconnects the network — the single points of failure.',
+    'Tarjan’s DFS finds them all in <strong>one O(V+E) pass</strong> using discovery times and low-links.',
+    'Bridge test: <strong>low[v] &gt; disc[u]</strong>; cut-vertex test: <strong>low[v] ≥ disc[u]</strong> (root needs ≥2 subtrees).',
+    '<strong>Back-edges are redundancy</strong> — every cycle protects its edges from ever being bridges.',
+    'Min-cut (from flow) generalises this to the <strong>smallest set</strong> of edges separating two endpoints.',
+  ]}
+/>
+
+Next up: **Network Topology** — bridges and cuts depend on *shape*, so let's compare stars, rings,
+meshes and trees and the reliability-vs-cost trade-offs they bake in.

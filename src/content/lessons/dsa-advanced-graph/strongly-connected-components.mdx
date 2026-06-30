@@ -1,0 +1,263 @@
+---
+title: Strongly Connected Components
+track: dsa-advanced-graph
+summary: "Tarjan's one-pass DFS finds mutually reachable groups: nodes that can all reach each other collapse into a single component."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-graphs/a-star
+leadsTo:
+  - dsa-advanced-graph/articulation-bridges
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AGphTarjanScc from '../../../components/demos/AGphTarjanScc.tsx';
+
+## The hook: who can get back to whom?
+
+Picture the one-way streets of a city. From some intersections you can drive out, wander around, and
+always find your way home. From others, once you leave you can never return. Group together every set of
+intersections where *everyone can reach everyone else* and you have carved the map into **strongly
+connected components** — islands of mutual reachability. Compilers use this to find circular imports,
+social networks use it to find tight-knit cliques, and 2-SAT solvers (two lessons from now) use it to
+decide satisfiability. Remarkably, you can find every component in a **single depth-first walk**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A strongly connected component is a maximal set of vertices where each can reach all the others; Tarjan's
+algorithm finds them in one DFS by tracking, for every node, the earliest-discovered node it can loop
+back to.
+</Callout>
+
+## Intuition
+
+You already met DFS and discovery times. Tarjan adds one more number per node. Give each node a
+**discovery time** `disc[v]` — when DFS first reaches it. Then track a **low-link** `low[v]`: the
+smallest discovery time reachable from `v` using tree edges plus *at most one* back edge into the part of
+the tree still being explored. Nodes wait on a stack as they are discovered.
+
+The magic condition is `low[v] === disc[v]`. It means `v` could not loop back to anything discovered
+before it — so `v` is the **root** of its component. Everything sitting above `v` on the stack was
+reachable from `v` and can reach back to `v`, so it all pops off together as one component. A node that
+*can* loop back further keeps a smaller `low`, stays on the stack, and joins its ancestor's component.
+
+## Play with it
+
+Step through Tarjan below. Watch each node get its `disc/low` badge, watch the stack grow, and watch a
+whole component flash into one colour the instant a root satisfies `low === disc`. Switch presets to see
+one giant cycle become a single component, and a DAG shatter into singletons.
+
+<AGphTarjanScc client:visible />
+
+<Callout type="tip">
+Tarjan emits components in **reverse topological order** of the condensation graph (the DAG you get by
+shrinking each component to a point). The first component popped is a sink; the last is a source. That
+free ordering is exactly what 2-SAT and dependency resolvers exploit.
+</Callout>
+
+## How it works
+
+Take the directed edges `0→1, 1→2, 2→0, 1→3, 3→4, 4→5, 5→3`. DFS from `0`:
+
+```
+visit 0   disc/low = 0/0   stack [0]
+visit 1   disc/low = 1/1   stack [0,1]
+visit 2   disc/low = 2/2   stack [0,1,2]
+  edge 2→0: 0 on stack → low[2] = min(2, disc[0]=0) = 0
+pop check at 2: low 0 ≠ disc 2 → keep on stack
+back at 1: low[1] = min(1, low[2]=0) = 0
+visit 3   disc/low = 3/3   stack [0,1,2,3]
+visit 4   disc/low = 4/4
+visit 5   disc/low = 5/5
+  edge 5→3: 3 on stack → low[5] = min(5, 3) = 3
+back-propagate: low[4]=3, low[3]=3
+root at 3: low 3 == disc 3 → pop {5,4,3} as one SCC
+back at 1: low[1] still 0
+root at 0: low 0 == disc 0 → pop {2,1,0} as one SCC
+```
+
+Two components: `{0,1,2}` and `{3,4,5}`. The edge `1→3` connects them but cannot be undone, so they stay
+separate.
+
+<CodeRunner
+  client:visible
+  code={`// Tarjan's SCC on an adjacency list (plain JS)
+function tarjanSCC(adj) {
+  const n = adj.length;
+  const disc = Array(n).fill(-1), low = Array(n).fill(-1);
+  const onStack = Array(n).fill(false), stack = [];
+  const sccs = [];
+  let time = 0;
+  function dfs(u) {
+    disc[u] = low[u] = time++;
+    stack.push(u); onStack[u] = true;
+    for (const v of adj[u]) {
+      if (disc[v] === -1) { dfs(v); low[u] = Math.min(low[u], low[v]); }
+      else if (onStack[v]) low[u] = Math.min(low[u], disc[v]);
+    }
+    if (low[u] === disc[u]) {
+      const comp = [];
+      let w;
+      do { w = stack.pop(); onStack[w] = false; comp.push(w); } while (w !== u);
+      sccs.push(comp.sort((a, b) => a - b));
+    }
+  }
+  for (let i = 0; i < n; i++) if (disc[i] === -1) dfs(i);
+  return sccs;
+}
+
+const adj = [[1], [2, 3], [0], [4], [5], [3]];`}
+  tests={[
+    { expr: 'JSON.stringify(tarjanSCC(adj))', label: 'SCCs of the two-cycle graph' },
+    { expr: 'tarjanSCC([[1],[2],[3],[]]).length', label: '# SCCs of a 4-node chain' },
+    { expr: 'tarjanSCC([[1],[2],[0]]).length', label: '# SCCs of a triangle' },
+  ]}
+/>
+
+## The real implementation
+
+A faithful excerpt from the course file — note how `onStack` distinguishes a true back edge (into the
+current component) from a cross edge into an already-finished one:
+
+```ts
+// /dsa/19-advanced-graph/strongly-connected.ts
+export function tarjanSCC(graph: DirectedGraph): number[][] {
+  const disc = new Map<number, number>();
+  const low = new Map<number, number>();
+  const onStack = new Set<number>();
+  const stack: number[] = [];
+  const sccs: number[][] = [];
+  let time = 0;
+
+  function dfs(v: number): void {
+    disc.set(v, time); low.set(v, time); time++;
+    stack.push(v); onStack.add(v);
+
+    for (const neighbor of graph.getNeighbors(v)) {
+      if (!disc.has(neighbor)) {                       // tree edge
+        dfs(neighbor);
+        low.set(v, Math.min(low.get(v)!, low.get(neighbor)!));
+      } else if (onStack.has(neighbor)) {              // back edge in current SCC
+        low.set(v, Math.min(low.get(v)!, disc.get(neighbor)!));
+      }
+    }
+
+    if (low.get(v) === disc.get(v)) {                  // v is an SCC root
+      const scc: number[] = [];
+      let w: number;
+      do { w = stack.pop()!; onStack.delete(w); scc.push(w); } while (w !== v);
+      sccs.push(scc);
+    }
+  }
+
+  for (const v of graph.getVertices()) if (!disc.has(v)) dfs(v);
+  return sccs;
+}
+```
+
+Run the full file: `npx tsx 19-advanced-graph/strongly-connected.ts`. It also includes Kosaraju's
+two-pass variant (DFS for a finish order, then DFS on the transposed graph) and a condensation builder.
+
+## Complexity
+
+Every vertex is pushed and popped once, and every edge is inspected once:
+
+$$
+T(V, E) = O(V + E), \qquad S(V, E) = O(V).
+$$
+
+| Algorithm | Passes | Time | Space |
+|-----------|--------|------|-------|
+| **Tarjan** | 1 DFS | $O(V + E)$ | $O(V)$ |
+| Kosaraju | 2 DFS + transpose | $O(V + E)$ | $O(V + E)$ |
+
+Both are linear; Tarjan wins on constant factors and memory because it never builds the reversed graph.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Compilers & build tools" icon="🛠️">
+A module graph with a cycle of imports forms an SCC larger than one node. Build systems contract each SCC
+into a super-node to get a DAG, then compile super-nodes in topological order — and warn you about the
+circular dependency they just collapsed.
+</ExampleCard>
+
+<ExampleCard domain="Web & social graphs" icon="🌐">
+On a follow graph, an SCC is a group where everyone can reach everyone via follows — a true community core.
+Ranking algorithms first condense the graph so the "rich-get-richer" feedback loops inside an SCC are
+handled as a unit.
+</ExampleCard>
+
+<ExampleCard domain="Ecology" icon="🦌">
+In a food web, a strongly connected component is a cycle of species that all depend on one another. Spot
+the SCCs and you find the closed loops of energy flow that keep an ecosystem self-sustaining.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **`disc` vs `low` on a back edge.** When you see a node already on the stack, update `low[v]` with the
+  neighbour's **`disc`**, not its `low`. Using `low` can incorrectly merge separate components.
+- **Forgetting the `onStack` check.** An edge to a node that is visited but *already popped* points into a
+  finished component — it must be ignored, or two real components fuse into one.
+- **Directed only.** SCCs are a directed-graph idea. For undirected graphs "strongly connected" collapses
+  to ordinary connected components (use BFS/DFS or union-find).
+- **Interview cue:** "circular dependencies", "mutually reachable", or "condense to a DAG" almost always
+  means SCC. Mention that Tarjan hands you the components already in reverse topological order.
+
+## Practice
+
+1. **Easy:** By hand, list the SCCs of `0→1, 1→0, 2→3`. How many components, and which are singletons?
+2. **Easy:** Is a directed acyclic graph ever a single SCC? When is it all singletons?
+3. **Medium:** Run the demo on "One big cycle" and read off why every node ends with `low = 0`.
+4. **Medium:** Build the condensation graph of the two-cycle example and confirm it is a DAG.
+5. **Hard:** Use SCCs to detect whether a directed graph has *any* cycle in $O(V+E)$ — what property of the
+   component sizes gives it away?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the condition low[v] === disc[v] signify?',
+      options: [
+        'v has no outgoing edges',
+        'v is the root of a strongly connected component',
+        'v is a leaf of the DFS tree',
+        'the graph is acyclic',
+      ],
+      answer: 1,
+      explain: 'If v cannot reach anything discovered before it, the nodes above v on the stack form one component with v as its root.',
+    },
+    {
+      q: 'On a back edge to a node still on the stack, low[v] should be updated using that node’s…',
+      options: ['low value', 'discovery time (disc)', 'finish time', 'degree'],
+      answer: 1,
+      explain: 'Use disc of the on-stack neighbour. Using low can wrongly fuse two distinct SCCs.',
+    },
+    {
+      q: 'In what order does Tarjan output the components?',
+      options: [
+        'Topological order of the condensation DAG',
+        'Reverse topological order of the condensation DAG',
+        'By component size',
+        'Random order',
+      ],
+      answer: 1,
+      explain: 'Sinks pop first, sources last — reverse topological order, which is why 2-SAT can read assignments straight off it.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>strongly connected component</strong> is a maximal set of vertices that can all reach each other.',
+    'Tarjan tracks <strong>disc[v]</strong> and <strong>low[v]</strong>; when <strong>low[v] === disc[v]</strong>, v roots a component that pops off the stack.',
+    'Update low from a neighbour’s <strong>disc</strong> on back edges and a child’s <strong>low</strong> on tree edges — and ignore edges into finished components.',
+    'It runs in <strong>O(V + E)</strong> with a single DFS, beating Kosaraju on constants and memory.',
+    'Components emerge in <strong>reverse topological order</strong>, powering dependency resolution and 2-SAT.',
+  ]}
+/>
+
+Next up: **Articulation Points & Bridges** — the same `disc`/`low` machinery, now finding the single nodes
+and edges whose removal would shatter a network.

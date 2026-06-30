@@ -1,0 +1,268 @@
+---
+title: Network Flow in Practice
+track: dsa-network-algorithms
+summary: "Max-flow equals min-cut: push flow along augmenting paths until none remain, and the saturated bottleneck you are left with is the network's true capacity."
+difficulty: intermediate
+estMinutes: 20
+prereqs:
+  - dsa-network-algorithms/network-routing
+leadsTo:
+  - dsa-network-algorithms/network-reliability
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NetAlgFlowExplorer from '../../../components/demos/NetAlgFlowExplorer.tsx';
+
+## The hook: how much can the pipe carry?
+
+Routing told you *which way* a packet should go. But a data centre operator has a harder question:
+with every link capped at some bandwidth, **how many gigabits can I push from server S to server T at
+once?** The bottleneck is never a single cable — it is the cleverest *combination* of cables an
+adversary could cut. Network flow finds that maximum throughput and, as a free bonus, names the exact
+set of links that limits it.
+
+<Callout type="intuition" title="The one-sentence idea">
+Keep finding a path from source to sink that still has spare capacity and push as much as it allows;
+when no such **augmenting path** is left, you have the maximum flow — and it equals the smallest
+**cut** that separates source from sink.
+</Callout>
+
+## Intuition: augmenting paths and the residual graph
+
+Start with zero flow. Find any path from S to T where every edge has room left, and saturate its
+**tightest** edge — that edge's spare capacity is the most this path can add. Repeat.
+
+The subtle ingredient is the **residual graph**. When you push 5 units along edge `u→v`, you also
+create a *backward* capacity of 5 on `v→u`. That backward edge lets a later path *cancel* an earlier,
+greedy choice — "undo 5 units here, reroute them better there." Without residuals, a bad first path
+could lock you out of the true maximum. With them, you are guaranteed to reach it.
+
+**Edmonds-Karp** is just this loop with one rule: always pick the *shortest* augmenting path (BFS by
+hop count). That single rule bounds the number of iterations and makes the runtime predictable.
+
+## Play with it
+
+Step through Edmonds-Karp. Each augmenting path lights up indigo, its bottleneck units get added to
+the running total, and edges fill toward their capacity. When no path remains, the **min-cut** — the
+saturated links whose capacities sum to exactly the max flow — turns red.
+
+<NetAlgFlowExplorer client:visible />
+
+<Callout type="tip">
+Drag <strong>S→A</strong> and <strong>S→B</strong> down low. The max flow drops to match them: when the
+source links are the bottleneck, the min-cut sits right next to the source.
+</Callout>
+
+## How it works
+
+On the classic 6-node network (source `S`, sink `T`), BFS keeps finding the shortest path with spare
+room and saturates its tightest edge:
+
+```
+push along S→A→C→T   bottleneck 12   total 12
+push along S→B→D→T   bottleneck  4   total 16
+push along S→B→C→T   bottleneck  7   total 23
+no augmenting path left → max flow = 23
+```
+
+The reachable set from `S` in the final residual graph is the source side of the min-cut; the edges
+leaving it carry exactly 23 units.
+
+<CodeRunner
+  client:visible
+  code={`// Edmonds-Karp max flow (BFS augmenting paths) — plain JS
+function maxFlow(cap, n, s, t) {
+  const f = Array.from({length:n}, () => Array(n).fill(0));
+  let total = 0;
+  while (true) {
+    const parent = Array(n).fill(-1); parent[s] = s;
+    const q = [s];
+    while (q.length) {
+      const u = q.shift();
+      for (let v = 0; v < n; v++)
+        if (parent[v] === -1 && cap[u][v] - f[u][v] > 0) { parent[v] = u; q.push(v); }
+    }
+    if (parent[t] === -1) break;             // no augmenting path
+    let bottleneck = Infinity;
+    for (let v = t; v !== s; v = parent[v]) bottleneck = Math.min(bottleneck, cap[parent[v]][v] - f[parent[v]][v]);
+    for (let v = t; v !== s; v = parent[v]) { f[parent[v]][v] += bottleneck; f[v][parent[v]] -= bottleneck; }
+    total += bottleneck;
+  }
+  return total;
+}
+
+function build() {
+  const n = 6, cap = Array.from({length:n}, () => Array(n).fill(0));
+  const E = [[0,1,16],[0,2,13],[1,2,10],[1,3,12],[2,1,4],[2,4,14],[3,2,9],[3,5,20],[4,3,7],[4,5,4]];
+  for (const [u,v,c] of E) cap[u][v] = c;
+  return { n, cap };
+}
+const { n, cap } = build();`}
+  tests={[
+    { expr: 'maxFlow(cap, n, 0, 5)', label: 'max flow S→T' },
+    { expr: 'maxFlow(cap, n, 0, 3)', label: 'max flow S→C' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds a residual network explicitly: every forward edge stores a back-pointer to its
+reverse edge, so pushing flow updates both in one shot.
+
+```ts
+// /dsa/27-network-algorithms/network-flow.ts
+class FlowNetwork {
+  adjacencyList: Map<number, FlowEdge[]> = new Map();
+
+  addEdge(from: number, to: number, capacity: number): void {
+    const forward: FlowEdge  = { to, capacity, flow: 0 };
+    const backward: FlowEdge = { to: from, capacity: 0, flow: 0 };
+    forward.reverseEdge = backward;          // residual link...
+    backward.reverseEdge = forward;          // ...points both ways
+    this.adjacencyList.get(from)!.push(forward);
+    this.adjacencyList.get(to)!.push(backward);
+  }
+
+  fordFulkerson(source: number, sink: number): number {
+    let maxFlow = 0;
+    const findPath = (u: number, seen: Set<number>, minCap: number): number => {
+      if (u === sink) return minCap;
+      seen.add(u);
+      for (const e of this.adjacencyList.get(u) || []) {
+        const residual = e.capacity - e.flow;
+        if (!seen.has(e.to) && residual > 0) {
+          const bottleneck = findPath(e.to, seen, Math.min(minCap, residual));
+          if (bottleneck > 0) { e.flow += bottleneck; e.reverseEdge!.flow -= bottleneck; return bottleneck; }
+        }
+      }
+      return 0;
+    };
+    while (true) {
+      const pushed = findPath(source, new Set(), Infinity);
+      if (pushed === 0) break;
+      maxFlow += pushed;
+    }
+    return maxFlow;
+  }
+}
+```
+
+The same file also has **Edmonds-Karp** (BFS paths + `getMinCut`), **Dinic's** (level graphs),
+**bipartite matching** (assignment as flow with unit capacities), and **min-cost max-flow**.
+Run the full file: `npx tsx 27-network-algorithms/network-flow.ts`.
+
+## Complexity
+
+Picking the *shortest* augmenting path (Edmonds-Karp) bounds the iteration count independent of the
+capacities:
+
+$$
+T_{\text{EK}}(V, E) = O(V E^2), \qquad T_{\text{Dinic}}(V, E) = O(V^2 E).
+$$
+
+| Algorithm | Path choice | Time | Note |
+|-----------|-------------|------|------|
+| Ford-Fulkerson | any (DFS) | $O(E \cdot \lvert f \rvert)$ | depends on max flow value |
+| **Edmonds-Karp** | shortest (BFS) | $O(V E^2)$ | capacity-independent |
+| Dinic's | blocking flows | $O(V^2 E)$ | fast on unit-capacity / matching |
+
+<Callout type="why">
+The **max-flow min-cut theorem** is the workhorse: the maximum you can push equals the minimum total
+capacity you would have to cut to disconnect S from T. So one algorithm answers both "how much
+throughput?" and "what is the weakest link?" — which is why the next lesson, reliability, leans on it.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Sports scheduling" icon="⚾">
+"Can my team still mathematically win the division?" becomes a max-flow problem: games-to-play are
+sources, rival win-limits are sinks, and a saturating cut proves elimination.
+</ExampleCard>
+
+<ExampleCard domain="Computer vision" icon="🖼️">
+Image segmentation labels each pixel foreground/background by finding a **min-cut** between a source
+(object seed) and sink (background seed) on the pixel grid — flow draws the object's outline.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="🚚">
+A supply network with truck-capacity edges asks "max crates from factory to port per day?" Add
+per-edge costs and min-cost max-flow finds the *cheapest* way to ship that maximum.
+</ExampleCard>
+
+<ExampleCard domain="Hiring" icon="🧑‍💼">
+Matching applicants to jobs is bipartite matching: give every applicant→job edge capacity 1 and the
+max flow is the largest set of simultaneous, conflict-free hires.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting reverse edges.** Without residual back-edges you compute a *maximal* flow (no path can
+  be greedily extended), not the *maximum*. They are mandatory.
+- **Ford-Fulkerson with irrational/huge capacities.** Plain DFS can loop pathologically; Edmonds-Karp's
+  BFS rule makes the runtime depend on $V$ and $E$, not on the capacity magnitudes.
+- **Undirected edges.** Model each as two directed edges, each with the full capacity.
+- **Recover the cut, not just the number.** After max flow, BFS the residual graph from the source;
+  edges from the reachable set to the rest *are* the min-cut.
+- **Interview cue:** "maximum simultaneous", "bottleneck", "minimum to remove to disconnect", or
+  "assign A to B without conflicts" all smell like flow. Reduce the problem to S, T and capacities.
+
+## Practice
+
+1. **Easy:** On `S→A=3, A→T=2`, what is the max flow and which edge is the cut?
+2. **Easy:** Add a reverse-edge by hand to a 3-node example and show how it cancels an overcommitted path.
+3. **Medium:** *Maximum Bipartite Matching* — wire applicants to a super-source and jobs to a
+   super-sink, all capacities 1, and read off the matching size.
+4. **Medium:** Given the final flow, recover the min-cut set by BFS in the residual graph.
+5. **Hard:** *Min-cost max-flow* — among all maximum flows, find the one minimising total edge cost
+   (successive shortest augmenting paths by cost).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the max-flow min-cut theorem state?',
+      options: [
+        'Max flow is always equal to the number of edges',
+        'The maximum flow from S to T equals the minimum total capacity that must be cut to separate them',
+        'Min cut is always one edge',
+        'Flow equals the shortest path length',
+      ],
+      answer: 1,
+      explain: 'Maximum throughput is bounded by — and exactly equals — the smallest-capacity cut separating source from sink.',
+    },
+    {
+      q: 'Why must a flow algorithm keep reverse (residual) edges?',
+      options: [
+        'To make the graph undirected',
+        'To let later paths cancel and reroute flow committed by earlier greedy choices',
+        'To store edge weights',
+        'They are only needed for negative capacities',
+      ],
+      answer: 1,
+      explain: 'Backward residual capacity lets the algorithm undo a suboptimal earlier push, which is what guarantees the true maximum.',
+    },
+    {
+      q: 'Two disjoint paths: S→A=10, A→T=4 and S→B=5, B→T=8. What is the max flow S→T?',
+      options: ['15', '12', '13', '9'],
+      answer: 3,
+      explain: 'The A path is capped by A→T=4; the B path is capped by S→B=5. With no shared edges the branches add: 4 + 5 = 9.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Max flow = repeatedly push along an <strong>augmenting path</strong> until none remain.',
+    '<strong>Residual (reverse) edges</strong> let greedy mistakes be undone — they make the maximum reachable.',
+    '<strong>Edmonds-Karp</strong> (shortest path by BFS) runs in O(VE²), independent of capacity sizes.',
+    'The <strong>max-flow min-cut theorem</strong> gives throughput and the weakest-link cut at the same time.',
+    'Flow models <strong>matching, segmentation, scheduling and shipping</strong> once you cast them as S, T and capacities.',
+  ]}
+/>
+
+Next up: **Network Reliability** — the min-cut tells you the weakest links; now let's find the single
+points of failure and design redundancy around them.

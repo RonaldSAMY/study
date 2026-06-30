@@ -1,0 +1,276 @@
+---
+title: Social Network Analysis
+track: dsa-network-algorithms
+summary: "Influence is about position, not popularity: betweenness centrality finds the brokers every shortest path must pass through, even when their friend count is unremarkable."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-network-algorithms/network-topology
+leadsTo:
+  - dsa-dynamic-programming/dp-intro
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NetAlgCentralityExplorer from '../../../components/demos/NetAlgCentralityExplorer.tsx';
+
+## The hook: the quiet person who runs the office
+
+Every organisation has someone whose name is not on the org chart's top row but through whom every
+deal somehow passes. They may know fewer people than the loud networker down the hall — yet remove
+them and two halves of the company stop talking. Social network analysis makes that intuition
+rigorous. The router-and-link machinery you have been building now answers a human question:
+**who actually holds a network together?** The surprising answer is rarely the person with the most
+connections.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Betweenness centrality** ranks a node by how many shortest paths run *through* it — so a low-degree
+**broker** bridging two communities can outrank a high-degree hub buried inside one.
+
+</Callout>
+
+## Intuition: four flavours of "important"
+
+There is no single notion of centrality — each captures a different kind of power:
+
+- **Degree centrality** — how many neighbours you have. Popularity. Cheap to compute, easily gamed.
+- **Closeness centrality** — how *near* you are to everyone else on average. Low closeness means you
+  hear news late; high closeness makes you an efficient broadcaster.
+- **Betweenness centrality** — how often you sit *on the shortest path* between two other people. This
+  is **broker power**: control over what flows, and a structural weak point if you leave.
+- **PageRank** — importance that is *recursive*: you matter if important nodes point to you. Google's
+  original web ranking and the basis of many recommendation systems.
+
+Betweenness is computed by **Brandes' algorithm**: from each source, a BFS counts the number of
+shortest paths to every node, then a reverse sweep distributes "dependency" credit back along those
+paths. The nodes that accumulate the most credit are the ones traffic cannot avoid.
+
+## Play with it
+
+The graph below is two tight communities joined by a single bridge. Step through Brandes one source at
+a time and watch node sizes grow with betweenness. The **bridge nodes balloon** — every cross-group
+path runs through them — even though their degree is ordinary. Then **cut the bridge** and watch that
+brokerage collapse.
+
+<NetAlgCentralityExplorer client:visible />
+
+<Callout type="tip">
+Look at the side panel: the top-betweenness node often has a *smaller* degree than nodes deep inside a
+cluster. That gap — high betweenness, modest degree — is the signature of a <strong>broker</strong>,
+and it is exactly what degree-counting alone would miss.
+</Callout>
+
+## How it works
+
+Betweenness of node `w` sums, over every pair `(s, t)`, the fraction of `s`–`t` shortest paths that
+pass through `w`. Brandes computes it efficiently per source `s`:
+
+```
+1. BFS from s, recording σ[v] = number of shortest paths s→v
+   and the predecessors of v on those paths.
+2. Pop nodes in reverse BFS order, pushing "dependency" credit
+   δ[v] += (σ[v]/σ[w]) · (1 + δ[w]) to each predecessor v of w.
+3. Add δ[w] (for w ≠ s) into betweenness[w].
+```
+
+A node on the only path between two big groups collects credit from *every* cross-group pair, so its
+score dwarfs a node tucked inside a single clique.
+
+<CodeRunner
+  client:visible
+  code={`// Brandes' betweenness centrality (unweighted) — plain JS
+function betweenness(adj) {
+  const nodes = Object.keys(adj);
+  const bc = {}; for (const n of nodes) bc[n] = 0;
+  for (const s of nodes) {
+    const sigma = {}, dist = {}, pred = {}, delta = {}, order = [];
+    for (const n of nodes) { sigma[n] = 0; dist[n] = -1; pred[n] = []; delta[n] = 0; }
+    sigma[s] = 1; dist[s] = 0;
+    const q = [s];
+    while (q.length) {
+      const v = q.shift(); order.push(v);
+      for (const w of adj[v]) {
+        if (dist[w] < 0) { dist[w] = dist[v] + 1; q.push(w); }
+        if (dist[w] === dist[v] + 1) { sigma[w] += sigma[v]; pred[w].push(v); }
+      }
+    }
+    for (let i = order.length - 1; i >= 0; i--) {
+      const w = order[i];
+      for (const v of pred[w]) delta[v] += (sigma[v] / sigma[w]) * (1 + delta[w]);
+      if (w !== s) bc[w] += delta[w];
+    }
+  }
+  for (const n of nodes) bc[n] = +(bc[n] / 2).toFixed(1); // undirected: halve
+  return bc;
+}
+
+// two triangles joined only by the bridge D-E
+const adj = {
+  A:['B','C'], B:['A','C'], C:['A','B','D'], D:['C','E'],
+  E:['D','F'], F:['E','G'], G:['E','F'],
+};`}
+  tests={[
+    { expr: 'JSON.stringify(betweenness(adj))', label: 'betweenness of each node' },
+    { expr: "betweenness(adj).D + ' vs ' + betweenness(adj).A", label: 'broker D vs clique member A' },
+  ]}
+/>
+
+## The real implementation
+
+The course file is Brandes' algorithm verbatim — BFS to count shortest paths, then back-accumulate the
+dependencies:
+
+```ts
+// /dsa/27-network-algorithms/social-networks.ts
+calculate(): Map<number, number> {
+  const betweenness = new Map<number, number>();
+  for (const node of this.graph.keys()) betweenness.set(node, 0);
+
+  for (const source of this.graph.keys()) {
+    const stack: number[] = [], paths = new Map(), sigma = new Map(),
+          distance = new Map(), delta = new Map();
+    // ... init: sigma[source]=1, distance[source]=0 ...
+    const queue = [source];
+    while (queue.length) {                       // BFS: count shortest paths
+      const v = queue.shift()!; stack.push(v);
+      for (const w of this.graph.get(v) || []) {
+        if (distance.get(w)! < 0) { queue.push(w); distance.set(w, distance.get(v)! + 1); }
+        if (distance.get(w)! === distance.get(v)! + 1) {
+          sigma.set(w, sigma.get(w)! + sigma.get(v)!);
+          paths.get(w)!.push(v);
+        }
+      }
+    }
+    while (stack.length) {                        // reverse: accumulate dependency
+      const w = stack.pop()!;
+      for (const v of paths.get(w)!)
+        delta.set(v, delta.get(v)! + (sigma.get(v)! / sigma.get(w)!) * (1 + delta.get(w)!));
+      if (w !== source) betweenness.set(w, betweenness.get(w)! + delta.get(w)!);
+    }
+  }
+  return betweenness; // normalised by (n-1)(n-2) in the full file
+}
+```
+
+The same file ships `ClosenessCentrality`, `PageRank` (power iteration), `CommunityDetection`
+(Louvain modularity), `InfluenceMaximization` (greedy independent-cascade), and `LinkPrediction`
+(common neighbours, Jaccard, Adamic-Adar).
+Run the full file: `npx tsx 27-network-algorithms/social-networks.ts`.
+
+## Complexity
+
+Brandes runs a BFS plus a back-sweep from every node — far cheaper than the naive all-pairs-paths
+approach:
+
+$$
+T_{\text{betweenness}}(V, E) = O(V E), \qquad T_{\text{degree}}(V, E) = O(V + E).
+$$
+
+| Measure | Captures | Time |
+|---------|----------|------|
+| Degree | popularity | $O(V + E)$ |
+| Closeness | broadcast efficiency | $O(V (V + E))$ |
+| **Betweenness** (Brandes) | broker / bridge power | $O(V E)$ |
+| PageRank | recursive prestige | $O(\text{iters} \cdot E)$ |
+
+<Callout type="why">
+Different questions want different centralities. "Who should we pay to advertise?" leans on degree or
+PageRank (reach). "Which account, if banned, most fragments a disinformation ring?" is a betweenness
+question (brokerage). Picking the wrong measure gives a confident, wrong answer.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Counter-terrorism" icon="🕵️">
+Intelligence analysts rank suspects by betweenness: the courier linking two cells often has few direct
+contacts yet maximal brokerage — removing them severs communication more than arresting a hub.
+</ExampleCard>
+
+<ExampleCard domain="Epidemiology" icon="💉">
+High-betweenness individuals are super-spreaders of *information and disease* alike; vaccinating or
+isolating brokers between communities slows an outbreak far more than targeting the merely popular.
+</ExampleCard>
+
+<ExampleCard domain="Ecology" icon="🐝">
+In food webs, a keystone species can have low degree but high betweenness — many energy pathways route
+through it, so its extinction cascades through the whole ecosystem.
+</ExampleCard>
+
+<ExampleCard domain="Open source" icon="💻">
+In a contributor graph, a maintainer reviewing code across several modules shows high betweenness;
+their unavailability bottlenecks the whole project even if they wrote little of it.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Degree ≠ importance.** The whole point of betweenness is that a low-degree broker can be the single
+  most critical node. Reaching for degree because it is easy is the classic mistake.
+- **Normalise before comparing networks.** Raw betweenness grows with network size; divide by
+  `(n−1)(n−2)` (directed) or half that (undirected) to compare across graphs.
+- **Ties in shortest paths matter.** Brandes is correct *because* it tracks `σ`, the *count* of equal
+  shortest paths, and splits credit proportionally. A version that keeps only one path is wrong.
+- **Betweenness is expensive.** `O(VE)` is fine for thousands of nodes; for millions, use sampled or
+  approximate betweenness rather than the exact algorithm.
+- **Interview cue:** "most influential", "key connector", "remove to disconnect communities" → a
+  centrality question; name degree, closeness, betweenness and PageRank and justify which one fits.
+
+## Practice
+
+1. **Easy:** In a star, what is the hub's betweenness relative to a leaf's, and why?
+2. **Easy:** Compute degree centrality for a 5-node path graph by hand.
+3. **Medium:** Implement closeness centrality with a BFS from each node and the reciprocal of total
+   distance.
+4. **Medium:** Run PageRank by power iteration on a tiny directed graph; show it converges and sums to 1.
+5. **Hard:** Greedy influence maximisation — pick the `k` seeds that maximise expected spread under an
+   independent-cascade simulation, and explain why greedy is near-optimal (submodularity).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why can a node with low degree still have very high betweenness?',
+      options: [
+        'Betweenness counts neighbours just like degree',
+        'If it is the only bridge between two groups, every shortest path across them must pass through it',
+        'Low-degree nodes are always central',
+        'Betweenness ignores shortest paths',
+      ],
+      answer: 1,
+      explain: 'A broker on the sole route between two communities collects credit from every cross-group pair, regardless of how few direct friends it has.',
+    },
+    {
+      q: 'Which centrality is recursive — you are important if important nodes point to you?',
+      options: ['Degree centrality', 'Closeness centrality', 'Betweenness centrality', 'PageRank'],
+      answer: 3,
+      explain: 'PageRank defines a node’s score in terms of the scores of nodes linking to it, solved by power iteration.',
+    },
+    {
+      q: 'What does Brandes’ algorithm track that a single-shortest-path method would get wrong?',
+      options: [
+        'Edge weights',
+        'σ, the number of equal-length shortest paths, so credit is split proportionally',
+        'The graph’s diameter',
+        'Node colours',
+      ],
+      answer: 1,
+      explain: 'When several shortest paths tie, betweenness must share the credit by the path counts σ — exactly what Brandes propagates.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Centrality formalises "importance" — and there are <strong>several distinct kinds</strong>, not one.',
+    '<strong>Betweenness</strong> measures broker power: how many shortest paths run through a node.',
+    'A low-degree <strong>bridge can outrank a high-degree hub</strong> — position beats popularity.',
+    '<strong>Brandes’ algorithm</strong> computes betweenness in O(VE) via BFS path-counting plus a reverse dependency sweep.',
+    'Choose the measure to fit the question: <strong>degree/PageRank for reach, betweenness for brokerage, closeness for broadcast</strong>.',
+  ]}
+/>
+
+That completes the Network Algorithms track — from routing a single packet to ranking the brokers of a
+whole society. Next you step into **Dynamic Programming**, where the art is remembering subproblems
+instead of re-solving them.

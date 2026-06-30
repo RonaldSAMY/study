@@ -1,0 +1,274 @@
+---
+title: Community Detection (Louvain)
+track: dsa-graph-networks
+summary: "Louvain finds communities by a greedy rule: repeatedly move each node into the neighbouring group that raises modularity the most."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-graph-networks/hits
+leadsTo:
+  - dsa-graph-networks/girvan-newman
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NetLouvainModularity from '../../../components/demos/NetLouvainModularity.tsx';
+
+## The hook: who are the friend groups?
+
+A social network is one giant tangle of edges, but inside it sit tight clusters — your university friends,
+your coworkers, your family — densely linked to each other and only loosely to the rest. Finding those
+clusters is **community detection**, and it powers "groups you may like", fraud-ring discovery, and
+brain-region maps. The trick is making "densely linked" precise so a computer can optimise it. Louvain does
+that with a score called **modularity**, then climbs it greedily — and it scales to graphs with hundreds of
+millions of nodes.
+
+<Callout type="intuition" title="The one-sentence idea">
+Modularity measures how many more edges fall inside groups than you would expect by chance; Louvain greedily
+moves nodes between groups to push that number as high as it goes.
+</Callout>
+
+## Intuition: more inside edges than chance predicts
+
+A good community has lots of internal edges and few external ones. But "lots" relative to what? Relative to
+a random graph with the same node degrees. **Modularity** $Q$ is exactly that comparison: the fraction of
+edges that lie inside communities, minus the fraction you would expect if the same edges were rewired at
+random. High $Q$ (above about $0.3$) means real structure; near zero means no better than random.
+
+Louvain optimises $Q$ in a simple, local way. Every node starts in its own community. Then, sweeping through
+nodes, it asks each one: "would moving you into a neighbour's community raise $Q$? If so, into which neighbour's
+community most?" — and makes the best move. It keeps sweeping until no single move helps. (The full algorithm
+then *collapses* each community into a super-node and repeats on the smaller graph, building a hierarchy — but
+the heart is this greedy local move.)
+
+## Play with it
+
+Press Play. Each node begins as its own colour; every step is one accepted move where a node joins the
+neighbouring community that raises modularity most. Watch $Q$ climb and the colours coalesce into two groups.
+Click one node then another to toggle an edge and change the structure Louvain finds.
+
+<NetLouvainModularity client:visible />
+
+<Callout type="tip">
+Add a few edges between the two coloured groups, then reset and replay. Past a point the bridge becomes so
+dense that Louvain decides the two halves are really *one* community — exactly when merging them stops hurting
+modularity.
+</Callout>
+
+## How it works
+
+Modularity for a partition is a sum over communities $c$:
+
+$$
+Q = \sum_{c} \left[ \frac{\Sigma_{c}^{\text{in}}}{m} - \left( \frac{\Sigma_{c}^{\text{tot}}}{2m} \right)^{2} \right],
+$$
+
+where $m$ is the total number of edges, $\Sigma_{c}^{\text{in}}$ is the number of edges with both ends inside
+community $c$, and $\Sigma_{c}^{\text{tot}}$ is the sum of degrees of nodes in $c$. The first term rewards
+internal edges; the second penalises a community for hoarding degree (which random chance would already explain).
+
+The greedy move evaluates the **modularity gain** of pulling node $i$ into a neighbouring community — a local
+quantity needing only $i$'s edges and the community's totals, so each move is cheap:
+
+```
+phase 1 (local moves):
+  each node starts alone
+  repeat sweeping all nodes:
+    for node i:
+      for each neighbour community c:
+        compute ΔQ of moving i into c
+      move i into the c with the largest positive ΔQ
+  until no move improves Q
+
+phase 2 (aggregate): collapse each community to one node, edges become weighted, repeat phase 1
+```
+
+<CodeRunner
+  client:visible
+  code={`// Greedy modularity optimization (Louvain phase 1).
+function louvain(edges, nodes) {
+  const adj = {}; nodes.forEach(n => adj[n] = new Set());
+  for (const [a, b] of edges) { adj[a].add(b); adj[b].add(a); }
+  const m = edges.length;
+  const deg = {}; nodes.forEach(n => deg[n] = adj[n].size);
+  const comm = {}; nodes.forEach(n => comm[n] = n);
+  const Q = () => {
+    let q = 0; const groups = {};
+    nodes.forEach(n => (groups[comm[n]] ||= []).push(n));
+    for (const g of Object.values(groups)) {
+      let ein = 0, dsum = 0;
+      for (const i of g) { dsum += deg[i]; for (const j of adj[i]) if (comm[j] === comm[i]) ein++; }
+      q += (ein / 2) / m - (dsum / (2 * m)) ** 2;
+    }
+    return q;
+  };
+  let improved = true;
+  while (improved) {
+    improved = false;
+    for (const node of nodes) {
+      const cur = comm[node]; let best = cur, bestQ = Q();
+      const cands = new Set([...adj[node]].map(nb => comm[nb]));
+      for (const c of cands) {
+        if (c === cur) continue;
+        comm[node] = c; const q = Q();
+        if (q > bestQ + 1e-9) { bestQ = q; best = c; }
+        comm[node] = cur;
+      }
+      if (best !== cur) { comm[node] = best; improved = true; }
+    }
+  }
+  return { communities: comm, modularity: +Q().toFixed(3) };
+}`}
+  tests={[
+    { expr: "louvain([['A','B'],['B','C'],['A','C'],['D','E'],['E','F'],['D','F'],['C','D']], ['A','B','C','D','E','F'])", label: 'two triangles + a bridge' },
+  ]}
+/>
+
+## The real implementation
+
+The course file's phase 1 is the greedy sweep; phase 2 relabels communities before the next round.
+
+```ts
+// /dsa/29-graph-advanced/louvain-method.ts
+private phase1(): boolean {
+  let improved = false;
+  for (const node of this.graph.nodes) {
+    const currentCommunity = this.communities.get(node)!;
+    const neighbors = this.graph.edges.get(node) || new Set();
+    let bestCommunity = currentCommunity;
+    let bestDeltaQ = 0;
+    for (const neighbor of neighbors) {
+      const neighborCommunity = this.communities.get(neighbor)!;
+      if (neighborCommunity === currentCommunity) continue;
+      const deltaQ = this.modularityGain(node, neighborCommunity);   // local ΔQ
+      if (deltaQ > bestDeltaQ) { bestDeltaQ = deltaQ; bestCommunity = neighborCommunity; }
+    }
+    if (bestCommunity !== currentCommunity) {
+      this.communities.set(node, bestCommunity);                     // accept the best move
+      improved = true;
+    }
+  }
+  return improved;
+}
+```
+
+Run the full file: `npx tsx 29-graph-advanced/louvain-method.ts`.
+
+## Complexity
+
+Each local-move sweep is linear in the edges, and aggregation shrinks the graph fast, so on sparse real
+networks Louvain is near-linearithmic:
+
+$$
+T = O(m \log n), \qquad S = O(n + m),
+$$
+
+for $n$ nodes and $m$ edges.
+
+| Phase | Time | Space |
+|-------|------|-------|
+| Local moves (one sweep) | $O(m)$ | $O(n)$ |
+| Aggregation | $O(n \log n)$ | $O(n)$ |
+| Total (typical) | $O(m \log n)$ | $O(n + m)$ |
+
+<Callout type="why">
+Modularity is a single scalar that scores a whole partition, turning a fuzzy "find the groups" task into a
+concrete optimization — the same move ML makes when it replaces "cluster this data" with "minimise this loss".
+Louvain is greedy hill-climbing on that objective.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Neuroscience" icon="🧠">
+Run Louvain on a brain's functional-connectivity graph and the communities line up with known functional
+regions — visual, motor, default-mode — recovered purely from which areas fire together.
+</ExampleCard>
+
+<ExampleCard domain="Fraud" icon="🚨">
+Banks build a graph of accounts linked by transfers; a tight Louvain community of accounts moving money in
+circles, isolated from the rest, is a classic money-laundering ring signature.
+</ExampleCard>
+
+<ExampleCard domain="Music" icon="🎧">
+On a "listeners who play A also play B" graph, communities surface genres and scenes no one labelled — the
+basis for "fans also like" playlists and discovery radio.
+</ExampleCard>
+
+<ExampleCard domain="Linguistics" icon="🗣️">
+In a word co-occurrence network, Louvain communities cluster words by topic or sense, helping disambiguate
+meanings and seed topic models.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The resolution limit.** Modularity can refuse to separate two small but distinct communities, merging
+  them because the penalty term overwhelms the reward at small scales. Multi-resolution variants address this.
+- **Greedy and order-dependent.** Louvain finds a *local* optimum, and the result can depend on the order in
+  which nodes are visited — run it a few times or use a fixed seed for reproducibility.
+- **Modularity has no fixed threshold.** A $Q$ of $0.4$ on one graph may be strong and weak on another;
+  compare against a randomized null model rather than a magic number.
+- **Interview cue:** "find dense groups in a huge graph, fast" is Louvain. Say "greedily maximise modularity
+  with local moves, then aggregate and repeat".
+
+## Practice
+
+1. **Easy:** Two disconnected triangles. By symmetry, what partition maximises $Q$, and what is it roughly?
+2. **Easy:** In the demo, delete the bridge edge entirely. Does the final modularity go up or down? Why?
+3. **Medium:** Hand-compute $Q$ for putting all six nodes of two triangles plus a bridge into one community versus two.
+4. **Medium:** Explain why moving a node only ever needs its own edges and the target community's degree total, not a full recompute.
+5. **Hard:** Construct a graph where visiting nodes in one order gives a different (worse) partition than another order, illustrating the local-optimum trap.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Modularity Q compares the edges inside communities against:',
+      options: [
+        'Zero',
+        'The number of nodes',
+        'The number expected if edges were rewired at random keeping degrees',
+        'The diameter of the graph',
+      ],
+      answer: 2,
+      explain: 'Q = (fraction of edges inside communities) − (fraction expected at random with the same degree sequence). High Q means more internal edges than chance.',
+    },
+    {
+      q: 'What is Louvain\'s core greedy move?',
+      options: [
+        'Remove the highest-betweenness edge',
+        'Move each node into the neighbouring community that increases Q the most',
+        'Teleport with probability 1 − d',
+        'Adopt the most common neighbour label',
+      ],
+      answer: 1,
+      explain: 'Phase 1 sweeps nodes, moving each into the neighbour community with the largest positive ΔQ, until no move helps. Then communities are aggregated.',
+    },
+    {
+      q: 'The "resolution limit" of modularity means Louvain may:',
+      options: [
+        'Run in exponential time',
+        'Fail to split small distinct communities, merging them',
+        'Require a directed graph',
+        'Never converge',
+      ],
+      answer: 1,
+      explain: 'Below a scale set by the total edge count, modularity\'s penalty term can prevent separating genuinely distinct small communities.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Communities</strong> are groups with many internal edges and few external ones; Louvain finds them at scale.',
+    '<strong>Modularity Q</strong> scores a partition: internal-edge fraction minus the fraction expected at random.',
+    'Louvain greedily <strong>moves each node</strong> into the neighbour community that raises Q most, then aggregates and repeats.',
+    'It runs in about <strong>O(m log n)</strong>, scaling to graphs with hundreds of millions of nodes.',
+    'Watch for the <strong>resolution limit</strong> and order-dependence — Louvain finds a strong local optimum, not a guaranteed global one.',
+  ]}
+/>
+
+Next up: **Girvan-Newman** — a top-down opposite of Louvain that finds communities by *cutting* the edges
+that bridge them, ranked by betweenness.

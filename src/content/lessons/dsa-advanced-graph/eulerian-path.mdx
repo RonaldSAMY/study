@@ -1,0 +1,263 @@
+---
+title: Eulerian Paths
+track: dsa-advanced-graph
+summary: "Walk every edge exactly once: a trail exists only when degrees behave, and Hierholzer's algorithm builds it in linear time."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-advanced-graph/articulation-bridges
+leadsTo:
+  - dsa-advanced-graph/bipartite-matching
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AGphEulerHierholzer from '../../../components/demos/AGphEulerHierholzer.tsx';
+
+## The hook: the seven bridges of Königsberg
+
+In 1736 the citizens of Königsberg wondered if they could stroll across all seven of their bridges
+exactly once and come home. Euler proved they could not — and in doing so invented graph theory. The
+question is timeless: can you trace **every edge exactly once** without lifting your pen? That walk is an
+**Eulerian trail**; if it returns to where it started, an **Eulerian circuit**. Mail carriers, snowplough
+routers, and DNA-assembly pipelines all live or die by it.
+
+<Callout type="intuition" title="The one-sentence idea">
+A connected graph has an Eulerian trail exactly when zero or two vertices have odd degree — and
+Hierholzer's algorithm walks it by greedily following unused edges, stitching in side-loops whenever it
+gets stuck.
+</Callout>
+
+## Intuition
+
+Every time your pen passes *through* a vertex it uses one edge to arrive and one to leave — degree two,
+spent in pairs. So an interior vertex of the walk must have **even degree**. Only the start and end of an
+open trail can have odd degree (you leave the start without arriving, and arrive at the end without
+leaving). That gives the whole rule:
+
+- **Eulerian circuit:** the graph is connected and *every* vertex has even degree.
+- **Eulerian trail (open):** connected, and *exactly two* vertices have odd degree — they must be the two
+  endpoints.
+- **No trail:** four or more odd-degree vertices (Königsberg has all four odd).
+
+Knowing a trail *exists* is half the job. **Hierholzer's algorithm** actually builds it: walk forward,
+deleting edges as you cross them, until you get stuck at a dead end. Back up, and any time a vertex still
+has unused edges, splice a new loop in. Because every vertex keeps even degree as you remove pairs, you
+can never get permanently stranded until all edges are gone.
+
+## Play with it
+
+Watch Hierholzer cross and delete edges (they turn green), then back up to stitch the trail together.
+The "Figure-eight" preset is a circuit; "Tail" has two odd vertices so it is an open path; "Königsberg"
+has four odd vertices, so the walk gets stuck — exactly Euler's negative answer, animated.
+
+<AGphEulerHierholzer client:visible />
+
+<Callout type="tip">
+The trail is assembled **in reverse**: a vertex is appended only once it has no unused edges left, and the
+final list is reversed at the end. That is why the stack-based version pushes finished vertices and flips
+the result — the same trick that makes the recursion iterative.
+</Callout>
+
+## How it works
+
+Take the figure-eight: triangles `0-1-2-0` and `2-3-4-2` sharing vertex `2`. All degrees are even, so a
+circuit exists. Start at `2`:
+
+```
+stack [2]  follow 2-1 → 1 → follow 1-0 → 0 → follow 0-2 → 2
+stack [2,1,0,2]  vertex 2 still has edges 2-3, 2-4
+follow 2-3 → 3 → follow 3-4 → 4 → follow 4-2 → 2
+stack [2,1,0,2,3,4,2]  now everything is stuck, pop into trail
+trail (reversed): 2 → 4 → 3 → 2 → 0 → 1 → 2
+```
+
+Every one of the six edges appears exactly once, and the walk ends back at `2`. The side-loop `2-3-4-2`
+got spliced in at the moment the first loop returned to `2` with edges to spare.
+
+<CodeRunner
+  client:visible
+  code={`// Hierholzer's algorithm for an Eulerian trail (plain JS, undirected)
+function eulerTrail(n, edges) {
+  const inc = Array.from({ length: n }, () => []);
+  edges.forEach(([u, v], i) => { inc[u].push(i); inc[v].push(i); });
+  const deg = Array(n).fill(0);
+  edges.forEach(([u, v]) => { deg[u]++; deg[v]++; });
+  const odd = deg.map((d, i) => (d % 2) ? i : -1).filter(i => i >= 0);
+  if (odd.length !== 0 && odd.length !== 2) return null; // no Eulerian trail
+  let start = odd.length === 2 ? odd[0] : edges[0][0];
+  const used = Array(edges.length).fill(false);
+  const stack = [start], trail = [];
+  const other = (i, v) => edges[i][0] === v ? edges[i][1] : edges[i][0];
+  while (stack.length) {
+    const v = stack[stack.length - 1];
+    let e = -1;
+    for (const i of inc[v]) if (!used[i]) { e = i; break; }
+    if (e === -1) trail.push(stack.pop());
+    else { used[e] = true; stack.push(other(e, v)); }
+  }
+  return trail.reverse();
+}
+
+const fig8 = [[0,1],[1,2],[2,0],[2,3],[3,4],[4,2]];`}
+  tests={[
+    { expr: 'JSON.stringify(eulerTrail(5, fig8))', label: 'circuit on the figure-eight' },
+    { expr: 'JSON.stringify(eulerTrail(4, [[0,1],[1,2],[2,3]]))', label: 'open trail on a path' },
+    { expr: 'eulerTrail(4, [[0,1],[0,1],[0,2],[0,2],[0,3],[1,3],[2,3]])', label: 'Königsberg (no trail)' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses the same stack-based Hierholzer over a multigraph (so parallel bridges are handled).
+This is the undirected version, trimmed to its core:
+
+```ts
+// /dsa/19-advanced-graph/eulerian-path.ts
+export function findEulerianPathUndirected(graph: UndirectedMultiGraph): number[] | null {
+  if (!hasEulerianPathUndirected(graph)) return null;
+
+  const work = graph.clone();
+  // start at an odd-degree vertex if one exists, else any vertex with edges
+  let start = -1;
+  for (const v of work.getVertices()) {
+    if (work.getDegree(v) % 2 !== 0) { start = v; break; }
+    if (work.getDegree(v) > 0 && start === -1) start = v;
+  }
+  if (start === -1) return [];
+
+  const path: number[] = [];
+  const stack: number[] = [start];
+  while (stack.length > 0) {
+    const v = stack[stack.length - 1];
+    const neighbors = work.getNeighbors(v);
+    if (neighbors.length === 0) {
+      path.push(stack.pop()!);          // dead end → commit to the trail
+    } else {
+      const next = neighbors[0];
+      work.removeEdge(v, next);         // delete the edge as we cross it
+      stack.push(next);
+    }
+  }
+  return path.reverse();
+}
+```
+
+Run the full file: `npx tsx 19-advanced-graph/eulerian-path.ts`. It also solves directed Eulerian paths
+(in-degree vs out-degree), LeetCode 332 "Reconstruct Itinerary", and de Bruijn sequences for "Cracking
+the Safe".
+
+## Complexity
+
+Each edge is crossed and removed exactly once, and each vertex is pushed and popped:
+
+$$
+T(V, E) = O(V + E), \qquad S(V, E) = O(E).
+$$
+
+| Step | Time |
+|------|------|
+| Check degrees + connectivity | $O(V + E)$ |
+| Build the trail (Hierholzer) | $O(E)$ |
+
+Contrast this with the **Hamiltonian** path (visit every *vertex* once), which is NP-complete — swapping
+"edge" for "vertex" turns an easy problem into one of the hardest known.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Genomics" icon="🧬">
+DNA assemblers chop a genome into overlapping k-mers and build a de Bruijn graph where edges are reads.
+Reconstructing the original sequence is finding an Eulerian path through that graph — Hierholzer stitches
+the fragments back into a chromosome.
+</ExampleCard>
+
+<ExampleCard domain="Municipal logistics" icon="🛻">
+Street sweepers, snowploughs, and meter readers must traverse every street (edge), not every corner. This
+is the Route Inspection (Chinese Postman) problem: find an Eulerian circuit, or add the fewest duplicate
+streets to make the odd-degree count zero.
+</ExampleCard>
+
+<ExampleCard domain="Puzzles & art" icon="✏️">
+"Draw this shape without lifting your pen or retracing a line" is precisely an Eulerian-trail test. Count
+the odd-degree corners: zero or two means it is drawable, four or more means it is impossible — no matter
+how clever you are.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Check connectivity, not just degrees.** Two separate even-degree components each have local circuits
+  but no single trail across both. The non-isolated vertices must form one connected piece.
+- **Start at an odd vertex for an open trail.** Begin anywhere else and you may strand an edge. For a
+  circuit, any vertex works.
+- **Directed graphs use a different rule:** in-degree equals out-degree everywhere for a circuit; for a
+  trail, exactly one vertex has `out - in = 1` (the start) and one has `in - out = 1` (the end).
+- **Naive deletion is slow.** Repeatedly scanning for an unused edge can be $O(E^2)$; keep a pointer or
+  iterator per vertex so each edge is considered once, preserving $O(E)$.
+- **Interview cue:** "use every road/edge once", "reconstruct itinerary", or "draw without lifting the pen"
+  signals Eulerian — lead with the odd-degree count.
+
+## Practice
+
+1. **Easy:** A square `0-1-2-3-0` — Eulerian circuit, open trail, or neither? Count the degrees.
+2. **Easy:** Add one diagonal to that square. How many odd-degree vertices now, and what does that imply?
+3. **Medium:** Königsberg has four odd vertices. What is the minimum number of bridges to add so a trail
+   becomes possible?
+4. **Medium:** Give a directed graph that has an Eulerian *circuit* but, after reversing one edge, has no
+   Eulerian trail at all.
+5. **Hard:** Implement the directed Eulerian path for LeetCode 332, breaking ties in lexical order of
+   destinations.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A connected undirected graph has an Eulerian circuit exactly when…',
+      options: [
+        'every vertex has even degree',
+        'exactly two vertices have odd degree',
+        'it has no cycles',
+        'it is bipartite',
+      ],
+      answer: 0,
+      explain: 'Passing through a vertex spends edges in pairs, so a closed walk needs every degree even.',
+    },
+    {
+      q: 'Why does Hierholzer build the trail in reverse?',
+      options: [
+        'To save memory',
+        'A vertex is committed only after all its edges are used, so finished vertices are pushed last',
+        'Because the graph is directed',
+        'It does not — the trail comes out forwards',
+      ],
+      answer: 1,
+      explain: 'Dead-end vertices are pushed onto the output; reversing the stack yields the trail in walking order.',
+    },
+    {
+      q: 'How does an Eulerian path differ from a Hamiltonian path?',
+      options: [
+        'They are the same problem',
+        'Eulerian visits every edge once (easy); Hamiltonian visits every vertex once (NP-complete)',
+        'Eulerian needs a directed graph',
+        'Hamiltonian is solved by Hierholzer',
+      ],
+      answer: 1,
+      explain: 'Swapping edge for vertex turns a linear-time problem into one of the classic NP-complete ones.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>Eulerian trail</strong> walks every edge exactly once; a <strong>circuit</strong> returns to its start.',
+    'A connected graph admits a trail iff it has <strong>0 or 2 odd-degree</strong> vertices (0 for a circuit).',
+    '<strong>Hierholzer\'s algorithm</strong> follows unused edges, splicing side-loops when stuck, in <strong>O(E)</strong>.',
+    'The trail is assembled in <strong>reverse</strong> by committing dead-end vertices to the output stack.',
+    'Eulerian (edges) is easy; <strong>Hamiltonian</strong> (vertices) is NP-complete — a one-word difference.',
+  ]}
+/>
+
+Next up: **Bipartite Matching** — from walking edges to *choosing* them, pairing two sides so that no one
+is double-booked, via augmenting paths.

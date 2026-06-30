@@ -1,0 +1,325 @@
+---
+title: A* Search
+track: dsa-graphs
+summary: "A* is Dijkstra with a compass: a heuristic estimate of the remaining distance that steers the search toward the goal so it explores far fewer nodes."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-graphs/bellman-ford-floyd
+leadsTo:
+  - dsa-advanced-graph/strongly-connected-components
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GphAStarGraph from '../../../components/demos/GphAStarGraph.tsx';
+
+## The hook: a search with a sense of direction
+
+Dijkstra's algorithm is patient but blind. To find the shortest route from your house to the airport,
+it expands outward in every direction at once — north into the hills, south into the sea — treating a
+node behind you exactly like a node ahead of you, because it only knows the distance *travelled so far*.
+A human with a map would never do that. You glance at the airport, see it is roughly east, and bias your
+search eastward. **A\*** gives the algorithm that same glance: a cheap estimate of how far the goal still
+is, so it stops exploring the wrong way and races toward the target. It is the workhorse behind GPS
+routing and the pathfinding that moves enemies toward you in nearly every video game.
+
+<Callout type="intuition" title="The one-sentence idea">
+A\* is Dijkstra plus a heuristic: it orders the frontier by $f(n) = g(n) + h(n)$, the known cost to reach
+$n$ plus an estimate of the cost still to go — and as long as that estimate never overestimates, A\*
+still returns the optimal path while exploring a fraction of the nodes.
+</Callout>
+
+## Intuition
+
+In Dijkstra you always expand the open node with the smallest **g-value** — the cheapest known distance
+from the start. A\* changes one thing: it expands the node with the smallest **f-value**, where
+
+- $g(n)$ is the real cost of the best path found so far from the start to $n$ (exactly Dijkstra's quantity), and
+- $h(n)$ is a **heuristic**: an estimate of the remaining cost from $n$ to the goal.
+
+Adding them, $f(n) = g(n) + h(n)$ estimates the total cost of the cheapest route *through* $n$. Sorting the
+frontier by $f$ means A\* prefers nodes that are both close behind us and promising ahead — it walks
+toward the goal instead of fanning out evenly.
+
+The magic condition is **admissibility**: the heuristic must never overestimate the true remaining cost,
+$h(n) \le h^*(n)$. A straight-line distance is admissible because no actual route can be shorter than a
+straight line. With an admissible $h$, A\* is **optimal** — it is guaranteed to return a genuine shortest
+path. Two limiting cases make the idea concrete:
+
+- Set $h(n) = 0$ everywhere and $f$ collapses to $g$: A\* **is** Dijkstra.
+- Make $h$ a perfect oracle equal to the true remaining cost and A\* walks straight down the optimal path,
+  touching almost nothing else.
+
+Real heuristics live between those extremes. The sharper (closer to the truth) $h$ is, the fewer nodes
+A\* expands. The Game Development course's lesson **Pathfinding (A\*)** (slug `game-ai/pathfinding-astar`)
+applies this exact algorithm to move an NPC toward the player on a tile map — same maths, a different stage.
+
+## Play with it
+
+Pick a **start** and a **goal**, then step through. Each step pops the lowest-$f$ node from the open set
+(it lights up sky blue), finalises it into the closed set (emerald), and relaxes its neighbours — updating
+their $g$, $h$ and $f$. Watch the open-set chips stay sorted by $f$, and when the goal is popped, the
+parent chain lights up as the shortest path with its total cost.
+
+<GphAStarGraph client:visible />
+
+<Callout type="tip">
+Notice how A\* almost never bothers with the node far from the goal direction: its $h$ is large, so its
+$f$ stays near the bottom of the open set and it is expanded late or never. That selectivity is the whole
+point — a good heuristic quietly prunes most of the graph.
+</Callout>
+
+## How it works
+
+A\* keeps a priority queue (the open set) ordered by $f$, a closed set of finalised nodes, and a
+`gScore` map of the best cost found to each node. Pop the lowest-$f$ node; if it is the goal, rebuild the
+path through parent links; otherwise close it and relax each neighbour, pushing it with an updated $f$
+whenever you find a cheaper $g$. Here is a full dry run on the demo graph, where every edge weight equals
+the straight-line distance between its endpoints and $h$ is the straight-line distance to G:
+
+```
+h(n) = straight-line distance to G:
+  A 8.1   B 7.3   C 6.1   D 4.1   E 3.2   F 2.2   G 0.0
+
+start A, goal G            open set (sorted by f = g + h)
+pop A  g=0.0 f=8.1   relax B g=3.2 f=10.5, C g=2.0 f=8.1    open: C8.1  B10.5
+pop C  g=2.0 f=8.1   relax D g=4.8 f=8.9,  E g=5.0 f=8.2    open: E8.2  D8.9  B10.5
+pop E  g=5.0 f=8.2   relax G g=8.2 f=8.2                    open: G8.2  D8.9  B10.5
+pop G  g=8.2 f=8.2   goal reached  →  path A → C → E → G, cost 8.2
+```
+
+A\* never expanded B, D or F — it found the answer after touching just four nodes. The code below is a
+self-contained plain-JS A\* over that same weighted graph; press Run to see the path and total cost.
+
+<CodeRunner
+  client:visible
+  code={`// A* over a small weighted graph whose nodes carry (x, y) coordinates.
+var pos = {
+  A: [0, 0], B: [1, 3], C: [2, 0], D: [4, 2],
+  E: [5, 0], F: [7, 3], G: [8, 1],
+};
+var edges = {
+  A: [['B', 3.2], ['C', 2.0]],
+  B: [['A', 3.2], ['D', 3.2]],
+  C: [['A', 2.0], ['D', 2.8], ['E', 3.0]],
+  D: [['B', 3.2], ['C', 2.8], ['F', 3.2], ['G', 4.1]],
+  E: [['C', 3.0], ['G', 3.2]],
+  F: [['D', 3.2], ['G', 2.2]],
+  G: [['D', 4.1], ['E', 3.2], ['F', 2.2]],
+};
+
+// straight-line (Euclidean) distance to the goal = an admissible heuristic
+function h(n, goal) {
+  var dx = pos[n][0] - pos[goal][0];
+  var dy = pos[n][1] - pos[goal][1];
+  return Math.round(Math.hypot(dx, dy) * 10) / 10;
+}
+
+function aStar(start, goal) {
+  var open = [{ id: start, g: 0, f: h(start, goal) }];
+  var came = {};
+  var gScore = {};
+  gScore[start] = 0;
+  var closed = {};
+  while (open.length) {
+    var bi = 0;                                   // pop the lowest-f node
+    for (var i = 1; i < open.length; i++) if (open[i].f < open[bi].f) bi = i;
+    var cur = open.splice(bi, 1)[0];
+    if (closed[cur.id]) continue;
+    if (cur.id === goal) {                        // rebuild path via parents
+      var path = [];
+      var n = goal;
+      while (n !== undefined) { path.unshift(n); n = came[n]; }
+      return { path: path, cost: cur.g };
+    }
+    closed[cur.id] = true;
+    var nbrs = edges[cur.id];
+    for (var j = 0; j < nbrs.length; j++) {
+      var to = nbrs[j][0], cost = nbrs[j][1];
+      if (closed[to]) continue;
+      var tentative = Math.round((cur.g + cost) * 10) / 10;
+      if (gScore[to] === undefined || tentative < gScore[to]) {
+        gScore[to] = tentative;
+        came[to] = cur.id;
+        open.push({ id: to, g: tentative, f: Math.round((tentative + h(to, goal)) * 10) / 10 });
+      }
+    }
+  }
+  return null;
+}`}
+  tests={[
+    { expr: "JSON.stringify(aStar('A','G').path)", label: 'shortest path A→G' },
+    { expr: "aStar('A','G').cost", label: 'total cost' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses a real min-heap for the open set and is generic over any state type `T`, so the same
+function solves graphs, grids and puzzles. Its heart is the $f(n) = g(n) + h(n)$ ordering and the parent
+chain reconstruction:
+
+```ts
+// /dsa/12-graphs/a-star.ts  — f(n) = g(n) + h(n)
+function aStar<T>(
+    start: T,
+    goal: T,
+    getNeighbors: (s: T) => Array<{ state: T; cost: number }>,
+    heuristic: (s: T, goal: T) => number,
+    stateToKey: (s: T) => string
+) {
+    const open = new AStarPriorityQueue<T>();        // min-heap ordered by f
+    const closed = new Set<string>();
+    const gScore = new Map<string, number>();
+    open.enqueue({ state: start, g: 0, h: heuristic(start, goal), f: heuristic(start, goal), parent: null });
+    gScore.set(stateToKey(start), 0);
+
+    while (!open.isEmpty()) {
+        const current = open.dequeue()!;
+        const key = stateToKey(current.state);
+        if (key === stateToKey(goal)) {              // reconstruct path via parents
+            const path: T[] = []; let n: any = current;
+            while (n) { path.unshift(n.state); n = n.parent; }
+            return { path, cost: current.g };
+        }
+        if (closed.has(key)) continue;
+        closed.add(key);
+        for (const { state: nb, cost } of getNeighbors(current.state)) {
+            const nk = stateToKey(nb);
+            if (closed.has(nk)) continue;
+            const tentativeG = current.g + cost;
+            if (tentativeG < (gScore.get(nk) ?? Infinity)) {
+                const h = heuristic(nb, goal);
+                gScore.set(nk, tentativeG);
+                open.enqueue({ state: nb, g: tentativeG, h, f: tentativeG + h, parent: current });
+            }
+        }
+    }
+    return null;
+}
+// Heuristics: manhattan |dx|+|dy|, euclidean sqrt(dx²+dy²), chebyshev max(|dx|,|dy|).
+```
+
+Run the full file: `npx tsx 12-graphs/a-star.ts`.
+
+## Complexity
+
+A\* does the same per-expansion work as Dijkstra — pop the minimum from a priority queue, relax each
+outgoing edge — so its worst case matches Dijkstra's:
+
+$$
+f(n) = g(n) + h(n), \qquad O\big((V + E)\log V\big) \text{ with a binary heap}.
+$$
+
+The heuristic does not change that bound, but in practice it slashes the *constant*: a sharp $h$ keeps
+most of the graph out of the open set entirely. The whole family is one algorithm dialled by $h$:
+
+| Algorithm | Orders frontier by | Heuristic | Optimal? |
+|-----------|--------------------|-----------|----------|
+| Dijkstra | $g(n)$ | none ($h = 0$) | Yes |
+| Greedy best-first | $h(n)$ | uses $h$ only | No |
+| A\* | $f(n) = g(n) + h(n)$ | $g$ and $h$ | Yes, when $h$ is admissible |
+
+At the extremes, $h = 0$ makes A\* degenerate to Dijkstra, while a perfect heuristic makes it expand
+roughly $O(\text{path length})$ nodes — a straight march to the goal. Common admissible heuristics on
+grids are **Manhattan** ($|dx| + |dy|$), **Euclidean** (straight-line $\sqrt{dx^2 + dy^2}$),
+**Chebyshev** ($\max(|dx|, |dy|)$) and **octile** distance for eight-direction movement.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Video games" icon="🎮">
+Nearly every game with moving enemies runs A\* to send an NPC toward the player. The map is a grid or a
+navigation mesh, $g$ is the steps walked, and $h$ is the Manhattan or octile distance to the player's
+tile. The Game Development course's lesson **Pathfinding (A\*)** (slug `game-ai/pathfinding-astar`) builds
+exactly this — the guard that rounds a corner to chase you is this algorithm, expanding only the tiles
+that lead your way.
+</ExampleCard>
+
+<ExampleCard domain="Warehouse robotics" icon="🤖">
+A fulfilment robot must roll from its dock to a shelf while dodging racks, charging stations and other
+robots. The floor is a grid of free and blocked cells; A\* with a Manhattan heuristic plans a route that
+weaves around the obstacles, and because $h$ points at the target shelf the planner barely glances at the
+aisles leading the wrong way — fast enough to replan every time a colleague crosses its path.
+</ExampleCard>
+
+<ExampleCard domain="GPS navigation" icon="🛰️">
+A continent's road network has hundreds of millions of junctions; plain Dijkstra would crawl. Routing
+engines use the **great-circle (straight-line) distance** to the destination as $h$. Since no road can be
+shorter than the straight line, the heuristic is admissible, the route stays optimal, and the search
+hugs the corridor between you and your destination instead of exploring the entire map.
+</ExampleCard>
+
+<ExampleCard domain="Puzzle solving" icon="🧩">
+A\* is not just for maps. To solve a sliding 15-puzzle, a **state** is a board arrangement and a
+**neighbour** is one tile slide. Use $h = $ the total Manhattan distance each tile sits from its home (an
+admissible estimate of remaining moves) and A\* finds a shortest solution while ignoring the astronomically
+many useless shuffles a blind search would wander into.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **An inadmissible heuristic breaks optimality.** If $h$ ever overestimates the remaining cost, A\* may
+  return a path that merely *looks* good and miss the true shortest one. When you need a guarantee, prove
+  $h(n) \le h^*(n)$ first — straight-line distance is the safe default.
+- **Mismatched units.** Your $g$ and $h$ must measure the same thing. If edges are in minutes but $h$ is in
+  kilometres, $f$ is meaningless. Scale the heuristic to the same currency as the edge weights.
+- **Forgetting that $h = 0$ is just Dijkstra.** If a problem has no usable goal-direction estimate, A\*
+  buys you nothing over Dijkstra — do not pretend a made-up heuristic helps.
+- **Re-expanding closed nodes.** With a consistent (monotone) heuristic, once a node is closed its $g$ is
+  final; skip it if it resurfaces. Forgetting the closed check makes the queue bloat.
+- **Interview cue:** when the prompt says "shortest path" *and* gives you coordinates or a clear notion of
+  distance-to-goal, reach for A\* — the interviewer is hinting that a heuristic is available.
+
+## Practice
+
+1. **Easy:** On the demo graph, hand-trace A\* from C to F. Which node is expanded first after C, and why?
+2. **Easy:** Explain in one sentence why setting $h(n) = 0$ turns A\* into Dijkstra.
+3. **Medium:** Give an example of an *inadmissible* heuristic for grid pathfinding and show how it could
+   produce a non-shortest path.
+4. **Medium:** For a 4-direction grid, argue why Manhattan distance is admissible but Euclidean distance,
+   while also admissible, expands more nodes.
+5. **Hard:** Implement the 15-puzzle heuristic "sum of Manhattan distances of each tile from its goal"
+   and explain why it dominates (is never smaller than) the "number of misplaced tiles" heuristic.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does A* use to order the open set?',
+      options: ['g(n), the cost from the start', 'h(n), the estimate to the goal', 'f(n) = g(n) + h(n)', 'The insertion order'],
+      answer: 2,
+      explain: 'A* expands the node with the smallest f = g + h: cheapest known cost behind it plus the estimated cost ahead of it.',
+    },
+    {
+      q: 'Which property of the heuristic guarantees A* returns a shortest path?',
+      options: ['It is always positive', 'It never overestimates the remaining cost (admissible)', 'It equals the number of edges', 'It is computed in O(1)'],
+      answer: 1,
+      explain: 'Admissibility — h(n) never exceeds the true remaining cost — is exactly what keeps A* optimal.',
+    },
+    {
+      q: 'If you set h(n) = 0 for every node, A* behaves like…',
+      options: ['Greedy best-first search', 'Depth-first search', "Dijkstra's algorithm", 'Breadth-first search on a weighted graph'],
+      answer: 2,
+      explain: 'With h = 0, f collapses to g, so A* expands purely by cost-so-far — that is Dijkstra.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A* expands the frontier by <strong>f(n) = g(n) + h(n)</strong> — known cost plus estimated cost-to-go.',
+    'An <strong>admissible</strong> heuristic (never overestimates) keeps A* <strong>optimal</strong>.',
+    'A sharper heuristic explores <strong>far fewer nodes</strong>; with h = 0 it degenerates to <strong>Dijkstra</strong>, and a perfect h marches straight to the goal.',
+    'Common heuristics: <strong>Manhattan</strong>, <strong>Euclidean</strong> (straight-line), <strong>Chebyshev</strong> and octile distance.',
+    'The same algorithm powers <strong>GPS routing, robot navigation, puzzle solving</strong> and <strong>game NPC pathfinding</strong> — only the heuristic changes.',
+  ]}
+/>
+
+Next up: **Strongly Connected Components** opens the Advanced Graph Algorithms track, trading shortest
+paths for deep structure — which groups of nodes can all reach each other. And to see A\* moving a real
+character toward a target, jump to the Game Development course's **Pathfinding (A\*)** lesson
+(`game-ai/pathfinding-astar`).

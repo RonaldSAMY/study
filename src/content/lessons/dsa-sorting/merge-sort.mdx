@@ -1,0 +1,242 @@
+---
+title: Merge Sort
+track: dsa-sorting
+summary: Split the array in half, sort each half recursively, then merge two sorted runs in linear time — guaranteed O(n log n) and stable.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - dsa-sorting/insertion-sort
+leadsTo:
+  - dsa-sorting/quick-sort
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SortMerge from '../../../components/demos/SortMerge.tsx';
+
+## The hook: two sorted piles zip together for free
+
+Two friends each hand you an already-sorted stack of cards and ask for one combined sorted stack.
+You do not re-sort anything — you just compare the two top cards, take the smaller, and repeat. The
+whole merge is a single linear pass. That observation is the entire engine of merge sort: *merging
+two sorted lists is cheap*, so if you can somehow get two sorted halves, you are almost done. And
+how do you sort a half? The same way — split it again, all the way down to single elements, which
+are sorted by definition.
+
+<Callout type="intuition" title="The one-sentence idea">
+Divide the array in half, recursively sort each half, then merge the two sorted halves in one
+$O(n)$ pass — giving $O(n \log n)$ every single time.
+</Callout>
+
+## Intuition
+
+This is your first **divide-and-conquer** sort, so it leans on the [recursion](/lessons/dsa-recursion/recursion-basics)
+mindset: trust that the recursive call returns a sorted half, and just focus on combining two sorted
+halves correctly.
+
+Two questions answer themselves:
+
+- **Why split?** Because a 1-element array is *already sorted*. Splitting drives every subproblem
+  down to that trivial base case.
+- **Why is merging the whole trick?** Two sorted runs of total length $n$ combine with a two-pointer
+  walk: look at both fronts, take the smaller, advance that pointer. Every element is touched once, so
+  the merge is $O(n)$.
+
+Counting the work by *levels* makes the bound obvious. Halving repeatedly gives $\log_2 n$ levels,
+and each level merges every element exactly once — $O(n)$ per level. Multiply: $O(n \log n)$. There is
+no bad input that breaks this; the split is blind to the data, so the worst case equals the best case.
+
+## Play with it
+
+The split is instant; the interesting work is the **merge**. Sky marks the run being merged, amber is
+the value just written into place, and emerald is the merged-and-sorted result filling in.
+
+<SortMerge client:visible />
+
+<Callout type="tip">
+Watch a single merge of two runs like <code>[3, 27, 38]</code> and <code>[9, 10, 82]</code>. Each step
+takes the smaller of the two *fronts* — never re-scanning what is behind. That linear merge, repeated
+across $\log n$ levels, is the whole cost.
+</Callout>
+
+## How it works
+
+The split phase recurses; the merge phase combines. Reading bottom-up:
+
+```
+split:   [38 27 43 3 9 82 10]
+         [38 27 43]      [3 9 82 10]
+         [38] [27 43]    [3 9] [82 10]
+         [38] [27][43]   [3][9] [82][10]
+merge:   [27 38][43]→[27 38 43]   [3 9][10 82]→[3 9 10 82]
+         [27 38 43] + [3 9 10 82] → [3 9 10 27 38 43 82]
+```
+
+The runnable version splits with `slice` and merges with a two-pointer walk:
+
+<CodeRunner
+  client:visible
+  code={`function merge(left, right) {
+  const out = [];
+  let i = 0, j = 0;
+  while (i < left.length && j < right.length) {
+    if (left[i] <= right[j]) out.push(left[i++]); // <= keeps it stable
+    else out.push(right[j++]);
+  }
+  while (i < left.length) out.push(left[i++]);
+  while (j < right.length) out.push(right[j++]);
+  return out;
+}
+
+function mergeSort(arr) {
+  if (arr.length <= 1) return arr;             // base case: already sorted
+  const mid = Math.floor(arr.length / 2);
+  const left = mergeSort(arr.slice(0, mid));
+  const right = mergeSort(arr.slice(mid));
+  return merge(left, right);
+}`}
+  tests={[
+    { expr: 'mergeSort([38,27,43,3,9,82,10]).join(",")', label: 'sort 7 values' },
+    { expr: 'mergeSort([5,4,3,2,1]).join(",")', label: 'reversed' },
+    { expr: 'merge([1,4,7],[2,5,8]).join(",")', label: 'merge two sorted runs' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the top-down sort and its $O(n)$ merge. The same merge powers a neat trick:
+**counting inversions** (how far from sorted an array is) by tallying the skipped-over elements.
+
+```ts
+// /dsa/sort/mergesort.ts
+function mergeSort<T>(arr: T[]): T[] {
+    if (arr.length <= 1) return arr;
+    const mid = Math.floor(arr.length / 2);
+    const left = mergeSort(arr.slice(0, mid));
+    const right = mergeSort(arr.slice(mid));
+    return merge(left, right);
+}
+
+function merge<T>(left: T[], right: T[]): T[] {
+    const result: T[] = [];
+    let i = 0, j = 0;
+    while (i < left.length && j < right.length) {
+        if (left[i] <= right[j]) result.push(left[i++]); // <= ⇒ stable
+        else result.push(right[j++]);
+    }
+    while (i < left.length) result.push(left[i++]);
+    while (j < right.length) result.push(right[j++]);
+    return result;
+}
+```
+
+Run the full file: `npx tsx sort/mergesort.ts`.
+
+## Complexity
+
+The split is data-blind, so all three cases coincide:
+
+$$
+T(n) = 2\,T\!\left(\tfrac{n}{2}\right) + O(n) = O(n \log n), \qquad S(n) = O(n).
+$$
+
+| Case | Time | Notes |
+|------|------|-------|
+| Best | $O(n \log n)$ | no shortcut, but no degradation either |
+| Average | $O(n \log n)$ | |
+| Worst | $O(n \log n)$ | **guaranteed** — unlike quicksort |
+
+The price is **$O(n)$ extra space** for the merge buffers. It is **stable** (the `<=` keeps equal
+keys in left-then-right order) and shines for **linked lists** (split via slow/fast pointers, merge by
+relinking — $O(1)$ extra space) and **external sorting** of data too big for RAM.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Highway traffic" icon="🚗">
+A "zipper merge" where two lanes of cars — each already in order — interleave into one lane is a
+literal merge step: at the merge point you alternately admit whichever car arrived first, combining two
+ordered streams in one pass.
+</ExampleCard>
+
+<ExampleCard domain="Databases" icon="🗄️">
+External merge sort lets a database sort a file far larger than memory: sort RAM-sized chunks, write
+each to disk, then merge the sorted chunks with a streaming $k$-way merge — the only sort that handles
+data which never fully fits in memory.
+</ExampleCard>
+
+<ExampleCard domain="Bioinformatics" icon="🧬">
+Genome assemblers merge sorted lists of $k$-mers from many reads; because merging preserves order and
+runs in linear time, overlapping fragments line up efficiently even at billions of entries.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Use `<=`, not `<`, in the merge.** Taking from the *left* run on ties is what makes merge sort
+  stable. Flip it to `<` and equal keys can reorder.
+- **It is not in place.** Each merge needs an output buffer, so it uses $O(n)$ extra memory — the main
+  reason quicksort is often preferred for in-memory arrays.
+- **Mind the base case and the split index.** `arr.length <= 1` returns immediately; `mid = floor(n/2)`
+  keeps the halves balanced. A wrong split can recurse forever.
+- **Interview hooks:** "guaranteed $O(n \log n)$, stable, ideal for linked lists and external sort," and
+  "the merge step counts inversions for free." Contrast with quicksort, coming next.
+
+## Practice
+
+1. **Easy:** Merge `[1, 3, 5]` and `[2, 4, 6]` by hand, listing each comparison.
+2. **Easy:** Why is a single-element (or empty) array the base case? What would go wrong without it?
+3. **Medium:** *Count inversions* — modify `merge` so that when you take from the right run, you add the
+   number of remaining left elements to a counter. Why does that count out-of-order pairs?
+4. **Medium:** *Merge k sorted lists* — combine $k$ sorted arrays of total length $n$ in $O(n \log k)$.
+   How does pairwise merging give the $\log k$ factor?
+5. **Hard:** Implement **bottom-up** (iterative) merge sort that merges runs of size 1, 2, 4, … with no
+   recursion. Why is it handy when the call stack is a concern?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why is merge sort’s worst case still O(n log n) when quicksort’s is O(n²)?',
+      options: [
+        'It uses extra memory',
+        'The split is always into equal halves, independent of the data',
+        'It is stable',
+        'It works on linked lists',
+      ],
+      answer: 1,
+      explain: 'Merge sort halves blindly, so it always has log n balanced levels — no input can unbalance the recursion.',
+    },
+    {
+      q: 'What is the time to merge two sorted runs of total length n?',
+      options: ['O(n²)', 'O(n log n)', 'O(n)', 'O(log n)'],
+      answer: 2,
+      explain: 'A two-pointer walk touches each element once, so merging is linear — the key fact behind the whole algorithm.',
+    },
+    {
+      q: 'Which change to the merge would break stability?',
+      options: [
+        'Using left[i] <= right[j]',
+        'Using left[i] < right[j] (take from right on ties)',
+        'Copying leftovers at the end',
+        'Splitting at floor(n/2)',
+      ],
+      answer: 1,
+      explain: 'On a tie you must take from the left run to preserve original order; < takes from the right and can reorder equal keys.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Merge sort is <strong>divide and conquer</strong>: split in half, sort each half, then merge.',
+    'Merging two sorted runs is <strong>O(n)</strong>; with <strong>log n</strong> levels the total is <strong>O(n log n)</strong>, guaranteed.',
+    'It is <strong>stable</strong> (thanks to <code>&lt;=</code>) but needs <strong>O(n)</strong> extra space — not in place.',
+    'Ideal for <strong>linked lists</strong> and <strong>external sorting</strong> of data larger than memory.',
+    'The merge step also <strong>counts inversions</strong> and powers k-way merges — a reusable primitive.',
+  ]}
+/>
+
+Next up: **Quicksort** — keep the divide-and-conquer idea but do the work *before* recursing, by
+partitioning around a pivot so each piece sorts in place.

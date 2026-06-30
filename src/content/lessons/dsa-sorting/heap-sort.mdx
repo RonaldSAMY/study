@@ -1,0 +1,249 @@
+---
+title: Heap Sort
+track: dsa-sorting
+summary: Treat the array as a binary heap, repeatedly extract the maximum to the end, and re-heapify — guaranteed O(n log n) in O(1) space.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-sorting/quick-sort
+leadsTo:
+  - dsa-sorting/counting-radix-sort
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SortHeap from '../../../components/demos/SortHeap.tsx';
+
+## The hook: selection sort with a superpower
+
+Selection sort was simple but slow: every pass scanned the *entire* unsorted region just to find the
+maximum. What if a data structure could hand you the maximum instantly and reorganise itself in
+$O(\log n)$? That structure is the **binary heap**, and bolting it onto selection sort is heap sort.
+You get merge sort's iron-clad $O(n \log n)$ guarantee *and* quicksort's $O(1)$ memory — the best of
+both, in place, with no worst-case surprises.
+
+<Callout type="intuition" title="The one-sentence idea">
+Build the array into a max-heap so the largest value sits at the root, then repeatedly swap the root
+to the end and sift the new root down to restore the heap.
+</Callout>
+
+## Intuition
+
+A [binary heap](/lessons/dsa-heaps/heap-basics) is a complete binary tree packed into an array: the
+children of index $i$ live at $2i+1$ and $2i+2$, and in a **max-heap** every parent is at least as
+large as its children. So the maximum is always at index 0 — free to read.
+
+Heap sort runs in two phases:
+
+1. **Build a max-heap** in place. Starting from the last non-leaf and moving up, *sift down* each
+   node so it settles above its children. This costs only $O(n)$ — most nodes are near the bottom and
+   barely move.
+2. **Sort by repeated extraction.** Swap the root (the max) with the last element of the heap; that
+   value is now in its final sorted position, so shrink the heap by one. The new root may be out of
+   order, so *sift it down* in $O(\log n)$. Repeat $n$ times.
+
+Phase two is $n$ extractions at $O(\log n)$ each, so the whole sort is $O(n \log n)$ — every time, on
+every input, using nothing but the original array.
+
+## Play with it
+
+The array *is* the heap (index $i$ has children $2i+1$, $2i+2$). Amber is the node sifting down, sky
+its children, emerald the sorted tail being built from the right. Watch the largest value climb to
+index 0 during the build, then get swapped to the end.
+
+<SortHeap client:visible />
+
+<Callout type="tip">
+Step through just the **build** phase. The biggest value bubbles up to index 0 even though we never do
+a full scan — each node only compares against its two children. That local rule is what makes
+extraction $O(\log n)$.
+</Callout>
+
+## How it works
+
+Heapify `[4, 10, 3, 5, 1]` into a max-heap, then extract:
+
+```
+build:   [4 10 3 5 1] → sift to → [10 5 3 4 1]   (10 at the root)
+extract: swap 10↔1 → [1 5 3 4 |10]  sift 1 down → [5 4 3 1 |10]
+extract: swap 5↔1  → [1 4 3 |5 10]  sift 1 down → [4 1 3 |5 10]
+extract: swap 4↔3  → [3 1 |4 5 10]  sift 3 down → [3 1 |4 5 10]
+extract: swap 3↔1  → [1 |3 4 5 10]  → sorted ✓
+```
+
+The runnable version builds the heap, then extracts, all in place:
+
+<CodeRunner
+  client:visible
+  code={`function heapSort(input) {
+  const a = [...input];
+  const n = a.length;
+  function siftDown(size, i) {
+    while (true) {
+      let largest = i;
+      const l = 2 * i + 1, r = 2 * i + 2;
+      if (l < size && a[l] > a[largest]) largest = l;
+      if (r < size && a[r] > a[largest]) largest = r;
+      if (largest === i) break;
+      [a[i], a[largest]] = [a[largest], a[i]];
+      i = largest;
+    }
+  }
+  for (let i = Math.floor(n / 2) - 1; i >= 0; i--) siftDown(n, i); // build
+  for (let i = n - 1; i > 0; i--) {                                // extract
+    [a[0], a[i]] = [a[i], a[0]];
+    siftDown(i, 0);
+  }
+  return a;
+}`}
+  tests={[
+    { expr: 'heapSort([4,10,3,5,1]).join(",")', label: 'sort [4,10,3,5,1]' },
+    { expr: 'heapSort([9,8,7,6,5,4]).join(",")', label: 'reversed' },
+    { expr: 'heapSort([2,1,2,1,2]).join(",")', label: 'with duplicates' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — `heapify` (sift down) plus the build-then-extract driver:
+
+```ts
+// /dsa/sort/heapsort.ts
+function heapSort<T>(arr: T[]): T[] {
+    const result = [...arr];
+    const n = result.length;
+    // Build max heap from the last non-leaf up.
+    for (let i = Math.floor(n / 2) - 1; i >= 0; i--) heapify(result, n, i);
+    // Repeatedly move the max to the end and re-heapify the smaller heap.
+    for (let i = n - 1; i > 0; i--) {
+        [result[0], result[i]] = [result[i], result[0]];
+        heapify(result, i, 0);
+    }
+    return result;
+}
+
+function heapify<T>(arr: T[], n: number, i: number): void {
+    let largest = i;
+    const left = 2 * i + 1, right = 2 * i + 2;
+    if (left < n && arr[left] > arr[largest]) largest = left;
+    if (right < n && arr[right] > arr[largest]) largest = right;
+    if (largest !== i) {
+        [arr[i], arr[largest]] = [arr[largest], arr[i]];
+        heapify(arr, n, largest); // keep sifting down
+    }
+}
+```
+
+Run the full file: `npx tsx sort/heapsort.ts`.
+
+## Complexity
+
+Build is $O(n)$; the $n$ extractions dominate at $O(n \log n)$ in every case:
+
+$$
+T_\text{best}(n) = T_\text{avg}(n) = T_\text{worst}(n) = O(n \log n), \qquad S(n) = O(1).
+$$
+
+| Phase | Cost |
+|-------|------|
+| Build heap | $O(n)$ |
+| Each extraction (sift down) | $O(\log n)$ |
+| $n$ extractions | $O(n \log n)$ |
+
+It is **in place** ($O(1)$ extra space — no second array, unlike merge sort) and has a **guaranteed**
+$O(n \log n)$ worst case (unlike quicksort). The catch: it is **not stable**, and it jumps around
+memory (parent-to-child index leaps), so its cache behaviour is worse than quicksort's — which is why
+quicksort is often faster in wall-clock time despite the scarier worst case.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Emergency room" icon="🏥">
+A priority queue — the live form of a heap — runs every ER: the most critical patient is always at the
+root, ready to be pulled next, and the structure re-balances in $O(\log n)$ as new arrivals are
+inserted. "Repeatedly extract the max" *is* triage.
+</ExampleCard>
+
+<ExampleCard domain="Network routing" icon="🛰️">
+Dijkstra's shortest-path algorithm pulls the closest unvisited node from a min-heap at every step.
+The same extract-min-then-reheapify loop that sorts an array also finds optimal routes through a
+network.
+</ExampleCard>
+
+<ExampleCard domain="Streaming analytics" icon="📡">
+To keep the **top-K** trending items from an endless event stream, hold a size-K heap: each new item
+either displaces the current minimum or is dropped, in $O(\log K)$ — bounded memory, no full sort.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Index formulas.** Children of $i$ are $2i+1$ and $2i+2$; parent is $\lfloor (i-1)/2 \rfloor$. Memorise
+  these — every heap bug traces back to them.
+- **Build is $O(n)$, not $O(n \log n)$.** A classic interview gotcha: the heights sum so that
+  bottom-up heapify is linear, even though each *extraction* is $O(\log n)$.
+- **Pass the right heap size.** During extraction, sift down with size `i` (the shrunk heap), not `n`,
+  or you will drag already-sorted elements back into the heap.
+- **It is not stable.** Long-range root swaps reorder equal keys. Need stability? Use merge sort.
+- **Interview hook:** "$O(n \log n)$ guaranteed *and* $O(1)$ space — the only common sort with both."
+  Then connect heaps to priority queues, Dijkstra, and top-K.
+
+## Practice
+
+1. **Easy:** Given the array heap `[10, 5, 3, 4, 1]`, what are the children of index 1, and do they
+   satisfy the max-heap property?
+2. **Easy:** Why does swapping the root to the end place a value in its *final* sorted position?
+3. **Medium:** Find the **k largest** elements of an array in $O(n + k \log n)$ using a heap. Why is
+   that better than fully sorting when $k \ll n$?
+4. **Medium:** Use a **min-heap** instead to sort ascending by extracting minimums into a new array.
+   What extra space does that cost, and how is it different from the in-place version?
+5. **Hard:** Prove that building a heap with bottom-up `heapify` is $O(n)$ by summing the work across
+   levels (most nodes are leaves and never move).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In a max-heap stored in an array, where is the maximum element?',
+      options: ['At the last index', 'At index 0 (the root)', 'At the middle', 'It varies'],
+      answer: 1,
+      explain: 'The max-heap property forces the largest value to the root, which is array index 0 — readable in O(1).',
+    },
+    {
+      q: 'What is heap sort’s worst-case time and extra space?',
+      options: [
+        'O(n²) time, O(1) space',
+        'O(n log n) time, O(n) space',
+        'O(n log n) time, O(1) space',
+        'O(n) time, O(n) space',
+      ],
+      answer: 2,
+      explain: 'Build is O(n), and n extractions at O(log n) give O(n log n) every time — all in place, so O(1) extra space.',
+    },
+    {
+      q: 'Why is heap sort often slower in practice than quicksort despite a better worst case?',
+      options: [
+        'It uses more memory',
+        'It is recursive',
+        'Its parent/child index jumps give poor cache locality',
+        'It is unstable',
+      ],
+      answer: 2,
+      explain: 'Sifting hops between distant indices (2i+1, 2i+2), thrashing the cache, whereas quicksort scans contiguous memory.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Heap sort is <strong>selection sort powered by a heap</strong>: the max is always at the root.',
+    'Phase 1 <strong>builds a max-heap in O(n)</strong>; phase 2 extracts the max n times at <strong>O(log n)</strong> each.',
+    'It is <strong>O(n log n) guaranteed</strong> and <strong>in place (O(1) space)</strong> — the only common sort with both.',
+    'It is <strong>not stable</strong> and has <strong>poor cache locality</strong>, so quicksort is often faster in wall-clock time.',
+    'Heaps live on as <strong>priority queues</strong> behind triage, Dijkstra, event simulation and top-K.',
+  ]}
+/>
+
+Next up: **Counting & Radix Sort** — drop comparisons entirely and break the $O(n \log n)$ barrier when
+the keys are small integers.

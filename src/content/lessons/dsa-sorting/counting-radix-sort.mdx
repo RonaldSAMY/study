@@ -1,0 +1,264 @@
+---
+title: Counting & Radix Sort
+track: dsa-sorting
+summary: Stop comparing elements and start counting them — sort small integers in linear time, then chain digit passes to handle big ones.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - dsa-sorting/heap-sort
+leadsTo:
+  - dsa-sorting/sorting-comparison
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SortCountingRadix from '../../../components/demos/SortCountingRadix.tsx';
+
+## The hook: you can't beat n·log n — unless you stop comparing
+
+Every sort so far asked the same question — "is $a$ bigger than $b$?" — and there is a famous proof
+that *any* comparison-based sort needs at least $\Omega(n \log n)$ comparisons. So how do real systems
+sort millions of integers in a single linear pass? They cheat the premise: they **never compare two
+elements at all**. If your keys are small integers, you can use each value as an *array index* and just
+tally how many times it appears. That is counting sort, and chaining it digit-by-digit gives radix
+sort — the engine behind postal sorting machines and a lot of "impossibly fast" pipelines.
+
+<Callout type="intuition" title="The one-sentence idea">
+If keys are small integers, count how many times each value occurs and use a running total to place
+every element directly — $O(n+k)$, with no comparisons; radix sort then chains this over digits.
+</Callout>
+
+## Intuition
+
+**Counting sort** works when values lie in a small range $0 \dots k$. Make a `count` array of size
+$k+1$, tally each value, then turn the tallies into a **prefix sum** so `count[v]` tells you the final
+position just past the last $v$. Walk the input from right to left, drop each element at its computed
+slot, and decrement. No element is ever compared to another — its position comes straight from its
+value. Total cost: $O(n+k)$. When $k = O(n)$ (grades 0–100, ages 0–150, byte values 0–255), that is
+linear.
+
+But what if $k$ is huge — say six-digit numbers, where a count array would need a million slots?
+**Radix sort** fixes this by sorting **one digit at a time**, least significant first, using counting
+sort (range 0–9) for each pass. The crucial requirement: each pass must be **stable**, so that ties on
+the current digit keep the order earned by previous digits. After the most significant digit, the whole
+array is sorted. The cost is $O(d \cdot (n+k))$ for $d$ digits — effectively $O(n)$ for fixed-width
+integers.
+
+## Play with it
+
+Watch LSD radix sort reorder the bars by the ones digit, then the tens, then the hundreds. Each pass is
+a stable counting sort; amber shows the value being placed and its current digit. No two bars are ever
+compared.
+
+<SortCountingRadix client:visible />
+
+<Callout type="tip">
+After the ones-digit pass, look at any two numbers sharing that digit — their order is *frozen*. The
+next pass only reorders by the tens digit and leaves ties alone. That stability, compounded across
+passes, is the entire reason radix sort produces a correctly sorted array.
+</Callout>
+
+## How it works
+
+Counting sort of `[4, 2, 2, 8, 3, 3, 1]` (range 0–8):
+
+```
+count occurrences:  1→1  2→2  3→2  4→1  8→1
+prefix sums give the end position of each value
+place right-to-left → [1, 2, 2, 3, 3, 4, 8]   (stable, no comparisons)
+```
+
+Radix sort of `[170, 45, 75, 90, 2, 802, 24, 66]`:
+
+```
+by ones:      [170, 90, 802, 2, 24, 45, 75, 66]
+by tens:      [802, 2, 24, 45, 66, 170, 75, 90]
+by hundreds:  [2, 24, 45, 66, 75, 90, 170, 802]   ← sorted
+```
+
+Both run with no element-to-element comparison:
+
+<CodeRunner
+  client:visible
+  code={`function countingSortByDigit(arr, exp) {
+  const n = arr.length;
+  const out = new Array(n);
+  const count = new Array(10).fill(0);
+  for (const x of arr) count[Math.floor(x / exp) % 10]++;
+  for (let i = 1; i < 10; i++) count[i] += count[i - 1];   // prefix sums
+  for (let i = n - 1; i >= 0; i--) {                       // right-to-left = stable
+    const d = Math.floor(arr[i] / exp) % 10;
+    out[--count[d]] = arr[i];
+  }
+  return out;
+}
+
+function radixSort(input) {
+  let a = [...input];
+  const max = Math.max(...a);
+  for (let exp = 1; Math.floor(max / exp) > 0; exp *= 10) {
+    a = countingSortByDigit(a, exp);
+  }
+  return a;
+}`}
+  tests={[
+    { expr: 'radixSort([170,45,75,90,2,802,24,66]).join(",")', label: 'radix sort' },
+    { expr: 'radixSort([329,457,657,839,436,720,355]).join(",")', label: '3-digit values' },
+    { expr: 'countingSortByDigit([45,75,90,802],1).join(",")', label: 'one stable pass (ones digit)' },
+  ]}
+/>
+
+## The real implementation
+
+From the course files — stable counting sort and the LSD radix driver that calls it per digit:
+
+```ts
+// /dsa/sort/countingsort.ts
+function countingSortStable(arr: number[]): number[] {
+    if (arr.length <= 1) return [...arr];
+    const n = arr.length;
+    const max = Math.max(...arr);
+    const count = new Array(max + 1).fill(0);
+    for (const num of arr) count[num]++;
+    for (let i = 1; i <= max; i++) count[i] += count[i - 1]; // cumulative → positions
+    const output = new Array(n);
+    for (let i = n - 1; i >= 0; i--) {                        // right-to-left ⇒ stable
+        const num = arr[i];
+        output[--count[num]] = num;
+    }
+    return output;
+}
+
+// /dsa/sort/radixsort.ts
+function radixSort(arr: number[]): number[] {
+    if (arr.length <= 1) return [...arr];
+    let result = [...arr];
+    const max = Math.max(...result);
+    for (let exp = 1; Math.floor(max / exp) > 0; exp *= 10) {
+        result = countingSortByDigit(result, exp); // stable counting sort per digit
+    }
+    return result;
+}
+```
+
+Run the full files: `npx tsx sort/countingsort.ts` and `npx tsx sort/radixsort.ts`.
+
+## Complexity
+
+Counting sort is linear in $n$ plus the value range $k$; radix multiplies by the digit count $d$:
+
+$$
+T_\text{counting}(n) = O(n + k), \qquad T_\text{radix}(n) = O\bigl(d \,(n + k)\bigr), \qquad S = O(n + k).
+$$
+
+| Sort | Time | Space | Stable | Beats $n\log n$ when |
+|------|------|-------|--------|----------------------|
+| Counting | $O(n+k)$ | $O(n+k)$ | Yes | $k = O(n)$ |
+| Radix (LSD) | $O(d(n+k))$ | $O(n+k)$ | Yes | $d \ll \log n$ |
+
+Both are **stable** and **non-comparison**, so they sidestep the $\Omega(n \log n)$ lower bound. The
+catch is that they are **not in place** (they need the output and count arrays) and only work for keys
+you can map to small integers — integers, fixed-length strings, dates — *not* arbitrary floats or
+custom objects without an integer key.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Postal service" icon="📮">
+Industrial mail sorters are radix sort in steel: a letter is routed by the last digit of its postcode
+into one of ten bins, the bins are stacked in order, and the machine re-runs on the next digit. After
+the final digit, the whole batch is in delivery order — millions of letters, no letter ever compared to
+another.
+</ExampleCard>
+
+<ExampleCard domain="Elections" icon="🗳️">
+Tallying a vote is counting sort's first half: one bucket per candidate, increment as ballots arrive.
+The histogram you build is exactly the `count` array — and reading the buckets in order "sorts" the
+ballots in linear time.
+</ExampleCard>
+
+<ExampleCard domain="GPU graphics" icon="🎮">
+GPUs sort millions of particles by depth every frame using radix sort on the bits of their distance
+values, because it is comparison-free, massively parallel, and predictably linear — exactly what
+real-time rendering budgets demand.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Stability is mandatory for radix.** If the per-digit counting sort is not stable (right-to-left
+  placement with prefix sums), earlier digits' order is lost and the result is wrong. This is the #1
+  bug.
+- **Watch the range $k$.** Counting sort with $k \gg n$ wastes time and memory; if values span billions,
+  use radix (or a comparison sort) instead of a billion-slot count array.
+- **Negatives and floats need care.** Shift by the minimum for negatives; floats require bit-twiddling
+  or a different approach. Plain counting/radix assume non-negative integers.
+- **It is not in place.** Mentioning the $O(n+k)$ auxiliary space (and that it is the trade for linear
+  time) shows you understand the cost.
+- **Interview hook:** "comparison sorts are bounded by $n \log n$; counting/radix escape it by using
+  keys as indices." Then state exactly when it applies — small integer keys.
+
+## Practice
+
+1. **Easy:** Build the `count` array for `[2, 5, 2, 0, 3, 0, 2]` (range 0–5). What does the prefix sum
+   look like?
+2. **Easy:** How many radix passes does LSD need for `[7, 13, 999, 21]`? What determines that number?
+3. **Medium:** Explain precisely why processing the input **right to left** during the placement step
+   makes counting sort stable.
+4. **Medium:** Sort an array of fixed-length strings (e.g. 3-letter words) with radix sort. What plays
+   the role of the "digit," and what is the base $k$?
+5. **Hard:** *Maximum gap* — find the largest difference between consecutive elements of the sorted form
+   in $O(n)$, using bucketing (the pigeonhole principle) instead of a full sort.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How do counting and radix sort beat the Ω(n log n) comparison lower bound?',
+      options: [
+        'They use a faster CPU',
+        'They never compare two elements — they use keys as array indices',
+        'They are recursive',
+        'They are in place',
+      ],
+      answer: 1,
+      explain: 'The lower bound only applies to comparison sorts. Counting/radix place elements by their integer value, doing no comparisons.',
+    },
+    {
+      q: 'Why must each digit pass of radix sort be stable?',
+      options: [
+        'To save memory',
+        'So that ties on the current digit keep the order from earlier digit passes',
+        'To make it in place',
+        'To handle negative numbers',
+      ],
+      answer: 1,
+      explain: 'LSD radix relies on earlier passes’ ordering surviving later ties; an unstable pass would scramble that and give a wrong result.',
+    },
+    {
+      q: 'Counting sort is the right tool when…',
+      options: [
+        'keys are arbitrary floating-point numbers',
+        'the value range k is large compared to n',
+        'keys are integers in a small range (k = O(n))',
+        'you need an in-place sort',
+      ],
+      answer: 2,
+      explain: 'Counting sort is O(n + k); it only wins when the range k is on the order of n (grades, ages, byte values).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Comparison sorts cannot beat <strong>Ω(n log n)</strong>; counting and radix sort escape it by <strong>not comparing</strong>.',
+    'Counting sort tallies values and uses <strong>prefix sums</strong> to place them in <strong>O(n + k)</strong>, stably.',
+    'Radix sort chains <strong>stable counting sorts</strong> over digits, LSD first — <strong>O(d(n + k))</strong>, near-linear for fixed-width keys.',
+    'Both are <strong>stable</strong> and <strong>non-comparison</strong> but <strong>not in place</strong>, and need integer-mappable keys.',
+    'They power <strong>postal sorters, vote tallies, and GPU depth sorts</strong> — wherever keys are small integers.',
+  ]}
+/>
+
+Next up: **Choosing a Sort** — put all eight side by side and learn to pick the right one from
+stability, space, data shape, and why your language ships Timsort.

@@ -1,0 +1,269 @@
+---
+title: 2-SAT
+track: dsa-advanced-graph
+summary: "Boolean puzzles, solved by graphs: turn each two-literal clause into implications and let strongly connected components decide satisfiability."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-advanced-graph/max-flow-min-cut
+leadsTo:
+  - dsa-graph-networks/pagerank
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AGph2Sat from '../../../components/demos/AGph2Sat.tsx';
+
+## The hook: the constraint puzzle that graphs crack
+
+General boolean satisfiability (SAT) is the original NP-complete problem — checking whether a tangle of
+true/false constraints can all hold at once is, in general, brutally hard. But restrict every clause to
+just **two** literals and something magical happens: the problem becomes solvable in **linear time**. The
+trick is to stop thinking in logic and start thinking in graphs. Seating charts, scheduling with "not both"
+rules, two-colouring — all collapse to **2-SAT**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Each clause $(a \lor b)$ is two implications $\lnot a \to b$ and $\lnot b \to a$; the formula is solvable
+iff no variable and its negation land in the same strongly connected component.
+
+</Callout>
+
+## Intuition
+
+A clause $(a \lor b)$ says "at least one is true". Equivalently: *if `a` is false, then `b` must be true*,
+and *if `b` is false, then `a` must be true*. Those two implications, $\lnot a \to b$ and $\lnot b \to a$,
+are edges in an **implication graph** with $2n$ nodes — one for each variable and one for its negation.
+
+Now follow the arrows. If you can travel from `x` all the way to `\lnot x` *and* back from `\lnot x` to
+`x`, then `x` implies its own negation and vice versa — a contradiction. In graph terms, `x` and
+`\lnot x` sit in the **same strongly connected component**. So the satisfiability test is exactly the SCC
+check from lesson one:
+
+- If some variable has `x` and `\lnot x` in one SCC → **UNSATISFIABLE**.
+- Otherwise → **SATISFIABLE**, and you read off an assignment from the component order.
+
+To assign values, use that Tarjan emits SCCs in reverse topological order. For each variable, set the
+literal whose component comes **later** in topological order (closer to a sink) to true — following an
+implication can only ever move you toward "more true", so the sink-ward literal is the safe choice.
+
+## Play with it
+
+The top row is each variable's positive literal, the bottom row its negation. Step through Tarjan building
+SCCs (same colour = same component), then watch the per-variable check. In "Contradiction", `x0` and
+`¬x0` end up the same colour — instantly unsatisfiable. In the satisfiable presets, every variable is
+split, and the chosen literals are circled green.
+
+<AGph2Sat client:visible />
+
+<Callout type="tip">
+This is why lesson one mattered: 2-SAT is "just" SCC on a cleverly built graph. The hard intellectual work
+is the <em>encoding</em> — translating "at most one of A, B", "exactly one", or "if P then Q" into clauses.
+The solving is a linear-time library call.
+</Callout>
+
+## How it works
+
+Take three variables and clauses $(x_0 \lor x_1) \land (\lnot x_0 \lor x_2) \land (\lnot x_1 \lor \lnot x_2)$.
+Encode each clause as two implications (writing literals as `xi` / `!xi`):
+
+```
+(x0 ∨ x1):   !x0 → x1,   !x1 → x0
+(!x0 ∨ x2):   x0 → x2,   !x2 → !x0
+(!x1 ∨ !x2):  x1 → !x2,   x2 → !x1
+```
+
+Run Tarjan on these six implication edges over the six literal nodes. No variable shares a component with
+its own negation, so the formula is **satisfiable**. Reading the literal in the later (sink-ward) component
+for each variable yields a concrete true/false assignment that satisfies every clause.
+
+Contrast the contradiction `(\lnot x_0 \to x_0)` together with `(x_0 \to \lnot x_0)`: now `x0` and `!x0`
+imply each other, fall into one SCC, and the answer is **unsatisfiable** — there is no consistent value.
+
+<CodeRunner
+  client:visible
+  code={`// 2-SAT via implication graph + Tarjan SCC (plain JS)
+function twoSat(n, clauses) {
+  const N = 2 * n;
+  const adj = Array.from({ length: N }, () => []);
+  const lit = (i, pos) => 2 * i + (pos ? 0 : 1);
+  const neg = (l) => l ^ 1;
+  for (const [i, ip, j, jp] of clauses) {
+    const a = lit(i, ip), b = lit(j, jp);
+    adj[neg(a)].push(b);
+    adj[neg(b)].push(a);
+  }
+  const disc = Array(N).fill(-1), low = Array(N).fill(-1);
+  const onStk = Array(N).fill(false), comp = Array(N).fill(-1), stack = [];
+  let time = 0, c = 0;
+  function dfs(u) {
+    disc[u] = low[u] = time++; stack.push(u); onStk[u] = true;
+    for (const v of adj[u]) {
+      if (disc[v] === -1) { dfs(v); low[u] = Math.min(low[u], low[v]); }
+      else if (onStk[v]) low[u] = Math.min(low[u], disc[v]);
+    }
+    if (low[u] === disc[u]) { let w; do { w = stack.pop(); onStk[w] = false; comp[w] = c; } while (w !== u); c++; }
+  }
+  for (let i = 0; i < N; i++) if (disc[i] === -1) dfs(i);
+  const assign = [];
+  for (let i = 0; i < n; i++) {
+    if (comp[lit(i, true)] === comp[lit(i, false)]) return null; // unsatisfiable
+    assign.push(comp[lit(i, true)] < comp[lit(i, false)]);       // later-topo literal = true
+  }
+  return assign;
+}`}
+  tests={[
+    { expr: 'JSON.stringify(twoSat(3, [[0,true,1,true],[0,false,2,true],[1,false,2,false]]))', label: 'satisfiable assignment' },
+    { expr: 'twoSat(1, [[0,true,0,true],[0,false,0,false]])', label: 'contradiction → null' },
+    { expr: 'twoSat(2, [[0,true,1,true],[0,true,1,false],[0,false,1,true],[0,false,1,false]])', label: 'all-four clauses → null' },
+  ]}
+/>
+
+## The real implementation
+
+The course file solves 2-SAT with Kosaraju's two-pass SCC. The `addClause` encoding and the same-SCC test
+are the heart of it:
+
+```ts
+// /dsa/19-advanced-graph/2-sat.ts
+addClause(i: number, iPositive: boolean, j: number, jPositive: boolean): void {
+  const a = this.toLiteral(i, iPositive);     // 2*i  (positive) or 2*i+1 (negative)
+  const b = this.toLiteral(j, jPositive);
+  this.addImplication(this.negate(a), b);     // ¬a → b
+  this.addImplication(this.negate(b), a);     // ¬b → a
+}
+
+solve(): boolean[] | null {
+  // ... Kosaraju: finish order, then SCC ids on the reverse graph ...
+  const assignment: boolean[] = [];
+  for (let i = 0; i < this.n; i++) {
+    const posLit = this.toLiteral(i, true);
+    const negLit = this.toLiteral(i, false);
+    if (sccId[posLit] === sccId[negLit]) return null;      // x and ¬x together → UNSAT
+    assignment.push(sccId[posLit] > sccId[negLit]);        // pick the later component
+  }
+  return assignment;
+}
+```
+
+Run the full file: `npx tsx 19-advanced-graph/2-sat.ts`. It wraps the solver in helpers for graph
+2-colouring, team formation, event scheduling, and "exactly one / at most one" constraints.
+
+## Complexity
+
+Building the graph is linear in the clauses, and the SCC pass is linear in the graph:
+
+$$
+T = O(n + m), \qquad S = O(n + m),
+$$
+
+where $n$ is the number of variables and $m$ the number of clauses (the graph has $2n$ nodes and $2m$
+edges).
+
+| Step | Time |
+|------|------|
+| Build implication graph | $O(m)$ |
+| Find SCCs (Tarjan/Kosaraju) | $O(n + m)$ |
+| Read off assignment | $O(n)$ |
+
+The jump to **3-SAT** — three literals per clause — loses this structure and is NP-complete. Two is easy,
+three is (as far as anyone knows) exponential.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Seating & event planning" icon="🪑">
+Seat guests in two rows where some pairs insist on the same row and others refuse to share one. Each guest
+is a boolean (row 0 or 1); "same row" and "different row" become clauses, and 2-SAT decides instantly
+whether a valid arrangement exists — and produces one.
+</ExampleCard>
+
+<ExampleCard domain="VLSI & map labelling" icon="🗺️">
+Placing a text label on each city so none overlap: each label has two candidate positions (a boolean), and
+overlapping candidates create "not both" clauses. 2-SAT was a breakthrough for automatic cartographic
+labelling precisely because it is linear time.
+</ExampleCard>
+
+<ExampleCard domain="Configuration & feature flags" icon="⚙️">
+Software with two-way toggles and rules like "if dark mode then high-contrast off" or "at least one codec
+enabled" forms a 2-SAT instance. The solver reports whether a consistent configuration exists before the
+product ever ships a broken combination.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Literal encoding.** Map variable `i` to nodes `2i` (true) and `2i+1` (false); negation is a single XOR
+  with 1. A consistent scheme is what keeps the implications correct.
+- **Two implications per clause, not one.** Every $(a \lor b)$ adds *both* $\lnot a \to b$ and
+  $\lnot b \to a$. Forgetting the symmetric edge silently produces wrong answers.
+- **Assignment direction.** Whether you pick the larger or smaller SCC id depends on whether your SCC
+  routine numbers components in topological or reverse-topological order. Pin it down (Tarjan: smaller id =
+  later in topo = set true).
+- **Unit and "at most one" clauses.** "`x` must be true" is the implication $\lnot x \to x$; "at most one of
+  `a, b`" is the clause $(\lnot a \lor \lnot b)$. Master these gadgets — encoding is the real skill.
+- **Interview cue:** binary choices ("either/or", "same/different", "if-then", "not both") over many items
+  with feasibility (not optimisation) screams 2-SAT. Optimisation would push you toward flow or ILP instead.
+
+## Practice
+
+1. **Easy:** Write the two implications for the clause $(\lnot x_0 \lor x_1)$.
+2. **Easy:** Why is a unit clause "`x` is true" encoded as the single edge $\lnot x \to x$?
+3. **Medium:** Encode "exactly one of `a, b` is true" as two clauses and explain each.
+4. **Medium:** Show that 2-colouring a graph is a 2-SAT instance (one variable per vertex, one
+   "exactly one" clause per edge).
+5. **Hard:** Given $n$ intervals each placeable in one of two positions, with overlap forbidden, build the
+   2-SAT instance and argue it is satisfiable iff a non-overlapping placement exists.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'The clause (a ∨ b) is encoded as which implications?',
+      options: [
+        'a → b and b → a',
+        '¬a → b and ¬b → a',
+        '¬a → ¬b only',
+        'a → ¬b and b → ¬a',
+      ],
+      answer: 1,
+      explain: '"At least one is true" means if either is false the other must be true: ¬a → b and ¬b → a.',
+    },
+    {
+      q: 'The formula is unsatisfiable exactly when…',
+      options: [
+        'the implication graph is disconnected',
+        'some variable x and ¬x are in the same strongly connected component',
+        'there is any cycle in the graph',
+        'the graph has an odd number of nodes',
+      ],
+      answer: 1,
+      explain: 'If x and ¬x are mutually reachable, x implies ¬x and back — a contradiction, so no assignment works.',
+    },
+    {
+      q: 'Why is 2-SAT easy while 3-SAT is NP-complete?',
+      options: [
+        'Three literals never overlap',
+        'A two-literal clause encodes as clean implications (graph reachability); three literals do not',
+        '3-SAT graphs are larger',
+        'They are equally hard',
+      ],
+      answer: 1,
+      explain: 'The if-then structure of a 2-clause maps to a directed edge; with three literals no such linear reachability encoding exists.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Each clause <strong>(a ∨ b)</strong> becomes implications <strong>¬a → b</strong> and <strong>¬b → a</strong> in a 2n-node graph.',
+    'The formula is satisfiable iff <strong>no variable shares an SCC with its own negation</strong>.',
+    'Assignments are read from SCC <strong>topological order</strong> — pick each variable\'s sink-ward literal.',
+    'It runs in <strong>O(n + m)</strong>, reusing the SCC algorithm from the start of this track.',
+    'The real skill is <strong>encoding</strong> constraints; <strong>3-SAT</strong> loses this structure and is NP-complete.',
+  ]}
+/>
+
+That closes the Advanced Graph Algorithms track — from connectivity and flow to logic on graphs. Next
+you step into **Network Science**, starting with **PageRank**: ranking the nodes of a graph by the
+random-surfer model, the eigenvector that organised the web.

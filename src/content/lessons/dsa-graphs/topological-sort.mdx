@@ -1,0 +1,272 @@
+---
+title: Topological Sort
+track: dsa-graphs
+summary: "Some tasks must happen before others: a topological sort flattens a dependency graph into a single safe order to do them in."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-graphs/cycle-detection
+leadsTo:
+  - dsa-graphs/union-find
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GphTopoKahn from '../../../components/demos/GphTopoKahn.tsx';
+
+## The hook: you can't pour the foundation after the roof
+
+Building a house has rules that are not about taste — they are about physics. You cannot install
+windows before the walls exist, and you cannot raise walls before the foundation has cured. Each task
+*depends on* others finishing first. Draw those dependencies as arrows and you get a graph: an arrow
+from "foundation" to "walls" means "foundation must come before walls". The question a project manager
+asks every morning — "given all these dependencies, what is a valid order to actually do the work?" —
+is exactly the question a **topological sort** answers. The same question shows up when your code
+compiles, when a spreadsheet recalculates, and when a course catalogue lists prerequisites.
+
+<Callout type="intuition" title="The one-sentence idea">
+A topological sort lines up the vertices of a directed acyclic graph so that for every edge
+$u \rightarrow v$, $u$ appears somewhere before $v$ — every dependency is satisfied before the thing
+that needs it.
+</Callout>
+
+## Intuition
+
+Recall from the cycle-detection lesson that a directed graph can either contain a cycle or not. A
+directed graph with **no** cycle is called a **DAG** (directed acyclic graph), and only a DAG can be
+topologically sorted. The reason is intuitive: if tasks A, B and C each depend on the previous one in a
+loop, none of them can go first, so no valid order exists. **A topological order exists if and only if
+the graph is a DAG.**
+
+So how do we find one order? Look for a vertex with **no incoming edges** — nothing depends on it being
+done later, so it is safe to do first. The number of incoming edges of a vertex is its **in-degree**.
+Kahn's algorithm turns that observation into a loop:
+
+1. Compute every vertex's in-degree.
+2. Put all the in-degree-zero vertices in a queue — they have no unmet dependencies.
+3. Repeatedly remove a vertex from the queue, append it to the output, and "delete" it from the graph by
+   decrementing each neighbour's in-degree. Any neighbour whose in-degree just hit zero has now had all
+   its dependencies satisfied, so enqueue it.
+4. When the queue empties, if you produced all the vertices you have a valid order. If some are missing,
+   their in-degrees never reached zero — a cycle was blocking them, so no order exists.
+
+That last step is a lovely tie-in to the previous lesson: Kahn's algorithm detects a cycle for free.
+There is also a second classic approach — run a depth-first search and record vertices in
+**post-order**, then reverse that list — which we will compare at the end.
+
+## Play with it
+
+Type a directed edge list (each `A-B` means an arrow $A \rightarrow B$), press Load, then step through.
+Watch each node's **in-degree badge**, the **queue** of ready nodes, and the **output order** grow as
+Kahn's algorithm peels the graph apart one zero in-degree node at a time.
+
+<GphTopoKahn client:visible />
+
+<Callout type="tip">
+Try turning the default graph into a cycle — load `A-B, B-C, C-A`. The queue starts empty, nothing can
+ever reach in-degree 0, and the demo reports that no valid order exists. That is Kahn's built-in cycle
+check in action.
+</Callout>
+
+## How it works
+
+Let us hand-trace Kahn's algorithm on the default graph `A-B, A-C, B-D, C-D, D-E` (arrows point from the
+first letter to the second). First compute in-degrees, then peel off zeros:
+
+```
+graph:  A→B, A→C, B→D, C→D, D→E
+
+in-degree:  A:0  B:1  C:1  D:2  E:1
+queue: [A]                              output: []
+
+pop A  → decrement B(1→0), C(1→0)       output: [A]      queue: [B, C]
+pop B  → decrement D(2→1)               output: [A,B]    queue: [C]
+pop C  → decrement D(1→0)               output: [A,B,C]  queue: [D]
+pop D  → decrement E(1→0)               output: [A,B,C,D] queue: [E]
+pop E  → (no neighbours)                output: [A,B,C,D,E] queue: []
+
+5 of 5 vertices output → valid order: A B C D E
+```
+
+Notice the order is not unique: when both B and C sit in the queue, either could go first. Any choice
+that respects the arrows is a correct topological sort. Here is the same algorithm as runnable code —
+the `null` return is the cycle signal:
+
+<CodeRunner
+  client:visible
+  code={`// Kahn's algorithm: topological sort by repeatedly removing
+// in-degree-zero nodes. Returns null if the graph has a cycle.
+function topoSort(graph) {
+  const nodes = Object.keys(graph);
+  const inDeg = {};
+  for (const v of nodes) inDeg[v] = 0;
+  for (const v of nodes)
+    for (const n of graph[v]) inDeg[n] = (inDeg[n] || 0) + 1;
+
+  const queue = nodes.filter((v) => inDeg[v] === 0);
+  const order = [];
+  while (queue.length) {
+    const v = queue.shift();
+    order.push(v);
+    for (const n of graph[v]) {
+      inDeg[n] -= 1;
+      if (inDeg[n] === 0) queue.push(n);
+    }
+  }
+  // If we could not output every node, a cycle blocked the rest.
+  return order.length === nodes.length ? order : null;
+}
+
+const dag = { A: ['B','C'], B: ['D','E'], C: ['E'], D: ['F'], E: ['F'], F: [] };
+const cyclic = { A: ['B'], B: ['C'], C: ['A'] };`}
+  tests={[
+    { expr: 'JSON.stringify(topoSort(dag))', label: 'order for the DAG' },
+    { expr: 'JSON.stringify(topoSort(cyclic))', label: 'cyclic graph' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses a generic `Map` so the vertices can be any type, and returns `null` to signal a
+cycle — the same contract as the snippet above, just typed:
+
+```ts
+// /dsa/12-graphs/topological-sort.ts  — Kahn's algorithm (BFS on in-degrees)
+function topologicalSortKahn<T>(graph: Map<T, T[]>): T[] | null {
+    const vertices = Array.from(graph.keys());
+    const inDegree = new Map<T, number>();
+    for (const v of vertices) inDegree.set(v, 0);
+    for (const neighbors of graph.values())
+        for (const n of neighbors) inDegree.set(n, (inDegree.get(n) || 0) + 1);
+
+    const queue: T[] = [];
+    for (const [v, d] of inDegree) if (d === 0) queue.push(v);
+
+    const result: T[] = [];
+    while (queue.length > 0) {
+        const v = queue.shift()!;
+        result.push(v);
+        for (const n of graph.get(v) || []) {
+            const d = inDegree.get(n)! - 1;
+            inDegree.set(n, d);
+            if (d === 0) queue.push(n);
+        }
+    }
+    // If not all vertices were output, a cycle blocked the rest.
+    return result.length === vertices.length ? result : null;
+}
+```
+
+Run the full file: `npx tsx 12-graphs/topological-sort.ts`.
+
+## Complexity
+
+Let $V$ be the number of vertices and $E$ the number of edges. Computing in-degrees touches every edge
+once; the main loop enqueues and dequeues every vertex once and, across all iterations, walks every edge
+exactly once to decrement neighbours:
+
+$$
+\text{time: } O(V + E), \qquad \text{space: } O(V).
+$$
+
+The space is the in-degree map plus the queue plus the output — all $O(V)$. Both classic algorithms hit
+the same bound; they differ in flavour:
+
+| Approach | Mechanism | Cycle detection | Notes |
+|----------|-----------|-----------------|-------|
+| Kahn's (BFS) | Repeatedly remove in-degree-0 vertices via a queue | Built in — output fewer than $V$ vertices means a cycle | Iterative; naturally yields a "layered" order |
+| DFS post-order | Reverse the order vertices *finish* in a depth-first search | Needs a separate "gray node" check during recursion | Recursive; elegant but risks stack overflow on deep graphs |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Higher education" icon="🎓">
+A degree programme lists prerequisites: Calculus II before Differential Equations, Intro Programming
+before Data Structures. Each "X before Y" is a directed edge, and a topological sort produces a valid
+study plan — an order in which you never enrol in a course before the ones it assumes. If the catalogue
+accidentally encodes a cycle, the sort fails, exposing an impossible-to-satisfy prerequisite chain.
+</ExampleCard>
+
+<ExampleCard domain="Software builds" icon="🛠️">
+A Makefile (or any build tool) knows that `main.o` depends on `main.c` and `utils.h`, and the final
+binary depends on every `.o` file. The build system topologically sorts this dependency graph to decide
+a compile order so that nothing is linked before the pieces it needs have been built — and to find
+independent files it can compile in parallel.
+</ExampleCard>
+
+<ExampleCard domain="Cooking" icon="🍝">
+A recipe is a dependency graph in disguise: you cannot toss the pasta in sauce before the sauce is made,
+and you cannot make the sauce before the onions are chopped. Topologically sorting the steps gives a
+sequence where every ingredient and sub-step is ready exactly when the next step calls for it.
+</ExampleCard>
+
+<ExampleCard domain="Spreadsheets" icon="📊">
+When cell C1 holds "A1 plus B1", C1 depends on A1 and B1. After you edit a cell, the spreadsheet engine
+topologically sorts the formula dependency graph and recalculates cells in that order, so every input is
+final before the cell that uses it is computed. A circular reference is just a cycle — which is why
+spreadsheets pop up the dreaded "circular reference" error.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting that only DAGs can be sorted.** If the problem allows cycles, your code must detect them.
+  With Kahn's, the check is free: if the output has fewer than $V$ vertices, return the cycle signal.
+- **Building in-degrees from the wrong direction.** An edge $u \rightarrow v$ adds 1 to *v*'s in-degree,
+  not *u*'s. Swap them and the whole order comes out backwards.
+- **Assuming the answer is unique.** Whenever the queue holds more than one ready vertex, several valid
+  orders exist. Interviewers often ask for *any* valid order; do not over-engineer a "canonical" one.
+- **DFS without a recursion-stack guard.** The DFS variant needs a three-colour (white/gray/black) marker
+  to catch back-edges; a plain visited set silently produces garbage on a cyclic graph.
+- **Interview cue:** phrases like "ordering with prerequisites", "course schedule", or "build order" are
+  near-certain signals to reach for a topological sort. Reach for Kahn's first — it is the easiest to get
+  right under pressure and hands you cycle detection at no extra cost.
+
+## Practice
+
+1. **Easy:** For the graph `A-B, A-C, B-D, C-D`, list every valid topological order by hand.
+2. **Easy:** Write down the initial in-degree of each vertex in `X-Y, X-Z, Y-Z, Z-W`.
+3. **Medium:** Modify `topoSort` to also return the names of the vertices stuck in a cycle when no order
+   exists.
+4. **Medium:** Given course prerequisites as pairs, return any valid order to take all courses (the
+   classic "Course Schedule II" problem).
+5. **Hard:** A topological order is *unique* exactly when the queue never holds more than one vertex at a
+   time. Add a check to `topoSort` that reports whether the order it found is the only possible one.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A topological sort is possible if and only if the directed graph…',
+      options: ['Is connected', 'Has no cycle (is a DAG)', 'Is a tree', 'Has at most one edge per vertex'],
+      answer: 1,
+      explain: 'A cycle makes ordering impossible because each vertex in the loop would need to come before itself. Only an acyclic directed graph (a DAG) can be sorted.',
+    },
+    {
+      q: "In Kahn's algorithm, which vertex is safe to output next?",
+      options: ['Any vertex with out-degree 0', 'Any vertex currently in the queue (in-degree 0)', 'The vertex with the most neighbours', 'The most recently added vertex'],
+      answer: 1,
+      explain: 'A vertex with in-degree 0 has no unmet dependencies, so it can be placed next. Kahn keeps exactly those vertices in the queue.',
+    },
+    {
+      q: 'You run Kahn on a graph with 6 vertices but the output list has only 4. What happened?',
+      options: ['The graph was disconnected', 'Two vertices had the same in-degree', 'A cycle blocked the remaining 2 vertices', 'The queue used a stack instead'],
+      answer: 2,
+      explain: 'The 2 missing vertices never reached in-degree 0 because edges inside a cycle kept their counts above zero — so no valid order exists.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>topological sort</strong> orders a DAG so that for every edge u→v, u comes before v.',
+    "<strong>Kahn's algorithm</strong> repeatedly removes an <strong>in-degree-0</strong> vertex, outputs it, and decrements its neighbours.",
+    'It runs in <strong>O(V + E)</strong> time and <strong>O(V)</strong> space.',
+    'Outputting fewer than V vertices means the graph has a <strong>cycle</strong> — free cycle detection.',
+    'The alternative is <strong>reversed DFS post-order</strong>; the order is generally <strong>not unique</strong>.',
+  ]}
+/>
+
+Next up: **Union-Find** — instead of ordering dependencies, we will track *connectivity*, merging
+disjoint sets in near-constant time to answer "are these two vertices in the same group?".

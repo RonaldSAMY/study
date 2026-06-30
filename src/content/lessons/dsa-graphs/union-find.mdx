@@ -1,0 +1,271 @@
+---
+title: Union-Find
+track: dsa-graphs
+summary: "A disjoint-set forest answers one question almost instantly: are these two elements already in the same group?"
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-graphs/topological-sort
+leadsTo:
+  - dsa-graphs/mst
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GphUnionFind from '../../../components/demos/GphUnionFind.tsx';
+
+## The hook: who is in my friend circle?
+
+Imagine a social app where, every time two people become friends, their whole circles silently merge.
+Later someone asks: "are Ana and Ravi in the same circle?" You could chase friendships hop by hop with a
+fresh traversal every time, but that work piles up fast. There is a structure built for exactly this
+question — it keeps a forest of groups, merges two groups in near-constant time, and tells you in a
+heartbeat whether two elements already belong together. That structure is **Union-Find**, also called the
+**Disjoint Set Union (DSU)**, and it is the quiet engine behind cycle detection and Kruskal's minimum
+spanning tree.
+
+<Callout type="intuition" title="The one-sentence idea">
+Union-Find keeps elements partitioned into non-overlapping groups, supporting just two operations:
+**find** (which group is this element in?) and **union** (merge these two groups) — both made nearly
+$O(1)$ by two small optimisations.
+</Callout>
+
+## Intuition
+
+A Union-Find structure tracks a set of elements split into **disjoint** (non-overlapping) groups. Every
+group is stored as a tree, and each element points to a **parent**; follow the parents far enough and you
+reach the group's **root**, which acts as the group's name. Two elements are in the same group exactly when
+they share a root.
+
+There are two operations:
+
+- **find(x)** — walk from `x` up the parent pointers to its root. The root identifies the group.
+- **union(x, y)** — find both roots; if they differ, hook one root under the other so the two trees become
+  one. If the roots are already equal, the elements were already connected and nothing changes.
+
+Done naively the trees can grow into long chains and `find` becomes slow. Two cheap tricks keep them flat:
+
+1. **Path compression** — during `find`, point every node you pass straight at the root. The next lookup
+   is then a single hop.
+2. **Union by rank (or size)** — always attach the shorter tree under the taller one, so the combined tree
+   never gets taller than it needs to be.
+
+Together these make `find` and `union` run in *near-constant amortised time*. One more detail matters for
+the next lesson: when `union(x, y)` discovers the roots are already equal, it can return **false** — and
+that "already connected" signal is precisely how we detect a **cycle**.
+
+## Play with it
+
+Type a list of union operations (each as `a-b`) and step through. Watch the parent-pointer arrows form a
+**forest**, nodes recolour as groups merge, and the live **component count** drop. When a union hits two
+elements that already share a root, the edge flashes rose — that would be a cycle.
+
+<GphUnionFind client:visible />
+
+<Callout type="tip">
+Run `0-1, 2-3, 0-2, 4-5` and notice that after `0-2` the trees for `{0,1}` and `{2,3}` fuse into one set.
+Then try adding `1-3` at the end: both already share a root, so it is reported as a cycle and skipped.
+</Callout>
+
+## How it works
+
+Process the unions in order. For each pair, find both roots; if they differ, attach the smaller-rank tree
+under the larger and drop the component count by one; if they match, the edge is redundant (a cycle) and is
+skipped.
+
+```
+elements: 0 1 2 3 4 5            (6 singleton sets, count = 6)
+
+union(0,1) -> roots 0,1 differ -> parent[1]=0        count 5
+union(2,3) -> roots 2,3 differ -> parent[3]=2        count 4
+union(0,2) -> roots 0,2 differ -> parent[2]=0        count 3
+union(4,5) -> roots 4,5 differ -> parent[5]=4        count 2
+union(1,3) -> find(1)=0, find(3)=0 -> SAME ROOT      count 2  (cycle, skipped)
+
+sets: { 0, 1, 2, 3 }   { 4, 5 }
+```
+
+<CodeRunner
+  client:visible
+  code={`class UnionFind {
+  constructor(n) {
+    this.parent = Array.from({ length: n }, (_, i) => i);
+    this.rank = Array(n).fill(0);
+    this.count = n;                 // number of disjoint sets
+  }
+  find(x) {                          // path compression
+    if (this.parent[x] !== x) this.parent[x] = this.find(this.parent[x]);
+    return this.parent[x];
+  }
+  union(x, y) {                      // returns false if already joined
+    const rx = this.find(x), ry = this.find(y);
+    if (rx === ry) return false;
+    if (this.rank[rx] < this.rank[ry]) this.parent[rx] = ry;
+    else if (this.rank[rx] > this.rank[ry]) this.parent[ry] = rx;
+    else { this.parent[ry] = rx; this.rank[rx]++; }
+    this.count--;
+    return true;
+  }
+  connected(x, y) { return this.find(x) === this.find(y); }
+}
+
+function countComponents(n, edges) {
+  const uf = new UnionFind(n);
+  for (const [u, v] of edges) uf.union(u, v);
+  return uf.count;
+}`}
+  tests={[
+    { expr: 'countComponents(5, [[0,1],[1,2],[3,4]])', label: 'components (expect 2)' },
+    { expr: '(function(){var uf=new UnionFind(5);uf.union(0,1);uf.union(1,2);return uf.connected(0,2);})()', label: 'connected(0,2)' },
+    { expr: '(function(){var uf=new UnionFind(5);uf.union(0,1);return uf.union(1,0);})()', label: 'union(1,0) again (cycle, false)' },
+  ]}
+/>
+
+## The real implementation
+
+The course file wraps the same logic in a typed class. Note `count` tracking the live number of disjoint
+sets and `union` returning a boolean so callers can detect cycles:
+
+```ts
+// /dsa/12-graphs/union-find.ts
+class UnionFind {
+    private parent: number[];
+    private rank: number[];
+    private count: number;            // number of disjoint sets
+    constructor(n: number) {
+        this.parent = Array.from({ length: n }, (_, i) => i);
+        this.rank = Array(n).fill(0);
+        this.count = n;
+    }
+    find(x: number): number {         // path compression
+        if (this.parent[x] !== x) this.parent[x] = this.find(this.parent[x]);
+        return this.parent[x];
+    }
+    union(x: number, y: number): boolean {   // returns false if already joined
+        const rx = this.find(x), ry = this.find(y);
+        if (rx === ry) return false;
+        if (this.rank[rx] < this.rank[ry]) this.parent[rx] = ry;
+        else if (this.rank[rx] > this.rank[ry]) this.parent[ry] = rx;
+        else { this.parent[ry] = rx; this.rank[rx]++; }
+        this.count--;
+        return true;
+    }
+    connected(x: number, y: number): boolean { return this.find(x) === this.find(y); }
+    getCount(): number { return this.count; }
+}
+```
+
+Run the full file: `npx tsx 12-graphs/union-find.ts`.
+
+## Complexity
+
+Let $n$ be the number of elements. With **both** optimisations — path compression and union by rank — each
+`find` and `union` runs in $O(\alpha(n))$ amortised time, where $\alpha$ is the inverse Ackermann function.
+That function grows so impossibly slowly that $\alpha(n) \le 4$ for any $n$ you could ever store, so in
+practice the operations are effectively constant time:
+
+$$
+\text{find / union} \;=\; O(\alpha(n)) \;\approx\; O(1), \qquad \text{space} = O(n).
+$$
+
+| Operation | Time | Note |
+|-----------|------|------|
+| `find(x)` | $O(\alpha(n)) \approx O(1)$ | flattens the path it walks |
+| `union(x, y)` | $O(\alpha(n)) \approx O(1)$ | two finds plus one link |
+| `connected(x, y)` | $O(\alpha(n)) \approx O(1)$ | two finds, compare roots |
+| Build from $m$ unions | $O(m \, \alpha(n))$ | near-linear in the edges |
+| Space | $O(n)$ | one parent and one rank per element |
+
+With only one optimisation you still get $O(\log n)$ per operation; with neither, a degenerate chain costs
+$O(n)$. The two tricks together are what earn the near-constant headline.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Social networks" icon="👥">
+A "friends of friends" feature merges circles as new friendships form. Each `union` fuses two circles, and
+`connected(ana, ravi)` answers "are they already in one circle?" without re-walking the whole network — the
+exact workload Union-Find was built for.
+</ExampleCard>
+
+<ExampleCard domain="Computer networking" icon="🖧">
+Plug a cable between two switches and their network segments join. Asking whether two machines can already
+reach each other is a `connected` query; tracking the number of separate segments is the live component
+count shrinking with every link.
+</ExampleCard>
+
+<ExampleCard domain="Image processing" icon="🖼️">
+In percolation and image segmentation, neighbouring same-colour pixels get unioned into blobs. After one
+sweep, two pixels sharing a root belong to the same connected region — that is how flood-style segmentation
+labels every blob in near-linear time.
+</ExampleCard>
+
+<ExampleCard domain="Account management" icon="📧">
+A platform de-duplicates users by merging any two accounts that share an email address. Each shared email
+triggers a `union`; the final groups are the real distinct people, and the component count is how many human
+beings the messy account list actually represents.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Skipping path compression in `find`.** Without it the trees can degrade into long chains and every
+  lookup crawls; the one-line `this.parent[x] = this.find(this.parent[x])` is what keeps them flat.
+- **Comparing elements instead of roots.** `x === y` does not mean same group. Always compare
+  `find(x)` with `find(y)`.
+- **Unioning by the wrong direction.** Union by rank must attach the **shorter** tree under the taller one.
+  Reverse it and the tree grows taller than necessary, slowing every later `find`.
+- **Forgetting to update the count.** Decrement the disjoint-set count only on a real merge (when the roots
+  differ), never on a redundant edge.
+- **Interview cue:** whenever a problem says "connected components", "are these two joined?", or "detect a
+  cycle while adding edges", reach for Union-Find first. A `union` that returns **false** is your cycle flag.
+
+## Practice
+
+1. **Easy:** Start with elements `0..4` and apply `union(0,1)`, `union(1,2)`. How many components remain?
+2. **Easy:** After those unions, what does `connected(0, 2)` return, and why?
+3. **Medium:** Given `n` and an edge list, write `countComponents(n, edges)` using Union-Find (you may
+   reuse the class above).
+4. **Medium:** Add a `union` that returns `false` when the two elements are already joined, and use it to
+   detect whether an undirected edge list contains a cycle.
+5. **Hard:** Extend the structure with union by **size** instead of rank, and add a `largestSet()` method
+   that returns the size of the biggest group in $O(1)$.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does it mean when union(x, y) finds that x and y already share the same root?',
+      options: ['The structure is corrupted', 'They are in different groups', 'They are already connected — adding this edge would form a cycle', 'x must become the new root'],
+      answer: 2,
+      explain: 'Equal roots mean the elements are already in one group; linking them again would close a cycle, so a good union returns false and changes nothing.',
+    },
+    {
+      q: 'Which pair of optimisations gives Union-Find its near-constant amortised time?',
+      options: ['Binary search and memoisation', 'Path compression and union by rank/size', 'Hashing and sorting', 'Recursion and backtracking'],
+      answer: 1,
+      explain: 'Path compression flattens the path during find, and union by rank/size keeps trees shallow; together they yield O(α(n)) per operation.',
+    },
+    {
+      q: 'For any practically storable n, the inverse Ackermann function α(n) is bounded by about…',
+      options: ['log n', 'sqrt(n)', '4', 'n'],
+      answer: 2,
+      explain: 'α grows so slowly that α(n) ≤ 4 for any n you could ever store, which is why the operations are treated as effectively O(1).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Union-Find (DSU) keeps elements in <strong>disjoint groups</strong> with two operations: <strong>find</strong> (which group?) and <strong>union</strong> (merge groups).',
+    'Each group is a tree; two elements are connected exactly when they share the same <strong>root</strong>.',
+    '<strong>Path compression</strong> points nodes straight at the root, and <strong>union by rank/size</strong> attaches the smaller tree under the larger.',
+    'With both optimisations, find and union run in <strong>O(α(n)) ≈ O(1)</strong> amortised time using <strong>O(n)</strong> space.',
+    'A <strong>union that returns false</strong> means the elements were already joined — that is your <strong>cycle detector</strong>.',
+  ]}
+/>
+
+Next up: **Minimum Spanning Trees** — Kruskal's algorithm sorts the edges cheapest-first and adds each one
+only if its endpoints are in different sets. Union-Find is exactly the structure that makes that "different
+sets?" test fast, so you already hold the key to the next lesson.

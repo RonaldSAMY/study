@@ -1,0 +1,226 @@
+---
+title: Linear Search
+summary: "Check every element one by one: the O(n) baseline that needs no sorting and is sometimes exactly the right call."
+track: dsa-searching
+difficulty: beginner
+estMinutes: 11
+prereqs:
+  - dsa-sorting/sorting-comparison
+leadsTo:
+  - dsa-searching/binary-search
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SearchLinearScan from '../../../components/demos/SearchLinearScan.tsx';
+
+## The hook: finding a friend's name in an unsorted guest list
+
+A party organizer hands you a stack of RSVP cards in the order they arrived — no alphabetical
+sorting, no index. Someone asks, "did Mara reply?" There is exactly one honest way to answer:
+start at the top and read card after card until you hit Mara or run out. That is **linear search** —
+the most basic algorithm there is, and on jumbled data it is genuinely the best you can do.
+
+<Callout type="intuition" title="The one-sentence idea">
+Walk through the collection from one end, compare each element to the target, and stop the moment
+you find it — or report failure once you have looked at everything.
+</Callout>
+
+## Intuition
+
+Sorting lessons taught you that *order* unlocks clever shortcuts. Linear search is what you reach for
+when there is **no order to exploit**. You make a single promise: every element gets at most one look.
+Because you never skip or assume anything, linear search works on *any* sequence — unsorted arrays,
+linked lists, streams you can only read once, even a generator that produces values on the fly.
+
+The cost of that generality is that you have no way to rule out the elements you have not seen yet.
+If the target is the last thing in the list (or absent entirely), you are forced to inspect all
+`n` items. There is no free lunch: the algorithm is only as fast as "look at everything" in the worst
+case. The upside is its honesty and simplicity — no preconditions, no setup, no surprises.
+
+## Play with it
+
+Type your own array and a target, then scan. The sky-blue cell is the one you are comparing right now;
+cells behind it grey out because they have already been ruled out. Watch how a target near the front
+finishes fast while a missing value forces a full sweep.
+
+<SearchLinearScan client:visible />
+
+<Callout type="tip">
+Put the target in the very last slot, then remove it entirely. Those two cases — last element and
+absent — both cost the full `n` comparisons. That worst case is the whole reason binary search exists.
+</Callout>
+
+## How it works
+
+Search for `6` in `[8, 3, 9, 1, 6, 4, 7]`:
+
+```
+index 0: 8 ≠ 6 → keep going
+index 1: 3 ≠ 6 → keep going
+index 2: 9 ≠ 6 → keep going
+index 3: 1 ≠ 6 → keep going
+index 4: 6 = 6 → FOUND at index 4
+```
+
+Five comparisons, then a confident answer. Had `6` been missing, we would have read all seven cards and
+returned `-1`. The loop body is a single equality test, which is why linear search is the first algorithm
+everyone writes.
+
+<CodeRunner
+  client:visible
+  code={`// Return the index of target, or -1 if it is not present.
+function linearSearch(arr, target) {
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i] === target) return i;
+  }
+  return -1;
+}
+
+// A handy cousin: collect EVERY position, not just the first.
+function linearSearchAll(arr, target) {
+  const hits = [];
+  for (let i = 0; i < arr.length; i++) {
+    if (arr[i] === target) hits.push(i);
+  }
+  return hits;
+}`}
+  tests={[
+    { expr: 'linearSearch([8,3,9,1,6,4,7], 6)', label: 'index of 6' },
+    { expr: 'linearSearch([8,3,9,1,6,4,7], 2)', label: 'index of missing 2' },
+    { expr: 'linearSearchAll([4,1,4,4,2], 4)', label: 'all positions of 4' },
+  ]}
+/>
+
+## The real implementation
+
+The course file is generic over any element type `T`, so it works for numbers, strings, or objects
+with a custom comparator. Here is the faithful core:
+
+```ts
+// /dsa/03-search/linear-search.ts
+function linearSearch<T>(arr: T[], target: T): number {
+    for (let i = 0; i < arr.length; i++) {
+        if (arr[i] === target) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Find the FIRST element satisfying a predicate (not just equality).
+function findIndex<T>(arr: T[], predicate: (v: T, i: number, a: T[]) => boolean): number {
+    for (let i = 0; i < arr.length; i++) {
+        if (predicate(arr[i], i, arr)) {
+            return i;
+        }
+    }
+    return -1;
+}
+```
+
+Run the full file: `npx tsx 03-search/linear-search.ts`.
+
+## Complexity
+
+One pass, one comparison per element, no extra storage:
+
+$$
+T(n) = O(n), \qquad S(n) = O(1).
+$$
+
+| Case | Comparisons | When |
+|------|-------------|------|
+| Best | $1$ | Target is the first element |
+| Average | $\tfrac{n}{2}$ | Target equally likely anywhere |
+| Worst | $n$ | Target is last, or absent |
+
+Linear search is unbeatable for a **single** lookup on unsorted data: any algorithm must, in the worst
+case, examine every element at least once just to be sure the target is not hiding somewhere unseen.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Lost property" icon="🧤">
+A cloakroom attendant searching for your scarf has no choice but to check hooks one at a time — the
+coats arrived in no particular order. That is linear search in the physical world: no structure, so no
+shortcut.
+</ExampleCard>
+
+<ExampleCard domain="Spreadsheets" icon="📊">
+A plain <code>VLOOKUP</code> over an unsorted column scans top to bottom until it matches — exactly
+<code>linearSearch</code>. Sort the column and switch to approximate match, and the same function can
+suddenly run binary search instead.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+Scanning a freshly sequenced DNA strand for a short marker motif, with no precomputed index, means
+sliding along base by base — a linear sweep. Indexes (like suffix arrays) exist precisely to escape
+this O(n) cost when you search the same genome repeatedly.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Returning a boolean when the index is wanted.** "Is it present?" and "where is it?" are different
+  questions. Return the index (and `-1` for absent) so the caller can choose.
+- **Forgetting the not-found case.** A loop that only returns inside the `if` falls off the end with
+  `undefined`. Always finish with an explicit `return -1`.
+- **Reaching for linear search on sorted data.** If the array is already sorted and you will search it
+  often, you are leaving an O(log n) speedup on the table — that is the next lesson.
+- **Sentinel trick.** Placing the target in the last slot lets the loop drop its bounds check, shaving a
+  comparison per iteration. Cute for interviews, rarely worth the mutation in practice.
+- **Interview cue:** "the data is unsorted and we search once" is the signal to *not* over-engineer —
+  say "linear scan, O(n), can't do better here" and move on.
+
+## Practice
+
+1. **Easy:** Trace `linearSearch([5, 2, 9, 2, 7], 2)` by hand. Which index is returned, and why that one?
+2. **Easy:** Modify the loop to return the *last* matching index instead of the first.
+3. **Medium:** Write `count(arr, target)` that returns how many times the target appears in one pass.
+4. **Medium:** Find both the minimum and the maximum of an array in a single scan (track two variables).
+5. **Hard:** Given a 2D grid, return the `{row, col}` of a target, scanning row by row — what is the
+   worst-case number of comparisons for an `m × n` grid?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does linearSearch return when the target is not in the array?',
+      options: ['undefined', '0', '-1', 'the array length'],
+      answer: 2,
+      explain: 'By convention the function returns -1 to signal "not found", since 0 is a valid index.',
+    },
+    {
+      q: 'For an array of 100 unsorted elements, how many comparisons does linear search make in the worst case?',
+      options: ['About 7', '50', '100', '10000'],
+      answer: 2,
+      explain: 'The worst case (target last or absent) inspects all n elements — here, 100 comparisons.',
+    },
+    {
+      q: 'Which situation is the BEST fit for linear search over binary search?',
+      options: [
+        'A million sorted records searched repeatedly',
+        'A short, unsorted list searched once',
+        'A sorted phone book',
+        'Finding an insertion point in sorted data',
+      ],
+      answer: 1,
+      explain: 'Linear search shines when data is unsorted and queried rarely — sorting first would not pay off.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Linear search <strong>checks each element once</strong>, left to right, and stops at the first match.',
+    'It needs <strong>no sorting and no preprocessing</strong>, so it works on any sequence — even a one-pass stream.',
+    'Cost is <strong>O(n) time, O(1) space</strong>; the worst case (last or absent) touches every element.',
+    'It is the <strong>right tool for unsorted data searched once</strong> — anything fancier would not pay off.',
+    'Always return an explicit <strong>-1 for "not found"</strong> so callers can distinguish it from index 0.',
+  ]}
+/>
+
+Next up: **Binary Search** — once the data is sorted, you can throw away half the candidates with every
+single comparison and crush O(n) down to O(log n).

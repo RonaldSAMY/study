@@ -1,0 +1,292 @@
+---
+title: Cycle Detection
+track: dsa-graphs
+summary: "A cycle is a path that returns to where it started: DFS spots one the moment it revisits a node still on the current path."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-graphs/dfs
+leadsTo:
+  - dsa-graphs/topological-sort
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GphCycleColors from '../../../components/demos/GphCycleColors.tsx';
+
+## The hook: the spreadsheet that ate itself
+
+You type `=B1 + 1` into cell A1, then `=A1` into cell B1, and the spreadsheet immediately throws a red
+**circular reference** error. It is not being fussy: to compute A1 it needs B1, but to compute B1 it
+needs A1, which needs B1, forever. There is no value that satisfies both at once. The spreadsheet caught
+a **cycle** in its dependency graph — a path that loops back onto itself — and refused to spin in circles.
+That same check guards build systems, package managers, schedulers, and deadlock detectors. The trick is
+a depth-first search that simply asks, "have I returned to a node I am *still in the middle of* visiting?"
+
+<Callout type="intuition" title="The one-sentence idea">
+A graph has a cycle exactly when a depth-first search runs into a node that is **still on the current
+path** — for directed graphs that is a node painted GRAY, for undirected graphs it is any visited
+neighbour that is not the one you just came from.
+
+</Callout>
+
+## Intuition
+
+You already know depth-first search: it dives down one branch as far as it can, then backtracks. A
+**cycle** is a path $v_1 \rightarrow v_2 \rightarrow \dots \rightarrow v_1$ that comes back to where it
+began. DFS is perfect for catching one, because it always remembers the chain of nodes it is *currently*
+exploring. If a new edge points back into that chain, you have just closed a loop.
+
+The subtlety is "back into the chain." Two cases need slightly different bookkeeping:
+
+- **Directed graphs (three colours).** Give every node a colour. **WHITE** means unvisited, **GRAY**
+  means "on the current DFS path — I started it but have not finished it," and **BLACK** means "fully
+  explored, all descendants done." When DFS follows an edge and lands on a **GRAY** node, that node is an
+  ancestor on the current path, so the edge is a **back edge** and the graph has a cycle. An edge to a
+  BLACK node is harmless: that subtree finished and led nowhere back.
+- **Undirected graphs (parent tracking).** Here every edge can be walked both ways, so the edge you just
+  arrived on always points back at your parent — that is not a cycle. The rule becomes: if DFS meets a
+  visited neighbour that is **not** the parent it came from, that neighbour closes a real cycle.
+
+Both run in one DFS sweep. Two other tools detect cycles differently and you will meet them soon:
+**Union-Find** (great for undirected graphs, joining endpoints and catching an edge whose ends are
+already connected) and **Kahn's algorithm** (a directed approach that peels off nodes with no remaining
+incoming edges; if any node never gets peeled, a cycle trapped it). Both appear in upcoming lessons.
+
+## Play with it
+
+Type a **directed** edge list (each `A-B` means an arrow $A \rightarrow B$), press Play, and watch nodes
+turn GRAY as DFS walks onto them and BLACK as it finishes. The instant an edge points at a GRAY node it
+flashes red — that is the back edge, and the run stops with "Cycle found!".
+
+<GphCycleColors client:visible />
+
+<Callout type="tip">
+Delete the edge `C-A` from the default graph and load it again. Now nothing ever points back to a GRAY
+ancestor, every node ends BLACK, and the run finishes in emerald: "No cycle — this is a DAG." One missing
+back edge is the whole difference between a cycle and a directed acyclic graph.
+</Callout>
+
+## How it works
+
+Let us dry-run the three-colour DFS on the directed graph `0→1, 1→2, 2→0` (a triangle that loops). Colours
+start all WHITE.
+
+```
+start DFS at 0        color: 0=GRAY
+  follow 0→1          1 is WHITE, descend
+    color: 1=GRAY
+    follow 1→2        2 is WHITE, descend
+      color: 2=GRAY
+      follow 2→0      0 is GRAY  ← back edge → CYCLE!
+return true
+```
+
+The moment edge `2→0` finds node 0 still GRAY (we never finished it — it is an ancestor on the path
+`0 → 1 → 2`), we know the path bit its own tail. Here is the same logic you can run right now, on a graph
+*with* a cycle and on a DAG:
+
+<CodeRunner
+  client:visible
+  code={`// Directed cycle detection by three-colouring.
+// WHITE = unseen, GRAY = on current DFS path, BLACK = done.
+function hasCycleDirected(graph) {
+  const WHITE = 0, GRAY = 1, BLACK = 2;
+  const color = {};
+  for (const v of Object.keys(graph)) color[v] = WHITE;
+
+  function dfs(v) {
+    color[v] = GRAY;
+    for (const n of graph[v] || []) {
+      if (color[n] === GRAY) return true;          // back edge → cycle
+      if (color[n] === WHITE && dfs(n)) return true;
+    }
+    color[v] = BLACK;
+    return false;
+  }
+
+  for (const v of Object.keys(graph)) {
+    if (color[v] === WHITE && dfs(v)) return true;
+  }
+  return false;
+}`}
+  tests={[
+    { expr: "hasCycleDirected({0:[1],1:[2],2:[0]})", label: 'triangle 0→1→2→0 (cycle)' },
+    { expr: "hasCycleDirected({0:[1,2],1:[3],2:[3],3:[]})", label: 'diamond DAG (no cycle)' },
+  ]}
+/>
+
+The first graph loops back to 0 and returns `true`; the diamond fans out and reconnects without ever
+pointing backward, so it returns `false`.
+
+## The real implementation
+
+The course file keeps both variants side by side — the directed three-colouring and the undirected
+parent-tracking version — over a `Map` adjacency list:
+
+```ts
+// /dsa/12-graphs/cycle-detection.ts
+// Directed: WHITE=unseen, GRAY=on current DFS path, BLACK=done. GRAY neighbour => cycle.
+function hasCycleDirectedDFS(graph: Map<number, number[]>): boolean {
+    const WHITE = 0, GRAY = 1, BLACK = 2;
+    const color = new Map<number, number>();
+    for (const v of graph.keys()) color.set(v, WHITE);
+    function dfs(v: number): boolean {
+        color.set(v, GRAY);
+        for (const n of graph.get(v) || []) {
+            if (color.get(n) === GRAY) return true;            // back edge
+            if (color.get(n) === WHITE && dfs(n)) return true;
+        }
+        color.set(v, BLACK);
+        return false;
+    }
+    for (const v of graph.keys()) if (color.get(v) === WHITE && dfs(v)) return true;
+    return false;
+}
+
+// Undirected: a visited neighbour that is not the parent closes a cycle.
+function hasCycleUndirectedDFS(graph: Map<number, number[]>): boolean {
+    const visited = new Set<number>();
+    function dfs(v: number, parent: number): boolean {
+        visited.add(v);
+        for (const n of graph.get(v) || []) {
+            if (!visited.has(n)) { if (dfs(n, v)) return true; }
+            else if (n !== parent) return true;
+        }
+        return false;
+    }
+    for (const v of graph.keys()) if (!visited.has(v) && dfs(v, -1)) return true;
+    return false;
+}
+```
+
+Run the full file: `npx tsx 12-graphs/cycle-detection.ts`.
+
+Notice the only real difference: the directed version tracks *three* states because direction matters
+(a finished BLACK subtree is safe), while the undirected version needs only visited/unvisited plus the
+parent it arrived from, because a bidirectional edge would otherwise look like a fake one-step cycle.
+
+## Complexity
+
+Let $V$ be the number of vertices and $E$ the number of edges. Every DFS variant visits each node once
+and scans each edge once, so they all share the same bound:
+
+$$
+O(V + E) \text{ time}, \qquad O(V) \text{ space}.
+$$
+
+The $O(V)$ space covers the colour or visited array plus the recursion stack (at most one entry per node
+deep). Here is how the common cycle-detection tools compare:
+
+| Method | Graph kind | Time | Extra space | Idea |
+|--------|-----------|------|-------------|------|
+| DFS + parent | Undirected | $O(V + E)$ | $O(V)$ | visited neighbour that is not the parent |
+| Union-Find | Undirected | $O(E\,\alpha(V))$ | $O(V)$ | edge whose endpoints already share a set |
+| DFS three-colour | Directed | $O(V + E)$ | $O(V)$ | edge into a GRAY (on-path) node |
+| Kahn's (BFS) | Directed | $O(V + E)$ | $O(V)$ | nodes left unpeeled have no valid order |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Spreadsheets" icon="📊">
+A spreadsheet's cells form a dependency graph: `A1 = B1 + 1` draws an arrow $B1 \rightarrow A1$. Type
+`B1 = A1` and you add $A1 \rightarrow B1$, closing a two-node loop. The engine runs cycle detection before
+every recalculation and shows a circular-reference error rather than looping forever — there is simply no
+consistent set of values that solves a self-referential formula.
+</ExampleCard>
+
+<ExampleCard domain="Operating systems" icon="🔒">
+Model running processes and the resources they hold or want as a **wait-for graph**: an arrow $P_1
+\rightarrow P_2$ means "$P_1$ is blocked waiting for something $P_2$ holds." A cycle in this graph is a
+**deadlock** — each process waits on the next around the ring and none can proceed. Deadlock detectors run
+exactly this directed cycle search and break the loop by aborting one process.
+</ExampleCard>
+
+<ExampleCard domain="Package managers" icon="📦">
+When you install a library, the package manager builds a dependency graph and resolves it in order. If
+package X depends on Y and Y (transitively) depends back on X, that is a **circular dependency** with no
+valid install order. Tools like npm or pip detect the cycle and refuse, because there is no first package
+to build.
+</ExampleCard>
+
+<ExampleCard domain="Version control" icon="🌿">
+A git history is a graph of commits, each pointing to its parents, and it must stay a **directed acyclic
+graph**. A commit can never end up as its own ancestor, or "what came before what?" would have no answer.
+The acyclic guarantee is what lets git order history, compute merge bases, and walk ancestry without ever
+looping.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Using two colours for a directed graph.** A plain visited set flags *any* revisit as a cycle, but an
+  edge into a finished (BLACK) node is perfectly fine — that is just a diamond, not a loop. You need the
+  GRAY-versus-BLACK distinction to tell an on-path ancestor from a done subtree.
+- **Forgetting the parent in the undirected case.** Without the `n !== parent` guard, the edge you just
+  walked looks like an instant cycle back to your parent. Always pass the parent down and skip it.
+- **Only starting DFS from one node.** A graph may be disconnected, so loop over *every* vertex and start
+  a fresh DFS from any that is still WHITE/unvisited — a cycle can hide in a component you never entered.
+- **Repeated edges in an undirected graph.** A true parallel edge `A-B` twice *is* a cycle; if your input
+  can contain duplicates, track the edge you arrived on rather than just the parent vertex.
+- **Interview cue:** if the prompt says "valid build order," "course schedule," or "no circular
+  dependencies," it is asking for directed cycle detection — reach for three-colour DFS or Kahn's.
+
+## Practice
+
+1. **Easy:** By hand, three-colour the graph `0→1, 1→2, 2→3`. Does any edge ever hit a GRAY node?
+2. **Easy:** For the undirected edges `0-1, 1-2, 2-0`, trace the DFS and name the visited non-parent
+   neighbour that reveals the cycle.
+3. **Medium:** Modify `hasCycleDirected` to also **return one node that lies on the cycle**, not just a
+   boolean.
+4. **Medium:** Given `numCourses` and prerequisite pairs `[a, b]` (take `b` before `a`), decide whether
+   every course can be finished — this is LeetCode 207, directed cycle detection in disguise.
+5. **Hard:** Explain why Union-Find detects undirected cycles but cannot, on its own, detect a cycle in a
+   *directed* graph.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In directed three-colour DFS, which situation proves a cycle exists?',
+      options: [
+        'An edge reaches a BLACK node',
+        'An edge reaches a GRAY node',
+        'A node is still WHITE at the end',
+        'Two nodes share the same colour',
+      ],
+      answer: 1,
+      explain: 'A GRAY node is still on the current DFS path (an ancestor), so an edge into it is a back edge that closes a loop. A BLACK node is a finished subtree and is safe.',
+    },
+    {
+      q: 'Why does undirected cycle detection track the parent node?',
+      options: [
+        'To count how many edges each node has',
+        'So the edge back to the node you just came from is not mistaken for a cycle',
+        'To make the search run in O(1) space',
+        'Because undirected graphs cannot have cycles otherwise',
+      ],
+      answer: 1,
+      explain: 'Every undirected edge is bidirectional, so the edge to your parent always points back. Skipping the parent stops that false positive; any OTHER visited neighbour is a genuine cycle.',
+    },
+    {
+      q: 'What is the time complexity of DFS-based cycle detection on a graph with V vertices and E edges?',
+      options: ['O(V²)', 'O(V + E)', 'O(E log V)', 'O(V · E)'],
+      answer: 1,
+      explain: 'Each vertex is coloured once and each edge is examined once, giving O(V + E) — the standard cost of a single DFS sweep.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>cycle</strong> is a path that returns to a node still on the current DFS path — DFS catches it in one O(V+E) sweep.',
+    '<strong>Directed graphs</strong>: three-colour DFS, where an edge into a <strong>GRAY</strong> (on-path) node is a back edge and a cycle; a BLACK node is safe.',
+    '<strong>Undirected graphs</strong>: a visited neighbour that is <strong>not the parent</strong> closes a cycle.',
+    'Always start DFS from <strong>every unvisited vertex</strong> so cycles in disconnected components are not missed.',
+    '<strong>Union-Find</strong> (undirected) and <strong>Kahn\'s algorithm</strong> (directed) are alternative cycle detectors you will meet next.',
+  ]}
+/>
+
+Next up: **Topological Sort** — once you know a directed graph is acyclic, you can line its nodes up in a
+valid order, the exact thing spreadsheets, build systems, and course schedulers do every day.

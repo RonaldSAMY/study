@@ -1,0 +1,325 @@
+---
+title: Bellman-Ford & Floyd-Warshall
+track: dsa-graphs
+summary: "When edges can be negative, Dijkstra breaks: Bellman-Ford relaxes every edge V−1 times to survive negative weights and catch negative cycles, while Floyd-Warshall solves all pairs at once."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-graphs/dijkstra
+leadsTo:
+  - dsa-graphs/a-star
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GphBellmanFord from '../../../components/demos/GphBellmanFord.tsx';
+
+## The hook: when a shortcut can pay you back
+
+Dijkstra is fast and elegant, but it rests on one quiet assumption: every edge costs something positive,
+so once a node is settled it can never get cheaper. The moment an edge can be **negative** — a currency
+trade that nets a profit, a shipping leg that comes with a rebate — that assumption collapses. A node you
+"finished" early might suddenly be reachable for less through a discount you had not explored yet, and
+Dijkstra will happily report a wrong answer with total confidence.
+
+Worse, negative edges can form a **negative cycle** — a loop you could ride forever, getting cheaper on
+every lap, so that "shortest path" stops meaning anything. We need an algorithm that tolerates negative
+weights and can raise its hand and say "this graph has no shortest path". That algorithm is
+**Bellman-Ford**, and its all-pairs cousin is **Floyd-Warshall**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A shortest path visits at most $V-1$ edges, so if you relax **every** edge $V-1$ times the distances
+must settle — and one extra pass that still improves something proves a negative cycle exists.
+</Callout>
+
+## Intuition
+
+Recall **relaxation** from Dijkstra: an edge from $u$ to $v$ with weight $w$ "relaxes" when the path to
+$u$ plus $w$ beats the best known distance to $v$, so we lower $\text{dist}[v]$. Dijkstra is clever about
+the order — it always relaxes from the closest unsettled node. Bellman-Ford throws that cleverness away
+and instead relaxes **brute force**: it sweeps over the entire edge list again and again.
+
+Why does that work? Think about how many edges a shortest path can contain. With $V$ vertices, a path
+with no repeated vertex has at most $V-1$ edges. After pass 1, every shortest path that uses just one edge
+is correct. After pass 2, every two-edge shortest path is correct, because its first edge was already
+settled. Each full sweep locks in one more hop, so after $V-1$ passes **every** shortest path is final.
+This is the same layer-by-layer reasoning behind dynamic programming.
+
+Then comes the clever twist. Run **one more** pass. If any edge still relaxes, some distance is still
+shrinking after $V-1$ rounds — which is impossible for a real shortest path. The only explanation is a
+**negative cycle**, a loop whose total weight is below zero. That single extra pass is a free negative-cycle
+detector.
+
+**Floyd-Warshall** attacks a bigger question — the shortest path between *every* pair of vertices — with a
+strikingly short triple loop. It asks, for each possible "middle" vertex $k$: is going $i \rightarrow k \rightarrow j$
+cheaper than the best $i \rightarrow j$ I know so far? Build that up for $k$ ranging over all vertices and you
+fill in the whole distance table.
+
+## Play with it
+
+Edit the directed, weighted graph (negative weights are allowed) and pick a source. Press play and watch
+Bellman-Ford sweep the edge list pass by pass — the sky edge is the one being relaxed, and a node flashes
+emerald the instant it finds a shorter distance. Try changing an edge weight to make a loop sum to less
+than zero and watch the final check pass flash rose.
+
+<GphBellmanFord client:visible />
+
+<Callout type="tip">
+Notice how the early passes do most of the work and the later ones often change nothing. That is the
+**early-exit** optimisation: if a whole pass relaxes no edge, every distance is already final and you can
+stop — no need to grind through all $V-1$ passes.
+</Callout>
+
+## How it works
+
+Let us hand-trace Bellman-Ford from source $A$ on a graph with one negative edge ($B \rightarrow C$ costs
+$-3$) but no negative cycle. Each pass walks the edges in order and lowers a distance whenever it can.
+
+```
+edges: A→B(4)  A→C(5)  B→C(-3)  B→D(6)  C→D(2)  C→E(4)  D→E(1)
+
+start        A=0  B=∞  C=∞  D=∞  E=∞
+pass 1
+  A→B(4)     B = 0+4 = 4
+  A→C(5)     C = 0+5 = 5
+  B→C(-3)    C = 4-3 = 1   (better than 5 — the negative edge pays off)
+  B→D(6)     D = 4+6 = 10
+  C→D(2)     D = 1+2 = 3   (better than 10)
+  C→E(4)     E = 1+4 = 5
+  D→E(1)     E = 3+1 = 4   (better than 5)
+pass 2       nothing improves  → done early
+final        A=0  B=4  C=1  D=3  E=4
+check pass   no edge relaxes   → no negative cycle
+```
+
+Here is the same routine as runnable JavaScript. It returns the distance map; the negative $B \rightarrow C$
+edge means $C$ ends at $1$, not the naive $5$.
+
+<CodeRunner
+  client:visible
+  code={`// Bellman-Ford: single-source shortest paths with negative edges.
+function bellmanFord(vertices, edges, source) {
+  const dist = {};
+  for (const v of vertices) dist[v] = Infinity;
+  dist[source] = 0;
+
+  // Relax every edge V-1 times.
+  for (let i = 0; i < vertices.length - 1; i++) {
+    let updated = false;
+    for (const [from, to, w] of edges) {
+      if (dist[from] !== Infinity && dist[from] + w < dist[to]) {
+        dist[to] = dist[from] + w;
+        updated = true;
+      }
+    }
+    if (!updated) break; // early exit: nothing changed this pass
+  }
+  return dist;
+}
+
+const vertices = ['A', 'B', 'C', 'D', 'E'];
+const edges = [
+  ['A', 'B', 4], ['A', 'C', 5], ['B', 'C', -3],
+  ['B', 'D', 6], ['C', 'D', 2], ['C', 'E', 4], ['D', 'E', 1],
+];
+const dist = bellmanFord(vertices, edges, 'A');
+console.log('distances from A:', JSON.stringify(dist));`}
+  tests={[
+    { expr: 'dist.C', label: 'shortest distance to C (via B, using the −3 edge)' },
+    { expr: 'dist.E', label: 'shortest distance to E' },
+  ]}
+/>
+
+## The real implementation
+
+The course version keeps the typed niceties — generic vertices, a `parent` map for path reconstruction,
+and an explicit negative-cycle flag from the extra pass.
+
+```ts
+// /dsa/12-graphs/bellman-ford.ts
+interface Edge<T> { from: T; to: T; weight: number; }
+
+function bellmanFord<T>(vertices: T[], edges: Edge<T>[], source: T) {
+    const dist = new Map<T, number>();
+    const parent = new Map<T, T | null>();
+    for (const v of vertices) { dist.set(v, Infinity); parent.set(v, null); }
+    dist.set(source, 0);
+
+    // Relax every edge V-1 times.
+    for (let i = 0; i < vertices.length - 1; i++) {
+        let updated = false;
+        for (const { from, to, weight } of edges) {
+            const d = dist.get(from)!;
+            if (d !== Infinity && d + weight < dist.get(to)!) {
+                dist.set(to, d + weight); parent.set(to, from); updated = true;
+            }
+        }
+        if (!updated) break;                 // early exit: nothing changed
+    }
+    // One more pass: any improvement means a negative cycle.
+    let hasNegativeCycle = false;
+    for (const { from, to, weight } of edges) {
+        const d = dist.get(from)!;
+        if (d !== Infinity && d + weight < dist.get(to)!) { hasNegativeCycle = true; break; }
+    }
+    return { dist, parent, hasNegativeCycle };
+}
+```
+
+Floyd-Warshall is even shorter. It works straight on a distance matrix where `Infinity` marks "no edge",
+and the triple loop tries every vertex $k$ as an intermediate stop:
+
+```ts
+// /dsa/12-graphs/floyd-warshall.ts  — all-pairs shortest paths (Infinity = no edge)
+function floydWarshall(graph: number[][]): number[][] {
+    const n = graph.length;
+    const dist = graph.map(row => [...row]);
+    for (let k = 0; k < n; k++)
+        for (let i = 0; i < n; i++)
+            for (let j = 0; j < n; j++)
+                if (dist[i][k] !== Infinity && dist[k][j] !== Infinity)
+                    dist[i][j] = Math.min(dist[i][j], dist[i][k] + dist[k][j]);
+    return dist;
+}
+```
+
+After it runs, any negative value on the diagonal — a node that can reach itself for less than zero —
+flags a negative cycle. Run either file with:
+
+```
+npx tsx 12-graphs/bellman-ford.ts
+npx tsx 12-graphs/floyd-warshall.ts
+```
+
+## Complexity
+
+Bellman-Ford does up to $V-1$ passes over all $E$ edges, so its time is $O(V \cdot E)$ with just $O(V)$
+extra space for the distance and parent maps. Floyd-Warshall's triple loop is $O(V^3)$ time and $O(V^2)$
+space for the matrix — wonderfully simple, and the right choice when the graph is small and dense and you
+want *every* pair.
+
+$$
+\text{Bellman-Ford: } O(V \cdot E) \text{ time}, \; O(V) \text{ space}
+\qquad
+\text{Floyd-Warshall: } O(V^3) \text{ time}, \; O(V^2) \text{ space}
+$$
+
+| Algorithm | Time | Edge weights | What it finds |
+|-----------|------|--------------|----------------|
+| BFS | $O(V+E)$ | unweighted | shortest hops from one source |
+| Dijkstra | $O((V+E)\log V)$ | non-negative only | shortest paths from one source |
+| Bellman-Ford | $O(V \cdot E)$ | any weights | one-source paths, detects negative cycles |
+| Floyd-Warshall | $O(V^3)$ | any weights | all-pairs paths, detects negative cycles |
+
+The progression is a story of generality versus speed: BFS is fastest but only counts hops, Dijkstra adds
+weights, Bellman-Ford adds negative weights at the cost of a slower $O(V \cdot E)$, and Floyd-Warshall
+trades even more time for the whole all-pairs table in three tidy lines.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Foreign-exchange trading" icon="💱">
+Take exchange rates and replace each with the negative logarithm of the rate. Multiplying rates around a
+loop becomes *adding* these weights, so a loop that multiplies back to more than one currency unit shows
+up as a **negative cycle**. Run Bellman-Ford and a detected negative cycle is literally an arbitrage
+opportunity — a sequence of trades that returns you more money than you started with.
+</ExampleCard>
+
+<ExampleCard domain="Internet routing" icon="🛰️">
+The classic RIP protocol is distributed Bellman-Ford. Each router knows only its direct neighbours, then
+repeatedly relaxes against the distance tables its neighbours advertise: "if I go through you, can I reach
+that network for less?" Over successive rounds these local relaxations converge to globally shortest
+hop-counts — no router ever sees the whole map.
+</ExampleCard>
+
+<ExampleCard domain="City trip planning" icon="🗺️">
+A travel app that needs the driving time between **every** pair of districts, not just from one origin,
+is the all-pairs problem. For a few dozen districts Floyd-Warshall fills the entire time-between-cities
+table in one $O(V^3)$ sweep, ready for instant lookups no matter which two places a user picks.
+</ExampleCard>
+
+<ExampleCard domain="Logistics & rebates" icon="📦">
+A freight network where some legs carry a rebate or subsidy gives genuinely **negative** edge costs.
+Bellman-Ford finds the cheapest route that exploits those discounts, and its check pass guards against an
+absurd "rebate loop" that would imply you could be paid to ship forever in a circle.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Using Dijkstra with negative edges.** It can settle a node too early and return a wrong answer with no
+  error. Any negative weight is a signal to reach for Bellman-Ford instead.
+- **Forgetting the `dist[u] === Infinity` guard.** Relaxing from an unreached node adds a weight to infinity
+  and can silently corrupt distances. Always skip edges whose source is still infinite.
+- **Skipping the extra pass.** Without that $V$-th sweep you never learn the graph has a negative cycle, and
+  your "shortest" distances are meaningless.
+- **Reaching for Floyd-Warshall on a big sparse graph.** Its $O(V^3)$ cost explodes; running Dijkstra (or
+  Bellman-Ford) once per source is far cheaper when $V$ is large.
+- **Interview cue:** "negative edge weights" almost always means Bellman-Ford; "shortest path between every
+  pair" on a small graph almost always means Floyd-Warshall.
+
+## Practice
+
+1. **Easy:** On the demo graph, change $B \rightarrow C$ from $-3$ to $-9$. What is the new shortest
+   distance to $E$ from $A$?
+2. **Easy:** Why does Bellman-Ford need exactly $V-1$ passes and not $V$? Tie your answer to the maximum
+   number of edges on a simple shortest path.
+3. **Medium:** Add a reverse edge $C \rightarrow B$ with weight $1$ to the demo graph. Does the cycle
+   $B \rightarrow C \rightarrow B$ become negative? Explain using its total weight.
+4. **Medium:** Reconstruct the actual path from $A$ to $E$ using the `parent` map produced by the typed
+   implementation.
+5. **Hard:** Adapt Floyd-Warshall to also return, for each pair, the next vertex on the shortest path, so
+   you can rebuild any route from the table.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why must Bellman-Ford relax every edge V−1 times?',
+      options: [
+        'Because there are V−1 edges in any graph',
+        'A simple shortest path has at most V−1 edges, and each pass settles one more hop',
+        'To guarantee the heap stays balanced',
+        'Because Dijkstra also runs V−1 times',
+      ],
+      answer: 1,
+      explain: 'A shortest path with no repeated vertex uses at most V−1 edges; each full sweep locks in one more edge of every such path.',
+    },
+    {
+      q: 'After the V−1 passes, an extra pass still lowers a distance. What does that prove?',
+      options: [
+        'The source was chosen wrong',
+        'The graph is disconnected',
+        'A negative cycle exists, so no shortest path is well-defined',
+        'Nothing — it is normal',
+      ],
+      answer: 2,
+      explain: 'If a distance can still shrink after V−1 passes, some loop has negative total weight; you could ride it forever to get cheaper.',
+    },
+    {
+      q: 'You need the shortest path between every pair of 40 cities, with a few negative legs. Best tool?',
+      options: [
+        'BFS from each city',
+        'Dijkstra from each city',
+        'Floyd-Warshall',
+        'A single Bellman-Ford run',
+      ],
+      answer: 2,
+      explain: 'All-pairs on a small graph with possible negative weights is exactly Floyd-Warshall: one O(V³) triple loop fills the whole table and Dijkstra cannot handle the negatives.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Bellman-Ford</strong> finds single-source shortest paths even with <strong>negative edges</strong> by relaxing every edge V−1 times.',
+    'One <strong>extra pass</strong> that still relaxes proves a <strong>negative cycle</strong> — a free detector Dijkstra cannot offer.',
+    'It costs <strong>O(V·E)</strong> — slower than Dijkstra, but strictly more general; an early exit stops once a pass changes nothing.',
+    '<strong>Floyd-Warshall</strong> solves <strong>all pairs</strong> in an O(V³) triple loop over an intermediate vertex k; a negative diagonal flags a negative cycle.',
+    'Pick by the problem: non-negative weights → Dijkstra, negative weights → Bellman-Ford, all-pairs on a small graph → Floyd-Warshall.',
+  ]}
+/>
+
+Next up: **A\* Search** — we put the negatives aside and go the other way, adding a smart heuristic on top
+of Dijkstra so the search aims straight at the goal and explores far fewer nodes.

@@ -1,0 +1,302 @@
+---
+title: Depth-First Search
+track: dsa-graphs
+summary: "DFS commits to one path and follows it to the end before backtracking: a stack (or recursion) that goes deep, not wide."
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - dsa-graphs/bfs
+leadsTo:
+  - dsa-graphs/cycle-detection
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GphDfsStack from '../../../components/demos/GphDfsStack.tsx';
+
+## The hook: exploring a maze with one hand on the wall
+
+Drop yourself into a stone maze with a single rule: pick a corridor, follow it as far as it goes, and
+only when you hit a dead end do you walk back to the last junction and try the next unexplored door.
+You never wander back to the entrance to reconsider — you plunge forward, committing to each choice
+until the path runs out. That stubborn "go deep, then backtrack" instinct is exactly **depth-first
+search**. Where BFS fanned out level by level with a queue, DFS dives down one branch with a stack,
+and the order in which it finishes corridors turns out to reveal a surprising amount about a graph's
+structure.
+
+<Callout type="intuition" title="The one-sentence idea">
+DFS explores a graph by **going as deep as possible** along each branch before backtracking, using a
+**stack** (an explicit one, or the call stack via recursion) to remember where to resume.
+
+</Callout>
+
+## Intuition
+
+In the last lesson, **BFS** used a **queue** (first-in, first-out) to visit vertices in rings of
+increasing distance from the start. DFS swaps that one data structure: it uses a **stack**
+(last-in, first-out). That single change flips the whole personality of the traversal.
+
+Push the start vertex. Then repeat: **pop** a vertex, mark it visited, and **push** its unvisited
+neighbours. Because the stack hands you back the *most recently* pushed vertex, you immediately dive
+into the neighbour you just discovered rather than the siblings you saw earlier. You keep plunging
+deeper until you reach a vertex with no unvisited neighbours — a dead end — at which point popping the
+stack naturally **backtracks** you to the most recent junction that still has doors left to try.
+
+Recursion expresses the same idea even more compactly: "visit me, then recursively visit each unvisited
+neighbour." The language's **call stack** plays the role of the explicit stack for free. Both versions
+visit every vertex and every edge exactly once, so both run in $O(V + E)$ time — the same budget as BFS,
+just a different shape of exploration.
+
+## Play with it
+
+Type an edge list, choose a start vertex, and step through the search. Watch a node get **popped**
+(turning sky), marked visited (emerald), and its unvisited neighbours **pushed** onto the stack on the
+right. The emerald links that form are the **DFS tree**, and the little badges number each node in the
+order DFS first reaches it.
+
+<GphDfsStack client:visible />
+
+<Callout type="tip">
+Keep your eye on the stack chips. The moment a node is pushed it sits on top, so it is the very next
+one explored — that "newest first" rule is the entire reason DFS burrows deep instead of spreading wide.
+
+</Callout>
+
+## How it works
+
+Let us hand-trace recursive DFS on a tiny graph, starting at `A`. We mark a vertex the instant we enter
+it, then recurse into neighbours in alphabetical order, skipping any already visited.
+
+```
+graph:  A: [B, C]   B: [A, D, E]   C: [A, F]   D: [B]   E: [B, F]   F: [C, E]
+
+visit A            -> order: A
+  visit B          -> order: A B
+    visit D        -> order: A B D   (D's only neighbour B is visited -> backtrack)
+    visit E        -> order: A B D E
+      visit F      -> order: A B D E F   (F's neighbours C, E lead on...)
+        visit C    -> order: A B D E F C   (C's neighbours all visited -> unwind)
+pre-order  (entered): A B D E F C
+post-order (finished): D C F E B A
+```
+
+Notice two useful orderings fall out for free. **Pre-order** is the sequence in which we *enter*
+vertices; **post-order** is the sequence in which we *finish* them (after all descendants are done).
+Post-order, reversed, is the backbone of topological sort in the lessons just ahead.
+
+<CodeRunner
+  client:visible
+  code={`// Recursive DFS: returns vertices in the order they are first entered
+function dfsRecursive(graph, start) {
+  const visited = new Set();
+  const order = [];
+  function dfs(v) {
+    visited.add(v);
+    order.push(v);
+    for (const n of graph[v] || []) {
+      if (!visited.has(n)) dfs(n);
+    }
+  }
+  dfs(start);
+  return order;
+}
+
+// Iterative DFS with an explicit stack (push neighbours in reverse
+// so the smallest is popped first, matching the recursive order)
+function dfsIterative(graph, start) {
+  const visited = new Set();
+  const order = [];
+  const stack = [start];
+  while (stack.length > 0) {
+    const v = stack.pop();
+    if (visited.has(v)) continue;
+    visited.add(v);
+    order.push(v);
+    const ns = graph[v] || [];
+    for (let i = ns.length - 1; i >= 0; i--) {
+      if (!visited.has(ns[i])) stack.push(ns[i]);
+    }
+  }
+  return order;
+}
+
+const g = { A: ['B','C'], B: ['A','D','E'], C: ['A','F'], D: ['B'], E: ['B','F'], F: ['C','E'] };`}
+  tests={[
+    { expr: "dfsRecursive(g, 'A').join(' ')", label: 'recursive order' },
+    { expr: "dfsIterative(g, 'A').join(' ')", label: 'iterative order' },
+  ]}
+/>
+
+The two versions visit the same vertices; with neighbours pushed in reverse they even produce the same
+sequence here. In general the *set* of visited vertices is identical, while the exact order can differ
+with the order you push neighbours.
+
+## The real implementation
+
+Here is the faithful core from the course file — a generic recursive DFS plus the iterative version that
+swaps the call stack for an explicit one (handy when a graph is deep enough to overflow the recursion
+limit):
+
+```ts
+// /dsa/12-graphs/dfs.ts
+function dfsRecursive<T>(graph: Map<T, T[]>, start: T, visited = new Set<T>()): T[] {
+    const result: T[] = [];
+    function dfs(vertex: T): void {
+        visited.add(vertex);
+        result.push(vertex);
+        for (const neighbor of graph.get(vertex) || []) {
+            if (!visited.has(neighbor)) dfs(neighbor);
+        }
+    }
+    dfs(start);
+    return result;
+}
+
+// Iterative DFS with an explicit stack (avoids recursion-depth limits)
+function dfsIterative<T>(graph: Map<T, T[]>, start: T): T[] {
+    const visited = new Set<T>();
+    const result: T[] = [];
+    const stack: T[] = [start];
+    while (stack.length > 0) {
+        const vertex = stack.pop()!;
+        if (!visited.has(vertex)) {
+            visited.add(vertex);
+            result.push(vertex);
+            const neighbors = graph.get(vertex) || [];
+            for (let i = neighbors.length - 1; i >= 0; i--) {
+                if (!visited.has(neighbors[i])) stack.push(neighbors[i]);
+            }
+        }
+    }
+    return result;
+}
+```
+
+Run the full file: `npx tsx 12-graphs/dfs.ts`.
+
+As DFS runs it implicitly classifies every edge. A **tree edge** leads to a brand-new vertex (these form
+the emerald DFS tree in the demo). A **back edge** points to an ancestor still on the stack — the telltale
+sign of a cycle, which is exactly what the next lesson exploits. **Forward** and **cross edges** (in
+directed graphs) point to already-finished vertices. And remember the two visit orders: **pre-order**
+records when a vertex is entered, **post-order** when it is finished — reversing post-order gives a valid
+topological ordering, the foundation of the topological-sort lesson coming up.
+
+## Complexity
+
+Let $V$ be the number of vertices and $E$ the number of edges. DFS touches every vertex once and scans
+every edge once, so:
+
+$$
+\text{time } O(V + E), \qquad \text{space } O(V).
+$$
+
+The space is the depth of the recursion (or the explicit stack) plus the visited set — in the worst case
+a single long path forces all $V$ vertices onto the stack at once. DFS and BFS share the same time bound
+but differ sharply in feel:
+
+| Aspect | BFS | DFS |
+|--------|-----|-----|
+| Frontier structure | Queue (FIFO) | Stack (LIFO) |
+| Extra memory | $O(\text{width})$ — a whole level | $O(\text{height})$ — one path deep |
+| Finds shortest path (unweighted) | Yes | No |
+| Enumerating all paths / deep solutions | Harder | Easier |
+| Natural for | Levels, nearest things | Backtracking, ordering, cycles |
+
+The memory contrast is the practical headline: BFS can blow up on a bushy graph with enormous levels,
+while DFS stays cheap on those but can run deep on a long, skinny graph.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Maze solving" icon="🧩">
+A robot solving a labyrinth follows one corridor to its end, and only on hitting a wall does it retreat
+to the last junction and try an untried door. That "deep then backtrack" wall-following is DFS, with the
+stack remembering every junction left half-explored behind you.
+
+</ExampleCard>
+
+<ExampleCard domain="File systems" icon="🗂️">
+When `du` or a recursive `find` walks a directory tree, it descends fully into the first subfolder,
+totals everything inside it, and only then climbs back to visit the next sibling folder. That is DFS
+over the directory graph — the call stack mirrors the folder path you are currently inside.
+
+</ExampleCard>
+
+<ExampleCard domain="Memory management" icon="♻️">
+A garbage collector's mark-and-sweep phase starts from the root references and follows pointers as deep
+as they go, marking every object it can reach. Anything DFS never touches is unreachable and safe to
+free — reachability is just a depth-first traversal of the object graph.
+
+</ExampleCard>
+
+<ExampleCard domain="Puzzle solving" icon="👑">
+A Sudoku or N-Queens backtracking solver is DFS over a tree of partial states: place a value, recurse to
+the next cell, and if a constraint breaks, backtrack and try the next value. Each "undo" is the stack
+popping back to the last decision that still has options.
+
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting the visited set.** Without it, any cycle sends DFS into infinite recursion. Mark a vertex
+  the moment you enter it, before recursing into neighbours.
+- **Marking at the wrong time in the iterative version.** Check and set "visited" when you **pop**, not
+  when you push — a vertex can be pushed several times by different neighbours before it is ever popped.
+- **Recursion-depth overflow.** A graph that is one long chain of, say, 100,000 vertices can blow the
+  call stack. Switch to the explicit-stack iterative version when depth could be large.
+- **Reversed-order surprise.** Pushing neighbours in forward order makes the iterative DFS visit them in
+  reverse. Push in reverse if you want it to match the recursive, alphabetical order (as in the demo).
+- **Interview cue:** if a problem asks for *any* path, connected components, cycle detection, or an
+  ordering of dependencies, reach for DFS. If it asks for the *shortest* unweighted path, reach for BFS.
+
+## Practice
+
+1. **Easy:** Hand-trace recursive DFS on `A-B, A-C, B-D` from `A`, pushing neighbours alphabetically.
+   Write the visit order.
+2. **Easy:** For the same graph, give the **post-order** (the order vertices *finish*).
+3. **Medium:** Modify `dfsIterative` to also return each vertex's **depth** (distance from the start
+   along the DFS tree).
+4. **Medium:** Write `countComponents(graph)` that runs DFS from every unvisited vertex and counts how
+   many separate connected components a graph has.
+5. **Hard:** Detect whether an **undirected** graph has a cycle using DFS, by spotting a visited
+   neighbour that is not the vertex you arrived from.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which data structure gives DFS its "go deep first" behaviour?',
+      options: ['A queue (FIFO)', 'A stack (LIFO)', 'A priority queue', 'A hash map'],
+      answer: 1,
+      explain: 'A stack hands back the most recently pushed vertex, so DFS dives into the newest neighbour before its siblings. A queue would give BFS instead.',
+    },
+    {
+      q: 'In the iterative DFS, when should a vertex be marked visited?',
+      options: ['When it is pushed onto the stack', 'When it is popped off the stack', 'Only at the very end', 'Never — the stack handles it'],
+      answer: 1,
+      explain: 'A vertex can be pushed multiple times by different neighbours, so you mark and process it when you pop it, skipping any later duplicate pops.',
+    },
+    {
+      q: 'What is the time complexity of DFS on a graph with V vertices and E edges?',
+      options: ['O(V) ', 'O(V log V)', 'O(V + E)', 'O(V squared) always'],
+      answer: 2,
+      explain: 'DFS visits each vertex once and scans each edge once, giving O(V + E) — the same bound as BFS.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'DFS explores <strong>as deep as possible</strong> along each branch, then <strong>backtracks</strong>, using a stack or recursion.',
+    'Swap BFS\'s <strong>queue for a stack</strong> and you get DFS — same O(V+E) time, very different exploration shape.',
+    'In the iterative version, mark vertices <strong>when you pop</strong>, not when you push, to avoid reprocessing.',
+    'DFS yields <strong>pre-order and post-order</strong>; reversed post-order underpins topological sort, and a <strong>back edge</strong> reveals a cycle.',
+    'Use DFS for paths, components, cycles, and orderings; use BFS when you need the <strong>shortest unweighted path</strong>.',
+  ]}
+/>
+
+Next up: **Cycle Detection** — DFS already brushed past the key clue (a back edge to a vertex still on
+the stack), and we will turn that observation into a reliable loop detector for both directed and
+undirected graphs.

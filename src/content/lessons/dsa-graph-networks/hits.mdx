@@ -1,0 +1,237 @@
+---
+title: HITS (Hubs & Authorities)
+track: dsa-graph-networks
+summary: "HITS gives every node two scores: a hub score for who it points to, and an authority score for who points to it."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-graph-networks/pagerank
+leadsTo:
+  - dsa-graph-networks/community-louvain
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NetHitsHubAuthority from '../../../components/demos/NetHitsHubAuthority.tsx';
+
+## The hook: the list and the expert
+
+Search "best machine-learning courses" and two very different good pages show up. One is a hand-curated
+*list* — it does not teach anything itself, but it links to all the great resources. The other is a single
+*authoritative* course that everyone links to. PageRank gives both one number, but they play opposite roles.
+Jon Kleinberg's HITS, invented the same year as PageRank, captures the difference with **two** scores per
+page: a **hub** score for pages that point to good things, and an **authority** score for pages that good
+things point at.
+
+<Callout type="intuition" title="The one-sentence idea">
+A good hub points to good authorities, and a good authority is pointed to by good hubs — so the two scores
+bootstrap each other through mutual reinforcement.
+</Callout>
+
+## Intuition: two scores that lift each other
+
+Where PageRank has one circular definition, HITS has two intertwined ones:
+
+- Your **authority** score is the sum of the **hub** scores of everyone pointing *at* you.
+- Your **hub** score is the sum of the **authority** scores of everyone you point *to*.
+
+Start every score at one. Then alternate: first refresh all authority scores from the current hub scores,
+then refresh all hub scores from the freshly-updated authority scores, then rescale so the numbers do not
+blow up. Each round sharpens the picture — pages that sit at the receiving end of many good linkers rise as
+authorities, and pages that curate links to those authorities rise as hubs. Unlike PageRank there is no
+teleport and no damping; the structure alone decides, which makes HITS query-focused but also more fragile.
+
+## Play with it
+
+Press Play and watch the two scores alternate. **Blue fill and size** show a node's authority (who points
+at it); the **emerald ring thickness** shows its hub score (who it points to). Click one node then another
+to toggle a link and reshape who is a hub and who is an authority.
+
+<NetHitsHubAuthority client:visible />
+
+<Callout type="tip">
+Find a node with a thick emerald ring but small blue fill: a pure hub. It points to strong authorities but
+nobody points back at it. The reverse — big blue, thin ring — is a pure authority that everyone cites but
+that links nowhere itself.
+</Callout>
+
+## How it works
+
+Let $h(p)$ be the hub score and $a(p)$ the authority score of page $p$. One round applies two updates and a
+normalization:
+
+$$
+a(p) = \sum_{q \to p} h(q), \qquad h(p) = \sum_{p \to q} a(q),
+$$
+
+then divide every score by the vector's length so the totals stay bounded. In matrix form, with adjacency
+matrix $A$, this is $a = A^{\top} h$ followed by $h = A\,a$ — repeatedly applying $A^{\top}A$ and $AA^{\top}$,
+whose dominant eigenvectors are the authority and hub scores.
+
+Trace a tiny graph: hubs $0,1$ both point to authority $3$, and $0$ also points to $2$.
+
+```
+start:   h = [1,1,1,1]            a = [1,1,1,1]
+auth:    a(2)=h(0)=1   a(3)=h(0)+h(1)=2   → a = [0,0,1,2] (then normalized)
+hub:     h(0)=a(2)+a(3)=3   h(1)=a(3)=2   → h = [3,2,0,0] (then normalized)
+```
+
+Node 3 is the authority (two hubs point to it); node 0 is the strongest hub (it reaches both authorities).
+
+<CodeRunner
+  client:visible
+  code={`// HITS: alternate authority and hub updates, then normalize.
+function hits(edges, nodes, iters = 20) {
+  const out = {}, inc = {};
+  nodes.forEach(n => { out[n] = []; inc[n] = []; });
+  for (const [u, v] of edges) { out[u].push(v); inc[v].push(u); }
+  let hub = {}, auth = {};
+  nodes.forEach(n => { hub[n] = 1; auth[n] = 1; });
+  const norm = (s) => {
+    const len = Math.sqrt(nodes.reduce((t, n) => t + s[n] * s[n], 0)) || 1;
+    nodes.forEach(n => s[n] /= len);
+  };
+  for (let it = 0; it < iters; it++) {
+    const a = {}; nodes.forEach(n => a[n] = inc[n].reduce((t, u) => t + hub[u], 0));
+    norm(a); auth = a;
+    const h = {}; nodes.forEach(n => h[n] = out[n].reduce((t, w) => t + auth[w], 0));
+    norm(h); hub = h;
+  }
+  const r = {}; nodes.forEach(n => r[n] = { hub: +hub[n].toFixed(2), auth: +auth[n].toFixed(2) });
+  return r;
+}`}
+  tests={[
+    { expr: "hits([['A','C'],['B','C'],['A','D']], ['A','B','C','D'])", label: 'hubs A,B vs authorities C,D' },
+  ]}
+/>
+
+## The real implementation
+
+The course file keeps separate hub and authority maps and stops early once authority scores stop changing.
+
+```ts
+// /dsa/29-graph-advanced/hits-algorithm.ts
+compute(iterations = 100, tolerance = 1e-6) {
+  for (let iter = 0; iter < iterations; iter++) {
+    const oldAuth = new Map(this.authScores);
+    this.updateAuthorities();   // a(p) = Σ hub(q) for q → p
+    this.updateHubs();          // h(p) = Σ auth(q) for p → q
+    this.normalize();           // L2-normalize both vectors
+    if (this.hasConverged(oldAuth, tolerance)) break;
+  }
+  return { hubs: this.hubScores, authorities: this.authScores };
+}
+```
+
+Run the full file: `npx tsx 29-graph-advanced/hits-algorithm.ts`.
+
+## Complexity
+
+Each update sweeps every edge once, and like all power iterations it converges in a number of rounds that
+depends on the spectral gap, not the graph size:
+
+$$
+T = O(k \, M), \qquad S = O(N + M),
+$$
+
+with $k$ iterations, $M$ edges, $N$ nodes.
+
+| Step | Cost |
+|------|------|
+| Authority update | $O(M)$ |
+| Hub update | $O(M)$ |
+| Normalize | $O(N)$ |
+| Total | $O(k\,M)$ |
+
+<Callout type="why">
+HITS and PageRank are both eigenvector methods, but on different matrices. PageRank finds the principal
+eigenvector of the damped transition matrix; HITS finds the principal eigenvectors of $A^{\top}A$
+(authorities) and $AA^{\top}$ (hubs). In ML you meet this same pair in the singular value decomposition —
+hubs and authorities are the left and right singular vectors of the link matrix.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Academia" icon="🎓">
+In a citation network, survey papers are hubs (they cite the key works) and seminal papers are authorities
+(they are cited by the surveys). HITS separates "great overview" from "great original result".
+</ExampleCard>
+
+<ExampleCard domain="E-commerce" icon="🛒">
+Treat "users who bought X also bought Y" as a graph: shopping guides and gift lists become hubs, while the
+products everyone converges on become authorities — useful for distinguishing curators from hits.
+</ExampleCard>
+
+<ExampleCard domain="Journalism" icon="📰">
+A "further reading" roundup is a hub linking to primary sources; the original investigative report is the
+authority. Ranking a breaking story benefits from knowing which role a page plays.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Skipping normalization explodes the scores.** Without rescaling each round, the sums grow without bound
+  and you lose all precision — the L2 step is mandatory, not cosmetic.
+- **HITS is topic-specific.** Classic HITS runs on a small subgraph built from a query's results, not the
+  whole web; run it globally and the scores blur.
+- **It is easily spammed.** A page can inflate its hub score just by linking to many authorities — there is
+  no damping to dilute manufactured links, a key reason Google chose PageRank.
+- **Interview cue:** "two kinds of importance, one for pointing and one for being pointed at" is HITS. Mention
+  the mutual-reinforcement update and that it is the eigenvectors of $A^{\top}A$ and $AA^{\top}$.
+
+## Practice
+
+1. **Easy:** In a star where one centre is pointed to by five leaves, which node is the authority and which are the hubs?
+2. **Easy:** Add a link in the demo from a pure authority back to a pure hub. How do their scores shift?
+3. **Medium:** Show that if you reverse every edge, the hub and authority scores simply swap.
+4. **Medium:** Why does running HITS without normalization for 50 iterations lose numerical precision? Work out roughly how fast the magnitudes grow.
+5. **Hard:** Construct a small graph where the highest-PageRank node is *not* the highest-authority node, and explain why.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A page links to many highly-cited expert pages but is itself cited by no one. In HITS it has:',
+      options: ['High authority, low hub', 'High hub, low authority', 'High both', 'Low both'],
+      answer: 1,
+      explain: 'Pointing to good authorities makes it a strong hub; being pointed to by no one keeps its authority low.',
+    },
+    {
+      q: 'How does HITS update an authority score each round?',
+      options: [
+        'Sum of authority scores of pages it points to',
+        'Sum of hub scores of pages that point to it',
+        'Its PageRank divided by out-degree',
+        'The teleport probability',
+      ],
+      answer: 1,
+      explain: 'Authority = Σ hub(q) over all q that link to the page. Hubs and authorities reinforce each other across rounds.',
+    },
+    {
+      q: 'Why is normalization required every iteration?',
+      options: [
+        'To sort the nodes',
+        'To keep score magnitudes bounded so the power iteration stays numerically stable',
+        'To add teleportation',
+        'To make the graph undirected',
+      ],
+      answer: 1,
+      explain: 'Repeated multiplication by the adjacency matrix grows the vectors; L2-normalizing each round keeps them bounded and convergent in direction.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'HITS gives each node <strong>two scores</strong>: a hub score (who it points to) and an authority score (who points to it).',
+    'The scores <strong>reinforce</strong>: good hubs point to good authorities, good authorities are pointed to by good hubs.',
+    'Compute by <strong>alternating</strong> a = Aᵀh and h = Aa, with an L2-normalize each round to stay stable.',
+    'Mathematically the scores are the dominant eigenvectors of <strong>AᵀA and AAᵀ</strong> — the SVD of the link matrix.',
+    'HITS is <strong>query-focused and spam-prone</strong> (no damping), which is why PageRank scaled to the whole web instead.',
+  ]}
+/>
+
+Next up: **Community Detection with Louvain** — stop ranking individual nodes and start finding the dense
+*groups* they form, by greedily maximizing a quantity called modularity.

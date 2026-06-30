@@ -1,0 +1,257 @@
+---
+title: Dijkstra's Algorithm
+track: dsa-graphs
+summary: "Dijkstra finds shortest paths from one source on non-negative weighted graphs: repeatedly finalise the closest unvisited vertex, then relax its edges."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-graphs/mst
+leadsTo:
+  - dsa-graphs/bellman-ford-floyd
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GphDijkstra from '../../../components/demos/GphDijkstra.tsx';
+
+## The hook: the satnav that always knows the fastest road
+
+You type a destination into your phone and a route appears in a heartbeat — the *fastest* one, not just *a* route. Behind that magic is a road map where every road carries a cost in minutes, and an algorithm that explores outward from where you are, always reaching for the nearest place it has not yet pinned down. Breadth-First Search could only count *hops*, treating every road as equal. But roads are not equal: a short side street and a long motorway are different costs. Dijkstra's algorithm is BFS upgraded to respect those weights, and it is the quiet engine inside satnav, internet routing, and a thousand other "cheapest way there" problems.
+
+<Callout type="intuition" title="The one-sentence idea">
+Keep a tentative distance for every vertex, repeatedly **finalise the unvisited vertex with the smallest tentative distance**, and **relax** its edges — because with non-negative weights, the closest unfinished vertex can never be reached more cheaply later.
+</Callout>
+
+## Intuition
+
+You already met **BFS**, which finds shortest paths when every edge counts as 1: a plain queue visits vertices in order of *hop count*. Dijkstra answers the harder question — shortest paths when edges have **weights** (distance, time, money) — and it does so with one elegant upgrade: swap the plain queue for a **min-priority-queue** keyed on distance.
+
+The algorithm tracks three things from a chosen **source**:
+
+- `dist[v]` — the best distance to `v` found *so far* (starts at $0$ for the source, $\infty$ for everyone else);
+- `parent[v]` — the vertex we arrived from on that best path (so we can rebuild the route);
+- a set of **finalised** (visited) vertices whose distance is now locked in.
+
+Each round, Dijkstra pops the unvisited vertex `u` with the smallest `dist`. Here is the key insight: **once popped, `u`'s distance is final.** Why? Because all edge weights are non-negative, any *other* route to `u` would have to pass through some still-unvisited vertex that is already at least as far away — so it cannot beat the distance we already have. With `u` locked in, we **relax** each of its edges: for a neighbour `v` with edge weight `w`, if going through `u` is cheaper, that is if $dist[u] + w \lt dist[v]$, we lower `dist[v]` and set `parent[v] = u`.
+
+It helps to contrast Dijkstra with two cousins:
+
+- **BFS** optimises *number of edges* on an unweighted graph; Dijkstra optimises *total weight*.
+- **Minimum Spanning Tree** (Prim/Kruskal) optimises the *total weight of a tree* connecting everything. Dijkstra optimises *path cost from a single source*. Same greedy flavour, different goal: an MST edge is chosen because it is the cheapest *connection*, a Dijkstra edge because it extends the cheapest *path from the source*.
+
+<Callout type="why">
+The "closest unfinished vertex is safe to finalise" argument only holds when weights are non-negative. A single **negative** edge can make a vertex you already finalised improvable later — which is exactly why Dijkstra breaks on negative weights and we will need Bellman-Ford next.
+</Callout>
+
+## Play with it
+
+Type a weighted edge list, pick a source, and step through. Watch each node carry a tentative `d=` label (starting at $\infty$), the **priority queue** shown as sorted `node:dist` chips, and the popped node turn sky-blue then emerald as it is finalised. The emerald edges grow into the **shortest-path tree**.
+
+<GphDijkstra client:visible />
+
+<Callout type="tip">
+Step slowly through the first few pops and read the caption. Notice that a vertex can have its `d=` label *lowered more than once* before it is finally popped — every improvement pushes a fresh, smaller entry into the queue, and the old, larger entry is simply skipped when it surfaces.
+</Callout>
+
+## How it works
+
+Take the graph `A-B:4, A-C:2, B-C:1, B-D:5, C-D:8, C-E:10, D-E:2` from source `A`. Dijkstra pops vertices in increasing finalised distance:
+
+```
+start:  dist = {A:0, B:∞, C:∞, D:∞, E:∞}    PQ = [A:0]
+
+pop A (d=0): relax B 0+4 → 4, C 0+2 → 2      PQ = [C:2, B:4]
+pop C (d=2): relax B 2+1=3 < 4 → 3,          PQ = [B:3, B:4(stale), D:10, E:12]
+             D 2+8 → 10, E 2+10 → 12
+pop B (d=3): relax D 3+5=8 < 10 → 8          PQ = [B:4(stale), D:8, D:10(stale), E:12]
+pop D (d=8): relax E 8+2=10 < 12 → 10        PQ = [D:10(stale), E:10, E:12(stale)]
+pop E (d=10): neighbours finalised, done
+
+final dist = {A:0, B:3, C:2, D:8, E:10}
+```
+
+The stale entries (a vertex sitting in the queue at an old, larger distance) are harmless: when one is popped we see the vertex is already finalised and skip it. Here is the same algorithm as runnable JavaScript with a simple "scan for the minimum" queue:
+
+<CodeRunner
+  client:visible
+  code={`// Dijkstra with a tiny array-based "pop the smallest" priority queue.
+function dijkstra(graph, source) {
+  const dist = {};
+  for (const v in graph) dist[v] = Infinity;
+  dist[source] = 0;
+
+  const pq = [{ node: source, d: 0 }];
+  const visited = {};
+
+  while (pq.length) {
+    // find and remove the queue entry with the smallest distance
+    let best = 0;
+    for (let i = 1; i < pq.length; i++) if (pq[i].d < pq[best].d) best = i;
+    const cur = pq.splice(best, 1)[0];
+
+    if (visited[cur.node]) continue;   // skip a stale entry
+    visited[cur.node] = true;          // cur.node is now final
+
+    for (const edge of graph[cur.node]) {
+      const nd = dist[cur.node] + edge.w;   // relax edge cur.node -> edge.v
+      if (nd < dist[edge.v]) {
+        dist[edge.v] = nd;
+        pq.push({ node: edge.v, d: nd });
+      }
+    }
+  }
+  return dist;
+}
+
+// undirected weighted graph (A-B:4, A-C:2, B-C:1, B-D:5, C-D:8, C-E:10, D-E:2)
+const graph = {
+  A: [{ v: 'B', w: 4 }, { v: 'C', w: 2 }],
+  B: [{ v: 'A', w: 4 }, { v: 'C', w: 1 }, { v: 'D', w: 5 }],
+  C: [{ v: 'A', w: 2 }, { v: 'B', w: 1 }, { v: 'D', w: 8 }, { v: 'E', w: 10 }],
+  D: [{ v: 'B', w: 5 }, { v: 'C', w: 8 }, { v: 'E', w: 2 }],
+  E: [{ v: 'C', w: 10 }, { v: 'D', w: 2 }],
+};`}
+  tests={[
+    { expr: "JSON.stringify(dijkstra(graph, 'A'))", label: 'distances from A' },
+  ]}
+/>
+
+You should get `{"A":0,"B":3,"C":2,"D":8,"E":10}` — note `D` is `8` via `A→C→B→D` (2+1+5), beating the direct `C→D` of weight 8 plus the longer prefix.
+
+## The real implementation
+
+The course file uses a proper **binary-heap** min-priority-queue, so each pop is $O(\log V)$ instead of a full scan. The structure is otherwise identical: pop the closest, skip stale entries, finalise, relax.
+
+```ts
+// /dsa/12-graphs/dijkstra.ts  (uses a binary-heap MinPriorityQueue)
+interface WeightedEdge<T> { vertex: T; weight: number; }
+
+function dijkstra<T>(graph: Map<T, WeightedEdge<T>[]>, source: T) {
+    const distances = new Map<T, number>();
+    const parents = new Map<T, T | null>();
+    const visited = new Set<T>();
+    const pq = new MinPriorityQueue<T>();
+
+    for (const v of graph.keys()) { distances.set(v, Infinity); parents.set(v, null); }
+    distances.set(source, 0);
+    pq.enqueue(source, 0);
+
+    while (!pq.isEmpty()) {
+        const { item: u, priority: d } = pq.dequeue()!;
+        if (visited.has(u)) continue;          // skip stale heap entries
+        visited.add(u);                         // u's distance is now final
+        if (d > distances.get(u)!) continue;
+        for (const { vertex: v, weight } of graph.get(u) || []) {
+            if (visited.has(v)) continue;
+            const nd = distances.get(u)! + weight;   // relax edge u → v
+            if (nd < distances.get(v)!) {
+                distances.set(v, nd);
+                parents.set(v, u);
+                pq.enqueue(v, nd);
+            }
+        }
+    }
+    return { distances, parents };
+}
+```
+
+To rebuild the actual route to some target `t`, walk `parents` backwards from `t` to the source and reverse. Run the full file: `npx tsx 12-graphs/dijkstra.ts`.
+
+## Complexity
+
+Let $V$ be the number of vertices and $E$ the number of edges. Every vertex is enqueued and dequeued, and every edge is relaxed once; the cost is dominated by the priority-queue operations:
+
+$$
+\text{binary heap: } O\big((V + E)\log V\big), \qquad \text{simple array scan: } O(V^2).
+$$
+
+Counter-intuitively the naive $O(V^2)$ version can *win* on **dense** graphs (where $E$ approaches $V^2$), because it avoids the $\log V$ heap overhead. Space is $O(V)$ for the distance, parent, and visited bookkeeping (plus $O(V)$ for the heap).
+
+| Algorithm | Graph it handles | Time | Negative edges? |
+|-----------|------------------|------|-----------------|
+| BFS | unweighted | $O(V + E)$ | n/a (no weights) |
+| Dijkstra (heap) | non-negative weights | $O((V + E)\log V)$ | no |
+| Bellman-Ford | any weights | $O(V \cdot E)$ | yes (detects negative cycles) |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Car navigation" icon="🚗">
+A satnav models the road network as a weighted graph: junctions are vertices, roads are edges weighted by drive time. Dijkstra from your current junction finalises nearby junctions first and fans outward, so the moment it finalises your destination it already holds the fastest route — which it rebuilds by following parent pointers back to you.
+</ExampleCard>
+
+<ExampleCard domain="Internet routing" icon="🌐">
+Link-state protocols such as OSPF give every network link a numeric cost. Each router runs Dijkstra over its map of the whole area to compute the least-cost path to every other router, then forwards each packet onto the first hop of that shortest path. Recompute when a link changes, and traffic re-routes automatically.
+</ExampleCard>
+
+<ExampleCard domain="Flight booking" icon="✈️">
+Searching for the cheapest multi-leg itinerary is a shortest-path problem where vertices are airports, edges are flights, and weights are fares. Dijkstra from your origin finds the lowest total fare to your destination — possibly via two cheap connecting legs that beat a single pricey direct flight, exactly like `A→C→B→D` beat the direct edge above.
+</ExampleCard>
+
+<ExampleCard domain="Telecom call routing" icon="📞">
+A phone carrier routing a call across its network picks the least-cost path through switching centres, where each trunk between centres carries a per-minute cost. Dijkstra finds the cheapest route to connect the call, and because tariffs are never negative the greedy "closest first" rule is exactly what is needed.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Running Dijkstra with negative weights.** A negative edge can make an already-finalised vertex improvable later, silently producing wrong distances. If any weight can be negative, reach for Bellman-Ford instead.
+- **Forgetting the stale-entry skip.** Because we push a *new* entry on every improvement rather than decreasing a key in place, the same vertex appears in the queue several times. Skip it (via the `visited` check) when you pop one already finalised, or you will relax from outdated distances.
+- **Updating `dist` but not pushing to the queue.** Every time you lower `dist[v]` you must enqueue the new `(v, dist[v])`, otherwise the improvement never gets a chance to be popped and propagated.
+- **Confusing Dijkstra with MST.** Both are greedy, but Prim grows a tree by cheapest *connecting edge* while Dijkstra grows paths by cheapest *distance from the source*. They generally produce different trees.
+- **Interview cue:** "shortest / cheapest / fastest path, non-negative weights, single source" is the textbook Dijkstra trigger. If it adds "edges may be negative", switch algorithms.
+
+## Practice
+
+1. **Easy:** From source `A` on `A-B:1, B-C:1, A-C:4`, what is `dist[C]`, and through which vertex does the best path go?
+2. **Easy:** Why does giving every edge weight `1` make Dijkstra produce the same distances as BFS?
+3. **Medium:** Modify the implementation to also return `parents`, then write a `path(parents, target)` helper that reconstructs the route from the source.
+4. **Medium:** On a graph with one edge of weight `-2`, hand-trace Dijkstra and find a case where it reports a distance larger than the true shortest path.
+5. **Hard:** Replace the array-scan queue with a binary heap and argue why the total running time becomes $O((V + E)\log V)$.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why is a vertex’s distance final the moment Dijkstra pops it from the priority queue?',
+      options: [
+        'Because the graph is acyclic',
+        'Because all edge weights are non-negative, so no later route through a farther vertex can be cheaper',
+        'Because the source was chosen correctly',
+        'Because the priority queue is sorted alphabetically',
+      ],
+      answer: 1,
+      explain: 'With non-negative weights, any alternative route must pass through a still-unvisited vertex that is at least as far, so it cannot beat the already-found distance.',
+    },
+    {
+      q: 'On the graph A-B:4, A-C:2, B-C:1, B-D:5 from source A, what is dist[B]?',
+      options: ['4', '3', '2', '5'],
+      answer: 1,
+      explain: 'A→C costs 2, then C→B costs 1, giving 3 — cheaper than the direct edge A→B of weight 4.',
+    },
+    {
+      q: 'Which change to a graph breaks Dijkstra’s correctness guarantee?',
+      options: [
+        'Adding more vertices',
+        'Making the graph undirected',
+        'Introducing a negative-weight edge',
+        'Doubling every weight',
+      ],
+      answer: 2,
+      explain: 'A negative edge can improve an already-finalised vertex later, violating the "closest popped vertex is final" invariant. Bellman-Ford handles that case.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Dijkstra computes <strong>single-source shortest paths</strong> on graphs with <strong>non-negative</strong> weights.',
+    'Each round it <strong>finalises the closest unvisited vertex</strong> from a min-priority-queue, then <strong>relaxes</strong> its edges.',
+    'Relaxing edge u→v means: if <strong>dist[u] + w &lt; dist[v]</strong>, lower dist[v] and set parent[v] = u.',
+    'With a binary heap it runs in <strong>O((V+E) log V)</strong>; a simple array scan gives O(V²), which can win on dense graphs.',
+    'It <strong>fails on negative edges</strong>, because a finalised vertex could later be improved — the motivation for Bellman-Ford.',
+  ]}
+/>
+
+Next up: **Bellman-Ford & Floyd-Warshall** — what to do when edges can go negative, and how to get shortest paths between *every* pair of vertices at once.

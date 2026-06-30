@@ -1,0 +1,228 @@
+---
+title: Binary Search
+summary: "Halve the search space every step: on sorted data, one comparison eliminates half the remaining candidates, giving O(log n)."
+track: dsa-searching
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - dsa-searching/linear-search
+leadsTo:
+  - dsa-searching/binary-search-variations
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SearchBinaryNarrow from '../../../components/demos/SearchBinaryNarrow.tsx';
+
+## The hook: the number-guessing game you always win
+
+A friend thinks of a number between 1 and 1000 and only tells you "higher" or "lower". Guess randomly
+and you could be there all day. Guess **500** first, and whatever they say, half the range is gone.
+Guess the middle of what remains, and half of *that* vanishes. In at most ten guesses you have pinned
+any number out of a thousand. That halving instinct is binary search — and it is the single most
+reused idea in all of algorithms.
+
+<Callout type="intuition" title="The one-sentence idea">
+On sorted data, compare the target to the middle element; since everything left of it is smaller and
+everything right is larger, one look lets you throw away an entire half.
+</Callout>
+
+## Intuition
+
+Linear search had no leverage because unsorted data hides no information in its arrangement. **Sorted**
+data is different: the position of the middle element tells you something about *every* other element
+at once. If the middle is too small, the target — if it exists — can only be to the right, so the whole
+left half (and the middle) is eliminated in a single comparison. If the middle is too big, the right
+half goes.
+
+You keep a window `[lo, hi]` of still-possible positions. Each step you probe its midpoint and shrink
+the window to one side. Because the window halves every time, it collapses from `n` to `1` in about
+$\log_2 n$ steps. For a million elements that is twenty comparisons instead of a million — the gap that
+makes binary search feel like magic. The one non-negotiable precondition: **the array must be sorted**,
+because the entire argument rests on "left is smaller, right is larger."
+
+## Play with it
+
+Enter values (they auto-sort) and a target, then step through. The indigo cell is `mid`; the sky cells
+mark `lo` and `hi`. Each step, the half that cannot contain the target greys out and the window halves.
+
+<SearchBinaryNarrow client:visible />
+
+<Callout type="tip">
+Count the steps: a nine-element array is always solved in at most four probes, and doubling the array
+to eighteen adds just *one* more. That "+1 per doubling" is exactly what $\log_2 n$ means.
+</Callout>
+
+## How it works
+
+Search for `7` in the sorted array `[1, 3, 5, 7, 9, 11, 13, 15, 17]` (indices 0–8):
+
+```
+lo=0 hi=8  mid=4  arr[4]=9  > 7  → drop right half, hi = 3
+lo=0 hi=3  mid=1  arr[1]=3  < 7  → drop left half,  lo = 2
+lo=2 hi=3  mid=2  arr[2]=5  < 7  → drop left half,  lo = 3
+lo=3 hi=3  mid=3  arr[3]=7  = 7  → FOUND at index 3
+```
+
+Four probes on nine elements. Notice `mid` is computed as `lo + (hi - lo) / 2`, never `(lo + hi) / 2` —
+more on that overflow trap below.
+
+<CodeRunner
+  client:visible
+  code={`// Classic iterative binary search on a SORTED array.
+function binarySearch(arr, target) {
+  let lo = 0, hi = arr.length - 1;
+  while (lo <= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);  // overflow-safe midpoint
+    if (arr[mid] === target) return mid;
+    else if (arr[mid] < target) lo = mid + 1;    // go right
+    else hi = mid - 1;                            // go left
+  }
+  return -1;
+}`}
+  tests={[
+    { expr: 'binarySearch([1,3,5,7,9,11,13,15,17], 7)', label: 'index of 7' },
+    { expr: 'binarySearch([1,3,5,7,9,11,13,15,17], 17)', label: 'index of 17 (last)' },
+    { expr: 'binarySearch([1,3,5,7,9,11,13,15,17], 8)', label: 'missing 8 → -1' },
+    { expr: 'binarySearch([], 5)', label: 'empty array → -1' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — note the comment about overflow, which is the bug interviewers love:
+
+```ts
+// /dsa/03-search/binary-search.ts
+function binarySearch<T>(arr: T[], target: T): number {
+    let left = 0;
+    let right = arr.length - 1;
+
+    while (left <= right) {
+        // Avoid integer overflow (important in some languages)
+        const mid = left + Math.floor((right - left) / 2);
+
+        if (arr[mid] === target) {
+            return mid;
+        } else if (arr[mid] < target) {
+            left = mid + 1;
+        } else {
+            right = mid - 1;
+        }
+    }
+
+    return -1;
+}
+```
+
+Run the full file: `npx tsx 03-search/binary-search.ts`.
+
+## Complexity
+
+Each comparison discards half the candidates, so the number of steps is the number of times you can
+halve `n` before reaching 1:
+
+$$
+T(n) = O(\log_2 n), \qquad S(n) = O(1).
+$$
+
+| Approach | Time | Needs sorting? |
+|----------|------|----------------|
+| Linear search | $O(n)$ | No |
+| **Binary search** | $O(\log n)$ | Yes |
+| Sort once, then many binary searches | $O(n \log n + q \log n)$ | Builds it |
+
+If you search a dataset many times, the one-time $O(n \log n)$ to sort is amortized away and every
+query is logarithmic — the reason sorted indexes are everywhere.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Version control" icon="🐛">
+<code>git bisect</code> finds the commit that introduced a bug by binary-searching your history: test the
+middle commit, learn "good" or "bad", and halve the range of suspects. Thousands of commits collapse to
+a dozen checkouts.
+</ExampleCard>
+
+<ExampleCard domain="Databases" icon="🗄️">
+A B-tree index is binary search generalized to disk: each node lets the engine discard most of the table
+in one read, turning a million-row lookup into a handful of page fetches instead of a full scan.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing / QA" icon="🏭">
+To find which machine in a sorted production line first exceeds a tolerance, an engineer halves the line
+repeatedly — checking the middle station and keeping the side where the fault must lie — instead of
+inspecting every unit.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Integer overflow in `mid`.** `(lo + hi) / 2` can overflow fixed-width integers when both are large.
+  Use `lo + (hi - lo) / 2`. JavaScript numbers won't overflow, but interviewers expect the safe form.
+- **Off-by-one in the boundary update.** After comparing `mid`, you must move *past* it: `lo = mid + 1`
+  or `hi = mid - 1`. Writing `lo = mid` (without the `+1`) can loop forever when `lo == mid`.
+- **Wrong loop condition.** The exact-match template uses `while (lo <= hi)` with inclusive `hi`. Mixing
+  it with an exclusive `hi` (`while lo < hi`) silently skips the last element.
+- **Forgetting the precondition.** Binary search on unsorted data returns garbage. If you're not sure the
+  input is sorted, you must sort first — or use linear search.
+- **Interview cue:** any phrase like "sorted array", "monotonic", or "minimize/maximize a value subject to
+  a feasibility check" should make you think binary search, even when no array is in sight.
+
+## Practice
+
+1. **Easy:** Trace binary search for `13` in `[1, 3, 5, 7, 9, 11, 13, 15, 17]`. How many probes?
+2. **Easy:** What does `binarySearch` return for a target smaller than every element? Walk the loop.
+3. **Medium:** Rewrite binary search recursively, passing `lo` and `hi` as parameters.
+4. **Medium:** Implement `searchInsertPosition` — return where the target *would* go to keep the array
+   sorted (the answer is `lo` when the loop ends).
+5. **Hard:** Given a sorted array rotated at an unknown pivot (e.g. `[7, 9, 1, 3, 5]`), find a target in
+   O(log n) by deciding which half is sorted at each step.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Roughly how many comparisons does binary search need for 1,000,000 sorted elements?',
+      options: ['About 20', 'About 1000', 'About 500000', 'About 1000000'],
+      answer: 0,
+      explain: 'log2(1,000,000) ≈ 20, so at most about twenty probes — versus up to a million for linear search.',
+    },
+    {
+      q: 'Why is mid computed as lo + (hi - lo) / 2 rather than (lo + hi) / 2?',
+      options: [
+        'It is faster',
+        'To avoid integer overflow when lo and hi are large',
+        'It returns a different index',
+        'To handle empty arrays',
+      ],
+      answer: 1,
+      explain: 'lo + hi can overflow a fixed-width integer; lo + (hi - lo)/2 computes the same midpoint without that risk.',
+    },
+    {
+      q: 'What is the essential precondition for binary search to be correct?',
+      options: [
+        'The array has no duplicates',
+        'The array is sorted',
+        'The array length is a power of two',
+        'The target is present',
+      ],
+      answer: 1,
+      explain: 'The whole "discard a half" argument relies on the array being sorted; otherwise the comparison tells you nothing.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Binary search keeps a window <strong>[lo, hi]</strong> and probes its midpoint, halving the window each step.',
+    'It runs in <strong>O(log n)</strong> time and O(1) space — "+1 comparison per doubling" of the input.',
+    'The array <strong>must be sorted</strong>; the method is meaningless on unordered data.',
+    'Use <strong>lo + (hi - lo) / 2</strong> and move past mid (<code>mid ± 1</code>) to dodge overflow and infinite loops.',
+    'The pattern generalizes far beyond arrays: <strong>git bisect, B-tree indexes, and "search on the answer"</strong> all halve a space.',
+  ]}
+/>
+
+Next up: **Binary Search Variations** — the same halving idea retuned to find the *first* or *last*
+occurrence of a value, or the boundary where a condition flips.

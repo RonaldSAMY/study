@@ -1,0 +1,256 @@
+---
+title: Ternary Search
+summary: "Find the peak of a unimodal function by splitting the range into thirds and discarding the outer third that cannot hold the maximum."
+track: dsa-searching
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - dsa-searching/jump-exponential-search
+leadsTo:
+  - dsa-graphs/graph-representations
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SearchTernaryUnimodal from '../../../components/demos/SearchTernaryUnimodal.tsx';
+
+## The hook: aiming for the best, not the present
+
+Throw a ball and its height rises, reaches a single highest point, then falls. Suppose you can *measure*
+the height at any moment but want the **time of maximum height**. There's no "is it sorted" question here —
+the values go up *and* down. Binary search is helpless because the target isn't a value you can compare
+against; it's the *crest* itself. **Ternary search** finds that crest by sampling two interior points and
+throwing away the third of the range that provably can't contain it.
+
+<Callout type="intuition" title="The one-sentence idea">
+On a function that rises then falls, probe two points that cut the range into thirds; whichever side is
+lower can't hold the peak, so discard its outer third and repeat.
+</Callout>
+
+## Intuition
+
+A function is **unimodal** on `[lo, hi]` if it strictly increases up to a single peak and then strictly
+decreases (or the mirror image, for a single valley). That shape is the only precondition — and it's a
+different precondition from "sorted".
+
+Pick two interior points `m1` and `m2` with `lo < m1 < m2 < hi`, dividing the range into thirds. Compare
+`f(m1)` and `f(m2)`:
+
+- If `f(m1) < f(m2)`, the function is still climbing as we move right at `m1`, so the peak lies to the
+  **right** of `m1`. The leftmost third `[lo, m1]` cannot contain it — drop it by setting `lo = m1`.
+- If `f(m1) >= f(m2)`, by symmetric reasoning the peak is **left** of `m2`, so drop the right third with
+  `hi = m2`.
+
+Either way the surviving range shrinks to **two-thirds** of its size. After `k` steps the range is
+`(2/3)^k` of the original, so it takes $O(\log(1/\epsilon))$ steps to pin the peak to precision `ε`.
+Crucially, ternary search compares two *interior* samples, never the endpoints — so it works even where
+the curve has corners and no derivative, where calculus-based methods stumble.
+
+## Play with it
+
+Drag the slider to move the hidden peak, then step through. Two dashed probes `m1` and `m2` split the
+live window into thirds; each step greys out the outer third that loses the `f(m1)` vs `f(m2)` comparison.
+Watch the window close in on the peak.
+
+<SearchTernaryUnimodal client:visible />
+
+<Callout type="tip">
+Notice the demo never reads the endpoints — only the two interior probes. That's why ternary search
+handles a sharp, non-smooth peak just as happily as a rounded one: it needs *order around the peak*, not
+a derivative.
+</Callout>
+
+## How it works
+
+Maximize a hump with its peak near `x = 64` on the range `[0, 100]`:
+
+```
+lo=0    hi=100  m1=33.3 m2=66.7  f(m1) < f(m2) → peak is right, lo = m1 = 33.3
+lo=33.3 hi=100  m1=55.6 m2=77.8  f(m1) < f(m2) → peak is right, lo = m1 = 55.6
+lo=55.6 hi=100  m1=70.4 m2=85.2  f(m1) > f(m2) → peak is left,  hi = m2 = 85.2
+lo=55.6 hi=85.2 ...                → window keeps shrinking toward 64
+```
+
+Each line keeps two-thirds of the previous window. A dozen iterations squeezes a width-100 interval down
+to a fraction of a unit — the peak emerges without ever solving for it directly.
+
+<CodeRunner
+  client:visible
+  code={`// Continuous ternary search: return x in [lo, hi] maximizing f.
+function ternaryMax(f, lo, hi, eps = 1e-7) {
+  while (hi - lo > eps) {
+    const m1 = lo + (hi - lo) / 3;
+    const m2 = hi - (hi - lo) / 3;
+    if (f(m1) < f(m2)) lo = m1;   // peak is to the right of m1
+    else hi = m2;                 // peak is to the left of m2
+  }
+  return (lo + hi) / 2;
+}
+
+// Integer version: index of the peak in a unimodal array.
+function peakIndex(arr) {
+  let lo = 0, hi = arr.length - 1;
+  while (hi - lo > 2) {
+    const m1 = lo + Math.floor((hi - lo) / 3);
+    const m2 = hi - Math.floor((hi - lo) / 3);
+    if (arr[m1] < arr[m2]) lo = m1;
+    else hi = m2;
+  }
+  let best = lo;
+  for (let i = lo + 1; i <= hi; i++) if (arr[i] > arr[best]) best = i;
+  return best;
+}`}
+  tests={[
+    { expr: 'Math.round(ternaryMax(x => -(x - 64) * (x - 64), 0, 100))', label: 'x* of downward parabola' },
+    { expr: 'peakIndex([1, 3, 7, 12, 9, 4, 2])', label: 'peak index of mountain array' },
+    { expr: 'peakIndex([2, 5, 8, 6])', label: 'peak index, short array' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the continuous maximizer and its integer cousin that scans the last few
+candidates once the window is tiny:
+
+```ts
+// /dsa/03-search/ternary-search.ts
+function ternarySearchMax(
+    f: (x: number) => number,
+    left: number,
+    right: number,
+    epsilon: number = 1e-9
+): number {
+    while (right - left > epsilon) {
+        const mid1 = left + (right - left) / 3;
+        const mid2 = right - (right - left) / 3;
+
+        if (f(mid1) < f(mid2)) {
+            left = mid1;          // peak is right of mid1
+        } else {
+            right = mid2;         // peak is left of mid2
+        }
+    }
+    return (left + right) / 2;
+}
+
+function ternarySearchMaxInt(f: (x: number) => number, left: number, right: number): number {
+    while (right - left > 2) {
+        const mid1 = left + Math.floor((right - left) / 3);
+        const mid2 = right - Math.floor((right - left) / 3);
+        if (f(mid1) < f(mid2)) left = mid1;
+        else right = mid2;
+    }
+    let maxIdx = left;            // few candidates remain — check them directly
+    for (let i = left + 1; i <= right; i++) if (f(i) > f(maxIdx)) maxIdx = i;
+    return maxIdx;
+}
+```
+
+Run the full file: `npx tsx 03-search/ternary-search.ts`.
+
+## Complexity
+
+The window shrinks by a factor of `2/3` each step, so reaching precision `ε` costs:
+
+$$
+T = O\!\left(\log_{3/2}\frac{1}{\epsilon}\right) = O(\log n), \qquad S = O(1).
+$$
+
+| Method | Per step | Range kept | Needs |
+|--------|----------|------------|-------|
+| Binary search | 1 evaluation | $1/2$ | sorted / monotone predicate |
+| **Ternary search** | 2 evaluations | $2/3$ | unimodal function |
+| Golden-section search | 1 new evaluation | $\approx 0.618$ | unimodal function |
+
+Ternary search makes **two** function evaluations per step and keeps a larger fraction, so when `f` is
+costly the golden-section variant — which reuses one probe and shrinks faster — is the practical upgrade.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Machine learning" icon="🤖">
+Validation error often falls then rises as a hyperparameter (like learning rate or tree depth) grows —
+a unimodal curve. Ternary search hunts the sweet-spot value with a handful of training runs instead of a
+full grid sweep.
+</ExampleCard>
+
+<ExampleCard domain="Antennas & signals" icon="📡">
+Signal strength peaks at one antenna angle and falls off either side. A self-aligning dish samples two
+nearby angles, keeps the better-trending side, and converges on the strongest direction — ternary search
+in hardware.
+</ExampleCard>
+
+<ExampleCard domain="Operations & pricing" icon="💹">
+Profit as a function of price (or production quantity) typically rises, peaks, then falls as demand
+drops. Ternary search locates the profit-maximizing price by comparing two trial prices and discarding
+the losing third of the range.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The function must be unimodal.** On data with two humps, ternary search can lock onto the wrong peak.
+  Confirm the single-peak shape before trusting it.
+- **Strict vs flat comparison.** A flat plateau (`f(m1) == f(m2)` over a region) breaks the strict-unimodal
+  assumption; either side may be discarded wrongly. Insist on *strict* monotonicity on each side of the peak.
+- **Don't reach for it on sorted arrays.** Finding a known value in sorted data is binary search's job —
+  ternary search is for optimizing a function, not matching a target.
+- **Integer termination.** With integer domains, stop when `right - left <= 2` and check the last two or
+  three points directly; looping further can stall or oscillate.
+- **Interview cue:** "maximize / minimize a unimodal function", "find the peak of a mountain array", or
+  "the metric goes up then down" all point to ternary (or golden-section) search.
+
+## Practice
+
+1. **Easy:** Find the peak index of the mountain array `[1, 4, 9, 7, 2]` by hand with ternary steps.
+2. **Easy:** Explain why ternary search would fail on `[1, 5, 2, 8, 3]` (hint: count the humps).
+3. **Medium:** Use `ternarySearchMin` to find the closest point on a line segment to a given point by
+   minimizing distance over the parameter `t ∈ [0, 1]`.
+4. **Medium:** Maximize `-2x² + 12x + 5` on `[0, 10]` with the continuous version; verify against the
+   calculus answer `x = 3`.
+5. **Hard:** Implement golden-section search and compare its function-evaluation count to ternary search
+   for the same precision.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What property must a function have for ternary search to find its maximum correctly?',
+      options: ['Sorted values', 'Unimodal (rises to one peak, then falls)', 'A known derivative', 'Integer inputs only'],
+      answer: 1,
+      explain: 'Ternary search relies on a single peak; on multi-modal functions it can converge to the wrong hump.',
+    },
+    {
+      q: 'If f(m1) < f(m2), which part of the range is discarded?',
+      options: ['The right third [m2, hi]', 'The left third [lo, m1]', 'The middle third', 'Nothing is discarded'],
+      answer: 1,
+      explain: 'f rising from m1 toward m2 means the peak is to the right of m1, so [lo, m1] cannot contain it and is dropped.',
+    },
+    {
+      q: 'Why might golden-section search be preferred when f is expensive to evaluate?',
+      options: [
+        'It needs no function evaluations',
+        'It reuses one probe per step and shrinks the range faster, so fewer evaluations',
+        'It works on unsorted arrays',
+        'It always finds the global maximum of any function',
+      ],
+      answer: 1,
+      explain: 'Ternary search costs two evaluations per step; golden-section reuses a previous probe and contracts more, saving evaluations.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Ternary search optimizes a <strong>unimodal function</strong> — order around a peak, not a sorted array.',
+    'It probes <strong>two interior points</strong> at the thirds and discards the outer third that cannot hold the peak.',
+    'The range shrinks to <strong>two-thirds</strong> each step, giving O(log(1/ε)) iterations.',
+    'It uses no derivatives, so it handles <strong>sharp, non-smooth peaks</strong> that calculus methods miss.',
+    'For costly evaluations, <strong>golden-section search</strong> reuses a probe and converges with fewer calls.',
+  ]}
+/>
+
+You've reached the end of the Searching track — from the humble O(n) scan to halving, boundary hunting,
+block jumps, and peak finding. Next up: **Representing Graphs**, where "search" grows from a line of
+elements into a web of connections, and a whole new family of traversals begins.

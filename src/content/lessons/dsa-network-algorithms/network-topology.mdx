@@ -1,0 +1,249 @@
+---
+title: Network Topology
+track: dsa-network-algorithms
+summary: "Shape decides everything: a network's topology fixes its worst-case latency, its link cost and its fragility — so diameter, density and clustering are the numbers that compare designs."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-network-algorithms/network-reliability
+leadsTo:
+  - dsa-network-algorithms/social-network-analysis
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NetAlgTopologyExplorer from '../../../components/demos/NetAlgTopologyExplorer.tsx';
+
+## The hook: same nodes, wildly different networks
+
+Give a network architect eight servers and they can wire them a dozen ways. A **star** routes
+everything through one hub — cheap to cable, but the hub is a fatal single point of failure. A **mesh**
+connects everyone to everyone — bulletproof and lightning fast, but the cabling cost explodes. A
+**ring** is tidy and cheap, yet a packet may crawl halfway around. Same eight nodes, opposite
+trade-offs. **Topology** is the study of how a network's *shape* dictates its speed, cost and
+resilience — and a handful of numbers let you compare any two designs at a glance.
+
+<Callout type="intuition" title="The one-sentence idea">
+A topology's character is captured by three measurements — **diameter** (worst-case hops),
+**density** (links per possible link) and **clustering** (how tightly neighbourhoods knit) — and they
+trade off against one another.
+</Callout>
+
+## Intuition: the three numbers that describe a shape
+
+- **Diameter** — the *longest* shortest path between any two nodes. It is the worst-case latency the
+  topology can ever impose. A mesh has diameter 1; a line of `n` nodes has diameter `n − 1`.
+- **Average path length** — the typical hop count, the everyday latency rather than the worst case.
+- **Density** — actual edges divided by the `n(n−1)/2` possible edges. High density buys short paths
+  and redundancy but costs links (and, from the last lesson, kills bridges).
+- **Clustering coefficient** — of a node's neighbours, what fraction are also connected to each other?
+  High clustering means tight-knit local groups; it is the fingerprint of social and biological nets.
+
+The famous **small-world** networks (think six degrees of separation) pull off the magic combination:
+**high clustering** like a regular lattice, yet a **tiny diameter** like a random graph — a few
+long-range "shortcut" edges collapse the distances.
+
+## Play with it
+
+Switch between star, ring, line, mesh and tree and watch the BFS wave ripple out from one end of the
+network's longest path. The side panel tracks links, diameter, average path and density so you can
+compare shapes directly. The final frame highlights the **diameter** — the worst-case route.
+
+<NetAlgTopologyExplorer client:visible />
+
+<Callout type="tip">
+Compare <strong>line</strong> and <strong>mesh</strong> at 8 nodes. The line uses just 7 links but has
+diameter 7; the mesh has diameter 1 but needs 28 links. Star and tree sit in between — that spectrum
+*is* the cost-versus-latency trade-off every architect negotiates.
+</Callout>
+
+## How it works
+
+Diameter falls out of all-pairs shortest paths. On an unweighted graph, run a BFS from every node, note
+the farthest distance each reaches (its **eccentricity**), and the maximum eccentricity is the
+diameter:
+
+```
+ring of 6:  every node reaches its antipode in 3 hops  → diameter 3
+star of 6:  any leaf → hub → any leaf is 2 hops         → diameter 2
+line of 6:  the two ends are 5 hops apart               → diameter 5
+```
+
+<CodeRunner
+  client:visible
+  code={`// Diameter, average path and density from BFS — plain JS
+function bfsDist(adj, s) {
+  const dist = { [s]: 0 }; const q = [s];
+  while (q.length) {
+    const u = q.shift();
+    for (const v of adj[u]) if (dist[v] === undefined) { dist[v] = dist[u] + 1; q.push(v); }
+  }
+  return dist;
+}
+function metrics(adj) {
+  const nodes = Object.keys(adj);
+  let diameter = 0, sum = 0, pairs = 0, edges = 0;
+  for (const u of nodes) edges += adj[u].length;
+  edges /= 2;
+  for (const s of nodes) {
+    const d = bfsDist(adj, s);
+    for (const v of nodes) if (v !== s && d[v] !== undefined) { sum += d[v]; pairs++; diameter = Math.max(diameter, d[v]); }
+  }
+  const n = nodes.length;
+  return { diameter, avgPath: +(sum / pairs).toFixed(2), density: +(edges / (n*(n-1)/2)).toFixed(2) };
+}
+
+const ring = { '0':['1','5'], '1':['0','2'], '2':['1','3'], '3':['2','4'], '4':['3','5'], '5':['4','0'] };
+const star = { '0':['1','2','3','4','5'], '1':['0'], '2':['0'], '3':['0'], '4':['0'], '5':['0'] };`}
+  tests={[
+    { expr: 'JSON.stringify(metrics(ring))', label: 'ring of 6' },
+    { expr: 'JSON.stringify(metrics(star))', label: 'star of 6' },
+  ]}
+/>
+
+## The real implementation
+
+The course file computes all-pairs distances with Floyd-Warshall, then reads diameter, radius and
+average path length straight off the matrix:
+
+```ts
+// /dsa/27-network-algorithms/network-topology.ts
+diameter(): number {
+  const dist = this.floydWarshall();           // O(V^3) all-pairs
+  let maxDist = 0;
+  for (let i = 0; i < dist.length; i++)
+    for (let j = 0; j < dist[i].length; j++)
+      if (dist[i][j] !== Infinity) maxDist = Math.max(maxDist, dist[i][j]);
+  return maxDist;
+}
+
+averagePathLength(): number {
+  const dist = this.floydWarshall();
+  let total = 0, count = 0;
+  for (let i = 0; i < dist.length; i++)
+    for (let j = i + 1; j < dist.length; j++)
+      if (dist[i][j] !== Infinity) { total += dist[i][j]; count++; }
+  return count ? total / count : 0;
+}
+```
+
+The same file ships `ClusteringCoefficient` (local and global), `NetworkDensity`,
+`DegreeDistribution` (with a scale-free / power-law test), and a `SmallWorldDetector`.
+Run the full file: `npx tsx 27-network-algorithms/network-topology.ts`.
+
+## Complexity
+
+Floyd-Warshall computes every pairwise distance directly; on sparse graphs, BFS-from-each-node is
+cheaper:
+
+$$
+T_{\text{Floyd}}(V) = O(V^3), \qquad T_{\text{BFS-all}}(V, E) = O\big(V (V + E)\big).
+$$
+
+| Metric | What it tells you | Cost |
+|--------|-------------------|------|
+| Diameter | worst-case latency | $O(V^3)$ or $O(V(V+E))$ |
+| Average path length | typical latency | same |
+| Density | wiring cost / redundancy | $O(V + E)$ |
+| Clustering coefficient | local cliquishness | $O(V \cdot d^2)$ |
+
+<Callout type="why">
+Diameter is a hard *upper bound* on how slow communication can get, no matter how clever your routing
+is. Datacentre designers chase **low-diameter** topologies (fat-trees, hypercubes) precisely so that
+no two machines are ever more than a few hops apart, even with tens of thousands of servers.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Air travel" icon="🛫">
+Airlines run a <strong>hub-and-spoke</strong> (star) topology: few routes to maintain, but every trip
+detours through a hub. Low-cost carriers prefer point-to-point (denser) for shorter total travel.
+</ExampleCard>
+
+<ExampleCard domain="Blockchain" icon="⛓️">
+A peer-to-peer crypto network's <strong>diameter</strong> bounds how long a transaction takes to reach
+every node. Low diameter means faster consensus and fewer orphaned blocks.
+</ExampleCard>
+
+<ExampleCard domain="Neuroscience" icon="🧠">
+The brain is a small-world network: dense local clusters (cortical columns) plus a few long-range
+white-matter shortcuts give high clustering *and* a short diameter — efficient and robust.
+</ExampleCard>
+
+<ExampleCard domain="Electronics" icon="🔌">
+Chip interconnects are chosen by topology: a mesh or torus on the die keeps the diameter low so cores
+exchange cache lines in few hops, trading silicon area for latency.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Diameter ignores disconnected pairs.** If the graph is in pieces, an unbounded distance is not a
+  diameter — report the diameter per component, or say "infinite".
+- **Diameter is worst-case, average path is typical.** A star has diameter 2 but a tiny average path;
+  don't conflate the two when arguing about performance.
+- **Density kills bridges but costs money.** Denser graphs have shorter paths and more redundancy
+  (recall the last lesson) — but each extra link is real cable, ports and power.
+- **Floyd-Warshall is `O(V^3)`.** Fine under ~500 nodes; beyond that, BFS/Dijkstra from each node on a
+  sparse graph wins.
+- **Interview cue:** "longest shortest path", "worst-case latency", or "compare two network designs"
+  points at diameter and the topology metrics — and BFS layers are usually all you need.
+
+## Practice
+
+1. **Easy:** What is the diameter of a complete graph (mesh) on any number of nodes?
+2. **Easy:** Compute the density of a tree on `n` nodes (it has `n − 1` edges).
+3. **Medium:** Write `eccentricity(node)` and use it to derive both the diameter (max) and radius (min).
+4. **Medium:** Compute the local clustering coefficient of a node: edges among its neighbours divided
+   by the number of possible ones.
+5. **Hard:** Detect a small-world network — show clustering far above, but average path length close
+   to, an equivalent random graph.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a network’s diameter measure?',
+      options: [
+        'The number of edges',
+        'The longest shortest path between any two nodes (worst-case hops)',
+        'The average degree',
+        'The number of bridges',
+      ],
+      answer: 1,
+      explain: 'Diameter is the maximum over all node pairs of their shortest-path length — the worst-case latency the shape imposes.',
+    },
+    {
+      q: 'A star network with one hub and 5 leaves has what diameter?',
+      options: ['1', '2', '5', '4'],
+      answer: 1,
+      explain: 'Any leaf reaches any other leaf in exactly two hops: leaf → hub → leaf.',
+    },
+    {
+      q: 'What makes a network "small-world"?',
+      options: [
+        'It has very few nodes',
+        'High clustering like a lattice combined with a short diameter like a random graph',
+        'It is fully connected',
+        'It has no cycles',
+      ],
+      answer: 1,
+      explain: 'Small-world networks keep tight local clustering yet, thanks to a few long-range shortcuts, have surprisingly short average path lengths.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A topology’s shape fixes its <strong>latency, cost and resilience</strong> before a single packet moves.',
+    '<strong>Diameter</strong> is worst-case hops; <strong>average path length</strong> is typical; both come from all-pairs distances.',
+    '<strong>Density</strong> trades wiring cost for short paths and redundancy; <strong>clustering</strong> measures local cliquishness.',
+    'Star, ring, line, mesh and tree span the spectrum from <strong>cheap-but-slow to fast-but-expensive</strong>.',
+    '<strong>Small-world</strong> networks win twice: high clustering and a short diameter via a few shortcut links.',
+  ]}
+/>
+
+Next up: **Social Network Analysis** — the same distance and clustering ideas, now used to find the
+most *influential* people, not the fastest routes.

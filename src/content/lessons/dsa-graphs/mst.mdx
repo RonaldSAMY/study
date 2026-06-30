@@ -1,0 +1,293 @@
+---
+title: Minimum Spanning Trees
+track: dsa-graphs
+summary: "Connect every vertex for the least total cost: Kruskal sorts edges and uses Union-Find to skip the ones that close a cycle."
+difficulty: intermediate
+estMinutes: 17
+prereqs:
+  - dsa-graphs/union-find
+leadsTo:
+  - dsa-graphs/dijkstra
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GphKruskalMst from '../../../components/demos/GphKruskalMst.tsx';
+
+## The hook: wiring up a new town for the least cash
+
+A property developer has staked out seven houses and needs to run electrical cable so every house has
+power. Cable costs money by the metre, and the survey lists the price of trenching between each pair of
+houses. You do not need a direct line from every house to every other house — you only need the whole
+estate to be **connected**, so current can reach all of it. Lay too much cable and you burn the budget;
+lay too little and a house goes dark. The cheapest set of trenches that still links everyone is a
+**minimum spanning tree**, and finding it is one of the most satisfying greedy algorithms in computing.
+
+<Callout type="intuition" title="The one-sentence idea">
+A minimum spanning tree connects all $V$ vertices of a weighted undirected graph using exactly $V-1$
+edges, no cycles, and the smallest possible total weight.
+</Callout>
+
+## Intuition
+
+Take a connected, weighted, **undirected** graph. A **spanning tree** is any subset of edges that touches
+every vertex while staying a tree: connected and acyclic. A tree on $V$ vertices always has exactly $V-1$
+edges, so a spanning tree is the leanest possible way to keep the graph in one piece. A **minimum**
+spanning tree is the spanning tree whose edge weights add up to the least total.
+
+Why is greed safe here? Because of the **cut property**: for any way of splitting the vertices into two
+groups, the cheapest edge crossing the split must belong to some minimum spanning tree. That single fact
+is what licenses us to keep grabbing cheap edges without fear of regret.
+
+**Kruskal's algorithm** turns that idea into a recipe driven by edges:
+
+1. Sort every edge by weight, cheapest first.
+2. Walk the sorted list. For each edge, ask: do its two endpoints already sit in the same connected
+   component?
+3. If they sit in **different** components, the edge joins two pieces that were not yet linked — keep it,
+   and merge the two components.
+4. If they sit in the **same** component, they are already connected, so this edge would close a cycle —
+   skip it.
+5. Stop once you have collected $V-1$ edges. The tree is complete.
+
+The "same component?" question is exactly what **Union-Find** answers in near-constant time, which is why
+the previous lesson set it up. `find` tells you which component a vertex is in; `union` merges two
+components and reports whether they really were distinct.
+
+There is a second classic, **Prim's algorithm**, which is *vertex*-based: start from one vertex and
+repeatedly pull in the cheapest edge that reaches a new vertex, using a priority queue to find it. Both
+find a minimum spanning tree; they just grow it differently. Kruskal shines on **sparse** graphs (it only
+sorts the edge list), while Prim tends to win on **dense** graphs.
+
+## Play with it
+
+Type a weighted edge list, press **Play**, and watch Kruskal walk the sorted edges. Each step either
+turns an edge **emerald** (kept, it joined two components) or **rose dashed** (skipped, its endpoints were
+already connected so it would form a cycle). The node colours are the Union-Find components — watch the
+separate colours merge into a single tree.
+
+<GphKruskalMst client:visible />
+
+<Callout type="tip">
+Keep an eye on the "edges in tree" counter. The moment it reaches $V-1$ the algorithm stops, even if
+cheap-looking edges remain in the list — those leftovers would only add cycles.
+</Callout>
+
+## How it works
+
+Here is the cheapest-first walk over the demo's default graph. Each line asks whether the edge's two ends
+are already connected; "skip" means they are, so adding it would make a cycle.
+
+```
+edges sorted by weight:  A-C 2, B-C 3, A-B 4, B-D 5, D-E 7, C-D 8, C-E 10
+
+A-C 2   add    components: {A,C}            total 2
+B-C 3   add    components: {A,B,C}          total 5
+A-B 4   skip   A and B already connected (cycle)
+B-D 5   add    components: {A,B,C,D}        total 10
+D-E 7   add    components: {A,B,C,D,E}      total 17   ← 4 edges = V-1, done
+```
+
+The same logic in plain JavaScript, with a tiny inline Union-Find. Press **Run** to confirm the total.
+
+<CodeRunner
+  client:visible
+  code={`// Kruskal's MST over an edge list of [u, v, weight]
+function kruskal(n, edges) {
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+  const union = (a, b) => {
+    const ra = find(a), rb = find(b);
+    if (ra === rb) return false;        // same component, would form a cycle
+    parent[ra] = rb;                    // merge the two components
+    return true;
+  };
+
+  const sorted = [...edges].sort((a, b) => a[2] - b[2]);  // cheapest first
+  const chosen = [];
+  let total = 0;
+  for (const [u, v, w] of sorted) {
+    if (union(u, v)) {                  // joins two components, keep it
+      chosen.push([u, v, w]);
+      total += w;
+      if (chosen.length === n - 1) break;
+    }
+  }
+  return { total, chosen };
+}
+
+const edges = [[0,1,2],[0,3,6],[1,2,3],[1,3,8],[1,4,5],[2,4,7],[3,4,9]];`}
+  tests={[
+    { expr: 'kruskal(5, edges).total', label: 'total weight' },
+    { expr: 'JSON.stringify(kruskal(5, edges).chosen)', label: 'MST edges' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses the path-compression, union-by-rank `UnionFind` from the previous lesson. The key
+move is that `union` returns `false` when the two endpoints already share a component — so the cycle test
+and the merge happen in a single call.
+
+```ts
+// /dsa/12-graphs/mst.ts  — Kruskal's algorithm
+interface Edge { from: number; to: number; weight: number; }
+
+// Union-Find from the previous lesson (path compression + union by rank).
+// union(a, b) returns false when a and b are already in the same set.
+class UnionFind {
+    private parent: number[];
+    private rank: number[];
+    constructor(n: number) {
+        this.parent = Array.from({ length: n }, (_, i) => i);
+        this.rank = new Array(n).fill(0);
+    }
+    find(x: number): number {
+        if (this.parent[x] !== x) this.parent[x] = this.find(this.parent[x]);  // path compression
+        return this.parent[x];
+    }
+    union(a: number, b: number): boolean {
+        const ra = this.find(a), rb = this.find(b);
+        if (ra === rb) return false;                       // same component → cycle
+        if (this.rank[ra] < this.rank[rb]) this.parent[ra] = rb;
+        else if (this.rank[ra] > this.rank[rb]) this.parent[rb] = ra;
+        else { this.parent[rb] = ra; this.rank[ra]++; }    // union by rank
+        return true;
+    }
+}
+
+function kruskalMST(numVertices: number, edges: Edge[]): { edges: Edge[]; totalWeight: number } {
+    const sorted = [...edges].sort((a, b) => a.weight - b.weight);  // cheapest first
+    const uf = new UnionFind(numVertices);
+    const mstEdges: Edge[] = [];
+    let totalWeight = 0;
+    for (const e of sorted) {
+        if (uf.union(e.from, e.to)) {           // joins two components → keep it
+            mstEdges.push(e);
+            totalWeight += e.weight;
+            if (mstEdges.length === numVertices - 1) break;   // tree complete
+        }
+        // else: same component → skip (would create a cycle)
+    }
+    return { edges: mstEdges, totalWeight };
+}
+```
+
+Run the full file: `npx tsx 12-graphs/mst.ts`.
+
+## Complexity
+
+Let $V$ be the number of vertices and $E$ the number of edges. Kruskal's cost is dominated by the sort;
+the Union-Find work that follows is near-linear because each `find` and `union` runs in almost constant
+amortised time:
+
+$$
+\text{Kruskal: } O(E \log E), \qquad \text{Prim (binary heap): } O(E \log V), \qquad \text{space } O(V).
+$$
+
+Since $E \le V^2$, we have $\log E \le 2 \log V$, so $O(E \log E)$ and $O(E \log V)$ are the same order —
+the practical choice comes down to the graph's density and whether the edges arrive already as a list.
+
+| Aspect | Kruskal | Prim |
+|--------|---------|------|
+| Driven by | edges (sorted) | vertices (grown from a seed) |
+| Core data structure | Union-Find | priority queue / min-heap |
+| Time | $O(E \log E)$ | $O(E \log V)$ |
+| Best when | graph is **sparse** | graph is **dense** |
+| Needs the whole edge list up front | yes (to sort) | no (grows incrementally) |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Power engineering" icon="⚡">
+A utility must connect a cluster of new towns to the grid with high-voltage lines. Towns are vertices and
+candidate line routes are weighted edges (cost of building each span). A minimum spanning tree is the
+cheapest network that energises every town — the textbook problem Kruskal was popularised to solve.
+</ExampleCard>
+
+<ExampleCard domain="Network infrastructure" icon="🖧">
+An ISP laying fibre between a company's offices wants every building online while trenching as little
+cable as possible. Model offices as vertices and the per-route digging cost as edge weights; the minimum
+spanning tree is the backbone that connects all sites for the least money.
+</ExampleCard>
+
+<ExampleCard domain="Machine learning" icon="🔬">
+Single-linkage clustering builds a minimum spanning tree over data points, then **cuts the most expensive
+edges**. Removing the $k-1$ heaviest tree edges leaves $k$ connected pieces — a fast, parameter-light way
+to discover natural clusters in the data.
+</ExampleCard>
+
+<ExampleCard domain="Civil engineering" icon="🚰">
+A regional plan must pipe fresh water from one reservoir to a scatter of villages. Villages and junctions
+are vertices, possible pipe segments are weighted edges, and the minimum spanning tree is the least-length
+pipe layout that still delivers water to every village.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Using it on a directed graph.** Minimum spanning trees are defined for **undirected** graphs. The
+  directed analogue (a minimum spanning arborescence) needs a different algorithm entirely.
+- **Forgetting the cycle check.** If you add edges purely by weight without asking whether the endpoints
+  are already connected, you get cycles and overspend. The Union-Find `union`-returns-false test is the
+  whole trick.
+- **Not stopping at $V-1$ edges.** Once the tree has $V-1$ edges it spans everything; continuing only
+  wastes time considering edges that must form cycles.
+- **Assuming the MST is unique.** When several edges share a weight, more than one minimum spanning tree
+  can exist — but they all have the **same total weight**.
+- **Interview cue:** if the prompt says "connect all the nodes for the minimum total cost" on a weighted
+  undirected graph, reach for Kruskal plus Union-Find first; mention Prim if the graph is dense.
+
+## Practice
+
+1. **Easy:** For the graph `A-C:2, B-C:3, A-B:4, B-D:5, D-E:7`, list the edges Kruskal keeps and the total.
+2. **Easy:** A connected graph has 9 vertices. How many edges does any spanning tree of it contain?
+3. **Medium:** While walking the sorted edges, you reach an edge whose endpoints have the same Union-Find
+   root. What do you do, and why?
+4. **Medium:** Modify Kruskal to return the number of connected components when the graph is **not**
+   connected (it cannot reach $V-1$ edges).
+5. **Hard:** Explain why removing the heaviest edge on any cycle never increases the spanning tree's
+   total weight — the exchange argument behind Kruskal's correctness.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A minimum spanning tree of a connected graph with V vertices always has how many edges?',
+      options: ['V', 'V - 1', 'V + 1', 'It depends on the weights'],
+      answer: 1,
+      explain: 'A tree on V vertices has exactly V - 1 edges — enough to connect everything with no cycles.',
+    },
+    {
+      q: "In Kruskal's algorithm, why do we skip an edge whose endpoints share a Union-Find component?",
+      options: [
+        'The edge is too heavy to use',
+        'Its endpoints are already connected, so adding it would create a cycle',
+        'Union-Find cannot merge them',
+        'It points in the wrong direction',
+      ],
+      answer: 1,
+      explain: 'Same component means a path already links them; adding the edge would close a cycle and waste weight.',
+    },
+    {
+      q: 'Which algorithm is usually the better fit for a dense graph?',
+      options: ["Kruskal, because it sorts edges", "Prim, with a priority queue", 'Neither works on dense graphs', 'Both are identical in every case'],
+      answer: 1,
+      explain: 'Prim grows from a vertex via a heap and tends to win when E is large; Kruskal suits sparse graphs.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>minimum spanning tree</strong> connects all V vertices with exactly <strong>V-1 edges</strong>, no cycles, and the least total weight.',
+    "<strong>Kruskal</strong> sorts edges cheapest-first and keeps each one only if it joins two different components.",
+    '<strong>Union-Find</strong> answers "same component?" in near-constant time — its union returning false is the cycle test.',
+    '<strong>Prim</strong> is the vertex-based alternative: grow a tree from a seed via a priority queue; better on dense graphs.',
+    'Kruskal runs in <strong>O(E log E)</strong> (dominated by the sort) with O(V) space; the MST may not be unique but its weight is.',
+  ]}
+/>
+
+Next up: **Dijkstra's Algorithm** — instead of connecting everything for the least total cost, we fix one
+source and find the cheapest path from it to every other vertex on a weighted graph.

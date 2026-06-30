@@ -1,0 +1,264 @@
+---
+title: Girvan-Newman
+track: dsa-graph-networks
+summary: "Girvan-Newman finds communities top-down: repeatedly cut the edge that the most shortest paths run through, and the network falls into clusters."
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - dsa-graph-networks/community-louvain
+leadsTo:
+  - dsa-graph-networks/label-propagation
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NetGirvanNewman from '../../../components/demos/NetGirvanNewman.tsx';
+
+## The hook: find the bridges, then burn them
+
+Louvain builds communities bottom-up by merging. Girvan-Newman does the opposite: it finds the few edges
+that *bridge* communities and snips them, letting the network fall apart into its natural clusters. The
+clever part is spotting the bridges. A road connecting two towns carries traffic between every pair of
+people on opposite sides — so it is the busiest road per capita. The graph version of "busiest" is **edge
+betweenness**: how many shortest paths run through an edge. Bridges between communities have sky-high
+betweenness, so removing the highest-betweenness edge again and again peels communities apart.
+
+<Callout type="intuition" title="The one-sentence idea">
+The edge with the most shortest paths crossing it is the bridge between groups, so cutting the
+highest-betweenness edge repeatedly splits the network into communities.
+</Callout>
+
+## Intuition: betweenness reveals the seams
+
+Within a tight community there are many short ways to get from one node to another, so no single internal
+edge is essential. But to cross from one community to another, almost every shortest path is funnelled
+through the handful of edges that connect them. Those bottleneck edges therefore accumulate enormous
+betweenness — they sit on the shortest path between most cross-community pairs.
+
+Girvan-Newman exploits this directly:
+
+1. Compute edge betweenness for every edge (run shortest paths between all node pairs, tally edge usage).
+2. Remove the single edge with the highest betweenness.
+3. Recompute betweenness — it changes once an edge is gone — and repeat.
+
+Each removal eventually disconnects a piece, and the sequence of splits builds a hierarchy of communities
+from coarse to fine. It is accurate and intuitive, but recomputing all-pairs shortest paths after every cut
+makes it expensive — the price of its top-down clarity.
+
+## Play with it
+
+Press Play. The red dashed edge is the current highest-betweenness link — the next to be cut. Each step
+removes it and recolours nodes by which connected component they now belong to, so you watch communities
+break off one at a time. Click one node then another to toggle an edge and change where the seams lie.
+
+<NetGirvanNewman client:visible />
+
+<Callout type="tip">
+The very first cut is almost always the single bridge between the two dense halves — it carries every
+cross-group shortest path, so its betweenness towers over every internal edge. After it falls, betweenness
+is recomputed and the next-weakest seam lights up.
+</Callout>
+
+## How it works
+
+The **betweenness** of edge $e$ sums, over all node pairs $(s,t)$, the fraction of shortest $s$–$t$ paths
+that use $e$:
+
+$$
+C_B(e) = \sum_{s \neq t} \frac{\sigma_{st}(e)}{\sigma_{st}},
+$$
+
+where $\sigma_{st}$ is the number of shortest paths from $s$ to $t$ and $\sigma_{st}(e)$ is how many of them
+pass through $e$. (When several shortest paths exist, each edge gets a fractional share, which is why the
+formula divides by $\sigma_{st}$.) The outer loop is short:
+
+```
+repeat until enough communities:
+  compute C_B(e) for every edge        ← BFS shortest paths from every node
+  remove edge with the largest C_B
+  recompute (the graph changed)
+connected components = communities
+```
+
+Trace two triangles joined by a single bridge $C-D$. Every shortest path from the A-B-C triangle to the
+D-E-F triangle must use $C-D$, so its betweenness dwarfs the triangle edges. Cut it, and the graph splits
+cleanly into the two triangles.
+
+<CodeRunner
+  client:visible
+  code={`// One Girvan-Newman step: cut the highest-betweenness edge.
+function girvanNewmanStep(edges, nodes) {
+  const adj = {}; nodes.forEach(n => adj[n] = new Set());
+  for (const [a, b] of edges) { adj[a].add(b); adj[b].add(a); }
+  const key = (u, v) => u < v ? u + '-' + v : v + '-' + u;
+  // all shortest paths via BFS predecessors
+  const shortest = (s, t) => {
+    const dist = { [s]: 0 }, preds = { [s]: [] }, q = [s];
+    while (q.length) { const u = q.shift();
+      for (const v of adj[u]) {
+        if (dist[v] === undefined) { dist[v] = dist[u] + 1; preds[v] = [u]; q.push(v); }
+        else if (dist[v] === dist[u] + 1) preds[v].push(u);
+      }
+    }
+    if (dist[t] === undefined) return [];
+    const paths = [];
+    const rec = (node, tail) => {
+      if (node === s) { paths.push(tail); return; }
+      for (const p of preds[node]) rec(p, [p, ...tail]);
+    };
+    rec(t, [t]); return paths;
+  };
+  const bw = {};
+  for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+    const paths = shortest(nodes[i], nodes[j]); if (!paths.length) continue;
+    for (const p of paths) for (let k = 0; k < p.length - 1; k++) {
+      const e = key(p[k], p[k + 1]); bw[e] = (bw[e] || 0) + 1 / paths.length;
+    }
+  }
+  let cut = null, max = 0;
+  for (const [e, v] of Object.entries(bw)) if (v > max) { max = v; cut = e; }
+  return { cut, betweenness: +max.toFixed(2) };
+}`}
+  tests={[
+    { expr: "girvanNewmanStep([['A','B'],['B','C'],['A','C'],['C','D'],['D','E'],['E','F'],['D','F']], ['A','B','C','D','E','F'])", label: 'highest-betweenness edge to cut' },
+  ]}
+/>
+
+## The real implementation
+
+The course file calculates betweenness from all shortest paths, then removes the single strongest edge.
+
+```ts
+// /dsa/29-graph-advanced/girvan-newman.ts
+removeHighestBetweennessEdge(): void {
+  const betweenness = this.calculateEdgeBetweenness();
+  let maxEdge = '';
+  let maxScore = 0;
+  for (const [edge, score] of betweenness) {
+    if (score > maxScore) { maxScore = score; maxEdge = edge; }   // pick the busiest edge
+  }
+  if (maxEdge) {
+    const [u, v] = maxEdge.split('-').map(Number);
+    this.graph.get(u)?.delete(v);                                  // snip it both ways
+    this.graph.get(v)?.delete(u);
+  }
+}
+```
+
+Run the full file: `npx tsx 29-graph-advanced/girvan-newman.ts`.
+
+## Complexity
+
+Computing betweenness from all-pairs shortest paths is the bottleneck, and it must be redone after every
+one of the up-to-$m$ removals:
+
+$$
+T = O(m^{2} n), \qquad S = O(n + m),
+$$
+
+for $n$ nodes and $m$ edges (using Brandes' $O(mn)$ betweenness, repeated $O(m)$ times).
+
+| Step | Cost |
+|------|------|
+| Edge betweenness (Brandes) | $O(mn)$ |
+| Removals | up to $O(m)$ |
+| Total | $O(m^{2} n)$ |
+
+<Callout type="why">
+Girvan-Newman is <strong>divisive</strong> (top-down splitting) where Louvain is <strong>agglomerative</strong>
+(bottom-up merging). Seeing the same problem solved from opposite directions is a recurring ML theme —
+hierarchical clustering does exactly this pair, and which direction wins depends on whether bridges or cores
+are easier to spot in your data.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Epidemiology" icon="🦠">
+The edges with highest betweenness are the bridges a disease must cross to jump between communities —
+vaccinate or close those few links and you fragment the contact network, slowing a spread far more than
+random closures.
+</ExampleCard>
+
+<ExampleCard domain="Infrastructure" icon="⚡">
+In a power grid, high-betweenness transmission lines carry flow between regions; they are exactly the lines
+whose failure cascades into blackouts, so planners harden them first.
+</ExampleCard>
+
+<ExampleCard domain="Ecology" icon="🌐">
+In a food web, removing high-betweenness trophic links reveals modules of tightly-interacting species,
+helping ecologists predict which extinctions ripple across the whole system.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **It is slow.** Recomputing all-pairs shortest paths after each cut makes Girvan-Newman impractical past a
+  few thousand nodes — use it for clarity on small graphs, Louvain for scale.
+- **Recompute, do not reuse.** Betweenness must be recalculated after every removal; the cut changes which
+  paths are shortest, so cached scores go stale immediately.
+- **When to stop is a choice.** The algorithm produces a whole hierarchy of splits; you pick the level
+  (often by the partition with maximum modularity) — there is no built-in stopping rule.
+- **Interview cue:** "split a network by cutting bridges" or "edge betweenness" is Girvan-Newman. Mention
+  the divisive top-down nature and the $O(m^2 n)$ cost from repeated betweenness.
+
+## Practice
+
+1. **Easy:** Why does the single bridge between two triangles have higher betweenness than any triangle edge?
+2. **Easy:** In the demo, add a second bridge between the halves. What changes about the first cut and why?
+3. **Medium:** When two shortest paths share an edge, why does each contribute only a fraction to its betweenness?
+4. **Medium:** Sketch how you would stop Girvan-Newman at the partition with the highest modularity instead of cutting all edges.
+5. **Hard:** Argue why, after removing one edge, only betweenness values for pairs whose shortest paths used that edge can change — and how that could speed up recomputation.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Edge betweenness counts:',
+      options: [
+        'The number of neighbours an edge connects',
+        'The number of shortest paths (across all node pairs) that pass through the edge',
+        'The edge weight',
+        'How many communities exist',
+      ],
+      answer: 1,
+      explain: 'It sums, over all node pairs, the fraction of shortest paths using the edge. Bridge edges between communities score highest.',
+    },
+    {
+      q: 'After removing the highest-betweenness edge, Girvan-Newman must:',
+      options: [
+        'Stop immediately',
+        'Recompute betweenness because the graph changed',
+        'Add the edge back with a weight',
+        'Normalize the scores',
+      ],
+      answer: 1,
+      explain: 'Removing an edge reroutes shortest paths, so betweenness values change and must be recomputed before the next cut.',
+    },
+    {
+      q: 'Compared with Louvain, Girvan-Newman is:',
+      options: [
+        'Faster and bottom-up',
+        'Slower and top-down (divisive)',
+        'Identical',
+        'Only for directed graphs',
+      ],
+      answer: 1,
+      explain: 'Girvan-Newman is divisive (cuts bridges from the top down) and costs about O(m²n), far slower than agglomerative Louvain.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Girvan-Newman is <strong>divisive</strong>: it finds communities by cutting the edges that bridge them.',
+    '<strong>Edge betweenness</strong> — shortest paths crossing an edge — is highest on inter-community bridges.',
+    'Repeatedly <strong>remove the top-betweenness edge and recompute</strong>; connected components become communities.',
+    'It costs about <strong>O(m²n)</strong>, accurate but practical only for small-to-medium graphs.',
+    'It is the <strong>top-down twin</strong> of Louvain, producing a hierarchy you cut at the best-modularity level.',
+  ]}
+/>
+
+Next up: **Label Propagation** — community detection with no objective to optimise at all, just nodes
+repeatedly copying the most common label around them.

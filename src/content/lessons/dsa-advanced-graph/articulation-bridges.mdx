@@ -1,0 +1,260 @@
+---
+title: Articulation Points & Bridges
+track: dsa-advanced-graph
+summary: "One DFS, two weak spots: articulation points are vertices and bridges are edges whose removal splits a connected network apart."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-advanced-graph/strongly-connected-components
+leadsTo:
+  - dsa-advanced-graph/eulerian-path
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AGphArticulationBridges from '../../../components/demos/AGphArticulationBridges.tsx';
+
+## The hook: the bolt that holds the bridge
+
+Every robust network has fragile spots. Pull one router and two campuses go dark; cut one undersea cable
+and a continent loses bandwidth. The vertices whose removal disconnects a graph are its **articulation
+points**; the edges with the same power are its **bridges**. Find them and you know exactly where a
+network has no backup — where redundancy must be added before something fails. The astonishing part:
+the very same `disc`/`low` numbers from the last lesson reveal both, in one undirected DFS.
+
+<Callout type="intuition" title="The one-sentence idea">
+A child subtree that cannot reach above its parent (without using the parent edge) hangs by a single
+thread: that parent is an articulation point, and if the subtree cannot even reach the parent itself, the
+connecting edge is a bridge.
+</Callout>
+
+## Intuition
+
+DFS turns any undirected graph into a tree of tree edges plus some **back edges** that climb to an
+ancestor. A back edge is a built-in detour: it gives an alternate route around a vertex. Articulation
+points and bridges are exactly the places where *no such detour exists*.
+
+As before, `disc[v]` is the discovery time and `low[v]` is the earliest node reachable from `v`'s subtree
+through one back edge. For a tree edge from `v` to child `u`:
+
+- If `low[u] >= disc[v]`, the whole subtree under `u` cannot climb above `v` — so removing `v`
+  disconnects it. **`v` is an articulation point.**
+- If `low[u] > disc[v]` (strictly), the subtree cannot even reach `v` by a detour — the edge `(v, u)`
+  is the only link. **`(v, u)` is a bridge.**
+
+The root of the DFS tree is special: it has no parent, so it is an articulation point only when it has
+**two or more** tree-children (otherwise removing it leaves the rest in one piece).
+
+## Play with it
+
+Step through the DFS. Articulation points light up pink and bridges turn into dashed orange the moment
+the `low`/`disc` test fires. Compare the three presets: a chain makes every internal node critical, while
+a solid ring has no weak spots at all because every node has a detour.
+
+<AGphArticulationBridges client:visible />
+
+<Callout type="tip">
+A bridge is always between two **2-edge-connected** blobs, but an articulation point can sit inside a
+blob with no bridges at all (think of a figure-eight: the shared centre is critical, yet every edge has
+a cycle around it). Bridges imply articulation points at their ends, but not the reverse.
+</Callout>
+
+## How it works
+
+Take `0-1, 0-2, 1-2, 2-3, 3-4, 3-5, 4-5` — two triangles joined by the single edge `2-3`. DFS from `0`:
+
+```
+0 disc/low 0/0
+1 disc/low 1/1
+2 disc/low 2/2   back edge 2→0 → low[2] = 0
+  low propagates up: low[1]=0, low[0]=0  (triangle {0,1,2} is detour-rich)
+3 disc/low 3/3   (reached via tree edge 2→3)
+4 disc/low 4/4
+5 disc/low 5/5   back edge 5→3 → low[5]=3 → low[4]=3
+  child 3→4: low[4]=3 ≥ disc[3]=3 → 3 is an articulation point
+back at 2: child 2→3 has low[3]=3 > disc[2]=2 → edge (2,3) is a BRIDGE
+  and low[3]=3 ≥ disc[2]=2 → 2 is an articulation point
+```
+
+So articulation points are `{2, 3}` and the only bridge is `2-3`. Removing either endpoint, or the edge
+itself, severs the two triangles.
+
+<CodeRunner
+  client:visible
+  code={`// Articulation points and bridges in one undirected DFS (plain JS)
+function critical(n, edges) {
+  const adj = Array.from({ length: n }, () => []);
+  for (const [u, v] of edges) { adj[u].push(v); adj[v].push(u); }
+  const disc = Array(n).fill(-1), low = Array(n).fill(-1);
+  const aps = new Set(), bridges = [];
+  let time = 0;
+  function dfs(u, parent) {
+    disc[u] = low[u] = time++;
+    let children = 0;
+    for (const v of adj[u]) {
+      if (v === parent) continue;
+      if (disc[v] === -1) {
+        children++;
+        dfs(v, u);
+        low[u] = Math.min(low[u], low[v]);
+        if (parent !== -1 && low[v] >= disc[u]) aps.add(u);
+        if (low[v] > disc[u]) bridges.push([u, v]);
+      } else {
+        low[u] = Math.min(low[u], disc[v]);
+      }
+    }
+    if (parent === -1 && children >= 2) aps.add(u);
+  }
+  for (let i = 0; i < n; i++) if (disc[i] === -1) dfs(i, -1);
+  return { aps: [...aps].sort((a, b) => a - b), bridges };
+}
+
+const edges = [[0,1],[0,2],[1,2],[2,3],[3,4],[3,5],[4,5]];`}
+  tests={[
+    { expr: 'JSON.stringify(critical(6, edges).aps)', label: 'articulation points' },
+    { expr: 'JSON.stringify(critical(6, edges).bridges)', label: 'bridges' },
+    { expr: 'critical(4, [[0,1],[1,2],[2,3]]).bridges.length', label: '# bridges in a path' },
+  ]}
+/>
+
+## The real implementation
+
+The course version keeps articulation points and bridges in separate passes for clarity; here is the
+bridge-finder (LeetCode 1192, "critical connections") almost verbatim:
+
+```ts
+// /dsa/19-advanced-graph/articulation-bridges.ts
+export function findBridges(graph: UndirectedGraph): [number, number][] {
+  const disc = new Map<number, number>();
+  const low = new Map<number, number>();
+  const parent = new Map<number, number>();
+  const bridges: [number, number][] = [];
+  let time = 0;
+
+  function dfs(v: number): void {
+    disc.set(v, time); low.set(v, time); time++;
+    for (const neighbor of graph.getNeighbors(v)) {
+      if (!disc.has(neighbor)) {
+        parent.set(neighbor, v);
+        dfs(neighbor);
+        low.set(v, Math.min(low.get(v)!, low.get(neighbor)!));
+        if (low.get(neighbor)! > disc.get(v)!) bridges.push([v, neighbor]);   // bridge!
+      } else if (neighbor !== parent.get(v)) {
+        low.set(v, Math.min(low.get(v)!, disc.get(neighbor)!));               // back edge
+      }
+    }
+  }
+
+  for (const v of graph.getVertices()) if (!disc.has(v)) dfs(v);
+  return bridges;
+}
+```
+
+Run the full file: `npx tsx 19-advanced-graph/articulation-bridges.ts`. It also finds articulation points
+and decomposes the graph into **biconnected components**.
+
+## Complexity
+
+A single DFS over an undirected graph, touching every vertex and edge once:
+
+$$
+T(V, E) = O(V + E), \qquad S(V, E) = O(V).
+$$
+
+| Task | Time | Space |
+|------|------|-------|
+| All articulation points | $O(V + E)$ | $O(V)$ |
+| All bridges | $O(V + E)$ | $O(V)$ |
+| Biconnected components | $O(V + E)$ | $O(V + E)$ |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Telecom & power grids" icon="⚡">
+Network operators run bridge detection on their fibre and transmission maps to flag single points of
+failure. Every bridge is a link with no alternate path — a candidate for a redundant backup line before
+the next storm.
+</ExampleCard>
+
+<ExampleCard domain="Epidemiology" icon="🦠">
+In a contact network, an articulation person connects two otherwise-separate clusters. Vaccinating or
+isolating that one individual splits the graph and stops a pathogen from crossing between communities.
+</ExampleCard>
+
+<ExampleCard domain="Transport planning" icon="🌉">
+A literal bridge or tunnel often *is* a graph bridge: the only road between two regions. Planners use the
+algorithm on road networks to find crossings whose closure would strand a town, prioritising them for
+maintenance funding.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Parent-edge handling.** In an undirected graph each edge appears twice. Skip the edge back to the
+  parent — but if there are **parallel edges**, a second edge to the parent is a real detour and must be
+  treated as a back edge.
+- **`>` vs `>=`.** Bridges use strict `low[u] > disc[v]`; articulation points use `low[u] >= disc[v]`.
+  Mixing them up turns every bridge endpoint into a false positive or hides real cut vertices.
+- **The root exception.** Don't apply the `low >= disc` rule to the DFS root — it has no parent. Count its
+  tree-children instead.
+- **Interview cue:** "critical connections", "single point of failure", or "minimum links to keep
+  connected" is a bridges/articulation question. Say "`disc` and `low` in one DFS" and derive the two
+  conditions.
+
+## Practice
+
+1. **Easy:** In a simple path `0-1-2-3`, which vertices are articulation points and which edges are bridges?
+2. **Easy:** Why does a cycle of any length have zero bridges and zero articulation points?
+3. **Medium:** Add the edge `0-3` to the two-triangle example. Which weak spots disappear, and why?
+4. **Medium:** Prove that every bridge's two endpoints are articulation points (unless an endpoint has
+   degree 1).
+5. **Hard:** Given a connected graph, find the minimum number of edges to add so it has no bridges at all
+   (it becomes 2-edge-connected).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Edge (v, u) is a bridge when…',
+      options: ['low[u] >= disc[v]', 'low[u] > disc[v]', 'disc[u] > low[v]', 'u is the DFS root'],
+      answer: 1,
+      explain: 'Strict inequality: the subtree under u cannot reach v or above even with one back edge, so the edge is the only link.',
+    },
+    {
+      q: 'When is the DFS root an articulation point?',
+      options: [
+        'Always',
+        'Never',
+        'When it has two or more DFS-tree children',
+        'When low[root] = 0',
+      ],
+      answer: 2,
+      explain: 'The root has no parent, so the low/disc rule does not apply; it is critical only if it joins two or more subtrees.',
+    },
+    {
+      q: 'Which statement is true?',
+      options: [
+        'Every articulation point lies on a bridge',
+        'Every bridge endpoint (degree > 1) is an articulation point',
+        'A cycle has exactly one bridge',
+        'Bridges only exist in directed graphs',
+      ],
+      answer: 1,
+      explain: 'Bridges imply articulation points at their ends, but figure-eight centres show articulation points can exist with no bridges nearby.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Articulation points</strong> are vertices and <strong>bridges</strong> are edges whose removal disconnects the graph.',
+    'Both come from one undirected DFS tracking <strong>disc[v]</strong> and <strong>low[v]</strong>.',
+    'Bridge test is strict <strong>low[u] &gt; disc[v]</strong>; articulation test is <strong>low[u] &ge; disc[v]</strong>.',
+    'The DFS <strong>root</strong> is an articulation point only with <strong>two or more</strong> tree-children.',
+    'It runs in <strong>O(V + E)</strong> and pinpoints single points of failure in any network.',
+  ]}
+/>
+
+Next up: **Eulerian Paths** — instead of asking which edges are critical, we ask whether we can walk
+*every* edge exactly once, the puzzle that founded graph theory at the bridges of Königsberg.

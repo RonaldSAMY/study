@@ -1,0 +1,228 @@
+---
+title: Choosing a Sort
+track: dsa-sorting
+summary: There is no single best sort — pick by stability, space, data shape, and worst-case needs, and understand why your language ships Timsort.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - dsa-sorting/counting-radix-sort
+leadsTo:
+  - dsa-searching/linear-search
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SortChooser from '../../../components/demos/SortChooser.tsx';
+
+## The hook: the interview answer that is always "it depends"
+
+You now know eight sorts. Asked "which is best?", the senior-engineer answer is never a single name —
+it is a set of questions. *Is the data nearly sorted? Are there equal keys whose order matters? Does it
+fit in memory? Are the keys small integers? Do you need a hard worst-case guarantee?* Each answer rules
+some sorts in and others out. This lesson turns your eight tools into a **decision procedure**, and then
+explains the one sort you actually use every day without noticing: Timsort.
+
+<Callout type="intuition" title="The one-sentence idea">
+Choosing a sort means matching the data's shape and your constraints — stability, memory, worst-case,
+key type — to an algorithm's trade-offs; the same input can make one sort linear and another quadratic.
+</Callout>
+
+## Intuition
+
+Two ideas separate the choices.
+
+**The comparison barrier.** Any sort that only compares pairs needs $\Omega(n \log n)$ comparisons in
+the worst case. So merge, quick, heap, and Timsort are all *optimal* comparison sorts — they differ in
+constants, memory, stability, and worst-case behaviour, not in big-O. To go *faster* you must leave the
+comparison model entirely, which only counting and radix sort can do, and only for small-integer keys.
+
+**Stability and adaptivity are real features, not footnotes.** *Stable* sorts (insertion, merge,
+counting, radix, Timsort) preserve the order of equal keys — essential when you sort by one field after
+another. *Adaptive* sorts (insertion, Timsort) get faster on data that is already partly ordered, which
+real-world data almost always is. Those two properties, not raw speed, drive most production choices.
+
+## Play with it
+
+Pick an algorithm and an input pattern, then read the live comparison/move counters. Run **insertion**
+on "Nearly sorted," then **selection** on the same data — same array, wildly different cost. That gap is
+exactly what "adaptive" means, and why the right choice depends on the data.
+
+<SortChooser client:visible />
+
+<Callout type="tip">
+Try quicksort on "Few unique." Plain Lomuto quicksort bogs down on many duplicates (a hint of its
+$O(n^2)$ trap), while insertion sort barely notices a nearly-sorted list. No algorithm wins every
+column — that is the whole point.
+</Callout>
+
+## How it works: the decision procedure
+
+Walk these questions in order and stop at the first match:
+
+```
+1. Keys are small integers (range ~ n)?      → Counting / Radix sort  (O(n), stable)
+2. n is tiny (< ~16) or nearly sorted?        → Insertion sort         (O(n) adaptive, stable)
+3. Need a stable sort?                         → Merge sort / Timsort   (O(n log n), O(n) space)
+4. Need O(n log n) worst case AND O(1) space? → Heap sort              (in place, unstable)
+5. General-purpose, average speed matters?    → Quicksort (randomized) (fast, in place, unstable)
+6. Don't want to choose?                       → Your language's default (almost always Timsort)
+```
+
+This little function captures the most important fork — adaptivity — by counting comparisons:
+
+<CodeRunner
+  client:visible
+  code={`function countCompares(arr, algo) {
+  const a = [...arr];
+  let c = 0;
+  if (algo === 'insertion') {
+    for (let i = 1; i < a.length; i++) {
+      const key = a[i]; let j = i - 1;
+      while (j >= 0 && (c++, a[j] > key)) { a[j + 1] = a[j]; j--; }
+      a[j + 1] = key;
+    }
+  } else { // selection: always scans the whole tail
+    for (let i = 0; i < a.length - 1; i++)
+      for (let j = i + 1; j < a.length; j++) { c++; if (a[j] < a[i]) {/* track min */} }
+  }
+  return c;
+}
+
+const nearlySorted = [1,2,3,4,5,6,7,9,8,10];`}
+  tests={[
+    { expr: 'countCompares(nearlySorted, "insertion")', label: 'insertion on nearly-sorted' },
+    { expr: 'countCompares(nearlySorted, "selection")', label: 'selection on nearly-sorted' },
+  ]}
+/>
+
+Insertion makes a handful of comparisons; selection always makes $n(n-1)/2$. Same data, same big-O
+family on random input — but the *adaptive* one is an order of magnitude cheaper here.
+
+## The big comparison table
+
+From the course comparison file — the cheat sheet worth memorising:
+
+| Algorithm | Best | Average | Worst | Space | Stable | Method |
+|-----------|------|---------|-------|-------|--------|--------|
+| Bubble | $O(n)$ | $O(n^2)$ | $O(n^2)$ | $O(1)$ | Yes | exchange |
+| Selection | $O(n^2)$ | $O(n^2)$ | $O(n^2)$ | $O(1)$ | No | selection |
+| Insertion | $O(n)$ | $O(n^2)$ | $O(n^2)$ | $O(1)$ | Yes | insertion |
+| Merge | $O(n\log n)$ | $O(n\log n)$ | $O(n\log n)$ | $O(n)$ | Yes | merge |
+| Quick | $O(n\log n)$ | $O(n\log n)$ | $O(n^2)$ | $O(\log n)$ | No | partition |
+| Heap | $O(n\log n)$ | $O(n\log n)$ | $O(n\log n)$ | $O(1)$ | No | selection (heap) |
+| Counting | $O(n+k)$ | $O(n+k)$ | $O(n+k)$ | $O(n+k)$ | Yes | counting |
+| Radix | $O(d(n+k))$ | $O(d(n+k))$ | $O(d(n+k))$ | $O(n+k)$ | Yes | counting |
+| **Timsort** | $O(n)$ | $O(n\log n)$ | $O(n\log n)$ | $O(n)$ | **Yes** | hybrid |
+
+Notice the bottom row dominates the comparison sorts on the axes that matter for general data: linear
+best case (**adaptive**), $O(n \log n)$ worst case (**guaranteed**), and **stable**.
+
+## Why your language ships Timsort
+
+Python, Java (for objects), Android, and Swift all default to **Timsort** — and JavaScript engines use
+it or a close cousin. It is a hybrid of the two sorts you already know:
+
+- It scans for **natural runs** (already-ascending or descending stretches) and reverses descending ones
+  in place — so real, partly-ordered data is nearly free.
+- It extends short runs to a minimum length with **insertion sort** (fast on small inputs).
+- It **merges** runs with a smart, stack-based strategy (and "galloping" to skip ahead) — stable, like
+  merge sort.
+
+The result combines insertion sort's adaptivity, merge sort's stability and worst-case guarantee, and
+clever engineering for the messy, partly-sorted data the real world actually produces. When in doubt,
+call your standard library's sort — it is Timsort, and it is very hard to beat.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Programming languages" icon="🐍">
+Python's <code>list.sort()</code> and Java's <code>Arrays.sort()</code> for objects are Timsort; C++'s
+<code>std::sort</code> is introsort (quick + heap + insertion); Java's primitive sort is dual-pivot
+quicksort. Each language picked a different point on the trade-off curve for its typical workload.
+</ExampleCard>
+
+<ExampleCard domain="Databases" icon="🧮">
+A query planner chooses a sort the way you just learned to: an in-memory hash/quick sort for small
+result sets, an external merge sort when the data exceeds RAM, and it exploits already-sorted indexes to
+skip sorting entirely — the decision procedure, automated.
+</ExampleCard>
+
+<ExampleCard domain="Embedded systems" icon="🔌">
+On a microcontroller with kilobytes of RAM and no room for an $O(n)$ merge buffer, engineers reach for
+heap sort (in place, guaranteed) or insertion sort (tiny code, great on small sensor batches) — exactly
+where merge sort's memory cost is disqualifying.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **"Quicksort is always fastest" is wrong.** Its $O(n^2)$ worst case, instability, and poor behaviour
+  on duplicates rule it out for plenty of jobs. Match the algorithm to the constraints.
+- **Big-O hides constants and memory.** Merge and heap are both $O(n \log n)$, but heap's cache misses
+  and merge's $O(n)$ buffer make them feel very different in practice.
+- **Stability is a requirement, not a nicety.** Multi-key sorting (sort by date, then by name) only works
+  if the second sort is stable. Know which of your tools are.
+- **In production, don't hand-roll it.** The standard library's sort is battle-tested and adaptive;
+  reimplementing it usually loses. Reserve custom sorts for special keys (radix) or constraints (embedded).
+- **Interview hook:** when asked "which sort?", reply with questions — data shape, stability, memory,
+  worst-case — then justify a choice. That conversation *is* the answer they want.
+
+## Practice
+
+1. **Easy:** You must sort 20 already-almost-sorted integers in place. Which sort, and why?
+2. **Easy:** You are sorting records by city, having already sorted them by name, and want names to stay
+   ordered within each city. Which property must your sort have?
+3. **Medium:** You have 50 million 32-bit integers and plenty of RAM. Argue for radix sort over
+   quicksort, with rough operation counts.
+4. **Medium:** A dataset is far larger than memory and lives on disk. Which sort handles it, and what is
+   the high-level strategy?
+5. **Hard:** Explain how Timsort achieves an $O(n)$ best case and an $O(n \log n)$ worst case
+   simultaneously — name the two algorithms it fuses and the role of natural runs.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You must sort records stably with a guaranteed O(n log n) worst case, and you have spare memory. Best pick?',
+      options: ['Quicksort', 'Heap sort', 'Merge sort (or Timsort)', 'Selection sort'],
+      answer: 2,
+      explain: 'Merge sort / Timsort are stable with a guaranteed O(n log n) worst case; the cost is O(n) extra space, which you have.',
+    },
+    {
+      q: 'Why do Python and Java (objects) default to Timsort?',
+      options: [
+        'It is the simplest to implement',
+        'It is in place with O(1) space',
+        'It is stable, adaptive (O(n) on nearly-sorted), and O(n log n) worst case',
+        'It is a non-comparison sort',
+      ],
+      answer: 2,
+      explain: 'Timsort fuses insertion sort (adaptive) and merge sort (stable, guaranteed), matching real, partly-ordered data.',
+    },
+    {
+      q: 'When can you legitimately beat O(n log n)?',
+      options: [
+        'Never',
+        'When keys are small integers, using counting or radix sort',
+        'When the array is reversed',
+        'When using recursion',
+      ],
+      answer: 1,
+      explain: 'The Ω(n log n) bound is only for comparison sorts; counting/radix sort small-integer keys in linear time.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'There is <strong>no single best sort</strong> — choose by stability, space, worst-case, and the data’s shape.',
+    'All comparison sorts are bounded by <strong>Ω(n log n)</strong>; only <strong>counting/radix</strong> (small integer keys) go faster.',
+    '<strong>Stability</strong> and <strong>adaptivity</strong> drive most real choices — the same input can be linear for one sort and quadratic for another.',
+    '<strong>Timsort</strong> (insertion + merge) is the default in Python, Java, Android and Swift: stable, adaptive, O(n log n) worst case.',
+    'In production, <strong>use the standard library’s sort</strong>; hand-roll only for special keys (radix) or hard constraints (embedded, in place).',
+  ]}
+/>
+
+That wraps the Sorting track. Next up — the **Searching** track opens with **Linear Search**, the
+$O(n)$ baseline every faster search is measured against.

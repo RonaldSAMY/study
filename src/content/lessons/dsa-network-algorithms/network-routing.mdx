@@ -1,0 +1,264 @@
+---
+title: Network Routing
+track: dsa-network-algorithms
+summary: "The core routing question: given latency-weighted links, which path is cheapest — and Dijkstra answers it by always settling the closest router next."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-graph-networks/label-propagation
+leadsTo:
+  - dsa-network-algorithms/network-flow-app
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NetAlgRoutingExplorer from '../../../components/demos/NetAlgRoutingExplorer.tsx';
+
+## The hook: every click is a routing decision
+
+When you open a web page, your request does not teleport to the server. It hops from router to
+router — maybe twenty of them — and at each one a tiny decision is made: *which neighbour gets this
+packet next?* Get it wrong and your video buffers; get it right and a packet crosses a continent in
+30 milliseconds. The internet's backbone protocol, OSPF, makes that decision by running the same
+algorithm a GPS uses to route you to the airport: **Dijkstra's shortest path**.
+
+<Callout type="intuition" title="The one-sentence idea">
+To find the cheapest route from a source, repeatedly **settle the closest unsettled node**, then use
+it to relax its neighbours — because the nearest frontier node can never be reached more cheaply later.
+</Callout>
+
+## Intuition: why "closest first" is safe
+
+You already know how to flood a graph with **BFS**, which finds paths with the fewest *hops*. But real
+links are not equal: a transatlantic cable has higher latency than a city hop. We want the path of
+least *total weight*, not fewest edges.
+
+Dijkstra's insight is a greedy one. Keep a tentative distance for every router. Among all routers you
+have *not* finalised, the one with the smallest tentative distance is **done** — no later path can
+beat it, because every edge weight is non-negative, so any detour only adds cost. Settle that node,
+relax its outgoing links (offer each neighbour a possibly-cheaper distance through it), and repeat.
+
+This is exactly the **label propagation** you saw on networks, but instead of spreading a community
+label by majority vote, we spread a *distance* by taking the minimum — and we always expand from the
+cheapest known frontier.
+
+## Play with it
+
+Pick a source and destination, then step through the algorithm. Watch each router get **settled** (its
+final latency locked in) in increasing order of distance, then watch a packet hop along the shortest
+path that fell out of the computation.
+
+<NetAlgRoutingExplorer client:visible />
+
+<Callout type="tip">
+Hit <strong>Shuffle costs</strong> and run it again. The settling *order* changes with the weights —
+Dijkstra does not march outward in hops like BFS, it marches outward in **cumulative cost**.
+</Callout>
+
+## How it works
+
+Take the source `A` and relax outward. Suppose the links are `A-B = 4`, `A-C = 3`, `B-C = 2`,
+`C-D = 6`, `B-D = 5`:
+
+```
+settle A (0)   → offer B=4, C=3
+settle C (3)   → offer D = 3+6 = 9, offer B = 3+2 = 5  (B already 4, keep 4)
+settle B (4)   → offer D = 4+5 = 9  (D already 9, tie, keep)
+settle D (9)   → done
+```
+
+We always pulled the smallest tentative value off the queue: `A(0), C(3), B(4), D(9)`. Once a node is
+settled its number never changes again.
+
+<CodeRunner
+  client:visible
+  code={`// Dijkstra with a simple array-scan "priority queue" (plain JS)
+function dijkstra(adj, source) {
+  const nodes = Object.keys(adj);
+  const dist = {}, prev = {}, done = {};
+  for (const n of nodes) { dist[n] = Infinity; prev[n] = null; }
+  dist[source] = 0;
+
+  for (let i = 0; i < nodes.length; i++) {
+    // pick the closest unsettled node
+    let u = null;
+    for (const n of nodes) if (!done[n] && dist[n] < (u === null ? Infinity : dist[u])) u = n;
+    if (u === null) break;
+    done[u] = true;
+    for (const { to, w } of adj[u]) {
+      if (dist[u] + w < dist[to]) { dist[to] = dist[u] + w; prev[to] = u; }
+    }
+  }
+  return { dist, prev };
+}
+
+function path(prev, dest) {
+  const out = [];
+  for (let c = dest; c != null; c = prev[c]) out.unshift(c);
+  return out;
+}
+
+const adj = {
+  A: [{to:'B',w:4},{to:'C',w:3}],
+  B: [{to:'A',w:4},{to:'C',w:2},{to:'D',w:5}],
+  C: [{to:'A',w:3},{to:'B',w:2},{to:'D',w:6}],
+  D: [{to:'B',w:5},{to:'C',w:6}],
+};
+const r = dijkstra(adj, 'A');`}
+  tests={[
+    { expr: "r.dist.D", label: 'cheapest cost A→D' },
+    { expr: "path(r.prev, 'D').join('→')", label: 'the route' },
+    { expr: "r.dist.B", label: 'cost A→B' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses a binary-heap priority queue so the "closest unsettled node" lookup is
+`O(log V)` instead of a linear scan:
+
+```ts
+// /dsa/27-network-algorithms/network-routing.ts
+function dijkstra(graph: Graph, source: string): ShortestPathResult {
+  const distances = new Map<string, number>();
+  const previous = new Map<string, string | null>();
+  const pq = new PriorityQueue<string>();
+
+  for (const node of graph.nodes) {
+    distances.set(node, node === source ? 0 : Infinity);
+    previous.set(node, null);
+  }
+  pq.enqueue(source, 0);
+
+  while (!pq.isEmpty()) {
+    const current = pq.dequeue()!;            // closest unsettled node
+    const currentDist = distances.get(current)!;
+    if (currentDist === Infinity) break;
+
+    for (const { to, weight } of graph.adjacencyList.get(current) || []) {
+      const newDist = currentDist + weight;   // relax the edge
+      if (newDist < distances.get(to)!) {
+        distances.set(to, newDist);
+        previous.set(to, current);
+        pq.enqueue(to, newDist);              // lazy decrease-key
+      }
+    }
+  }
+  return { distances, previous, path: (d) => /* walk `previous` back */ [] };
+}
+```
+
+The same file also ships **Bellman-Ford** (handles negative weights and detects arbitrage cycles),
+**A\*** (Dijkstra plus a goal heuristic), and **Floyd-Warshall** (all-pairs).
+Run the full file: `npx tsx 27-network-algorithms/network-routing.ts`.
+
+## Complexity
+
+With a binary-heap priority queue, each edge can trigger one push and each node one pop:
+
+$$
+T(V, E) = O\big((V + E)\log V\big), \qquad S(V, E) = O(V).
+$$
+
+| Algorithm | Handles | Time | Best for |
+|-----------|---------|------|----------|
+| **Dijkstra** | non-negative weights | $O((V+E)\log V)$ | one source → all routers (OSPF, GPS) |
+| Bellman-Ford | negative weights, cycle detect | $O(VE)$ | currency arbitrage, distance-vector (RIP) |
+| A\* | one goal + heuristic | $O(E\log V)$ typical | goal-directed map routing |
+| Floyd-Warshall | all pairs | $O(V^3)$ | small dense networks |
+
+<Callout type="why">
+Negative weights break Dijkstra's "closest is final" guarantee: a later detour through a negative edge
+could undercut a settled node. The instant weights can go negative, reach for Bellman-Ford instead.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Aviation" icon="✈️">
+A flight-search engine treats airports as nodes and legs as weighted edges (price or minutes). The
+"cheapest path with at most k stops" you book is a hop-limited Dijkstra over the flight graph.
+</ExampleCard>
+
+<ExampleCard domain="Neuroscience" icon="🧠">
+Connectomics measures the "wiring cost" between brain regions. Shortest-path length across the
+connectome predicts how quickly signals integrate — a Dijkstra distance on grey matter.
+</ExampleCard>
+
+<ExampleCard domain="Video games" icon="🎮">
+An NPC chasing the player runs A\* — Dijkstra biased by a straight-line heuristic toward the goal — so
+it explores toward you instead of fanning out across the whole level every frame.
+</ExampleCard>
+
+<ExampleCard domain="Epidemiology" icon="🦠">
+Modelling how fast a pathogen reaches a city uses shortest *time* paths across a mobility network;
+the "distance" is expected days of spread along each travel edge.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Negative weights.** Dijkstra silently returns wrong answers, it does not crash. Always ask the
+  interviewer "can weights be negative?" — if yes, say Bellman-Ford out loud.
+- **The lazy-deletion trick.** Most heap-based versions push duplicates and skip a node if it pops
+  with a stale (larger) distance. That is simpler than a true decrease-key and just as correct.
+- **Stop early if you only need one target.** Break the loop the moment you pop the destination — no
+  need to settle the whole graph for a single route.
+- **A\* needs an admissible heuristic.** If your estimate ever *overestimates* the remaining cost,
+  A\* can return a non-optimal path. Straight-line distance is the classic safe choice.
+- **Interview cue:** "shortest path, weighted, non-negative, single source" is a near-guaranteed
+  Dijkstra question. If they add "all pairs, small graph", pivot to Floyd-Warshall.
+
+## Practice
+
+1. **Easy:** By hand, run Dijkstra from `A` on `A-B=1, B-C=1, A-C=5`. What is the cost to `C` and why
+   is it *not* 5?
+2. **Easy:** Modify the snippet to stop as soon as the destination is settled. Does the answer change?
+3. **Medium:** *Network Delay Time* (LeetCode 743) — from a source, return the time for a signal to
+   reach every node, or `-1` if some node is unreachable.
+4. **Medium:** *Cheapest Flights Within K Stops* (LeetCode 787) — add a hop limit to the relaxation.
+5. **Hard:** *Path With Minimum Effort* (LeetCode 1631) — replace "sum of weights" with "max edge on
+   the path" and re-derive why the greedy settle order still works.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why can Dijkstra finalise a node the moment it is the closest unsettled one?',
+      options: [
+        'Because the graph is a tree',
+        'Because all edge weights are non-negative, so no later path can be cheaper',
+        'Because BFS guarantees it',
+        'Because the priority queue sorts the edges',
+      ],
+      answer: 1,
+      explain: 'Non-negative weights mean any alternative route reaches the node through some other frontier node that is already at least as far — so the current distance is final.',
+    },
+    {
+      q: 'Edges A-B=4, A-C=3, C-B=2. What is the shortest distance from A to B?',
+      options: ['4', '5', '3', '6'],
+      answer: 0,
+      explain: 'Direct A→B is 4; going A→C→B is 3+2=5. The minimum is 4.',
+    },
+    {
+      q: 'Your link costs can be negative (a credit on certain routes). Which algorithm do you use?',
+      options: ['Dijkstra', 'A* with Euclidean heuristic', 'Bellman-Ford', 'Plain BFS'],
+      answer: 2,
+      explain: 'Negative weights break Dijkstra’s greedy guarantee; Bellman-Ford relaxes all edges V−1 times and even detects negative cycles.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Routing = <strong>shortest weighted path</strong>; OSPF and GPS both run Dijkstra under the hood.',
+    'Dijkstra is greedy: <strong>settle the closest unsettled node</strong>, then relax its neighbours.',
+    'A binary-heap priority queue gives <strong>O((V+E) log V)</strong> time, O(V) space.',
+    'Negative weights need <strong>Bellman-Ford</strong>; a goal heuristic upgrades Dijkstra to <strong>A*</strong>; all-pairs on small graphs use <strong>Floyd-Warshall</strong>.',
+    'Always ask "<strong>can weights be negative?</strong>" before committing to Dijkstra in an interview.',
+  ]}
+/>
+
+Next up: **Network Flow in Practice** — once packets know *where* to go, how much can the network
+actually carry at once?

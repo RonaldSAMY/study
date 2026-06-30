@@ -1,0 +1,249 @@
+---
+title: Binary Search Variations
+summary: "Retune the halving idea to find boundaries: first and last occurrence, lower and upper bound, and the insertion point in a sorted array."
+track: dsa-searching
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-searching/binary-search
+leadsTo:
+  - dsa-searching/jump-exponential-search
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SearchBoundExplorer from '../../../components/demos/SearchBoundExplorer.tsx';
+
+## The hook: how many people scored exactly 80?
+
+A sorted list of exam scores has lots of repeated values. "Is 80 present?" is the plain binary-search
+question you already solved. But the useful questions are sharper: *where does the run of 80s begin?*
+*Where does it end?* *How many 80s are there?* *If a new 80 arrives, where does it slot in?* Plain binary
+search stops at *some* 80 and shrugs. The variations in this lesson stop at the exact **boundary** you
+care about — and they all reuse the same halving skeleton.
+
+<Callout type="intuition" title="The one-sentence idea">
+Instead of halting at any match, keep halving past it: record a candidate and steer toward the side that
+holds the boundary you want — the first match, the last match, or the spot where a condition flips.
+</Callout>
+
+## Intuition
+
+Ordinary binary search asks a yes/no question — "is `arr[mid]` the target?" Boundary search asks a
+*monotonic* question whose answer flips exactly once across the array, like "is `arr[mid] >= target`?"
+On a sorted array that predicate is `false, false, …, false, true, true, …, true`, and the first `true`
+is the boundary. Binary search is the perfect tool for finding where a monotone predicate changes.
+
+Two design choices control which boundary you land on. **First**, on equality do you keep going left
+(to find the *first* occurrence) or right (the *last*)? **Second**, do you treat the right end as
+inclusive (`hi = n - 1`, loop `lo <= hi`) or exclusive (`hi = n`, loop `lo < hi`)? The exclusive form is
+the cleanest for "bounds": `lowerBound` returns the first index with `arr[i] >= target`, and `upperBound`
+the first with `arr[i] > target`. Their difference, `upperBound - lowerBound`, is the count of matches —
+no separate counting pass.
+
+## Play with it
+
+The array has duplicate `4`s on purpose. Switch between the four modes and step through. Watch how
+**first occurrence** keeps shrinking the window from the right after each match, while **last occurrence**
+shrinks from the left — same target, opposite boundary.
+
+<SearchBoundExplorer client:visible />
+
+<Callout type="tip">
+Run **lower bound** and **upper bound** on target `4`, note the two indices, and subtract. That gap is
+exactly how many 4s there are — and it cost two O(log n) searches, never an O(n) count.
+</Callout>
+
+## How it works
+
+Find the **first** occurrence of `4` in `[2, 4, 4, 4, 6, 6, 8, 9]` (indices 0–7). The trick: on a match,
+save the index but keep searching the left half for an earlier one.
+
+```
+lo=0 hi=7 mid=3 arr[3]=4 = 4 → record best=3, search LEFT, hi=2
+lo=0 hi=2 mid=1 arr[1]=4 = 4 → record best=1, search LEFT, hi=0
+lo=0 hi=0 mid=0 arr[0]=2 < 4 → search RIGHT, lo=1
+lo=1 hi=0 → window empty → first occurrence is index 1
+```
+
+For the **last** occurrence you flip one line — on a match, search *right* (`lo = mid + 1`) instead of
+left — and the same skeleton lands on index 3.
+
+<CodeRunner
+  client:visible
+  code={`// Lower bound: first index with arr[i] >= target (exclusive-right template).
+function lowerBound(arr, target) {
+  let lo = 0, hi = arr.length;          // note: hi = n, not n - 1
+  while (lo < hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (arr[mid] < target) lo = mid + 1;
+    else hi = mid;                       // mid might be the boundary — keep it
+  }
+  return lo;
+}
+
+// Upper bound: first index with arr[i] > target. One comparison changes.
+function upperBound(arr, target) {
+  let lo = 0, hi = arr.length;
+  while (lo < hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (arr[mid] <= target) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+function countOccurrences(arr, target) {
+  return upperBound(arr, target) - lowerBound(arr, target);
+}`}
+  tests={[
+    { expr: 'lowerBound([2,4,4,4,6,6,8,9], 4)', label: 'first index ≥ 4' },
+    { expr: 'upperBound([2,4,4,4,6,6,8,9], 4)', label: 'first index > 4' },
+    { expr: 'countOccurrences([2,4,4,4,6,6,8,9], 4)', label: 'how many 4s' },
+    { expr: 'lowerBound([2,4,4,4,6,6,8,9], 5)', label: 'insertion point for 5' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the explicit first-occurrence search and the two bound helpers it builds on:
+
+```ts
+// /dsa/03-search/binary-search-variations.ts
+function findFirstOccurrence<T>(arr: T[], target: T): number {
+    let left = 0;
+    let right = arr.length - 1;
+    let result = -1;
+
+    while (left <= right) {
+        const mid = Math.floor((left + right) / 2);
+        if (arr[mid] === target) {
+            result = mid;       // record, then keep looking LEFT
+            right = mid - 1;
+        } else if (arr[mid] < target) {
+            left = mid + 1;
+        } else {
+            right = mid - 1;
+        }
+    }
+    return result;
+}
+
+function lowerBound<T>(arr: T[], target: T): number {
+    let left = 0, right = arr.length;     // exclusive right
+    while (left < right) {
+        const mid = Math.floor((left + right) / 2);
+        if (arr[mid] < target) left = mid + 1;
+        else right = mid;
+    }
+    return left;                           // first index with arr[i] >= target
+}
+```
+
+Run the full file: `npx tsx 03-search/binary-search-variations.ts`.
+
+## Complexity
+
+Every variation is still binary search — a constant amount of work per halving:
+
+$$
+T(n) = O(\log n), \qquad S(n) = O(1).
+$$
+
+| Question | Helper | Result when absent |
+|----------|--------|--------------------|
+| First index $\ge$ target | `lowerBound` | insertion point |
+| First index $>$ target | `upperBound` | insertion point |
+| First / last exact match | first/last occurrence | $-1$ |
+| Count of matches | `upper − lower` | $0$ |
+
+Counting occurrences the naive way is $O(n)$; two boundary searches make it $O(\log n)$ — a real win on
+arrays with long runs of duplicates.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Leaderboards" icon="🏆">
+To show "you rank in the top 5%", a game server runs <code>lowerBound</code> on the sorted score table to
+find where your score slots in, then converts that index to a percentile — no scan of millions of players.
+</ExampleCard>
+
+<ExampleCard domain="Insurance" icon="🛡️">
+Premiums are set by age or risk *brackets*. Finding which bracket a client falls into is an
+<code>upperBound</code> on the sorted bracket cutoffs: the first threshold strictly above their value
+marks their tier.
+</ExampleCard>
+
+<ExampleCard domain="Autocomplete" icon="⌨️">
+Words sharing a prefix form a contiguous block in a sorted dictionary. Lower and upper bound on the
+prefix delimit that block in O(log n), so the suggestion list is just the slice between the two indices.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Mixing inclusive and exclusive `hi`.** The bound template uses `hi = n` with `while (lo < hi)` and
+  `hi = mid` (no `-1`). Splicing in `hi = mid - 1` from the exact-match template breaks it. Pick one
+  template per variation and keep it consistent.
+- **The one-character difference.** `lowerBound` uses `arr[mid] < target`; `upperBound` uses `<=`. That
+  single `=` is the entire distinction between "first `>=`" and "first `>`". Name them carefully.
+- **Reading the not-found result.** When the target is absent, `lowerBound` returns the **insertion point**,
+  not `-1`. That is a feature — it tells you where the value would go — but check `arr[idx] === target`
+  if you need a true membership test.
+- **Off-by-one in the count.** The count is `upper - lower`, not `upper - lower + 1`, because `upper` is
+  exclusive. Verify on a single-element run: one `4` gives `lower=1, upper=2, count=1`.
+- **Interview cue:** "first/last position of element", "smallest index such that…", or "how many are
+  `<= x`" are all boundary searches. Reach for `lowerBound`/`upperBound`, not a raw binary search.
+
+## Practice
+
+1. **Easy:** In `[1, 2, 2, 2, 3]`, give `lowerBound(2)`, `upperBound(2)`, and the count of 2s.
+2. **Easy:** What does `lowerBound([1, 3, 5], 4)` return, and what does that index mean?
+3. **Medium:** Implement `findLastOccurrence` by changing exactly one line of `findFirstOccurrence`.
+4. **Medium:** Use `lowerBound` to write `searchInsertPosition` and confirm it matches the plain
+   insertion point from the previous lesson.
+5. **Hard:** Given start and end times sorted by start, count how many intervals begin within
+   `[L, R]` using two bound queries.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the sorted array [2, 4, 4, 4, 6], what is lowerBound(4)?',
+      options: ['0', '1', '3', '4'],
+      answer: 1,
+      explain: 'lowerBound returns the first index with value ≥ 4, which is index 1 — the start of the run of 4s.',
+    },
+    {
+      q: 'How do you count occurrences of a value with two boundary searches?',
+      options: [
+        'lowerBound + upperBound',
+        'upperBound − lowerBound',
+        'upperBound − lowerBound + 1',
+        'lowerBound − upperBound',
+      ],
+      answer: 1,
+      explain: 'upperBound is exclusive, so subtracting lowerBound gives the exact count without an off-by-one.',
+    },
+    {
+      q: 'When the target is absent, what does lowerBound return?',
+      options: ['-1', 'undefined', 'the insertion point that keeps the array sorted', 'the array length always'],
+      answer: 2,
+      explain: 'It returns the index where the value would be inserted to preserve order — handy beyond plain membership.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Boundary searches find <strong>where a monotone predicate flips</strong>, not just whether a value exists.',
+    'On a match, keep halving: go <strong>left for the first occurrence, right for the last</strong>.',
+    '<strong>lowerBound</strong> = first index ≥ target; <strong>upperBound</strong> = first index &gt; target; they differ by one comparison.',
+    'Their difference <strong>upper − lower is the count</strong> of matches, in O(log n) instead of O(n).',
+    'When absent, a bound returns the <strong>insertion point</strong> — useful for slotting values into sorted data.',
+  ]}
+/>
+
+Next up: **Jump & Exponential Search** — what to do when the array is enormous, unbounded, or stored
+where backward jumps are expensive and pure binary search is awkward.

@@ -1,0 +1,260 @@
+---
+title: PageRank
+track: dsa-graph-networks
+summary: "PageRank scores a node by one rule: you are important if important pages link to you — the eigenvector of the web."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-advanced-graph/two-sat
+leadsTo:
+  - dsa-graph-networks/hits
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NetPageRankFlow from '../../../components/demos/NetPageRankFlow.tsx';
+
+## The hook: how do you rank the whole web with no editors?
+
+In 1998 the web had hundreds of millions of pages and no one to grade them. Counting inbound links was
+the obvious idea — but spammers can mint a million junk pages that all link to theirs. The insight that
+launched Google was to make a link's value depend on the *importance of the page casting it*. A vote from
+a page that is itself heavily linked counts more than a vote from a nobody. That is circular — your rank
+depends on your neighbours' ranks, which depend on yours — and resolving that circle is exactly PageRank.
+
+<Callout type="intuition" title="The one-sentence idea">
+Imagine a surfer who clicks random links forever; PageRank is the fraction of time they spend on each
+page — high if many important pages point to it.
+</Callout>
+
+## Intuition: a random surfer who sometimes teleports
+
+Picture someone browsing forever. From the current page they do one of two things:
+
+- With probability $d$ (the **damping factor**, usually $0.85$) they follow a random out-link.
+- With probability $1 - d$ they get bored and **teleport** to a page chosen uniformly at random.
+
+Run this walk for a long time and the surfer settles into a steady state: each page is visited a fixed
+fraction of the time. That fraction is its PageRank. Teleporting is not a detail — it guarantees the walk
+can always escape dead ends and link farms, so a unique steady state always exists.
+
+The circularity resolves by **iteration**. Start every page equal, then repeatedly let each page hand its
+score out evenly along its links. Importance flows along edges, pools at well-connected pages, and after a
+dozen or so rounds the numbers stop moving. That fixed point is the answer.
+
+## Play with it
+
+Press Play and watch importance flow. Node size and colour grow with a page's rank; the emerald ring marks
+the current leader. Click one node then another to add or remove a link and see the ranking rearrange.
+
+<NetPageRankFlow client:visible />
+
+<Callout type="tip">
+Slide the damping factor down toward $0.5$. The teleport term spreads rank more evenly, so the leader's
+advantage shrinks — high damping trusts the link structure, low damping trusts everyone equally.
+</Callout>
+
+## How it works
+
+Each iteration applies one rule to every page at once: a page's new score is a small teleport share plus
+the damped sum of scores arriving along its in-links. For a page $A$ with the pages $i$ linking to it:
+
+$$
+PR(A) = \frac{1 - d}{N} + d \sum_{i \to A} \frac{PR(i)}{L(i)},
+$$
+
+where $N$ is the number of pages, $L(i)$ is the number of out-links from page $i$, and $d$ is the damping
+factor. Every page divides its score equally among the pages it points to — a page with many out-links
+gives each neighbour only a thin slice.
+
+Watch three pages where $B \to A$, $C \to A$, and $A \to C$ converge from a flat start:
+
+```
+iter 0:  A=0.333  B=0.333  C=0.333
+iter 1:  A=0.473  B=0.050  C=0.477
+iter 2:  A=0.457  B=0.050  C=0.493
+iter 3:  A=0.461  B=0.050  C=0.489   ← barely moving: converged
+```
+
+B linked to nothing important and was linked to by nothing, so it sinks to the teleport floor; A and C
+trade rank back and forth and settle.
+
+<CodeRunner
+  client:visible
+  code={`// Power-iteration PageRank on a directed graph.
+function pageRank(edges, nodes, d = 0.85, iters = 50) {
+  const out = {}, inc = {};
+  nodes.forEach(n => { out[n] = []; inc[n] = []; });
+  for (const [u, v] of edges) { out[u].push(v); inc[v].push(u); }
+  const N = nodes.length;
+  let pr = {}; nodes.forEach(n => pr[n] = 1 / N);
+  for (let it = 0; it < iters; it++) {
+    const next = {};
+    let dangling = 0;
+    nodes.forEach(n => { if (out[n].length === 0) dangling += pr[n]; });
+    for (const v of nodes) {
+      let s = 0;
+      for (const u of inc[v]) s += pr[u] / out[u].length;
+      next[v] = (1 - d) / N + d * (s + dangling / N);
+    }
+    pr = next;
+  }
+  // round for readability
+  const r = {}; nodes.forEach(n => r[n] = +pr[n].toFixed(3));
+  return r;
+}`}
+  tests={[
+    { expr: "pageRank([['A','B'],['A','C'],['B','C'],['C','A']], ['A','B','C'])", label: 'ranks of a 3-page web' },
+    { expr: "pageRank([['A','B'],['B','A']], ['A','B'])", label: 'a symmetric 2-cycle is balanced' },
+  ]}
+/>
+
+## The real implementation
+
+The course file wraps power iteration in a class and adds the personalized variant — instead of teleporting
+uniformly, you teleport into a chosen set of pages, which biases the ranking toward one user's interests.
+
+```ts
+// /dsa/29-graph-advanced/pagerank-advanced.ts
+computePageRank(iterations: number = 100): Map<number, number> {
+  const pr = new Map<number, number>();
+  const N = this.nodes.length;
+  this.nodes.forEach(node => pr.set(node, 1 / N));      // start flat
+
+  for (let iter = 0; iter < iterations; iter++) {
+    const newPr = new Map<number, number>();
+    for (const node of this.nodes) {
+      let sum = 0;
+      for (const [from, targets] of this.graph) {        // incoming links
+        if (targets.includes(node)) {
+          sum += (pr.get(from) || 0) / targets.length;   // share of source's rank
+        }
+      }
+      newPr.set(node, (1 - this.dampingFactor) / N + this.dampingFactor * sum);
+    }
+    pr.clear();
+    for (const [node, value] of newPr) pr.set(node, value);
+  }
+  return pr;
+}
+```
+
+Run the full file: `npx tsx 29-graph-advanced/pagerank-advanced.ts`.
+
+## Complexity
+
+Each iteration touches every edge once to push rank, and the walk converges geometrically — the error
+shrinks by a factor of $d$ each round, so a fixed tolerance needs only $O(\log(1/\varepsilon))$ iterations,
+independent of graph size:
+
+$$
+T = O\!\left(k \,(N + M)\right), \qquad S = O(N + M),
+$$
+
+where $k$ is the iteration count, $N$ the nodes, and $M$ the edges.
+
+| Quantity | Cost | Note |
+|----------|------|------|
+| One iteration | $O(N + M)$ | every node and edge once |
+| Iterations to converge | $O(\log(1/\varepsilon))$ | $\approx 50$–$100$ in practice |
+| Memory | $O(N + M)$ | the graph plus two rank vectors |
+
+<Callout type="why">
+PageRank is an <strong>eigenvector</strong> problem in disguise: the converged scores are the dominant
+eigenvector of the (damped) link matrix, and power iteration is the standard way to find it. If you have
+met the idea in the ML course's [eigenvalues &amp; eigenvectors lesson](/lessons/linear-algebra/eigenvectors),
+PageRank is its most famous application — the web's link matrix, its principal eigenvector read off as
+importance.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Academia" icon="📚">
+Eigenfactor and similar metrics rank journals by treating citations as links: a citation from a
+heavily-cited journal lifts your score more than one from an obscure newsletter — PageRank on the
+citation graph.
+</ExampleCard>
+
+<ExampleCard domain="Biology" icon="🧬">
+GeneRank runs PageRank over protein-interaction networks to prioritise genes: a gene tied to many
+already-important genes bubbles up as a candidate drug target, even with weak direct evidence.
+</ExampleCard>
+
+<ExampleCard domain="Sports" icon="🏈">
+Rank teams by who-beat-whom: beating a strong team should count more than beating a weak one. Feeding the
+results graph through PageRank yields ratings that resist padding a schedule with easy wins.
+</ExampleCard>
+
+<ExampleCard domain="Roads" icon="🛣️">
+Traffic engineers run PageRank on the road network to predict which intersections carry the most flow —
+a junction fed by many busy junctions inherits their importance, flagging where congestion concentrates.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Dangling nodes leak rank.** A page with no out-links has nowhere to send its score. Redistribute it
+  (uniformly, as the demo does) or the ranks stop summing to one.
+- **Forgetting teleport breaks convergence.** Without the $1 - d$ term a rank sink (a cycle with no way out)
+  swallows all the score. Damping guarantees a unique steady state.
+- **It is global, not local.** PageRank cannot be read off one node's neighbourhood — it depends on the
+  whole graph, which is why you iterate to a fixed point.
+- **Interview cue:** "rank nodes by importance where importance is recursive" almost always means PageRank
+  or power iteration. Say "dominant eigenvector of the transition matrix" and explain the random surfer.
+
+## Practice
+
+1. **Easy:** On a 2-cycle $A \to B \to A$, argue from symmetry what each rank must be, then check it in the demo.
+2. **Easy:** Add a self-loop in the runner ($C \to C$). What happens to $C$'s share, and why is that a "rank sink"?
+3. **Medium:** With $d = 0.85$ and $N = 4$, what is the minimum possible PageRank any page can have? (Hint: the teleport floor.)
+4. **Medium:** Modify the snippet to compute *personalized* PageRank by teleporting only to node $A$ instead of uniformly.
+5. **Hard:** Two pages point only at each other and nothing points in. Show how teleport stops them from hoarding all the rank, and estimate their final share.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the damping factor d = 0.85 represent?',
+      options: [
+        'The fraction of pages that are spam',
+        'The probability the random surfer follows a link rather than teleporting',
+        'The learning rate of the iteration',
+        'The number of iterations needed',
+      ],
+      answer: 1,
+      explain: 'With probability d the surfer follows an out-link; with probability 1 − d they teleport to a random page, which guarantees a unique steady state.',
+    },
+    {
+      q: 'A page divides its PageRank among its out-links. A page with 10 out-links passes to each neighbour:',
+      options: ['Its full rank', 'One tenth of its rank', 'Nothing', 'Ten times its rank'],
+      answer: 1,
+      explain: 'Score is split evenly: each of the 10 neighbours receives PR/10. Many out-links means a thin slice each.',
+    },
+    {
+      q: 'Why is PageRank described as an eigenvector computation?',
+      options: [
+        'Because it sorts numbers',
+        'Because the converged scores are the dominant eigenvector of the link matrix, found by power iteration',
+        'Because it uses matrix inversion',
+        'Because the graph must be symmetric',
+      ],
+      answer: 1,
+      explain: 'Iterating the damped link matrix is power iteration; it converges to that matrix\'s principal eigenvector, which is the PageRank vector.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'PageRank ranks a node by the importance of who links to it — a <strong>recursive, global</strong> definition.',
+    'Model it as a <strong>random surfer</strong> who follows links with probability d and teleports with probability 1 − d.',
+    'Compute it by <strong>power iteration</strong>: start flat, push rank along out-links, repeat until it stops moving.',
+    'Teleport (the 1 − d term) guarantees a <strong>unique steady state</strong> and tames dangling nodes and rank sinks.',
+    'The converged vector is the <strong>dominant eigenvector</strong> of the link matrix — PageRank is linear algebra on the web.',
+  ]}
+/>
+
+Next up: **HITS** — instead of one score per page, two reinforcing scores: good *hubs* point to good
+*authorities*, and good authorities are pointed to by good hubs.

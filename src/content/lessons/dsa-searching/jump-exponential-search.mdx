@@ -1,0 +1,275 @@
+---
+title: Jump & Exponential Search
+summary: "Two block strategies for sorted data: jump in fixed sqrt(n) hops, or double the range until it overshoots — ideal for huge, streamed, or unbounded inputs."
+track: dsa-searching
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-searching/binary-search-variations
+leadsTo:
+  - dsa-searching/ternary-search
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SearchJumpExponential from '../../../components/demos/SearchJumpExponential.tsx';
+
+## The hook: finding a word when you can't flip backwards cheaply
+
+Imagine a dictionary printed on a long paper scroll. Flipping *forward* is easy, but reeling *back* is
+slow and clumsy. Binary search would have you bouncing left and right across the whole scroll — lots of
+expensive rewinds. Instead you advance in steady leaps, peeking at every few hundred words, until you
+just pass your target; then you scan that short stretch carefully. That is **jump search**. Its cousin,
+**exponential search**, leaps in *doubling* strides — perfect when you don't even know how long the
+scroll is.
+
+<Callout type="intuition" title="The one-sentence idea">
+Skip ahead in big steps to find the small block that must contain the target, then search only that
+block — fixed √n steps for jump search, or doubling steps for exponential search.
+</Callout>
+
+## Intuition
+
+Both algorithms split the work into **locate the block, then search the block**. They differ in how the
+strides grow.
+
+**Jump search** uses a *fixed* step of $\sqrt{n}$. It checks `arr[step]`, `arr[2·step]`, `arr[3·step]`,
+… until it lands on a value `>=` the target — meaning the target, if present, sits in the previous block.
+Then it linear-scans that one block of length $\sqrt{n}$. Why $\sqrt{n}$? Because with step `s` you make
+about `n/s` jumps plus `s` scan steps, and `n/s + s` is smallest when `s = √n`. Its appeal: it only ever
+moves *forward* and backtracks at most one block, which is gentle on sequential media.
+
+**Exponential search** uses a *doubling* step: it probes index 1, 2, 4, 8, 16, … until `arr[bound]`
+overshoots the target, then runs an ordinary binary search inside `[bound/2, bound]`. If the target sits
+at index `i`, it finds the range in about $\log_2 i$ probes and binary-searches a range of size `i`, for
+$O(\log i)$ total. That makes it the tool for **unbounded** inputs of unknown length, and a winner when
+the target is near the front.
+
+## Play with it
+
+Toggle between the two algorithms and step through. **Jump** hops in equal √n strides, then scans one
+block. **Exponential** doubles its reach, then binary-searches the settled range. The probe is marked
+with ▲; the shaded band is the region still in play.
+
+<SearchJumpExponential client:visible />
+
+<Callout type="tip">
+Switch to **Exponential** and search for a small value like `2`. It doubles only once or twice before
+binary-searching a tiny range — far fewer probes than scanning from the front, and it never needed to
+know the array's length up front.
+</Callout>
+
+## How it works
+
+**Jump search** for `19` in a 16-element sorted array (step `= √16 = 4`):
+
+```
+jump: arr[4]=8   < 19 → skip block, hop to index 8
+jump: arr[8]=23  ≥ 19 → overshot; target is in block [4..8]
+scan: arr[4]=8  ≠ 19
+scan: arr[5]=11 ≠ 19
+scan: arr[6]=14 ≠ 19
+scan: arr[7]=19 = 19 → FOUND at index 7
+```
+
+Two jumps plus a four-cell scan. **Exponential search** for the same target doubles `1 → 2 → 4 → 8`
+until `arr[8]=23 ≥ 19`, then binary-searches the range `[4..8]`.
+
+<CodeRunner
+  client:visible
+  code={`// Jump search: fixed sqrt(n) stride, then a linear scan of one block.
+function jumpSearch(arr, target) {
+  const n = arr.length;
+  if (n === 0) return -1;
+  const step = Math.floor(Math.sqrt(n));
+  let prev = 0, curr = step;
+  while (curr < n && arr[curr] < target) { prev = curr; curr += step; }
+  for (let i = prev; i <= Math.min(curr, n - 1); i++) {
+    if (arr[i] === target) return i;
+  }
+  return -1;
+}
+
+// Exponential search: double the bound, then binary-search the range.
+function exponentialSearch(arr, target) {
+  const n = arr.length;
+  if (n === 0) return -1;
+  if (arr[0] === target) return 0;
+  let bound = 1;
+  while (bound < n && arr[bound] < target) bound *= 2;
+  let lo = Math.floor(bound / 2), hi = Math.min(bound, n - 1);
+  while (lo <= hi) {
+    const mid = lo + Math.floor((hi - lo) / 2);
+    if (arr[mid] === target) return mid;
+    else if (arr[mid] < target) lo = mid + 1;
+    else hi = mid - 1;
+  }
+  return -1;
+}`}
+  tests={[
+    { expr: 'jumpSearch([1,2,4,7,8,11,14,19,23,27,31,36,41,48,55,60], 19)', label: 'jump → index of 19' },
+    { expr: 'jumpSearch([1,2,4,7,8,11,14,19,23,27,31,36,41,48,55,60], 60)', label: 'jump → last element' },
+    { expr: 'exponentialSearch([1,2,4,7,8,11,14,19,23,27,31,36,41,48,55,60], 2)', label: 'exp → small target' },
+    { expr: 'exponentialSearch([1,2,4,7,8,11,14,19,23,27,31,36,41,48,55,60], 13)', label: 'exp → missing 13' },
+  ]}
+/>
+
+## The real implementation
+
+From the course files — jump search with its √n step, and exponential search's doubling phase that hands
+off to a bounded binary search:
+
+```ts
+// /dsa/03-search/jump-search.ts
+function jumpSearch<T>(arr: T[], target: T): number {
+    const n = arr.length;
+    if (n === 0) return -1;
+    const step = Math.floor(Math.sqrt(n));
+
+    let prev = 0;
+    let curr = step;
+    while (curr < n && arr[curr] < target) {   // hop forward by √n
+        prev = curr;
+        curr += step;
+    }
+    for (let i = prev; i <= Math.min(curr, n - 1); i++) {  // scan one block
+        if (arr[i] === target) return i;
+    }
+    return -1;
+}
+
+// /dsa/03-search/exponential-search.ts
+function exponentialSearch<T>(arr: T[], target: T): number {
+    const n = arr.length;
+    if (n === 0) return -1;
+    if (arr[0] === target) return 0;
+
+    let bound = 1;
+    while (bound < n && arr[bound] < target) {  // double until overshoot
+        bound *= 2;
+    }
+    const left = Math.floor(bound / 2);
+    const right = Math.min(bound, n - 1);       // clamp to the real end
+    return binarySearch(arr, target, left, right);  // ordinary binary search
+}
+```
+
+Run the full files: `npx tsx 03-search/jump-search.ts` and `npx tsx 03-search/exponential-search.ts`.
+
+## Complexity
+
+The block sizes are chosen to balance the two phases:
+
+$$
+T_{\text{jump}}(n) = O(\sqrt{n}), \qquad T_{\text{exp}}(n) = O(\log i),
+$$
+
+where `i` is the target's index. Both use $O(1)$ extra space.
+
+| Algorithm | Time | Best for |
+|-----------|------|----------|
+| Binary search | $O(\log n)$ | Random access, known size |
+| Jump search | $O(\sqrt{n})$ | Forward-only / costly backward jumps |
+| Exponential search | $O(\log i)$ | Unbounded size, target near front |
+
+Binary search is asymptotically fastest, but jump and exponential search win in the *access patterns*
+they were designed for — sequential media and unbounded streams.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Magnetic tape & logs" icon="📼">
+Seeking on tape or an append-only log is cheap forward, painful backward. Jump search's forward-only
+√n hops with a single short backtrack fit that cost model far better than binary search's two-way
+bouncing.
+</ExampleCard>
+
+<ExampleCard domain="Paginated APIs" icon="🌐">
+A REST endpoint returns sorted results page by page with no total count. Exponential search requests
+page 1, 2, 4, 8, … until it overshoots, then binary-searches between the last two — finding the right
+page without ever asking "how many pages are there?"
+</ExampleCard>
+
+<ExampleCard domain="Library stacks" icon="📚">
+Hunting a call number along a long sorted shelf, you read the spine every few feet (a jump) rather than
+every book, then scan the final stretch closely — physically cheaper than a binary search that sends you
+walking back and forth across the whole aisle.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Wrong step size.** Any fixed step gives $O(n/s + s)$; only $s = \sqrt{n}$ minimizes it. A step of,
+  say, 10 is $O(n)$ on large arrays. Compute `Math.floor(Math.sqrt(n))`.
+- **Forgetting to clamp the bound.** In exponential search, `bound` can shoot past the array. The right
+  end of the binary search must be `Math.min(bound, n - 1)` or you index out of range.
+- **Off-by-one in the jump block.** After the jump loop, scan `[prev, min(curr, n-1)]` inclusive. Starting
+  the scan at `curr` instead of `prev` skips the block that actually holds the target.
+- **Still requires sorted data.** Both algorithms lean on monotonicity just like binary search; on
+  unsorted input they're meaningless.
+- **Interview cue:** "the array is unbounded / infinite" or "we can only read forward / backward seeks are
+  expensive" is the tell. Reach for exponential search for unknown length, jump search for sequential cost.
+
+## Practice
+
+1. **Easy:** For `n = 100`, what step does jump search use, and how many jumps at most before the scan?
+2. **Easy:** Trace exponential search for target `8` in a 16-element array — how many times does `bound`
+   double before it overshoots?
+3. **Medium:** Modify jump search to return the *first* occurrence when duplicates are present.
+4. **Medium:** Implement `unboundedSearch(getElement, target)` where `getElement(i)` returns `undefined`
+   past the end — double until you read `undefined` or overshoot, then binary-search.
+5. **Hard:** Compare expected probes of jump vs exponential vs binary search when the target is always at
+   index 3 of a million-element array. Which wins, and why?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does jump search use a step size of √n?',
+      options: [
+        'It is the largest step that fits in memory',
+        'It minimizes n/step + step, the total jump-plus-scan cost',
+        'It guarantees O(log n)',
+        'Because n is always a perfect square',
+      ],
+      answer: 1,
+      explain: 'Total work is about n/step jumps plus step scan steps; n/s + s is minimized at s = √n, giving O(√n).',
+    },
+    {
+      q: 'What makes exponential search suitable for unbounded or unknown-length arrays?',
+      options: [
+        'It sorts the array first',
+        'It doubles the bound until it overshoots, never needing the length up front',
+        'It uses O(n) space',
+        'It only works on small arrays',
+      ],
+      answer: 1,
+      explain: 'Doubling locates a range that brackets the target using only forward probes, so the total size is never required.',
+    },
+    {
+      q: 'In exponential search, why clamp the binary-search right end to min(bound, n - 1)?',
+      options: [
+        'To make it faster',
+        'Because bound may have doubled past the end of the array',
+        'To handle duplicates',
+        'To avoid sorting',
+      ],
+      answer: 1,
+      explain: 'The last doubling can exceed n - 1; clamping keeps the binary search inside the array bounds.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Both algorithms <strong>locate a block, then search inside it</strong> — only the stride pattern differs.',
+    'Jump search hops in fixed <strong>√n steps</strong> then scans one block: O(√n), forward-friendly.',
+    'Exponential search <strong>doubles the bound</strong> then binary-searches the range: O(log i), great for unknown lengths.',
+    'Binary search is still asymptotically fastest; these win on <strong>sequential media and unbounded streams</strong>.',
+    'Always <strong>clamp the bound</strong> to the array end, use a true √n step, and remember the data must be sorted.',
+  ]}
+/>
+
+Next up: **Ternary Search** — leaving sorted arrays behind to find the *peak* of a function that rises
+then falls, by splitting the range into thirds instead of halves.

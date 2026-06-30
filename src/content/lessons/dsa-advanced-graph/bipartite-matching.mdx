@@ -1,0 +1,257 @@
+---
+title: Bipartite Matching
+track: dsa-advanced-graph
+summary: "Pair two sides without conflicts: augmenting paths grow a matching one edge at a time until it is provably maximum."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-advanced-graph/eulerian-path
+leadsTo:
+  - dsa-advanced-graph/max-flow-min-cut
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AGphBipartiteMatching from '../../../components/demos/AGphBipartiteMatching.tsx';
+
+## The hook: everyone gets a partner
+
+You have workers on one side and jobs on the other, students and projects, doctors and shifts. Each
+worker can do only certain jobs, and no job can go to two people. How many assignments can you make at
+once? That is **maximum bipartite matching** — and a greedy first pass usually leaves people stranded who
+*could* have been paired if only earlier choices were nudged aside. The fix is beautiful: find an
+**augmenting path** and flip it, turning every matched edge unmatched and vice versa, gaining exactly one
+pair each time.
+
+<Callout type="intuition" title="The one-sentence idea">
+A matching is maximum precisely when no augmenting path remains — an alternating chain from a free left
+vertex to a free right vertex whose flip increases the matching by one.
+</Callout>
+
+## Intuition
+
+A graph is **bipartite** when its vertices split into two sides with edges only going across (no edges
+inside a side). A **matching** is a set of edges that share no vertex — a clean one-to-one pairing.
+
+Greedy alone is short-sighted: if worker A grabs the only job that worker B can also do, B is stuck even
+when A had a second option. An **augmenting path** repairs this. Starting from an unmatched left vertex,
+alternate *unmatched, matched, unmatched, …* edges until you reach an unmatched right vertex. Every edge
+on that path swaps state: the path had one fewer matched edge than unmatched, so flipping it nets **+1**
+match and never breaks an existing pair (each touched vertex simply changes partner).
+
+Kuhn's algorithm just tries to augment from each left vertex in turn. When a desired right vertex is
+already taken, it **recursively re-homes** the current occupant down another augmenting path. If that
+succeeds, both fit; if not, it tries the next option. **Berge's theorem** guarantees that when no
+augmenting path exists anywhere, the matching is maximum.
+
+## Play with it
+
+Each left vertex searches in turn. Watch a taken right vertex trigger a recursive re-routing (the sky-blue
+path), and watch the whole chain flip green when a free vertex is found. The "Needs re-routing" preset is
+the key one — greedy would stall, but augmentation finds the perfect pairing.
+
+<AGphBipartiteMatching client:visible />
+
+<Callout type="tip">
+Bipartite matching is the gateway to <strong>König's theorem</strong>: in any bipartite graph the size of
+the maximum matching equals the size of the minimum vertex cover. So the same search that pairs people
+also tells you the fewest vertices that touch every edge — a duality we will see again as max-flow/min-cut.
+</Callout>
+
+## How it works
+
+Take left `{0,1,2}`, right `{0,1}`, edges `0-0, 1-0, 1-1, 2-1`. Process left vertices in order:
+
+```
+L0 → R0 free            match {R0:L0}              size 1
+L1 → R0 taken by L0
+     re-home L0: L0's only edge is R0 (visited) → fail
+     L1 → R1 free       match {R0:L0, R1:L1}       size 2
+L2 → R1 taken by L1
+     re-home L1: L1 → R0 taken by L0
+                 re-home L0: no other option → fail
+                 L1 has no other free edge → fail
+     L2 has no other edge → stays unmatched        size 2
+```
+
+Maximum matching is `2` (only two right vertices exist, so that is the ceiling). The recursion tried hard
+to fit `L2` by reshuffling, proved it impossible, and stopped — exactly Berge's "no augmenting path" test.
+
+<CodeRunner
+  client:visible
+  code={`// Kuhn's algorithm: maximum bipartite matching via augmenting paths (plain JS)
+function maxMatching(leftN, rightN, edges) {
+  const adj = Array.from({ length: leftN }, () => []);
+  for (const [l, r] of edges) adj[l].push(r);
+  const matchR = Array(rightN).fill(-1); // matchR[r] = left vertex, or -1
+  function augment(l, seen) {
+    for (const r of adj[l]) {
+      if (seen[r]) continue;
+      seen[r] = true;
+      if (matchR[r] === -1 || augment(matchR[r], seen)) {
+        matchR[r] = l;          // claim r (re-homing its old partner if needed)
+        return true;
+      }
+    }
+    return false;
+  }
+  let size = 0;
+  for (let l = 0; l < leftN; l++) {
+    if (augment(l, Array(rightN).fill(false))) size++;
+  }
+  return { size, matchR };
+}`}
+  tests={[
+    { expr: 'maxMatching(3, 2, [[0,0],[1,0],[1,1],[2,1]]).size', label: 're-routing case' },
+    { expr: 'maxMatching(3, 3, [[0,0],[0,1],[1,0],[1,2],[2,1],[2,2]]).size', label: 'full 3×3 match' },
+    { expr: 'maxMatching(3, 3, [[0,0],[1,0],[2,0],[2,2]]).size', label: 'bottleneck at R0' },
+  ]}
+/>
+
+## The real implementation
+
+Kuhn's algorithm from the course file — the recursion `tryAugment` is the augmenting-path search:
+
+```ts
+// /dsa/19-advanced-graph/bipartite-matching.ts
+export function kuhnMatching(graph: BipartiteGraph): number[] {
+  const rightSize = graph.getRightSize();
+  const match: number[] = Array(rightSize).fill(-1);   // match[right] = left
+
+  function tryAugment(left: number, visited: boolean[]): boolean {
+    for (const right of graph.getNeighbors(left)) {
+      if (visited[right]) continue;
+      visited[right] = true;
+      // right is free, OR its partner can be re-homed along another path
+      if (match[right] === -1 || tryAugment(match[right], visited)) {
+        match[right] = left;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  for (let left = 0; left < graph.getLeftSize(); left++) {
+    tryAugment(left, Array(rightSize).fill(false));     // fresh visited set per left
+  }
+  return match;
+}
+```
+
+Run the full file: `npx tsx 19-advanced-graph/bipartite-matching.ts`. It also implements **Hopcroft-Karp**
+($O(E\sqrt{V})$ via simultaneous shortest augmenting paths), the **Hungarian** algorithm for weighted
+assignment, and the König minimum-vertex-cover construction.
+
+## Complexity
+
+Kuhn's runs one augmenting search per left vertex, each scanning the edges:
+
+$$
+T = O(V \cdot E), \qquad S = O(V + E).
+$$
+
+| Algorithm | Time | Best for |
+|-----------|------|----------|
+| **Kuhn (augmenting paths)** | $O(V \cdot E)$ | small or dense graphs, simplest code |
+| Hopcroft-Karp | $O(E \sqrt{V})$ | large sparse graphs |
+| Hungarian | $O(V^3)$ | weighted (minimum-cost) assignment |
+
+The key fact: each augmenting path adds one edge, the matching has at most $V/2$ edges, and each search is
+$O(E)$ — giving the $O(V \cdot E)$ bound.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Hospital scheduling" icon="🏥">
+Residents must be matched to on-call shifts subject to who is qualified and available. Maximum matching
+fills the most slots at once; the unmatched residents and shifts are exactly where the rota has slack or a
+shortage.
+</ExampleCard>
+
+<ExampleCard domain="Online advertising" icon="📣">
+Ad servers pair impressions with eligible campaigns in real time. Each impression (left) can serve only
+certain ads (right) under targeting rules; maximum matching maximises filled inventory without
+double-booking a slot.
+</ExampleCard>
+
+<ExampleCard domain="Kidney exchange" icon="🫀">
+Incompatible donor–patient pairs are matched into chains where each donor gives to a compatible stranger.
+Matching algorithms (a weighted, cyclic cousin of this one) decide which swaps maximise the number of
+transplants performed.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Reset `visited` per left vertex.** The visited array guards one augmenting search; reusing it across
+  left vertices blocks valid re-routings and undercounts the matching.
+- **Match by right vertex.** Storing `match[right] = left` makes re-homing a single recursive call. Trying
+  to track both sides by hand invites bugs.
+- **Confirm bipartiteness first.** Augmenting paths assume two sides. On a graph with odd cycles you need
+  the Blossom algorithm instead — much harder.
+- **Maximum independent set / vertex cover.** In a bipartite graph these reduce to matching via König's
+  theorem: minimum vertex cover = max matching, and maximum independent set = $V -$ max matching.
+- **Interview cue:** "assign A to B with constraints", "maximum pairs", or "minimum people to cover all
+  tasks" is matching. If weights appear, switch to Hungarian; if huge and sparse, Hopcroft-Karp.
+
+## Practice
+
+1. **Easy:** Draw left `{0,1}`, right `{0,1}` with edges `0-0, 0-1, 1-0`. What is the maximum matching size?
+2. **Easy:** Why can the matching never exceed $\min(\lvert L\rvert, \lvert R\rvert)$?
+3. **Medium:** Construct a graph where greedy (no augmenting) gives matching 1 but the true maximum is 2.
+4. **Medium:** Using König's theorem, find the minimum vertex cover of the "Workers & jobs" preset.
+5. **Hard:** A 3×3 grid of seats — place the most students so no two are horizontally or diagonally
+   adjacent. Model the conflicts as a bipartite graph and use maximum independent set.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'An augmenting path runs from…',
+      options: [
+        'any vertex to any other',
+        'a free left vertex to a free right vertex, alternating unmatched/matched edges',
+        'a matched edge to another matched edge',
+        'the source to the sink',
+      ],
+      answer: 1,
+      explain: 'Flipping such an alternating path turns one more edge matched than it unmatches, increasing the matching by exactly one.',
+    },
+    {
+      q: 'Berge\'s theorem says a matching is maximum when…',
+      options: [
+        'every left vertex is matched',
+        'no augmenting path exists',
+        'the graph is connected',
+        'all degrees are even',
+      ],
+      answer: 1,
+      explain: 'If no augmenting path can be found from any free vertex, the current matching cannot be enlarged.',
+    },
+    {
+      q: 'Why must the visited array be reset for each left vertex in Kuhn\'s algorithm?',
+      options: [
+        'to save memory',
+        'each augmenting search is independent; sharing visited blocks valid re-routings',
+        'the graph changes between searches',
+        'it should not be reset',
+      ],
+      answer: 1,
+      explain: 'visited prevents infinite recursion within one search; carrying it over would wrongly forbid edges later searches need.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>matching</strong> pairs vertices with no shared endpoints; we want the maximum such set.',
+    '<strong>Augmenting paths</strong> alternate unmatched/matched edges between two free vertices; flipping one gains a pair.',
+    'Kuhn\'s algorithm augments from each left vertex, <strong>recursively re-homing</strong> taken partners.',
+    'By <strong>Berge\'s theorem</strong>, no augmenting path means the matching is maximum.',
+    'Runs in <strong>O(V·E)</strong>; König ties matching to <strong>minimum vertex cover</strong> and independent sets.',
+  ]}
+/>
+
+Next up: **Max-Flow / Min-Cut** — matching is a special case of pushing flow through a network, and the
+theorem that bounds it is one of the deepest results in combinatorial optimisation.

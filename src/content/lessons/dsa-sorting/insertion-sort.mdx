@@ -1,0 +1,241 @@
+---
+title: Insertion Sort
+track: dsa-sorting
+summary: Grow a sorted region by slipping each new value into its correct spot — adaptive, stable, and the secret weapon inside real-world hybrid sorts.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - dsa-sorting/selection-sort
+leadsTo:
+  - dsa-sorting/merge-sort
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SortInsertion from '../../../components/demos/SortInsertion.tsx';
+
+## The hook: the way you sort a hand of cards
+
+Deal yourself a hand of playing cards and you sort them without thinking: you pick up each new card
+and slide it left until it sits between a smaller and a larger card. The cards already in your hand
+stay sorted the whole time; you just make room for the newcomer. That is insertion sort, exactly —
+and unlike the previous two sorts, it gets *dramatically faster* when the data is already close to
+sorted. That single property is why it hides inside the sorting routines your language actually ships.
+
+<Callout type="intuition" title="The one-sentence idea">
+Keep a sorted region on the left; take the next value, shift the larger sorted elements one slot
+right to open a gap, and drop the value into it.
+</Callout>
+
+## Intuition
+
+Selection sort searched the *whole* unsorted tail for one element to place. Insertion sort flips
+that: it takes the *next* element (no searching) and asks where it belongs in the already-sorted
+left region. To insert, it slides every larger sorted value one position right — like nudging books
+on a shelf — until a gap opens at the right spot.
+
+The magic is in the stopping condition. As soon as the value to the left is **not** bigger, you
+stop shifting — the element is home. On a nearly-sorted array almost nothing is out of place, so the
+inner shift-loop barely runs, and the whole sort costs close to $O(n)$. On a reversed array every
+element must travel all the way left, and you are back to $O(n^2)$. Insertion sort *adapts to how
+sorted the input already is* — the first sort in this track that does.
+
+## Play with it
+
+Amber is the card you just picked up; sky bars are the larger sorted values shifting right to open
+its gap. Press **Nearly sorted** and count how rarely the sky bars even appear.
+
+<SortInsertion client:visible />
+
+<Callout type="tip">
+Compare two runs: a random array versus the "Nearly sorted" preset. The nearly-sorted run finishes
+in a handful of steps because each new value is already almost in place — that is adaptivity you can
+watch.
+</Callout>
+
+## How it works
+
+Trace `[5, 3, 8, 1, 2]`. Brackets mark the sorted region; the picked value is in caps:
+
+```
+[5] 3 8 1 2        pick 3 → 5>3 shift → [3 5] 8 1 2
+[3 5] 8 1 2        pick 8 → 5<8 stop  → [3 5 8] 1 2
+[3 5 8] 1 2        pick 1 → shift 8,5,3 → [1 3 5 8] 2
+[1 3 5 8] 2        pick 2 → shift 8,5,3 → [1 2 3 5 8]
+```
+
+The runnable version shifts (not swaps) and returns the sorted array:
+
+<CodeRunner
+  client:visible
+  code={`function insertionSort(arr) {
+  const a = [...arr];
+  for (let i = 1; i < a.length; i++) {
+    const key = a[i];      // the card we just picked up
+    let j = i - 1;
+    while (j >= 0 && a[j] > key) {
+      a[j + 1] = a[j];     // shift a larger sorted value right
+      j--;
+    }
+    a[j + 1] = key;        // drop key into the open gap
+  }
+  return a;
+}`}
+  tests={[
+    { expr: 'insertionSort([5,3,8,1,2]).join(",")', label: 'sort [5,3,8,1,2]' },
+    { expr: 'insertionSort([1,2,3,5,4]).join(",")', label: 'nearly sorted' },
+    { expr: 'insertionSort([5,4,3,2,1]).join(",")', label: 'reversed (worst)' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the in-place version, plus the *binary* variant that locates the gap with
+binary search (fewer comparisons, same shifts):
+
+```ts
+// /dsa/sort/insertionsort.ts
+function insertionSort<T>(arr: T[]): T[] {
+    const result = [...arr];
+    const n = result.length;
+    for (let i = 1; i < n; i++) {
+        const current = result[i];
+        let j = i - 1;
+        while (j >= 0 && result[j] > current) {
+            result[j + 1] = result[j]; // shift right
+            j--;
+        }
+        result[j + 1] = current;       // insert
+    }
+    return result;
+}
+
+// Binary insertion sort: search for the insertion point in O(log i).
+function binaryInsertionSort<T>(arr: T[]): T[] {
+    const result = [...arr];
+    for (let i = 1; i < result.length; i++) {
+        const current = result[i];
+        let left = 0, right = i;
+        while (left < right) {
+            const mid = (left + right) >> 1;
+            if (result[mid] <= current) left = mid + 1;
+            else right = mid;
+        }
+        for (let j = i; j > left; j--) result[j] = result[j - 1];
+        result[left] = current;
+    }
+    return result;
+}
+```
+
+Run the full file: `npx tsx sort/insertionsort.ts`.
+
+## Complexity
+
+The shift-loop length depends on the data, which is exactly what makes it adaptive:
+
+$$
+T_\text{best}(n) = O(n), \qquad T_\text{avg}(n) = T_\text{worst}(n) = O(n^2), \qquad S(n) = O(1).
+$$
+
+| Input | Shifts | Time |
+|-------|--------|------|
+| Sorted (best) | 0 | $O(n)$ |
+| Random (average) | $\approx n^2/4$ | $O(n^2)$ |
+| Reversed (worst) | $n(n-1)/2$ | $O(n^2)$ |
+
+It is **in place** ($O(1)$), **stable** (the `>` test never shifts an equal value past its twin), and
+**online** — it can absorb new values one at a time as they stream in. Binary search cuts the
+*comparisons* to $O(n \log n)$, but the *shifts* stay $O(n^2)$, so the overall bound is unchanged.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Card games" icon="🃏">
+Arranging a freshly dealt poker hand is textbook insertion sort: each card you pick up gets slid
+leftward past the bigger cards until it nestles into place, while the cards already in hand stay in
+order throughout.
+</ExampleCard>
+
+<ExampleCard domain="Libraries" icon="📚">
+Re-shelving a returned book, a librarian slides along the sorted shelf and inserts it exactly where
+its call number fits — no need to disturb the rest of the shelf, just open one gap.
+</ExampleCard>
+
+<ExampleCard domain="Live data" icon="📈">
+A real-time leaderboard that updates as scores arrive is *online* insertion sort: each incoming score
+is inserted into the already-ranked list in $O(n)$, keeping the board sorted at every instant without
+re-sorting from scratch.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Shifting versus swapping.** Insertion sort *shifts* larger values right and drops the key once;
+  it does not swap pairs like bubble sort. Shifting does fewer writes and is more cache-friendly.
+- **Loop-guard order matters.** Write `j >= 0 && a[j] > key`: the bounds check must come first, or
+  you read `a[-1]`.
+- **It really is used in production.** V8, Java, and Python all fall back to insertion sort for small
+  subarrays (often under ~16–64 elements) because its low overhead beats the bookkeeping of fancier sorts.
+- **Interview hook:** "adaptive, stable, online, great on small/nearly-sorted data." That last clause
+  is the bridge to **Timsort**, which chops the array into runs and insertion-sorts each one.
+
+## Practice
+
+1. **Easy:** Trace insertion sort on `[2, 4, 1, 3]`. How many shifts happen in total?
+2. **Easy:** On `[1, 2, 3, 4, 5]`, how many times does the inner `while` body execute? Explain the
+   $O(n)$ best case from your answer.
+3. **Medium:** Insertion sort a **linked list**. Why does it avoid the shifting cost entirely (hint:
+   pointer splicing), even though it is still $O(n^2)$?
+4. **Medium:** Implement the binary-search variant and explain why the asymptotic time does **not**
+   improve despite doing fewer comparisons.
+5. **Hard:** *Shell sort* — run insertion sort with a gap sequence (e.g. 5, then 2, then 1). Why does
+   pre-sorting with big gaps make the final gap-1 pass nearly linear?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'On an already-sorted array, what is insertion sort’s running time?',
+      options: ['O(n²)', 'O(n log n)', 'O(n)', 'O(log n)'],
+      answer: 2,
+      explain: 'Each new value is already in place, so the inner shift-loop never runs — one comparison per element, O(n) total.',
+    },
+    {
+      q: 'Why is insertion sort stable?',
+      options: [
+        'It uses binary search',
+        'It only shifts elements that are strictly greater than the key, so equal values keep their order',
+        'It is recursive',
+        'It selects the global minimum each pass',
+      ],
+      answer: 1,
+      explain: 'The guard a[j] > key stops at an equal value, so the key lands after its equal twin — original order preserved.',
+    },
+    {
+      q: 'Which feature makes insertion sort the building block inside Timsort?',
+      options: [
+        'O(1) swaps',
+        'It is adaptive and fast on small/nearly-sorted runs',
+        'It is a non-comparison sort',
+        'It guarantees O(n log n)',
+      ],
+      answer: 1,
+      explain: 'Timsort splits data into runs and insertion-sorts the small ones, exploiting insertion sort’s low overhead and adaptivity.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Insertion sort grows a <strong>sorted left region</strong> by shifting bigger values right and inserting each new key.',
+    'It is <strong>adaptive</strong>: <strong>O(n)</strong> on nearly-sorted data, <strong>O(n²)</strong> average/worst.',
+    'In place (<strong>O(1)</strong>), <strong>stable</strong>, and <strong>online</strong> — it can sort a stream as it arrives.',
+    'It <strong>shifts</strong> rather than swaps, doing fewer writes and playing nicely with the cache.',
+    'Real engines fall back to it for <strong>small subarrays</strong>; it is the heart of <strong>Timsort</strong>.',
+  ]}
+/>
+
+Next up: **Merge Sort** — stop fighting $O(n^2)$ and split the problem in half recursively, because
+*merging two already-sorted lists* is only $O(n)$.

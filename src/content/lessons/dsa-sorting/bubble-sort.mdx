@@ -1,0 +1,233 @@
+---
+title: Bubble Sort
+track: dsa-sorting
+summary: Repeatedly swap out-of-order neighbours so the largest value bubbles to the end each pass — the simplest sort to picture, and the slowest to run.
+difficulty: beginner
+estMinutes: 12
+prereqs:
+  - dsa-tries/trie-autocomplete
+leadsTo:
+  - dsa-sorting/selection-sort
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SortBubble from '../../../components/demos/SortBubble.tsx';
+
+## The hook: let the big ones float up
+
+Drop a fizzy tablet in water and the largest bubbles race to the surface first. Bubble sort
+borrows that picture exactly: walk along the array comparing each value with its right-hand
+neighbour, and whenever they are out of order, swap them. The biggest value keeps winning its
+comparisons and "floats" all the way to the right end in a single pass. Do it again on what is
+left, and the second-biggest settles just before it. It is the first sort almost everyone meets,
+because you can run it in your head — and the last one you should ever ship, because it is slow.
+
+<Callout type="intuition" title="The one-sentence idea">
+Sweep the array swapping any adjacent pair that is out of order; after each sweep the largest
+remaining value has bubbled into its final place, so one more element is locked in every pass.
+</Callout>
+
+## Intuition
+
+Sorting means putting elements in order, and the most local thing you can check is: *are these two
+neighbours in the right order?* Bubble sort does nothing but that, over and over.
+
+In one left-to-right pass, every time the value you are carrying is bigger than the next one, they
+swap, so you effectively *carry the running maximum rightward* until it can go no further — it ends
+up at the end. That guarantees the last position is correct after pass one, the last two after pass
+two, and so on. The unsorted region shrinks by one each pass, so after at most $n-1$ passes the
+whole array is sorted.
+
+There is one free optimisation: if a whole pass makes **no swaps at all**, nothing was out of
+order, so you can stop early. That single flag is what gives bubble sort its one redeeming quality —
+it is fast on data that is already (nearly) sorted.
+
+## Play with it
+
+Type your own numbers, then step through. Sky bars are the pair being compared; the emerald tail is
+the region already locked in. Watch the largest value travel right on the first pass.
+
+<SortBubble client:visible />
+
+<Callout type="tip">
+Load an already-sorted array like <code>1, 2, 3, 4, 5</code>. The first pass makes zero swaps, the
+early-exit flag fires, and it finishes in $O(n)$ — bubble sort's one genuinely good case.
+</Callout>
+
+## How it works
+
+Trace `[5, 3, 8, 1, 2]`. Each line is one neighbour comparison:
+
+```
+Pass 1:  [5 3]8 1 2  → swap → [3 5]8 1 2
+         3[5 8]1 2   → ok
+         3 5[8 1]2   → swap → 3 5[1 8]2
+         3 5 1[8 2]  → swap → 3 5 1[2 8]   8 is parked ✓
+Pass 2:  [3 5]1 2 |8 → ok
+         3[5 1]2 |8  → swap → 3[1 5]2 |8
+         3 1[5 2]|8  → swap → 3 1[2 5]|8   5 parked ✓
+Pass 3:  [3 1]2 |5 8 → swap → [1 3]2 |5 8
+         1[3 2]|5 8  → swap → 1[2 3]|5 8   3 parked ✓
+Pass 4:  [1 2]|3 5 8 → ok, no swaps → STOP
+```
+
+The runnable version uses the early-exit flag and actually returns the sorted array:
+
+<CodeRunner
+  client:visible
+  code={`function bubbleSort(arr) {
+  const a = [...arr];
+  const n = a.length;
+  for (let i = 0; i < n - 1; i++) {
+    let swapped = false;
+    for (let j = 0; j < n - i - 1; j++) {
+      if (a[j] > a[j + 1]) {
+        [a[j], a[j + 1]] = [a[j + 1], a[j]];
+        swapped = true;
+      }
+    }
+    if (!swapped) break; // a clean pass means we are done
+  }
+  return a;
+}`}
+  tests={[
+    { expr: 'bubbleSort([5,3,8,1,2]).join(",")', label: 'sort [5,3,8,1,2]' },
+    { expr: 'bubbleSort([1,2,3,4,5]).join(",")', label: 'already sorted' },
+    { expr: 'bubbleSort([9,7,5,3,1]).join(",")', label: 'reversed' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the optimised in-place version with the `swapped` flag:
+
+```ts
+// /dsa/sort/bubblesort.ts
+function bubbleSortOptimized<T>(arr: T[]): T[] {
+    const n = arr.length;
+    const result = [...arr];
+
+    for (let i = 0; i < n - 1; i++) {
+        let swapped = false;
+        for (let j = 0; j < n - i - 1; j++) {
+            if (result[j] > result[j + 1]) {
+                [result[j], result[j + 1]] = [result[j + 1], result[j]];
+                swapped = true;
+            }
+        }
+        if (!swapped) break; // already sorted → stop early
+    }
+    return result;
+}
+```
+
+Run the full file: `npx tsx sort/bubblesort.ts`.
+
+## Complexity
+
+Best case is a single clean pass; average and worst are the full nested loop:
+
+$$
+T_\text{best}(n) = O(n), \qquad T_\text{avg}(n) = T_\text{worst}(n) = O(n^2), \qquad S(n) = O(1).
+$$
+
+| Case | Comparisons | Time |
+|------|-------------|------|
+| Already sorted (best) | $n-1$ | $O(n)$ |
+| Random (average) | $\approx n^2/2$ | $O(n^2)$ |
+| Reversed (worst) | $n(n-1)/2$ | $O(n^2)$ |
+
+It sorts **in place** ($O(1)$ extra memory) and is **stable** — equal values never jump past each
+other because we only swap on a strict `>`.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Physics" icon="🫧">
+Carbonated drinks really do "bubble sort" by size: buoyancy is proportional to volume, so the
+largest CO₂ bubbles rise fastest and reach the surface first, with smaller ones settling into order
+beneath them — biggest-to-the-top, one layer at a time.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+On a packing line where a robot arm can only swap two *adjacent* boxes, ordering them by weight is
+literally bubble sort: each sweep nudges the heaviest remaining box to the far end of the belt.
+</ExampleCard>
+
+<ExampleCard domain="Sports" icon="🏐">
+A "ladder" tournament where you may only challenge the player one rung above you is bubble sort in
+slow motion — each upset swaps neighbours, and the strongest competitor steadily climbs to the top.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting the early-exit flag.** Without `swapped`, bubble sort is $O(n^2)$ even on sorted
+  input. With it, the best case drops to $O(n)$ — interviewers love asking for exactly this tweak.
+- **The inner bound is `n - i - 1`, not `n - 1`.** The last $i$ elements are already sorted; re-scanning
+  them wastes time (and can read past the end).
+- **Swap, do not just compare.** A common bug is detecting the inversion but forgetting to actually
+  exchange the two values.
+- **Interview framing:** "larger elements bubble up." Then mention it is *stable* and *in-place* but
+  $O(n^2)$, so it is teaching material, not production code.
+
+## Practice
+
+1. **Easy:** Hand-trace one full pass of bubble sort on `[4, 2, 7, 1]`. Which value ends up last?
+2. **Easy:** *Sort by parity* — rearrange `[3, 1, 2, 4]` so evens come before odds using a single
+   adjacent-swap sweep. How is this just a bubble pass with a different comparison?
+3. **Medium:** Modify the code to also **count** the number of swaps. How many does `[5, 4, 3, 2, 1]`
+   need, and why is that the maximum possible?
+4. **Medium:** *Cocktail shaker sort* — bubble left-to-right, then right-to-left, alternating. Why
+   does this help arrays where one small value sits at the far right (a "turtle")?
+5. **Hard:** Prove that the number of swaps bubble sort performs equals the number of **inversions**
+   in the array (pairs that are out of order).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'After the first full pass of bubble sort (ascending), which element is guaranteed to be in its final position?',
+      options: ['The smallest', 'The largest', 'The median', 'None of them'],
+      answer: 1,
+      explain: 'Each pass carries the running maximum rightward, so the largest value ends the pass parked at the far right.',
+    },
+    {
+      q: 'What does the swapped flag give bubble sort?',
+      options: [
+        'Stability',
+        'O(1) space',
+        'An O(n) best case on already-sorted input',
+        'An O(n log n) worst case',
+      ],
+      answer: 2,
+      explain: 'If a pass makes no swaps the array is sorted, so it can stop early — turning the best case into a single O(n) pass.',
+    },
+    {
+      q: 'Why is bubble sort stable?',
+      options: [
+        'It uses extra memory',
+        'It only swaps on a strict greater-than, so equal values never cross',
+        'It sorts from both ends',
+        'It is recursive',
+      ],
+      answer: 1,
+      explain: 'Equal neighbours fail the strict > test and are left alone, so their original relative order is preserved.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Bubble sort swaps <strong>adjacent out-of-order pairs</strong>; the largest value bubbles to the end each pass.',
+    'A <strong>no-swap pass</strong> means done — the early-exit flag gives an <strong>O(n)</strong> best case.',
+    'Average and worst case are <strong>O(n²)</strong>; it is <strong>in-place (O(1))</strong> and <strong>stable</strong>.',
+    'The inner loop only needs to reach <code>n - i - 1</code> because the tail is already sorted.',
+    'Great for teaching and tiny/nearly-sorted inputs; never the right choice at scale.',
+  ]}
+/>
+
+Next up: **Selection Sort** — instead of nudging neighbours, scan the whole unsorted region for the
+single smallest value and drop it straight into place.

@@ -1,0 +1,283 @@
+---
+title: Breadth-First Search
+track: dsa-graphs
+summary: "Explore a graph in rings around the start: BFS visits everything one level at a time and hands you the shortest unweighted path for free."
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - dsa-graphs/graph-representations
+leadsTo:
+  - dsa-graphs/dfs
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GphBfsQueue from '../../../components/demos/GphBfsQueue.tsx';
+
+## The hook: ripples on a pond
+
+Drop a pebble into a still pond and a ring spreads outward, then a wider ring, then a wider one
+still. Every point the wave reaches at the same instant is exactly the same distance from where the
+pebble landed. **Breadth-first search** explores a graph the same way: it visits the start, then
+*all* of its neighbours, then everything one more step out, never skipping ahead. Because it fans out
+in perfect rings, the moment BFS first touches a node it has reached it by the fewest possible edges
+— so the search itself draws you the shortest route on an unweighted map.
+
+<Callout type="intuition" title="The one-sentence idea">
+BFS uses a **queue** to explore a graph level by level, so the first time it reaches any node it has
+done so by the **fewest edges** — giving you the shortest unweighted path for free.
+</Callout>
+
+## Intuition
+
+In the previous lesson you stored a graph as an adjacency list: each vertex pointing to its
+neighbours. Now we want to *walk* that structure. The key tool is a **queue** — a first-in,
+first-out line, exactly like people waiting at a counter.
+
+The recipe is short. Put the start node in the queue and mark it visited. Then repeat: take the node
+at the **front** of the queue, look at its neighbours, and for every neighbour you have not seen yet,
+mark it visited and add it to the **back** of the queue. Keep going until the queue is empty.
+
+Why does this produce rings? Because a queue serves nodes in the order they arrived. The start comes
+out first (level 0). Then all of its neighbours, which were added next, come out together (level 1).
+Their neighbours form level 2, and so on. A node added at level $k$ can only enqueue nodes at level
+$k+1$, so distances never go backwards. The "visited" mark is essential: without it a cycle would
+send you round and round forever, and you would enqueue the same node many times.
+
+Contrast this with going **deep** first — chasing one path to its end before backtracking. That is
+depth-first search, the next lesson. BFS instead stays shallow and wide, which is precisely what
+makes it the right tool when you care about *distance*.
+
+## Play with it
+
+Type an undirected edge list, choose a start node, and step through. Watch the queue (the row of
+chips) fill from the back and empty from the front, while each node lights up **sky** as it is
+processed and turns **emerald** once visited. The little `L` badge under each node is the level — its
+distance in edges from the start.
+
+<GphBfsQueue client:visible />
+
+<Callout type="tip">
+Pause right after a node is dequeued and read the queue left to right: everything in it is either at
+the current level or the next one down, never two levels apart. That tidy ordering is the whole
+reason BFS measures shortest distances correctly.
+</Callout>
+
+## How it works
+
+Let us dry-run BFS on a small graph, starting from `A`. The queue drives everything; "visit" means
+we mark a node and record the level it was found at.
+
+```
+graph (undirected):  A-B, A-C, B-D, B-E, C-F, E-F     start = A
+
+queue: [A]                visit A (level 0)
+dequeue A -> enqueue B, C        queue: [B, C]
+dequeue B -> enqueue D, E        queue: [C, D, E]    B,C at level 1
+dequeue C -> enqueue F           queue: [D, E, F]    F at level 2
+dequeue D -> (no new)            queue: [E, F]
+dequeue E -> (F already seen)    queue: [F]
+dequeue F -> (no new)            queue: []   -> done
+
+visit order: A B C D E F
+levels:      A:0  B:1 C:1  D:2 E:2 F:2
+```
+
+Here is the same procedure as runnable JavaScript. `bfs` returns the visit order; `bfsDistances`
+returns each node's level (its shortest distance in edges from the start).
+
+<CodeRunner
+  client:visible
+  code={`// Graph as a plain object: node -> array of neighbours (undirected)
+function bfs(graph, start) {
+  const visited = new Set([start]);
+  const order = [];
+  const queue = [start];
+  while (queue.length > 0) {
+    const v = queue.shift();          // take from the FRONT
+    order.push(v);
+    for (const n of graph[v] || []) {
+      if (!visited.has(n)) {
+        visited.add(n);
+        queue.push(n);                // add to the BACK
+      }
+    }
+  }
+  return order;
+}
+
+// Distance (number of edges) from start to every reachable node
+function bfsDistances(graph, start) {
+  const dist = { [start]: 0 };
+  const queue = [start];
+  while (queue.length > 0) {
+    const v = queue.shift();
+    for (const n of graph[v] || []) {
+      if (!(n in dist)) {
+        dist[n] = dist[v] + 1;        // one level deeper
+        queue.push(n);
+      }
+    }
+  }
+  return dist;
+}
+
+const g = { A:['B','C'], B:['A','D','E'], C:['A','F'], D:['B'], E:['B','F'], F:['C','E'] };`}
+  tests={[
+    { expr: "bfs(g, 'A').join(' ')", label: 'visit order' },
+    { expr: 'JSON.stringify(bfsDistances(g, "A"))', label: 'distances from A' },
+  ]}
+/>
+
+## The real implementation
+
+The course file generalises this to any node type with a typed `Map`, and adds a `shortestPath`
+helper that remembers each node's parent so it can rebuild the actual route.
+
+```ts
+// /dsa/12-graphs/bfs.ts
+function bfs<T>(graph: Map<T, T[]>, start: T): T[] {
+    const visited = new Set<T>();
+    const result: T[] = [];
+    const queue: T[] = [start];
+    visited.add(start);
+    while (queue.length > 0) {
+        const vertex = queue.shift()!;
+        result.push(vertex);
+        for (const neighbor of graph.get(vertex) || []) {
+            if (!visited.has(neighbor)) { visited.add(neighbor); queue.push(neighbor); }
+        }
+    }
+    return result;
+}
+
+// Shortest path on an UNWEIGHTED graph: first time BFS reaches a node is the fewest-edges path.
+function shortestPath<T>(graph: Map<T, T[]>, start: T, end: T): T[] | null {
+    const visited = new Set<T>([start]);
+    const queue: T[] = [start];
+    const parent = new Map<T, T>();
+    while (queue.length) {
+        const v = queue.shift()!;
+        for (const n of graph.get(v) || []) {
+            if (!visited.has(n)) {
+                visited.add(n); parent.set(n, v); queue.push(n);
+                if (n === end) { const path=[end]; let c=end; while(parent.has(c)){c=parent.get(c)!; path.unshift(c);} return path; }
+            }
+        }
+    }
+    return null;
+}
+```
+
+Run the full file: `npx tsx 12-graphs/bfs.ts`.
+
+## Complexity
+
+Let $V$ be the number of vertices and $E$ the number of edges. Every vertex is enqueued and dequeued
+at most once (the visited set guarantees it), and we scan each vertex's neighbour list once, which
+across the whole graph touches every edge a constant number of times:
+
+$$
+\text{time } O(V + E), \qquad \text{space } O(V).
+$$
+
+The space is the queue plus the visited set, each holding at most $V$ entries. Compare BFS with its
+depth-first sibling:
+
+| Aspect | BFS | DFS |
+|--------|-----|-----|
+| Data structure | Queue (FIFO) | Stack (LIFO) |
+| Explores | Level by level | One path to the end, then backtracks |
+| Finds shortest unweighted path | Yes | No |
+| Time / space | $O(V + E)$ / $O(V)$ | $O(V + E)$ / $O(V)$ |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Social networks" icon="🧑‍🤝‍🧑">
+"Degrees of separation" is literally a BFS level. Start at you, level 1 is your friends, level 2 is
+friends-of-friends. LinkedIn's "2nd / 3rd connection" labels are exactly the level at which BFS first
+reaches that person across the friendship graph.
+</ExampleCard>
+
+<ExampleCard domain="Epidemiology" icon="🦠">
+Contact tracers expand outward from a confirmed case: first the people that case met, then the people
+*those* contacts met. Each ring is one BFS level, and prioritising the nearest rings is how limited
+testing capacity gets aimed where transmission is most likely.
+</ExampleCard>
+
+<ExampleCard domain="Web crawling" icon="🕸️">
+A crawler seeded with one URL fetches that page, queues every link it finds, then fetches those and
+queues their links. Crawling breadth-first keeps the search close to the seed and reaches the most
+popular, well-linked pages first instead of tunnelling down one site forever.
+</ExampleCard>
+
+<ExampleCard domain="Chess puzzles" icon="♞">
+"Fewest knight moves from here to there" is a shortest path on an unweighted graph whose nodes are
+squares and whose edges are legal knight jumps. BFS from the start square reaches the target at
+exactly the minimum number of moves — no fancier algorithm needed.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Marking visited too late.** Mark a node visited the moment you *enqueue* it, not when you dequeue
+  it. If you wait, a node with several neighbours can be added to the queue many times before it is
+  processed, and the run blows up.
+- **Using a stack by accident.** Calling `queue.pop()` turns BFS into DFS. BFS must take from the
+  front (`shift`) and add to the back (`push`).
+- **Forgetting the start in the visited set.** Add the start node to visited before the loop, or it
+  can be re-enqueued by one of its own neighbours.
+- **Trusting BFS on weighted graphs.** BFS counts edges, not weights. The moment edges carry costs,
+  fewest-edges is not cheapest — you need Dijkstra. BFS is only "shortest path" for unweighted graphs.
+- **Interview cue:** if a problem says "minimum steps", "fewest moves", or "shortest path" on an
+  unweighted graph or grid, reach for BFS reflexively.
+
+## Practice
+
+1. **Easy:** By hand, list the BFS visit order of `A-B, A-C, B-D, C-D` starting at `A`.
+2. **Easy:** For the same graph, write down each node's level (distance from `A`).
+3. **Medium:** Modify `bfsDistances` to also return the parent of each node, then reconstruct the path
+   from the start to a chosen target.
+4. **Medium:** Given a grid where `0` is open and `1` is a wall, find the fewest steps from the
+   top-left to the bottom-right moving up/down/left/right. (Treat each open cell as a node.)
+5. **Hard:** A graph is **bipartite** if you can 2-colour it so no edge joins same-coloured nodes.
+   Use BFS to colour nodes by alternating level parity and detect a conflict.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which data structure makes a traversal breadth-first rather than depth-first?',
+      options: ['A stack (LIFO)', 'A queue (FIFO)', 'A priority queue', 'A hash map'],
+      answer: 1,
+      explain: 'A FIFO queue serves nodes in arrival order, so a node and all its same-level siblings come out together — that is what produces the level-by-level rings.',
+    },
+    {
+      q: 'On an UNWEIGHTED graph, what does the first time BFS reaches a node tell you?',
+      options: ['Nothing special', 'It was reached by the fewest possible edges', 'It is the farthest node', 'It must be a leaf'],
+      answer: 1,
+      explain: 'BFS expands in rings of equal distance, so the first arrival at any node is along a fewest-edges (shortest unweighted) path.',
+    },
+    {
+      q: 'Why must BFS mark a node visited when it is ENQUEUED, not when dequeued?',
+      options: ['To save memory', 'To keep the queue sorted', 'To stop the same node being enqueued multiple times', 'It does not matter when you mark it'],
+      answer: 2,
+      explain: 'If you delay the mark, several neighbours can each enqueue the same unvisited node before it is processed, causing duplicates and wasted work.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'BFS explores a graph <strong>level by level</strong> using a <strong>queue</strong> (first-in, first-out).',
+    'The <strong>first time</strong> BFS reaches a node, it has done so by the <strong>fewest edges</strong> — the shortest path on an <strong>unweighted</strong> graph.',
+    'Always mark a node visited when you <strong>enqueue</strong> it, and include the start, to avoid duplicates and infinite loops.',
+    'BFS runs in <strong>O(V + E)</strong> time and <strong>O(V)</strong> space on an adjacency list.',
+    'Track each node\'s <strong>parent</strong> to rebuild the actual path; switch to <strong>Dijkstra</strong> the moment edges have weights.',
+  ]}
+/>
+
+Next up: **Depth-First Search** — swap the queue for a stack (or recursion) and explore each path to
+its end before backtracking, the natural partner to BFS.

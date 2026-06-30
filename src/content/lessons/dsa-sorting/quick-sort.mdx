@@ -1,0 +1,257 @@
+---
+title: Quicksort
+track: dsa-sorting
+summary: Partition the array around a pivot so smaller values land left and larger right, then recurse on each side — the fastest sort in practice.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-sorting/merge-sort
+leadsTo:
+  - dsa-sorting/heap-sort
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SortQuick from '../../../components/demos/SortQuick.tsx';
+
+## The hook: split the room, then sort each side
+
+Imagine lining up a crowd by height. You grab one person — the **pivot** — and say: "Everyone
+shorter, stand to my left; everyone taller, to my right." After that one pass, the pivot is standing
+in their *final* spot, even though neither side is sorted yet. Now you repeat the trick on the left
+group and the right group independently. Each pivot you place is permanent, and the groups keep
+shrinking. That is quicksort: it does its real work *before* recursing — the opposite of merge sort,
+which does its work *after*.
+
+<Callout type="intuition" title="The one-sentence idea">
+Partition the array around a pivot so smaller values go left and larger go right; the pivot is now in
+its final place, so recurse on the two sides.
+</Callout>
+
+## Intuition
+
+Like merge sort, quicksort is [divide and conquer](/lessons/dsa-recursion/recursion-basics) — but the
+cleverness lives in the *divide*, and the combine step is **free**. There is nothing to merge: once
+the left side and right side are each sorted, and the pivot sits between them, the whole range is
+sorted.
+
+The engine is **partition**. Pick a pivot (say the last element). Walk a pointer `j` across the range,
+keeping a boundary `i` for the "smaller-than-pivot" zone. Every time `a[j] < pivot`, swap it into the
+smaller zone and advance the boundary. When the walk ends, swap the pivot into the boundary slot — and
+it is home for good.
+
+Why is it usually the *fastest* sort despite a scary worst case? It works **in place** on contiguous
+memory (great cache behaviour), its inner loop is just a compare and an occasional swap, and on random
+data the pivot splits the array roughly in half — giving $\log n$ levels of $O(n)$ work, i.e.
+$O(n \log n)$ with tiny constants.
+
+## Play with it
+
+Amber is the pivot; sky is the element being tested against it. Watch each pivot settle into emerald —
+its permanent home — then the two sides recurse. Now press **Already sorted** to see the worst case
+unfold step by step.
+
+<SortQuick client:visible />
+
+<Callout type="tip">
+On "Already sorted" with the last element as pivot, every partition peels off just one element, so the
+recursion is $n$ levels deep instead of $\log n$ — that is the $O(n^2)$ trap. A <em>random</em> pivot
+makes that catastrophe astronomically unlikely.
+</Callout>
+
+## How it works
+
+Lomuto partition of `[10, 7, 8, 9, 1, 5]` with pivot `5` (last element). `i` is the boundary of the
+"smaller" zone:
+
+```
+pivot = 5
+7,8,9 are all ≥ 5 → boundary i stays at 0
+j hits 1 (< 5)    → swap 1 into slot i, advance i
+end of scan       → swap pivot 5 into the boundary slot
+result: [1, 5, 8, 9, 7, 10]   ← 5 is now in its FINAL position
+        recurse on [1]  and on [8, 9, 7, 10]
+```
+
+The runnable version partitions in place and sorts a copy:
+
+<CodeRunner
+  client:visible
+  code={`function quickSort(input) {
+  const a = [...input];
+  function partition(lo, hi) {
+    const pivot = a[hi];          // last element as pivot
+    let i = lo;
+    for (let j = lo; j < hi; j++) {
+      if (a[j] < pivot) { [a[i], a[j]] = [a[j], a[i]]; i++; }
+    }
+    [a[i], a[hi]] = [a[hi], a[i]]; // pivot to its final slot
+    return i;
+  }
+  function sort(lo, hi) {
+    if (lo >= hi) return;
+    const p = partition(lo, hi);
+    sort(lo, p - 1);
+    sort(p + 1, hi);
+  }
+  sort(0, a.length - 1);
+  return a;
+}`}
+  tests={[
+    { expr: 'quickSort([10,7,8,9,1,5]).join(",")', label: 'sort [10,7,8,9,1,5]' },
+    { expr: 'quickSort([5,4,3,2,1]).join(",")', label: 'reversed' },
+    { expr: 'quickSort([3,3,1,2,3]).join(",")', label: 'with duplicates' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the Lomuto partition, plus the **randomized** pivot you should actually ship
+(it dodges the sorted-input worst case):
+
+```ts
+// /dsa/sort/quicksort.ts
+function quickSort<T>(arr: T[], low = 0, high = arr.length - 1): T[] {
+    if (low < high) {
+        const pivotIndex = partition(arr, low, high);
+        quickSort(arr, low, pivotIndex - 1);
+        quickSort(arr, pivotIndex + 1, high);
+    }
+    return arr;
+}
+
+function partition<T>(arr: T[], low: number, high: number): number {
+    const pivot = arr[high];
+    let i = low - 1;
+    for (let j = low; j < high; j++) {
+        if (arr[j] < pivot) { i++; [arr[i], arr[j]] = [arr[j], arr[i]]; }
+    }
+    [arr[i + 1], arr[high]] = [arr[high], arr[i + 1]];
+    return i + 1;
+}
+
+// Production choice: randomize the pivot so no fixed input is the worst case.
+function randomizedPartition<T>(arr: T[], low: number, high: number): number {
+    const r = Math.floor(Math.random() * (high - low + 1)) + low;
+    [arr[r], arr[high]] = [arr[high], arr[r]];
+    return partition(arr, low, high);
+}
+```
+
+Run the full file: `npx tsx sort/quicksort.ts`.
+
+## Complexity
+
+A balanced split gives $O(n \log n)$; a maximally unbalanced one degrades to $O(n^2)$:
+
+$$
+T_\text{best}(n) = T_\text{avg}(n) = O(n \log n), \qquad T_\text{worst}(n) = O(n^2), \qquad S(n) = O(\log n).
+$$
+
+| Case | Pivot behaviour | Time |
+|------|-----------------|------|
+| Best / average | splits roughly in half | $O(n \log n)$ |
+| Worst | always smallest/largest (e.g. sorted input, fixed pivot) | $O(n^2)$ |
+
+It is **in place** with only $O(\log n)$ stack space (recursion), and it is **not stable** — a partition
+swap can hurl an equal key across the array. The same partition routine gives **quickselect**, which
+finds the $k$-th smallest element in $O(n)$ average time without fully sorting.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Auctions" icon="🔨">
+An estate auctioneer splits incoming lots around a reserve price — above the line into the premium
+sale, below into the clearance sale — then re-splits each pile around a finer price point. Divide,
+place, recurse: each threshold fixes one boundary exactly like quicksort's partition.
+</ExampleCard>
+
+<ExampleCard domain="Statistics" icon="📊">
+Finding a **median** without sorting uses quickselect — quicksort's partition, but recursing into only
+the side that contains the middle index — so you get the median in $O(n)$ average time instead of
+$O(n \log n)$.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A parcel hub splits packages around a zone boundary ("west of the river vs east"), drops each into the
+correct chute, then re-splits each chute by a finer postcode — a physical, in-place partition cascade.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The sorted-input trap.** With a fixed first/last pivot, already-sorted (or reverse-sorted) data is
+  the $O(n^2)$ worst case. Fix it with a **random** pivot or **median-of-three**.
+- **Many duplicates kill plain Lomuto.** An array of equal keys degrades to $O(n^2)$. Use a **3-way
+  partition** (Dutch national flag) that groups `< pivot`, `= pivot`, `> pivot`.
+- **It is not stable.** If you need stable order, use merge sort or Timsort.
+- **Watch recursion depth.** Recurse into the smaller side and loop on the larger (tail-call style) to
+  bound the stack at $O(\log n)$.
+- **Interview hooks:** explain partition crisply, name the worst case *and* its fix, and mention
+  quickselect. This is the single most-asked sorting question.
+
+## Practice
+
+1. **Easy:** Partition `[3, 7, 8, 5, 2, 1, 9, 5, 4]` around pivot `5` (last element). Where does the
+   pivot end up?
+2. **Easy:** *Sort colors (0/1/2)* in one pass with a 3-way partition. Why does this never need a
+   recursive call?
+3. **Medium:** Implement **quickselect** to return the $k$-th largest element. Why is the average time
+   $O(n)$ and not $O(n \log n)$?
+4. **Medium:** Construct an input that makes last-element-pivot quicksort hit $O(n^2)$, then show a
+   random pivot makes it vanishingly unlikely.
+5. **Hard:** *Introsort* — start with quicksort but switch to heap sort once recursion depth exceeds
+   $2\log n$. Why does this guarantee $O(n \log n)$ worst case while keeping quicksort's speed?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Right after a partition completes, what is guaranteed about the pivot?',
+      options: [
+        'Both sides are fully sorted',
+        'The pivot is in its final sorted position',
+        'The pivot is the median',
+        'The array is stable',
+      ],
+      answer: 1,
+      explain: 'Partition places the pivot so all smaller values are left and all larger are right — that is its permanent, final slot.',
+    },
+    {
+      q: 'What triggers quicksort’s O(n²) worst case?',
+      options: [
+        'Too much extra memory',
+        'A pivot that is consistently the smallest or largest element',
+        'Using recursion',
+        'Duplicate-free input',
+      ],
+      answer: 1,
+      explain: 'A worst-pivot split peels off one element per level, giving n levels of O(n) work — O(n²). Random/median-of-three pivots avoid it.',
+    },
+    {
+      q: 'Which is true of quicksort compared with merge sort?',
+      options: [
+        'Quicksort is stable; merge sort is not',
+        'Quicksort is in place (O(log n) space); merge sort needs O(n)',
+        'Quicksort guarantees O(n log n); merge sort does not',
+        'Quicksort cannot sort arrays',
+      ],
+      answer: 1,
+      explain: 'Quicksort partitions in place with O(log n) stack; merge sort needs O(n) buffers. The trade-off: quicksort is unstable with an O(n²) worst case.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Quicksort <strong>partitions</strong> around a pivot; the pivot lands in its <strong>final position</strong>, then each side recurses.',
+    'Average and best are <strong>O(n log n)</strong> with small constants; the worst case is <strong>O(n²)</strong>.',
+    'Fix the worst case with a <strong>random pivot</strong> or <strong>median-of-three</strong>; handle duplicates with a <strong>3-way partition</strong>.',
+    'It is <strong>in place</strong> (<strong>O(log n)</strong> stack) and <strong>cache-friendly</strong>, but <strong>not stable</strong>.',
+    'The same partition gives <strong>quickselect</strong> — the k-th smallest in O(n) average time.',
+  ]}
+/>
+
+Next up: **Heap Sort** — get merge sort's guaranteed $O(n \log n)$ *and* quicksort's $O(1)$ space by
+selecting the maximum with a heap instead of a linear scan.

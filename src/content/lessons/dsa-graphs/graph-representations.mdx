@@ -1,0 +1,242 @@
+---
+title: Representing Graphs
+track: dsa-graphs
+summary: "Before you can traverse a graph you must store it: adjacency lists win on sparse graphs, matrices on dense ones."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-searching/ternary-search
+leadsTo:
+  - dsa-graphs/bfs
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GphRepresentationBuilder from '../../../components/demos/GphRepresentationBuilder.tsx';
+
+## The hook: the same map, two filing cabinets
+
+Picture a city's road map. Junctions are **vertices**, roads are **edges**. Before any GPS can route
+you, the computer has to *store* that map — and the choice of filing cabinet quietly decides whether
+your route query takes a microsecond or a millisecond. Store each junction with a little list of the
+roads leaving it, and a sparse city map sips memory. Store a giant grid that marks every possible
+junction-to-junction pair, and edge lookups become instant but the memory bill explodes. Same map,
+two data structures, two completely different performance profiles.
+
+<Callout type="intuition" title="The one-sentence idea">
+A graph is just vertices plus edges; you can keep the edges as a per-vertex **list** (cheap for sparse
+graphs) or as a full **matrix** of every pair (instant lookups, but $O(V^2)$ memory).
+</Callout>
+
+## Intuition
+
+A **graph** $G = (V, E)$ is a set of vertices $V$ and a set of edges $E$ connecting them. Edges can be:
+
+- **directed** (a one-way street, $A \rightarrow B$) or **undirected** (a two-way street, $A - B$);
+- **weighted** (each edge carries a cost, like distance or time) or **unweighted** (every edge counts as 1).
+
+Unlike an array or a tree, a graph has no fixed shape — any vertex may connect to any other. So we need
+a representation that captures *which* pairs are connected. The two classic choices:
+
+1. **Adjacency list** — for each vertex, store a list of its neighbours. A sparse graph (few edges,
+   $E \ll V^2$) stores almost nothing extra.
+2. **Adjacency matrix** — a $V \times V$ grid where cell $(i, j)$ is 1 (or the weight) if an edge exists.
+   Checking "is there an edge from $i$ to $j$?" is a single array access, but you always pay $O(V^2)$ memory
+   even if the graph has three edges.
+
+A third option, the **edge list** (just an array of `[u, v]` pairs), is the simplest of all and is exactly
+what algorithms like Kruskal's MST want to consume.
+
+## Play with it
+
+Type an edge list, flip the directed switch, and step through. Watch the **adjacency list** and the
+**adjacency matrix** fill in together, one edge per step. Notice how an undirected edge updates *two*
+list entries and *two* symmetric matrix cells, while a directed edge updates only one of each.
+
+<GphRepresentationBuilder client:visible />
+
+<Callout type="tip">
+Count the 1s in the matrix versus the empty cells. For this little graph most of the matrix is zeros —
+that wasted space is exactly why sparse real-world graphs (road networks, social graphs) almost always
+use adjacency lists.
+</Callout>
+
+## How it works
+
+Building an adjacency list from an edge list is a two-line loop: for every edge `[u, v]`, append `v` to
+`u`'s list (and `u` to `v`'s list if the graph is undirected). The matrix is the same idea with a grid.
+
+```
+edges = [A-B, A-C, B-D, C-D, D-E]   (undirected)
+
+adjacency list            adjacency matrix
+A: [B, C]                    A B C D E
+B: [A, D]                 A [0 1 1 0 0]
+C: [A, D]                 B [1 0 0 1 0]
+D: [B, C, E]              C [1 0 0 1 0]
+E: [D]                    D [0 1 1 0 1]
+                          E [0 0 0 1 0]
+```
+
+<CodeRunner
+  client:visible
+  code={`// Build an adjacency list from an edge list
+function buildGraph(edges, directed = false) {
+  const g = {};
+  for (const [u, v] of edges) {
+    (g[u] ||= []).push(v);
+    if (!directed) (g[v] ||= []).push(u);
+  }
+  return g;
+}
+
+// Build an adjacency matrix (nodes must be 0..n-1)
+function buildMatrix(n, edges) {
+  const m = Array.from({ length: n }, () => Array(n).fill(0));
+  for (const [u, v] of edges) { m[u][v] = 1; m[v][u] = 1; }
+  return m;
+}`}
+  tests={[
+    { expr: "JSON.stringify(buildGraph([['A','B'],['A','C'],['B','D']]))", label: 'adjacency list' },
+    { expr: 'JSON.stringify(buildMatrix(3, [[0,1],[1,2]]))', label: '3x3 matrix' },
+  ]}
+/>
+
+## The real implementation
+
+The course file wraps these ideas in small classes. Here is the faithful core of the weighted
+adjacency-list graph and the `buildGraph` helper most interview problems start from:
+
+```ts
+// /dsa/12-graphs/graph-basics.ts
+class WeightedGraph<T> {
+    private adjacencyList: Map<T, { vertex: T; weight: number }[]> = new Map();
+    constructor(private isDirected = false) {}
+
+    addEdge(v1: T, v2: T, weight: number): void {
+        if (!this.adjacencyList.has(v1)) this.adjacencyList.set(v1, []);
+        if (!this.adjacencyList.has(v2)) this.adjacencyList.set(v2, []);
+        this.adjacencyList.get(v1)!.push({ vertex: v2, weight });
+        if (!this.isDirected) this.adjacencyList.get(v2)!.push({ vertex: v1, weight });
+    }
+    getNeighbors(vertex: T) { return this.adjacencyList.get(vertex) || []; }
+}
+
+// The pattern most LeetCode graph problems open with:
+function buildGraph<T>(edges: [T, T][], isDirected = false): Map<T, T[]> {
+    const graph = new Map<T, T[]>();
+    for (const [u, v] of edges) {
+        if (!graph.has(u)) graph.set(u, []);
+        if (!graph.has(v)) graph.set(v, []);
+        graph.get(u)!.push(v);
+        if (!isDirected) graph.get(v)!.push(u);
+    }
+    return graph;
+}
+```
+
+Run the full file: `npx tsx 12-graphs/graph-basics.ts`.
+
+## Complexity
+
+Let $V$ be the number of vertices and $E$ the number of edges. The two representations trade memory
+against lookup speed:
+
+$$
+\text{list: } O(V + E) \text{ space}, \qquad \text{matrix: } O(V^2) \text{ space}.
+$$
+
+| Operation | Adjacency list | Adjacency matrix |
+|-----------|----------------|------------------|
+| Storage | $O(V + E)$ | $O(V^2)$ |
+| Add edge | $O(1)$ | $O(1)$ |
+| Has edge $(u, v)$? | $O(\deg u)$ | $O(1)$ |
+| Iterate neighbours of $u$ | $O(\deg u)$ | $O(V)$ |
+| Traverse whole graph (BFS/DFS) | $O(V + E)$ | $O(V^2)$ |
+
+The rule of thumb: **sparse graph → list, dense graph → matrix.** Most real graphs are sparse, so the
+adjacency list is the default you will reach for again and again in the lessons ahead.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Molecular biology" icon="🧬">
+A protein-interaction network stores thousands of proteins but only the handful of partners each one
+actually binds. That is textbook sparse data — an adjacency list keeps the whole interactome in memory
+where a matrix would waste gigabytes on empty pairs.
+</ExampleCard>
+
+<ExampleCard domain="Aviation" icon="✈️">
+Flight schedules are directed weighted edges: a one-way leg from JFK to LHR with a cost in minutes.
+Airlines keep them as adjacency lists per airport so "where can I fly from here?" is a quick neighbour
+scan, not a sweep across every airport on Earth.
+</ExampleCard>
+
+<ExampleCard domain="Image processing" icon="🖼️">
+Treat each pixel as a vertex connected to its four neighbours and an image becomes a grid graph. Because
+every pixel touches the same few neighbours, the connectivity is implicit — you compute neighbours from
+coordinates instead of storing any list or matrix at all.
+</ExampleCard>
+
+<ExampleCard domain="Compilers" icon="⚙️">
+A build system models files as vertices and "A includes B" as a directed edge. The dependency graph is
+sparse, so compilers store adjacency lists and later topologically sort them to decide compile order.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting the second insertion for undirected edges.** An undirected edge `A-B` must appear in
+  *both* `A`'s list and `B`'s list. Drop one and your graph silently becomes directed.
+- **Initialising the matrix wrong.** `Array(n).fill(Array(n).fill(0))` shares one inner row across all
+  rows — every write corrupts every row. Build each row separately.
+- **Choosing a matrix for a huge sparse graph.** A social network with a billion users would need a
+  $10^{18}$-cell matrix. Always default to lists unless the graph is genuinely dense.
+- **Interview cue:** when the input is "a list of edges" and the graph is sparse, the very first thing to
+  write is the `buildGraph` adjacency-list loop — interviewers expect it reflexively.
+
+## Practice
+
+1. **Easy:** Convert the edge list `[[0,1],[0,2],[1,2]]` into an adjacency list by hand (undirected).
+2. **Easy:** For 5 vertices and 4 edges, how many cells of the $5\times5$ matrix are zero?
+3. **Medium:** Write `degree(graph, v)` returning the number of neighbours of `v` from an adjacency list.
+4. **Medium:** Given a directed adjacency list, compute every vertex's **in-degree** in one pass.
+5. **Hard:** Convert an adjacency matrix back into an edge list without listing any undirected edge twice.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A graph has 1,000 vertices and 2,000 edges. Which representation uses less memory?',
+      options: ['Adjacency matrix', 'Adjacency list', 'They are equal', 'Neither stores edges'],
+      answer: 1,
+      explain: 'The list uses O(V+E) ≈ 3,000 cells; the matrix uses O(V²) = 1,000,000 cells. Sparse graphs strongly favour the list.',
+    },
+    {
+      q: 'Which operation is O(1) on an adjacency matrix but O(degree) on an adjacency list?',
+      options: ['Adding a vertex', 'Iterating all neighbours', 'Checking whether edge (u,v) exists', 'Counting vertices'],
+      answer: 2,
+      explain: 'A matrix answers "is there an edge?" with one cell read; a list must scan u\'s neighbours.',
+    },
+    {
+      q: 'In an undirected adjacency list, adding edge A-B requires…',
+      options: ['Appending B to A only', 'Appending A to B only', 'Appending B to A and A to B', 'Updating a V×V grid'],
+      answer: 2,
+      explain: 'Undirected edges are symmetric, so both endpoints must list each other.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A graph is <strong>vertices + edges</strong>; edges may be directed/undirected and weighted/unweighted.',
+    'An <strong>adjacency list</strong> uses O(V+E) memory — the default for sparse, real-world graphs.',
+    'An <strong>adjacency matrix</strong> uses O(V²) memory but gives <strong>O(1) edge lookups</strong>.',
+    'An <strong>edge list</strong> is the simplest form and feeds edge-centric algorithms like Kruskal.',
+    'Undirected edges must be stored <strong>both ways</strong>; matrices are <strong>symmetric</strong> for undirected graphs.',
+  ]}
+/>
+
+Next up: **Breadth-First Search** — now that the map is stored, we explore it level by level with a queue
+to find the shortest route on an unweighted graph.
