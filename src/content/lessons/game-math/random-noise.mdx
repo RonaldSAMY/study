@@ -1,0 +1,188 @@
+---
+title: Randomness & Noise
+track: game-math
+summary: "Seeded PRNGs and Perlin noise: how games conjure endless, repeatable, natural-looking worlds from a single number."
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - game-math/interpolation-easing
+leadsTo:
+  - game-physics/kinematics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import NoiseTerrainForge from '../../../components/demos/NoiseTerrainForge.tsx';
+
+## The hook: a whole planet from one number
+
+Type a seed into Minecraft and an entire world unfolds — mountains, oceans, caves, biomes — stretching
+further than you could ever explore. Share that seed with a friend and they get the *exact same* world,
+block for block. No designer placed those mountains; an algorithm did, driven by a single number. The
+trick is two ideas working together: a **pseudo-random number generator** that turns one seed into an
+endless, repeatable stream of "random" numbers, and **noise** that smooths those numbers into the rolling,
+organic shapes nature actually has.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **seeded PRNG** turns one number into a repeatable stream of randomness, and **noise** smooths that
+randomness into natural, continuous variation you can sample anywhere.
+
+</Callout>
+
+## Intuition: controlled randomness, then smoothness
+
+Computers cannot make true randomness; they fake it. A **PRNG** starts from a **seed** and applies a
+deterministic recipe over and over, spitting out numbers that *look* random but are completely
+reproducible. Same seed, same sequence — which is a feature, not a bug: it is how a roguelike can hand you
+a "daily challenge" that is identical for every player, or how a bug can be replayed exactly.
+
+But raw PRNG output is **white noise** — each value is independent of its neighbors, so it looks like TV
+static. Terrain is not static; nearby points have *similar* heights. The fix is **value noise** and
+**Perlin noise**: instead of a random value at every point, you place random values (or gradients) only
+at the corners of a grid, then **interpolate smoothly between them** — exactly the easing curves from the
+last lesson. The result is continuous: zoom in and it stays smooth, sample two close points and you get
+close values. That smoothness is what makes it read as hills instead of confetti.
+
+The last ingredient is **octaves**. One layer of noise gives gentle, broad shapes. Add a second layer at
+half the size and half the strength, then a third, and so on — this stacking, called **fractal** or
+fractional Brownian motion, glues fine ridges onto big continents, the way real mountains have boulders
+on slopes on ranges.
+
+## Play with it
+
+Press **Reseed** to grow a brand-new world from a fresh seed — note the seed number; type the same idea
+into your own game and you would get this map back. Slide **scale** to zoom from jagged islands to broad
+continents, and raise **octaves** to pile fine detail onto the broad shapes.
+
+<NoiseTerrainForge client:visible />
+
+<Callout type="tip">
+Drop <strong>octaves</strong> to 1 for the pure, rounded base layer, then climb to 6 and watch crisp
+ridgelines and coves appear — each octave adds detail at half the size and half the weight of the one
+before.
+</Callout>
+
+## The formal definition
+
+A classic PRNG is the **linear congruential generator**, which folds the previous number into the next:
+
+$$
+x_{n+1} = (a\,x_n + c) \bmod m, \qquad u_n = \frac{x_n}{m} \in [0, 1).
+$$
+
+The same starting $x_0$ (the seed) always reproduces the whole stream. **Perlin noise** at a point first
+finds the surrounding grid cell, then blends the contributions of its corner gradients using a smooth
+fade $f$ (the smoothstep-style curve) so the field is continuous and smooth everywhere:
+
+$$
+f(t) = 6t^5 - 15t^4 + 10t^3.
+$$
+
+**Fractal noise** sums several octaves, each at double the frequency and half the amplitude:
+
+$$
+\text{fbm}(\mathbf{p}) = \sum_{i=0}^{O-1} \frac{1}{2^{\,i}}\;\text{noise}\bigl(2^{\,i}\,\mathbf{p}\bigr).
+$$
+
+```csharp
+// Fractal (fBm) height at a world point
+float h = 0f, amp = 1f, freq = 1f;
+for (int o = 0; o < octaves; o++) {
+    h += amp * Perlin(p.x * freq, p.y * freq);
+    amp *= 0.5f; freq *= 2f;          // finer + quieter each octave
+}
+```
+
+<Callout type="why">
+Seeding is what makes huge worlds <strong>cheap and shareable</strong>: you store the seed, not the
+terrain. And because noise is a pure function of position, you can generate any chunk of the world on
+demand without ever computing the parts the player has not visited.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Roguelikes" icon="🗝️">
+A daily-run roguelike seeds its PRNG with the date, so every player worldwide explores the identical
+dungeon and can fairly compare scores. Speedrunners hunt for lucky seeds precisely because the seed fully
+determines the layout.
+</ExampleCard>
+
+<ExampleCard domain="Camera & animation" icon="📹">
+An explosion's screen shake is Perlin noise driving the camera offset — smooth and organic, unlike jerky
+white noise. The same trick adds a lifelike idle sway to a torch flame or a hovering drone so nothing
+looks frozen.
+</ExampleCard>
+
+<ExampleCard domain="Visual effects" icon="🔥">
+Animated clouds, fire, smoke and water surfaces are noise textures scrolled and layered over time.
+Sampling fractal noise in 3D (the third axis being time) makes a fire flicker continuously instead of
+flipping between unrelated frames.
+</ExampleCard>
+
+<ExampleCard domain="Loot systems" icon="🎁">
+A boss drop rolls a uniform PRNG value and checks it against a loot table's thresholds. Seeding lets QA
+reproduce a "the legendary never drops" bug exactly, and lets the server verify a client's rolls were not
+tampered with.
+</ExampleCard>
+
+<Callout type="note">
+White noise and smooth noise are <strong>both</strong> useful: use the raw PRNG for discrete decisions
+(which item dropped, did this attack crit), and use Perlin/fractal noise for continuous fields (height,
+temperature, cloud density) where neighbors should resemble each other.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why do games seed their random number generators?',
+      options: [
+        'To make the numbers more random',
+        'So the same seed reproduces the exact same sequence — enabling shareable worlds and reproducible bugs',
+        'To speed up the generator',
+        'Because PRNGs cannot run without a seed value of zero',
+      ],
+      answer: 1,
+      explain: 'A PRNG is deterministic: identical seed → identical stream. That reproducibility is what lets a world, a daily run, or a bug be recreated precisely.',
+    },
+    {
+      q: 'What is the key difference between raw PRNG (white) noise and Perlin noise?',
+      options: [
+        'Perlin noise uses no randomness at all',
+        'White noise values are independent per point; Perlin noise interpolates smoothly so nearby points have similar values',
+        'White noise is always 2D and Perlin is always 3D',
+        'They are the same thing with different names',
+      ],
+      answer: 1,
+      explain: 'White noise is uncorrelated static. Perlin noise places gradients on a grid and smoothly interpolates, giving a continuous field where neighbors resemble each other — ideal for terrain.',
+    },
+    {
+      q: 'In fractal (fBm) noise, what happens to each successive octave?',
+      options: [
+        'Its frequency doubles and its amplitude halves, adding finer, quieter detail',
+        'Its frequency halves and its amplitude doubles',
+        'It is identical to the first octave',
+        'It removes detail from the previous octave',
+      ],
+      answer: 0,
+      explain: 'Each octave doubles frequency (finer features) and halves amplitude (less influence), so broad shapes dominate and fine ridges are layered subtly on top.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>PRNG</strong> turns one <strong>seed</strong> into a deterministic, repeatable stream — same seed, same world.',
+    'Raw PRNG output is <strong>white noise</strong>: great for discrete rolls, but too jagged for natural fields.',
+    '<strong>Perlin / value noise</strong> interpolates random gradients on a grid into a smooth, continuous field.',
+    '<strong>Fractal (fBm)</strong> noise stacks octaves — double frequency, half amplitude — to add detail at every scale.',
+    'Because noise is a pure function of position, worlds are <strong>cheap, shareable and generated on demand</strong>.',
+  ]}
+/>
+
+That completes Game Math. Next you step into **game physics** — starting with kinematics, where these
+positions and values finally start moving under velocity and acceleration over time.

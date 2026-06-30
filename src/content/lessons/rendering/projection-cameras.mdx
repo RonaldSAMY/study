@@ -1,0 +1,137 @@
+---
+title: Projection & Cameras
+track: rendering
+summary: "Perspective versus orthographic, field of view, the view frustum, and the MVP matrix chain."
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - game-math/matrices-transforms
+  - rendering/rendering-pipeline
+leadsTo:
+  - rendering/shaders
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import FrustumProjectionLab from '../../../components/demos/FrustumProjectionLab.tsx';
+
+## The hook: how does a 3D world fit on a flat screen?
+
+Your monitor is flat, yet the world in your game has depth — things are near, things are far, and the far ones look smaller. Somewhere between the 3D scene and the 2D grid of pixels, a piece of math throws away one dimension *on purpose*, in just the way your eyes do. That math is **projection**, and the virtual eye doing it is the **camera**. Choose its settings well and the world feels real; choose badly and everything looks warped, cramped, or eerily flat.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **camera** defines a box of visible space — the **view frustum** — and **projection** is the matrix that squashes everything in that box onto the flat screen, optionally making far things smaller.
+</Callout>
+
+## Intuition: the box you can see
+
+In the **matrices and transforms** lesson you learned that a single matrix can move, rotate, and scale points. The camera is built from exactly those tools, chained together.
+
+Picture standing in a dark room with a flashlight. You only see what falls inside the cone of light: too close and it is behind you, too far and it fades out, too far to the side and it misses the beam. A camera is the same. It can see only a bounded region of space called the **view frustum**, fenced in by:
+
+- a **near plane** (closer than this is clipped away),
+- a **far plane** (farther than this is invisible),
+- and the sides, set by the **field of view (FOV)** — how wide the cone opens.
+
+There are two flavors of projection. **Perspective** mimics eyes and lenses: parallel rails appear to converge and distant objects shrink, so the frustum is a truncated pyramid. **Orthographic** keeps sizes constant no matter the distance, so the frustum is a plain box — perfect for blueprints, isometric strategy games, and 2D UI.
+
+## Play with it
+
+This is a top-down slice of a camera. Slide the **FOV**, **near**, and **far** planes and watch the frustum reshape; objects inside it project down to the screen strip, and in perspective mode the far ones shrink. Switch to **orthographic** to see depth stop mattering.
+
+<FrustumProjectionLab client:visible />
+
+<Callout type="tip">
+Crank the FOV very wide and watch the projected objects stretch toward the edges — that is the "fish-eye" look. Narrow it and the scene flattens and zooms, like a sniper scope. Game FOV settings are a direct handle on this trade-off.
+</Callout>
+
+## The formal definition
+
+A vertex's journey to the screen is a chain of matrix multiplies — the **Model-View-Projection (MVP)** chain:
+
+$$
+\mathbf{p}_{\text{clip}} = M_{\text{proj}} \, M_{\text{view}} \, M_{\text{model}} \, \mathbf{p}_{\text{local}}.
+$$
+
+The model matrix places an object in the world, the view matrix moves the world in front of the camera, and the projection matrix maps the frustum into a standard cube. A perspective projection (with vertical field of view $\theta$, aspect ratio $a$, and near/far $n, f$) has the form
+
+$$
+M_{\text{proj}} =
+\begin{bmatrix}
+\frac{1}{a \tan(\theta/2)} & 0 & 0 & 0 \\
+0 & \frac{1}{\tan(\theta/2)} & 0 & 0 \\
+0 & 0 & \frac{-(f+n)}{f-n} & \frac{-2fn}{f-n} \\
+0 & 0 & -1 & 0
+\end{bmatrix}.
+$$
+
+The magic is in that bottom row: it copies $-z$ into the output's $w$ component. After the **perspective divide** (dividing by $w$), an object's screen size scales like $1/z$ — far things get smaller, automatically.
+
+<Callout type="why">
+Because depth ends up encoded as $1/z$, precision bunches up near the camera. Setting the near plane too small spreads that precision thinly and causes **z-fighting** (flickering overlapping surfaces). Knowing the projection math tells you exactly which slider to fix.
+</Callout>
+
+## The same idea, across very different games
+
+Every camera uses projection, but the right choice is genre-specific.
+
+<ExampleCard domain="Isometric city builder" icon="🏙️">
+A city builder uses an **orthographic** camera so a building looks the same size whether it sits at the front or back of the map. Constant scale lets players compare structures and place them on a clean grid — perspective would make far districts deceptively tiny.
+</ExampleCard>
+
+<ExampleCard domain="Competitive shooter" icon="🎯">
+Competitive players raise their **FOV** to see more around them, accepting edge distortion for awareness. Lower it and enemies appear larger and closer — effectively a zoom. The FOV slider is one of the most-tweaked settings in the genre.
+</ExampleCard>
+
+<ExampleCard domain="Mobile endless runner" icon="📱">
+A runner pulls the **near plane** forward and the **far plane** in to a tight band, so the GPU never processes scenery the player will never reach. A shallow frustum is free performance on a battery-limited phone.
+</ExampleCard>
+
+<ExampleCard domain="Flight simulator" icon="✈️">
+A flight sim needs a huge **far plane** to render the horizon, but that risks z-fighting on cockpit gauges inches away. Sims solve it by rendering the cockpit and the distant world with separate projections, each with its own near/far range.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the view frustum?',
+      options: [
+        'The list of triangles in a model',
+        'The region of space a camera can actually see',
+        'The matrix that rotates an object',
+        'The grid of pixels on the screen',
+      ],
+      answer: 1,
+      explain: 'The frustum is the bounded volume — near plane, far plane, and sides set by FOV — that the camera renders.',
+    },
+    {
+      q: 'In perspective projection, how does an object’s apparent size change with distance z?',
+      options: ['It stays constant', 'It scales like 1/z (smaller when farther)', 'It scales like z (bigger when farther)', 'It scales like z squared'],
+      answer: 1,
+      explain: 'The perspective divide by w (which holds z) makes apparent size fall off as 1/z, so distant objects shrink.',
+    },
+    {
+      q: 'Which projection keeps objects the same size regardless of distance, making it ideal for an isometric builder?',
+      options: ['Perspective', 'Orthographic', 'Fish-eye', 'Stereographic'],
+      answer: 1,
+      explain: 'Orthographic projection ignores depth for scaling, so near and far objects render at the same size.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>camera</strong> sees only the <strong>view frustum</strong>: bounded by near, far, and the FOV-set sides.',
+    '<strong>Perspective</strong> shrinks distant objects (truncated-pyramid frustum); <strong>orthographic</strong> keeps sizes constant (box frustum).',
+    'Vertices reach the screen through the <strong>Model-View-Projection</strong> matrix chain.',
+    'The projection’s bottom row copies depth into <strong>w</strong>; the perspective divide is what creates the 1/z size falloff.',
+    'A too-small <strong>near plane</strong> wastes depth precision and causes <strong>z-fighting</strong>.',
+  ]}
+/>
+
+Next up: **shaders** — the tiny programs that run on every vertex and every pixel once projection has placed your geometry on screen.

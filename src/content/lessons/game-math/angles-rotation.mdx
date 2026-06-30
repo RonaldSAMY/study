@@ -1,0 +1,176 @@
+---
+title: Angles & Rotation
+track: game-math
+summary: "Headings, atan2 and angular velocity: how anything in a game turns to face — and chase — a target."
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - trigonometry/unit-circle
+  - game-math/vectors-in-games
+leadsTo:
+  - game-math/interpolation-easing
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TurretAimController from '../../../components/demos/TurretAimController.tsx';
+
+## The hook: the turret that tracks you
+
+Walk past a sentry turret in any action game and it swivels to follow you — not snapping instantly, but
+turning at a believable speed, always taking the short way around. Behind that simple-looking behavior
+are three small ideas: figure out the **direction** to the target, convert it to an **angle**, and rotate
+toward that angle a little bit each frame without overshooting. Master this and you can make eyes follow
+a cursor, a car steer into a corner, or a missile hunt its prey.
+
+<Callout type="intuition" title="The one-sentence idea">
+To face a target, take the **angle** of the arrow pointing at it, then each frame rotate your current
+heading **toward** that angle by at most your **turn rate** — always the short way around.
+
+</Callout>
+
+## Intuition: from an arrow to a heading
+
+You already know that `target − self` gives the arrow pointing from you to your goal. A **heading** is
+just that arrow boiled down to a single number: the angle it makes with the positive x-axis. The tool
+that converts a 2D arrow into an angle is `atan2`.
+
+Why `atan2` and not plain $\arctan$? Plain $\arctan(\Delta y / \Delta x)$ throws away which quadrant you
+are in — it cannot tell "up-right" from "down-left," and it divides by zero when the target is straight
+up. `atan2` takes the two components *separately*, so it returns the correct angle across the full circle
+from $-180°$ to $180°$.
+
+Once you have your current heading and the desired heading, the trick is the **difference**. Subtract
+them and you might get something like $350°$ — but turning $350°$ is silly when you could turn $-10°$ the
+other way. So you **wrap** the difference into the range $-180°$ to $180°$, which always picks the
+shorter rotation. Finally, you only move by your **angular velocity** times the frame time, so the turn
+is smooth and capped.
+
+## Play with it
+
+Move your cursor around the grid. The turret reads the angle to the cursor with `atan2`, finds the
+wrapped error (the green arc), and rotates toward it. Now drag the **max turn rate** way down and whip
+the cursor across the screen — watch the barrel lag behind, unable to keep up.
+
+<TurretAimController client:visible />
+
+<Callout type="tip">
+Notice the <strong>error</strong> readout never exceeds ±180°. That wrapping is what stops the turret
+from spinning the long way around when the target crosses from just-left to just-right of straight up.
+</Callout>
+
+## The formal definition
+
+The desired heading toward a target is the angle of the displacement arrow:
+
+$$
+\theta_{\text{target}} = \operatorname{atan2}(\Delta y,\ \Delta x), \qquad \Delta = \mathbf{p}_{\text{target}} - \mathbf{p}_{\text{self}}.
+$$
+
+The raw difference between desired and current heading must be **wrapped** to the shortest signed angle:
+
+$$
+\Delta\theta = \bigl((\theta_{\text{target}} - \theta) + \pi \bmod 2\pi\bigr) - \pi \in (-\pi,\ \pi].
+$$
+
+Then you turn by at most the angular velocity $\omega$ times the frame time $\Delta t$, clamping so you
+never overshoot:
+
+$$
+\theta_{\text{new}} = \theta + \operatorname{clamp}\bigl(\Delta\theta,\ -\omega\,\Delta t,\ \omega\,\Delta t\bigr).
+$$
+
+```csharp
+// Turn smoothly toward a target, capped at turnRate (rad/s)
+float desired = Mathf.Atan2(target.y - pos.y, target.x - pos.x);
+float maxStep = turnRate * Time.deltaTime;
+heading = Mathf.MoveTowardsAngle(heading, desired, maxStep);
+```
+
+<Callout type="why">
+Multiplying the turn by $\Delta t$ makes rotation <strong>frame-rate independent</strong>, just like
+movement. And clamping to $\omega\,\Delta t$ is what separates a snappy arcade turret from a heavy tank
+that swings its turret slowly — the same code, one different number.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Tower defense" icon="🏰">
+Each tower picks the nearest enemy, computes the heading to it with `atan2`, and rotates its cannon at a
+fixed turn rate. A slow turn rate becomes a balancing knob: heavy towers hit hard but cannot track fast
+flyers, so you must place them where targets approach head-on.
+</ExampleCard>
+
+<ExampleCard domain="Stealth games" icon="🕵️">
+A guard's vision cone is centered on its heading. To check if it can see you, the guard takes the angle
+to the player and asks whether the wrapped difference from its heading is smaller than half the cone
+angle — pure angle math deciding whether the alarm sounds.
+</ExampleCard>
+
+<ExampleCard domain="Twin-stick shooters" icon="🎮">
+The character continuously faces the aim stick (or mouse). The render code sets the sprite's rotation to
+`atan2` of the aim direction every frame, so the gun points exactly where you are pushing — instant,
+because the turn rate here is effectively infinite.
+</ExampleCard>
+
+<ExampleCard domain="Homing missiles" icon="🚀">
+A seeking missile flies forward at constant speed but can only turn so fast. Each frame it nudges its
+heading toward the target by a capped angle, which is exactly why a nimble player can out-juke a missile
+with a sharp turn the missile cannot match.
+</ExampleCard>
+
+<Callout type="note">
+The same wrap-and-clamp pattern drives <strong>angular velocity</strong> in general: a spinning coin, a
+rotating platform, or a steering wheel all advance an angle by a rate times $\Delta t$ each frame.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why use atan2(Δy, Δx) instead of arctan(Δy / Δx) to find a heading?',
+      options: [
+        'atan2 is faster to compute',
+        'atan2 uses both components, so it returns the correct angle in all four quadrants and handles Δx = 0',
+        'arctan does not exist in most game engines',
+        'They are identical in every case',
+      ],
+      answer: 1,
+      explain: 'Dividing first loses the sign information of each component. atan2 keeps Δy and Δx separate, covering the full −180° to 180° range and the straight-up case where Δx = 0.',
+    },
+    {
+      q: 'A turret faces 170° and the target is at −170°. What is the shortest turn?',
+      options: ['+340° (almost all the way around)', '−340°', '+20° (a small hop across the ±180° line)', '0°'],
+      answer: 2,
+      explain: 'The raw difference is −170° − 170° = −340°. Wrapped into (−180°, 180°] that becomes −340° + 360° = +20°, so the turret only nudges 20° across the boundary instead of spinning the long way.',
+    },
+    {
+      q: 'What does multiplying the turn step by Δt (delta time) accomplish?',
+      options: [
+        'It makes the turret turn instantly',
+        'It makes the rotation speed frame-rate independent',
+        'It converts radians to degrees',
+        'It reverses the rotation direction',
+      ],
+      answer: 1,
+      explain: 'Scaling by Δt means the object rotates the same number of degrees per second regardless of frame rate — a 30 Hz phone and a 144 Hz PC end up at the same heading.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>heading</strong> is a single angle; get it from a direction arrow with <strong>atan2(Δy, Δx)</strong>.',
+    '<strong>atan2</strong> beats arctan because it keeps both components and works in all four quadrants.',
+    'Always <strong>wrap</strong> the angle difference into ±180° so you rotate the short way around.',
+    'Cap each turn at <strong>angular velocity × Δt</strong> for smooth, frame-rate-independent rotation.',
+    'Tune the single <strong>turn rate</strong> number to make turrets, guards, cars and missiles feel light or heavy.',
+  ]}
+/>
+
+Next up: **interpolation & easing** — once you can point at a target, you will want to glide toward it
+with lerp, slerp and easing curves that make motion feel alive.

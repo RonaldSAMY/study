@@ -1,0 +1,142 @@
+---
+title: Shaders
+track: rendering
+summary: "Tiny GPU programs that run per-vertex and per-pixel, in massive parallel."
+difficulty: advanced
+estMinutes: 14
+prereqs:
+  - rendering/rasterization
+  - memory-hardware/gpu-architecture
+leadsTo:
+  - rendering/lighting-pbr
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import FragmentShaderSandbox from '../../../components/demos/FragmentShaderSandbox.tsx';
+
+## The hook: a program for every pixel, all at once
+
+A modern screen has over two million pixels. Sixty times a second, something has to decide the color of every one of them. You could never do that with a normal loop on a normal CPU — it would crawl. Instead the GPU runs the *same tiny program* on all of them simultaneously. Those tiny programs are **shaders**, and learning to write them is the difference between using an engine's defaults and inventing your own look: toon outlines, water ripples, dissolving enemies, glowing portals.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **shader** is a small program the GPU runs in parallel — a **vertex shader** once per corner to position it, and a **fragment shader** once per pixel to color it.
+</Callout>
+
+## Intuition: two stages, two jobs
+
+In the **GPU architecture** lesson you saw that a GPU is thousands of small cores built for doing the same operation on different data. Shaders are how you *feed* that machine. The rendering pipeline runs two programmable stages:
+
+1. **Vertex shader** — runs once per vertex. Its job is placement: take a corner in local space and output where it lands in clip space (the MVP multiply from the last lesson). It can also pass data forward, like colors or texture coordinates.
+2. **Fragment shader** — runs once per pixel the triangle covers. Its job is color: read the interpolated values handed down by rasterization and output the final RGBA.
+
+The crucial mental shift: a fragment shader has **no idea about its neighbors**. It only knows its own inputs — its screen/UV position, plus shared values called **uniforms** (the same for every pixel this frame, like time or a light position) and **varyings** (the per-vertex values rasterization interpolated). From those few numbers it must compute one color. That isolation is exactly what lets millions run at once.
+
+## Play with it
+
+Below is a fragment shader written in JavaScript so you can scrub its inputs live. Every pixel runs the same formula on its own coordinate; the sliders are **uniforms** shared by all of them. Change the pattern, frequency, and phase, and hit animate to drive the phase over time.
+
+<FragmentShaderSandbox client:visible />
+
+<Callout type="tip">
+Notice that turning up "frequency" changes *every* pixel, but each still computes independently from its own position. There is no loop you can see — that is the parallel mindset. Write the rule for one pixel; the hardware repeats it a million-fold.
+</Callout>
+
+## The formal definition
+
+A fragment shader is a pure function from inputs to a color:
+
+$$
+\text{color} = f(\text{uv}, \; \text{uniforms}, \; \text{varyings}).
+$$
+
+In real GPU code this is written in a shading language like GLSL. The plasma effect in the demo is essentially a sum of sine waves of the pixel's coordinate:
+
+```glsl
+// fragment shader: one color per pixel
+uniform float freq;     // shared by all pixels this frame
+uniform float phase;
+in vec2 uv;             // this pixel's coordinate, interpolated
+out vec4 fragColor;
+
+void main() {
+  float a = sin(uv.x * freq + phase);
+  float b = sin(uv.y * freq - phase);
+  float v = 0.5 + 0.5 * sin(a + b);
+  fragColor = vec4(v, v * 0.6, 1.0 - v, 1.0);
+}
+```
+
+<Callout type="why">
+Because the function is *pure* — output depends only on inputs, with no shared writes — the scheduler can run any pixel in any order on any core. That pure, data-parallel shape is the same one behind matrix multiplies in neural nets, which is why GPUs serve both graphics and machine learning.
+</Callout>
+
+## The same idea, across very different games
+
+The two-stage shader model powers wildly different effects.
+
+<ExampleCard domain="Cartoon adventure" icon="🎨">
+A cel-shaded adventure game gets its inked look from a fragment shader that *quantizes* lighting into two or three flat bands instead of a smooth gradient, then draws a dark outline where surface normals turn away from the camera. The art style lives entirely in a few lines of per-pixel code.
+</ExampleCard>
+
+<ExampleCard domain="Survival game water" icon="🌊">
+An open-water survival game animates waves in the **vertex shader**: each vertex is pushed up and down by a sum of sine waves driven by a time uniform. No new geometry is sent each frame — the same mesh just moves on the GPU, nearly free.
+</ExampleCard>
+
+<ExampleCard domain="Roguelike dissolve" icon="🔥">
+When an enemy dies in a roguelike, a fragment shader compares each pixel against a noise texture and a rising threshold uniform, discarding pixels below it. The creature appears to burn away from the edges — a dissolve done purely in the pixel stage.
+</ExampleCard>
+
+<ExampleCard domain="Rhythm game backgrounds" icon="🎵">
+A rhythm game feeds the music's loudness into a uniform that a fullscreen fragment shader reads, pulsing colors and warping patterns in time with the beat. One shader, one number per frame, an entire reactive backdrop.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the main job of the vertex shader versus the fragment shader?',
+      options: [
+        'Vertex shader colors pixels; fragment shader positions corners',
+        'Vertex shader positions corners; fragment shader colors pixels',
+        'Both color pixels',
+        'Both only run on the CPU',
+      ],
+      answer: 1,
+      explain: 'The vertex shader transforms each corner into clip space; the fragment shader computes the color of each covered pixel.',
+    },
+    {
+      q: 'A value that is the same for every pixel in a draw (like the current time) is called a…',
+      options: ['varying', 'uniform', 'vertex', 'texel'],
+      answer: 1,
+      explain: 'Uniforms are constant across the whole draw call; varyings differ per pixel because rasterization interpolates them.',
+    },
+    {
+      q: 'Why can a fragment shader run on millions of pixels in parallel?',
+      options: [
+        'Because it writes to shared memory that syncs them',
+        'Because each pixel’s output depends only on its own inputs (no neighbor access)',
+        'Because the CPU schedules them one at a time',
+        'Because pixels are processed alphabetically',
+      ],
+      answer: 1,
+      explain: 'Each fragment is independent — a pure function of its own inputs — so any core can run any pixel in any order.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>shader</strong> is a small GPU program run in massive parallel across vertices or pixels.',
+    'The <strong>vertex shader</strong> positions each corner; the <strong>fragment shader</strong> colors each pixel.',
+    '<strong>Uniforms</strong> are shared across a draw; <strong>varyings</strong> are per-pixel values interpolated by rasterization.',
+    'A fragment shader is a <strong>pure function</strong> of its own inputs — that independence is what enables parallelism.',
+    'The same data-parallel shape powers both graphics and <strong>machine learning</strong> on GPUs.',
+  ]}
+/>
+
+Next up: **lighting and PBR** — using shaders and the dot product to make surfaces respond to light with diffuse, specular, and ambient terms.

@@ -1,0 +1,133 @@
+---
+title: Textures & UV Mapping
+track: rendering
+summary: "Wrapping images onto geometry with UV coordinates, plus sampling, filtering, and mipmaps."
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - rendering/shaders
+leadsTo:
+  - rendering/color-framebuffers
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import UvMappingDragboard from '../../../components/demos/UvMappingDragboard.tsx';
+
+## The hook: how does a flat photo become a 3D brick wall?
+
+A castle wall in a game is usually just a few flat triangles. Yet it shows individual bricks, mortar, cracks, and moss. The geometry did not get more detailed — an *image* got glued onto it. The trick is telling each corner of the triangle which part of the image it should grab, then letting the GPU stretch the photo across the surface. That gluing is **UV mapping**, and it is how nearly all the visual richness in games is delivered cheaply.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **texture** is an image, and **UV coordinates** are a per-vertex address into it — telling each point on a surface which pixel of the image to wear.
+</Callout>
+
+## Intuition: an address book for pixels
+
+Think of unwrapping a paper model: you cut a 3D shape along seams and flatten it onto a sheet. **UV mapping** is the reverse bookkeeping. Every vertex stores two numbers, $u$ and $v$, each running from $0$ to $1$, that name a spot in the texture image — like normalized coordinates that do not care about the image's resolution.
+
+You met **varyings** in the shaders lesson: rasterization interpolates each vertex's UV across the triangle, so every pixel gets its own $(u, v)$. The fragment shader then **samples** the texture at that address to fetch a color. That fetch is rarely a clean hit, which is where the subtleties live:
+
+- **Magnification** — when the surface is close and one texel covers many pixels. **Nearest** sampling gives crisp blocks; **bilinear** filtering blends the four nearest texels for smoothness.
+- **Minification** — when the surface is far and one pixel covers many texels. Sampling a single texel makes the image **sparkle** and shimmer as the camera moves.
+- **Mipmaps** — pre-shrunk copies of the texture. When minified, the GPU reads from a smaller, already-averaged level, killing the sparkle almost for free.
+
+## Play with it
+
+Drag the UV box on the left to choose which region of the texture maps onto the quad on the right. Shrink the box to **magnify** (watch nearest go blocky); enlarge it past the texture to **minify** (watch the fine pattern sparkle), then switch **mipmaps** on to calm it.
+
+<UvMappingDragboard client:visible />
+
+<Callout type="tip">
+Push the UV box outside the $0$ to $1$ range. The pattern repeats — that is **wrapping** (tiling). A small brick texture can cover a whole wall by repeating its UVs, which is why texture memory goes so far.
+</Callout>
+
+## The formal definition
+
+A texture is a function from a 2D coordinate to a color, sampled at UV addresses interpolated across the triangle:
+
+$$
+\text{color}(p) = \text{sample}\big(T, \; u(p), \; v(p)\big), \qquad u, v \in [0, 1].
+$$
+
+Bilinear filtering blends the four texels surrounding the sample point $(u, v)$ with weights from the fractional parts $f_u, f_v$:
+
+$$
+\text{sample} = (1-f_u)(1-f_v)\,c_{00} + f_u(1-f_v)\,c_{10} + (1-f_u)f_v\,c_{01} + f_u f_v\,c_{11}.
+$$
+
+The chosen **mipmap level** depends on how fast UVs change between adjacent pixels: roughly $\text{LOD} = \log_2(\text{texels per pixel})$. More texels squeezed into a pixel means a coarser level, so each pixel reads a pre-averaged value instead of one aliased texel.
+
+<Callout type="why">
+Mipmaps cost about a third more memory but turn shimmering distant surfaces into smooth ones and *speed up* sampling (smaller reads cache better). It is one of the highest-value trades in all of real-time rendering — pure win once you understand minification.
+</Callout>
+
+## The same idea, across very different games
+
+UV mapping is everywhere, stressed differently per game.
+
+<ExampleCard domain="Open-world terrain" icon="⛰️">
+A vast landscape tiles a small rock texture thousands of times via wrapped UVs, then blends several textures by weight so grass fades into mud. Without tiling, a unique image for the whole terrain would never fit in memory.
+</ExampleCard>
+
+<ExampleCard domain="Character customization" icon="🧑‍🎤">
+A create-a-character screen swaps **textures** on the same head mesh to change skin, tattoos, and warpaint. The geometry is fixed; only the image addressed by the UVs changes, so thousands of looks share one model.
+</ExampleCard>
+
+<ExampleCard domain="Card battler" icon="🃏">
+A digital card game packs hundreds of card arts into one big **texture atlas** and gives each card quad a different UV rectangle into it. One bind, many cards — fewer state changes and faster draws.
+</ExampleCard>
+
+<ExampleCard domain="Driving sim road signs" icon="🛣️">
+Road signs viewed from far away shimmer badly without **mipmaps** because their crisp lettering minifies hard. Mipmapping smooths the distant signs into legible blurs that sharpen as you approach — exactly the minification fix.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What do UV coordinates represent?',
+      options: [
+        'The position of a vertex in world space',
+        'A per-vertex address into the texture image, from 0 to 1',
+        'The brightness of a pixel',
+        'The camera’s field of view',
+      ],
+      answer: 1,
+      explain: 'UVs are normalized 0–1 coordinates that tell each surface point which part of the texture to sample.',
+    },
+    {
+      q: 'A distant textured surface shimmers and sparkles as the camera moves. What fixes it best?',
+      options: ['Increasing the field of view', 'Turning on mipmaps', 'Lowering the ambient light', 'Adding more vertices'],
+      answer: 1,
+      explain: 'Sparkle is a minification artifact; mipmaps supply pre-averaged smaller levels that remove it.',
+    },
+    {
+      q: 'What does bilinear filtering do when magnifying a texture?',
+      options: [
+        'Picks the single nearest texel, giving blocky edges',
+        'Blends the four nearest texels for a smooth result',
+        'Repeats the texture across the surface',
+        'Converts the texture to grayscale',
+      ],
+      answer: 1,
+      explain: 'Bilinear sampling weights the four surrounding texels by the fractional UV, smoothing the magnified image.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>texture</strong> is an image; <strong>UV coordinates</strong> address into it, interpolated across each triangle.',
+    '<strong>Magnification</strong> needs filtering — <strong>nearest</strong> is blocky, <strong>bilinear</strong> blends four texels smoothly.',
+    '<strong>Minification</strong> causes shimmering; <strong>mipmaps</strong> (pre-shrunk levels) fix it cheaply.',
+    'UVs outside 0–1 <strong>wrap</strong>, letting a small texture tile across a large surface.',
+    'Packing many images into a <strong>texture atlas</strong> reduces binds and speeds up drawing.',
+  ]}
+/>
+
+Next up: **color, gamma, and framebuffers** — how the colors these textures produce are actually stored, blended, and corrected before they reach your eyes.

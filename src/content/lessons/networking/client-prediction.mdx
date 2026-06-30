@@ -1,0 +1,188 @@
+---
+title: Client Prediction & Reconciliation
+track: networking
+summary: Move first, ask the server later — predict locally to hide the round trip, then quietly correct when the authoritative answer arrives.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - networking/client-server-p2p
+  - game-physics/kinematics
+leadsTo:
+  - networking/lag-compensation
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PredictionReconcileLab from '../../../components/demos/PredictionReconcileLab.tsx';
+
+## The hook: why does your character move the instant you press the key?
+
+You learned last lesson that competitive games put one **authoritative server** in charge of the truth. But
+that server might be 80 milliseconds away. If your character only moved *after* asking permission and hearing
+back, every keypress would feel like steering a boat through syrup — press, wait, drift, react. Yet in a good
+shooter the character moves on the *very next frame*. How? The client cheats, politely: it **predicts** the
+result of your input immediately and shows it to you, then lets the far-away server quietly confirm or fix it.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Client-side prediction** runs the same movement math locally so you see your input instantly, and
+**reconciliation** replays your un-acknowledged inputs on top of the server's authoritative answer to silently
+fix any mismatch.
+</Callout>
+
+## Intuition: act now, apologize later
+
+Remember **kinematics** — given a position and an input, you can compute the next position with the same step
+formula. That formula is the key, because the client and the server can run the *exact same function*.
+
+Here is the trick, in three beats:
+
+1. **Predict.** When you press right, the client applies the movement step right away and draws you there. No
+   waiting. It also saves a copy of that input in a "not yet confirmed" list.
+2. **Send.** The same input travels to the authoritative server, which applies it to the real world and sends
+   back a snapshot stamped with *the last input it processed*.
+3. **Reconcile.** When that snapshot arrives it is already old — you have pressed more keys since. So the client
+   throws away its predicted position, snaps to the server's authoritative one, and **replays** every input the
+   server hadn't seen yet. If your prediction was right, the replay lands in the same spot and you notice
+   nothing. If it was wrong, you see a small correction.
+
+Without prediction you wait a whole **round trip** before anything happens. With it, you wait one frame — and
+only feel a hiccup on the rare frames where local guess and server truth disagree.
+
+## Play with it
+
+Hold the move buttons (or the arrow keys) to push the player. Crank the **latency** slider up and toggle
+**prediction off**: the player now lags a full round trip behind your finger. Turn prediction back on and it
+snaps to your input instantly. Then hit **Server knockback** — a shove only the server knows about — to trigger
+a visible **rollback** as reconciliation corrects your prediction.
+
+<PredictionReconcileLab client:visible />
+
+<Callout type="tip">
+Watch the <strong>pending inputs</strong> counter. Those are the keypresses the server hasn't confirmed yet —
+exactly the inputs that get replayed during reconciliation. More latency means more pending inputs to replay.
+</Callout>
+
+## The formal definition
+
+Let the world step be a deterministic function $f$ that maps a state $x$ and an input $u$ to the next state:
+
+$$
+x_{k+1} = f(x_k,\, u_k).
+$$
+
+Without prediction, the time between pressing a key and seeing a result is the full round trip,
+
+$$
+T_{\text{felt}} = \text{RTT} = 2L,
+$$
+
+for one-way latency $L$. With prediction the client applies $f$ locally, so $T_{\text{felt}} \approx$ one frame,
+independent of $L$.
+
+When an authoritative snapshot arrives, it carries the server state $x^{\text{srv}}$ and the sequence number
+$s$ of the last input the server applied. The client holds a buffer of un-acknowledged inputs
+$u_{s+1}, u_{s+2}, \dots, u_n$ and **rebuilds** its predicted state by replaying them:
+
+$$
+\hat{x}_n = f\big(\cdots f(f(x^{\text{srv}}, u_{s+1}),\, u_{s+2}) \cdots,\, u_n\big).
+$$
+
+```python
+# server reconciliation: snap to truth, then replay un-acked inputs
+state = snapshot.pos                      # authoritative base
+pending = [u for u in pending if u.seq > snapshot.seq]
+for u in pending:                         # rollback-and-replay
+    state = step(state, u)                # same f() the server ran
+predicted = state                         # a mismatch shows as a correction
+```
+
+<Callout type="why">
+Reconciliation only works because the step $f$ is **deterministic and shared** — the client and server compute
+identical results from identical inputs. This is the same insistence on a reproducible function that makes
+gradient checks, simulations, and replayable training runs trustworthy in machine learning: same inputs, same
+output, every time.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Racing games" icon="🏎️">
+Steering input is predicted instantly so the car turns the moment you flick the stick. The server still owns
+collisions and lap times; when it disagrees — say you clipped a wall it saw first — reconciliation nudges the
+car back onto the authoritative line instead of letting your screen drift into fantasy.
+</ExampleCard>
+
+<ExampleCard domain="VR headsets" icon="🥽">
+A headset can't wait for a render server to move the world when you turn your head — that delay causes nausea.
+It **predicts** where your head will be a few milliseconds ahead, renders to that pose, then warps the finished
+frame to the *measured* pose at the last instant. Predict, then correct, exactly as here.
+</ExampleCard>
+
+<ExampleCard domain="Messaging apps" icon="💬">
+When you tap send, the message appears in the thread immediately marked "sending." The app **optimistically**
+shows the predicted outcome; only when the server acknowledges does the check-mark appear. If delivery fails,
+the optimistic message is rolled back and flagged — a reconciliation in everyday software.
+</ExampleCard>
+
+<ExampleCard domain="Collaborative docs" icon="📝">
+Type in a shared document and your letters show up with zero delay, even though a server must merge everyone's
+edits. The client applies your edit locally, sends it, and when the merged authoritative version returns it
+**re-applies your still-pending keystrokes** on top — the document-editing cousin of input replay.
+</ExampleCard>
+
+<Callout type="note">
+Prediction is a bet that the future is boring: most of the time nothing surprising happens, so the local guess
+matches the server and the correction is invisible. The art is making the rare correction *smooth* rather than
+a jarring teleport — which is exactly what the next lesson tackles for the players around you.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does turning prediction off make the controls feel sluggish?',
+      options: [
+        'The server runs at a lower frame rate',
+        'You must wait a full round trip before your input has any visible effect',
+        'Prediction compresses the network packets',
+        'The client stops drawing frames',
+      ],
+      answer: 1,
+      explain: 'With no local prediction, the client only moves after sending input to the server and receiving the result back — a delay of the full round trip, 2L.',
+    },
+    {
+      q: 'One-way latency is 60 ms. With no prediction, how long until a keypress visibly moves your character?',
+      options: ['About 60 ms', 'About 120 ms', 'About 30 ms', 'Zero — it is instant'],
+      answer: 1,
+      explain: 'Felt delay without prediction is the round trip, RTT = 2L = 2 × 60 = 120 ms.',
+    },
+    {
+      q: 'During reconciliation, what does the client do after snapping to the server snapshot?',
+      options: [
+        'Nothing — the snapshot is the final position',
+        'It deletes all of its inputs and waits for the next snapshot',
+        'It replays the inputs the server had not yet processed on top of the snapshot',
+        'It averages its prediction with the snapshot',
+      ],
+      answer: 2,
+      explain: 'The client rebuilds its predicted state by replaying every un-acknowledged input (sequence numbers newer than the snapshot) using the same deterministic step function.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Client-side prediction</strong> runs the movement step locally so input feels instant instead of waiting a round trip (2L).',
+    'The client keeps a buffer of <strong>un-acknowledged inputs</strong>, each tagged with a sequence number.',
+    '<strong>Reconciliation</strong> snaps to the authoritative snapshot, then replays the still-pending inputs — a rollback-and-replay.',
+    'It works only because the step function is <strong>deterministic and shared</strong> between client and server.',
+    'A correct prediction makes the correction invisible; a wrong one shows up as a small <strong>rollback</strong> snap.',
+  ]}
+/>
+
+Next up: prediction smooths *your* avatar, but everyone else still arrives as sparse, late snapshots. **Lag
+compensation and interpolation** make those remote players move smoothly — and let the server fairly judge your
+shots.

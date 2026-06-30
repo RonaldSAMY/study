@@ -1,0 +1,183 @@
+---
+title: State Synchronization
+track: networking
+summary: Keep every machine's world in agreement by streaming snapshots — and shrink the firehose with delta compression that sends only what changed.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - networking/client-server-p2p
+leadsTo:
+  - audio-performance/game-audio
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DeltaSnapshotBandwidthLab from '../../../components/demos/DeltaSnapshotBandwidthLab.tsx';
+
+## The hook: how do 100 players share one world?
+
+Every smoothing trick so far — prediction, interpolation, rewind — runs on a steady diet of **snapshots** of
+the game state. The authoritative server holds the one true world and must keep dozens or hundreds of machines
+agreeing about it, many times a second. The naive plan is to mail everyone the entire world on every tick. With
+a few entities that's fine. With hundreds of players, projectiles, and pickups, it's a bandwidth firehose
+nobody can afford. The way out is simple and powerful: most of the world doesn't change each tick, so **send
+only what did**.
+
+<Callout type="intuition" title="The one-sentence idea">
+**State synchronization** keeps every machine's copy of the world in agreement by streaming snapshots; **delta
+compression** sends only the entities that changed since a known baseline instead of the whole world every time.
+</Callout>
+
+## Intuition: don't resend what hasn't moved
+
+You met the **client-server** model: one authoritative server owns the truth and broadcasts it. The question is
+*how* to broadcast efficiently.
+
+- **Full snapshot.** Every tick, serialize and send all $N$ entities. Dead simple and robust — a fresh arrival
+  is instantly correct — but the cost is fixed at "the whole world" no matter how little happened.
+- **Delta.** Send only the entities that differ from a baseline the receiver already has. If just five of two
+  hundred entities moved, you ship five, not two hundred.
+
+Deltas need a shared reference point. The receiver acknowledges the last snapshot it fully holds, and the server
+diffs against *that*. To stay robust against dropped packets, the server periodically sends a full **keyframe**:
+a complete snapshot that re-grounds everyone, so a momentary loss can't corrupt the world forever.
+
+There is a second axis of savings hiding in each entity: you rarely need full precision. A position can be
+**quantized** to a few bits, an angle to a single byte. Delta compression decides *which* entities to send;
+quantization shrinks *each* one. Together they turn the firehose into a trickle.
+
+## Play with it
+
+Each dot is an entity; a flash means it changed this tick. The two bars show the bytes a **full snapshot** costs
+versus a **delta**. Raise the **entities** count and the full bar barely cares about churn while the delta bar
+tracks how much actually moved. Drop the **churn** and watch the savings soar. The **keyframe** slider forces a
+periodic full snapshot — set it to 1 and the delta advantage disappears entirely.
+
+<DeltaSnapshotBandwidthLab client:visible />
+
+<Callout type="tip">
+The bandwidth saved climbs as the world gets bigger and calmer. That's the real world: in a large match most
+entities are idle on any given tick, so deltas routinely cut traffic by an order of magnitude.
+</Callout>
+
+## The formal definition
+
+With $N$ entities at $B$ bytes each, a **full snapshot** costs
+
+$$
+S_{\text{full}} = H + N\,B,
+$$
+
+for a small header $H$. If a fraction $c$ of entities change in a tick, a **delta** costs
+
+$$
+S_{\Delta} = H + cN\,(B + b_{\text{id}}),
+$$
+
+where $b_{\text{id}}$ is the per-entity index needed to say *which* ones changed. The fractional bandwidth saved
+is
+
+$$
+\text{saved} = 1 - \frac{S_{\Delta}}{S_{\text{full}}} \approx 1 - c\left(1 + \frac{b_{\text{id}}}{B}\right),
+$$
+
+so low churn $c$ means big savings. Keyframes every $k$ ticks add back one full snapshot's cost periodically,
+amortized as $S_{\text{full}}/k$ extra per tick.
+
+```python
+# delta against the last snapshot the client acknowledged
+delta = [(i, e) for i, e in enumerate(world) if e != baseline[i]]
+packet = header(ack_id) + serialize(delta)   # only the changed entities
+if tick % keyframe_interval == 0:            # periodic full re-ground
+    packet = header(ack_id) + serialize(world)
+```
+
+<Callout type="why">
+"Store a baseline, transmit only the difference" is the same instinct behind sending **gradients** instead of
+whole models in distributed training, and behind **sparse updates** that touch only the parameters that moved.
+Communicating the change rather than the whole state is a core efficiency pattern far beyond games.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Video compression" icon="🎥">
+A video isn't a pile of full images. Codecs send occasional complete **keyframes** (I-frames) and, between them,
+**delta frames** (P-frames) that encode only what moved since the last one. A still scene compresses to almost
+nothing — identical to a calm game world producing tiny deltas.
+</ExampleCard>
+
+<ExampleCard domain="Backups" icon="💾">
+A full backup copies everything; an **incremental backup** copies only the files changed since the last one. You
+take a full baseline occasionally and stream cheap diffs in between — the keyframe-plus-delta rhythm applied to
+storage instead of game state.
+</ExampleCard>
+
+<ExampleCard domain="Version control" icon="🔀">
+Git doesn't store a fresh copy of your project per commit; it records the **diff** from the previous state and
+deduplicates unchanged content. A thousand commits over one big repo stay small because each one transmits only
+the change — delta compression as the foundation of a tool.
+</ExampleCard>
+
+<ExampleCard domain="Financial data" icon="📈">
+A market data feed doesn't resend the whole order book on every update. It pushes **incremental** ticks — this
+price changed, that quantity updated — against a periodic full snapshot, so millions of subscribers stay in sync
+on a modest pipe. Same delta-plus-keyframe design.
+</ExampleCard>
+
+<Callout type="note">
+Deltas trade robustness for size: lose a delta and your baseline is wrong until the next keyframe, so engines
+balance keyframe frequency against bandwidth. More keyframes recover faster from loss but cost more — exactly
+the slider you nudged in the demo.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does delta compression save the most bandwidth in a large, calm world?',
+      options: [
+        'Because large worlds use smaller entities',
+        'Because most entities are unchanged each tick, so only a few need sending',
+        'Because keyframes are disabled in large worlds',
+        'Because deltas compress headers',
+      ],
+      answer: 1,
+      explain: 'A full snapshot always costs the whole world, but a delta costs only the changed fraction c. When little moves, c is tiny and savings approach 100%.',
+    },
+    {
+      q: 'A world has 200 entities at 10 bytes each, and 10% change this tick (ignore id and header overhead). Roughly how do full and delta sizes compare?',
+      options: ['2000 B vs 200 B', '2000 B vs 2000 B', '200 B vs 2000 B', '2000 B vs 20 B'],
+      answer: 0,
+      explain: 'Full = 200 × 10 = 2000 B. Delta = 0.10 × 200 × 10 = 200 B — about a 90% reduction.',
+    },
+    {
+      q: 'What is the main purpose of periodic keyframes (full snapshots) in a delta stream?',
+      options: [
+        'To increase the frame rate',
+        'To re-ground receivers so a lost delta cannot corrupt the world forever',
+        'To save more bandwidth than deltas',
+        'To encrypt the packets',
+      ],
+      answer: 1,
+      explain: 'Deltas depend on a correct baseline. A periodic full snapshot lets a client that missed a delta resynchronize, trading some bandwidth for robustness.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>State synchronization</strong> keeps every machine in agreement by streaming snapshots of the authoritative world.',
+    'A <strong>full snapshot</strong> costs H + N·B every tick; a <strong>delta</strong> costs only the changed fraction, H + cN·(B + id).',
+    'Bandwidth saved ≈ <strong>1 − c</strong>, so low churn in big worlds yields order-of-magnitude reductions.',
+    'Periodic <strong>keyframes</strong> re-ground receivers so a dropped delta cannot corrupt the world permanently.',
+    '<strong>Quantizing</strong> each entity to fewer bits compounds the savings on top of delta compression.',
+  ]}
+/>
+
+You've now built the full multiplayer stack: architecture, instant controls, smooth opponents, and a synced
+world. Next the senses come alive — **game audio and DSP**, where sound waves, mixing, and spatial audio turn a
+silent simulation into a place.

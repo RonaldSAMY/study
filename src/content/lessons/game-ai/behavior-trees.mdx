@@ -1,0 +1,154 @@
+---
+title: Behavior Trees
+track: game-ai
+summary: "Sequence and selector nodes compose small behaviors into scalable, reusable AI that a state machine could never keep tidy."
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - game-ai/finite-state-machines
+  - data-structures/trees
+leadsTo:
+  - game-ai/steering-boids
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BTreeTickViz from '../../../components/demos/BTreeTickViz.tsx';
+
+## The hook: the AI that grew too many arrows
+
+In the last lesson the guard was charming with three states. Now give him ten — patrol, chase, flee, reload, heal, take cover, call for help, investigate noise, melee, surrender — and the finite state machine collapses under its own wiring: dozens of transitions, every new behavior threatening to touch every old one. Studios hit this wall hard, and the tool they reached for to climb over it powers the AI in *Halo*, *The Sims*, and countless others: the **behavior tree**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **behavior tree** organizes actions as a tree that you **tick** from the root each frame; composite nodes (**sequence** and **selector**) combine children using simple success/failure rules, so complex behavior emerges from small reusable pieces.
+</Callout>
+
+## Intuition: ticking a tree of success and failure
+
+You already know trees from the data-structures track — a root, internal nodes, and leaves. A behavior tree adds one idea: every node, when run ("ticked"), returns a **status**, usually `success`, `failure`, or `running`. Parents combine their children's statuses:
+
+- **Leaf nodes** do the real work. A *condition* leaf (`enemy visible?`) returns success or failure; an *action* leaf (`Attack`) does something and reports how it went.
+- A **Sequence** node (think logical **AND**) ticks its children left to right and stops at the first **failure**. It succeeds only if *all* children succeed — "do this, then this, then this."
+- A **Selector** node (think logical **OR**, also called *fallback*) ticks its children left to right and stops at the first **success**. It is a priority list of plans: "try the best plan; if it fails, try the next."
+
+Each tick, evaluation starts again at the **root** and flows down. Crucially, behaviors don't know about each other — you add a new branch without rewiring anything else. That is the property FSMs lacked.
+
+## Play with it
+
+This guard-bot tree has a `Selector` root choosing between *Fight*, *Reload*, and *Patrol*. Toggle the world facts, then **Tick** to walk the tree one node at a time, or **Auto-run** to watch it flow. Active nodes glow; green is success, amber is failure.
+
+<BTreeTickViz client:visible />
+
+<Callout type="tip">
+Turn `has ammo` off while the enemy is visible. The Fight sequence fails at the ammo check, the Selector falls through to Reload, and that succeeds. You just watched a fallback in action — no transition arrows required.
+</Callout>
+
+## The formal definition
+
+A behavior tree is a rooted tree where each node $n$ exposes a tick function returning a status from the set
+
+$$
+\text{Status} = \{\, \texttt{success},\; \texttt{failure},\; \texttt{running} \,\}.
+$$
+
+For a **Sequence** with children $c_1, c_2, \dots, c_k$, the returned status is
+
+$$
+\text{Seq} =
+\begin{cases}
+\texttt{failure} & \text{if any } c_i \text{ returns failure} \\[2pt]
+\texttt{running} & \text{else if some } c_i \text{ is running} \\[2pt]
+\texttt{success} & \text{if all } c_i \text{ succeed}
+\end{cases}
+$$
+
+A **Selector** is the mirror image — swap the roles of success and failure:
+
+$$
+\text{Sel} =
+\begin{cases}
+\texttt{success} & \text{if any } c_i \text{ returns success} \\[2pt]
+\texttt{running} & \text{else if some } c_i \text{ is running} \\[2pt]
+\texttt{failure} & \text{if all } c_i \text{ fail}
+\end{cases}
+$$
+
+The `running` status is what lets a multi-frame action (walk a path, play an animation) report "not done yet" so the tick resumes it next frame instead of restarting.
+
+<Callout type="why">
+Behavior trees scale where FSMs choke because composition replaces wiring. Adding a behavior is dropping in a subtree, not threading new transitions through every existing state. The same subtree — "find cover then shoot" — can be reused across many characters, which is why they became the industry default for complex agents.
+</Callout>
+
+## The same idea, four different worlds
+
+Prioritized fallback and ordered sequencing show up far beyond enemies.
+
+<ExampleCard domain="Robotics" icon="🤖">
+A warehouse robot runs a Selector: *try* to pick the item, *else* re-scan the shelf, *else* call a human. Each attempt is a Sequence of checks and motions. The `running` status keeps a slow arm motion alive across many control cycles.
+</ExampleCard>
+
+<ExampleCard domain="Cooking" icon="🍳">
+A recipe is a Sequence: crack eggs **then** whisk **then** pour **then** cook — fail any step (no eggs!) and the whole dish fails. "Top with cheese or breadcrumbs or nothing" is a Selector: take the first option you can actually do.
+</ExampleCard>
+
+<ExampleCard domain="Emergency medicine" icon="🚑">
+Triage protocols are literally fallback trees: check airway, **else** check breathing, **else** check circulation. Responders memorize the priority order so the most life-critical successful action is taken first — exactly a Selector.
+</ExampleCard>
+
+<ExampleCard domain="Smart home" icon="🏠">
+A morning routine Sequence: confirm it's a weekday, **then** raise the blinds, **then** start the kettle. A "wake me gently" Selector tries soft lights first, falls back to music, falls back to an alarm if you're still asleep.
+</ExampleCard>
+
+<Callout type="note">
+A behavior tree can perfectly mimic any FSM, but the reverse gets ugly fast. That asymmetry — trees subsume state machines, not the other way around — is the whole reason the field moved on.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A Sequence node ticks its children and returns success only when...',
+      options: [
+        'any one child succeeds',
+        'all of its children succeed',
+        'the first child fails',
+        'exactly half of the children succeed',
+      ],
+      answer: 1,
+      explain: 'Sequence is a logical AND: it needs every child to succeed, stopping early at the first failure.',
+    },
+    {
+      q: 'The enemy is visible but the bot has no ammo. With a Selector root over [Fight-sequence, Reload-sequence, Patrol], what does the bot do?',
+      options: ['Attack', 'Reload', 'Patrol', 'Nothing — the tree fails'],
+      answer: 1,
+      explain: 'Fight fails at the ammo check, so the Selector falls through to the Reload sequence, which succeeds.',
+    },
+    {
+      q: 'What is the purpose of the running status?',
+      options: [
+        'To mark a node as broken',
+        'To let a multi-frame action resume next tick instead of restarting',
+        'To make a Selector behave like a Sequence',
+        'To count how many children a node has',
+      ],
+      answer: 1,
+      explain: 'running means "not finished yet", so the next tick continues the in-progress action rather than starting over.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>behavior tree</strong> is ticked from the root each frame; every node returns <strong>success, failure, or running</strong>.',
+    'A <strong>Sequence</strong> is an AND — succeeds only if all children succeed, stopping at the first failure.',
+    'A <strong>Selector</strong> (fallback) is an OR — succeeds at the first child that succeeds, a built-in priority list.',
+    'The <strong>running</strong> status lets multi-frame actions continue across ticks instead of restarting.',
+    'Behaviors compose without rewiring, so trees <strong>scale and reuse</strong> where FSM transitions explode.',
+  ]}
+/>
+
+Next up: **steering and boids** — instead of choosing discrete actions, we'll make movement itself look alive with continuous forces.

@@ -1,0 +1,182 @@
+---
+title: Recursion
+track: algorithms
+summary: "A function that solves a big problem by calling itself on a smaller one — until the problem is small enough to answer outright."
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - data-structures/trees
+leadsTo:
+  - algorithms/space-time-tradeoffs
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CallStackTreeLab from '../../../components/demos/CallStackTreeLab.tsx';
+
+## The hook: how do you blow up a single enemy into a whole explosion?
+
+A grenade goes off in your game. It spawns shrapnel; each shard, when it hits a wall, spawns sparks;
+each spark spawns a tiny puff of smoke. You did not write three different functions. You wrote **one**
+"spawn debris" function that, under the right conditions, **calls itself** to spawn the next, smaller
+layer — and stops when the pieces are too small to matter.
+
+That self-calling pattern is **recursion**, and once you see it you will spot it everywhere a problem
+contains a smaller copy of itself: folders inside folders, branches splitting into branches, a puzzle
+that becomes a slightly easier puzzle.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Recursion** is solving a problem by reducing it to a *smaller version of the same problem*, again
+and again, until you hit a case so small you can answer it directly.
+</Callout>
+
+## Intuition: two parts, never one
+
+You already know a **tree**: a root that branches into children, each of which is itself a little tree.
+Recursion is the *verb* for that *noun* — it is how you naturally walk a structure that is defined in
+terms of itself. Every recursive function has exactly two parts:
+
+1. **The base case** — the smallest input, where you stop and return an answer without recursing.
+   No base case means the function calls itself forever (a *stack overflow* crash).
+2. **The recursive case** — you do a little work, then call yourself on a **strictly smaller** input,
+   trusting that call to handle the rest.
+
+The magic word is *trust*. To write `factorial(n)` you do **not** picture all the calls at once. You
+say: "$n!$ is just $n$ times $(n-1)!$, and I trust the smaller call to be correct." This is **divide
+and conquer**: break the problem, solve the pieces, combine.
+
+Behind the scenes the computer keeps a **call stack** — a stack of paused function calls, each waiting
+for the one it spawned to return. The deepest the stack ever gets is the recursion's *depth*, and that
+depth is real memory.
+
+## Play with it
+
+Pick **factorial** to see recursion as a single straight **chain** — each call makes exactly one more,
+so the stack depth equals $n$. Then switch to **fibonacci** and watch the calls **branch** into a tree
+that explodes. Tap any node to see the *same* subproblem being recomputed over and over.
+
+<CallStackTreeLab client:visible />
+
+<Callout type="tip">
+In <strong>fibonacci</strong> mode, tap the node <strong>F(2)</strong> at a moderate n. Count how many
+times it lights up. Every one of those is wasted, repeated work — remember that feeling; the next
+lesson kills it with caching.
+</Callout>
+
+## The formal definition
+
+A recursive definition states a value in terms of *smaller instances of itself*, plus base cases.
+Factorial is the cleanest example:
+
+$$
+n! = \begin{cases} 1 & \text{if } n = 0 \quad (\text{base case}) \\ n \cdot (n-1)! & \text{if } n > 0 \quad (\text{recursive case}) \end{cases}
+$$
+
+In code the shape mirrors the math exactly — a guard for the base case, then a self-call on a smaller
+argument:
+
+```python
+def factorial(n):
+    if n == 0:          # base case: stop here
+        return 1
+    return n * factorial(n - 1)   # recursive case: smaller problem
+```
+
+The Fibonacci numbers branch into **two** smaller calls, which is why their call tree grows so fast:
+
+$$
+F(n) = F(n-1) + F(n-2), \qquad F(0) = 0,\; F(1) = 1.
+$$
+
+Counting the work: this naive $F(n)$ makes about $2^n$ calls, while its stack only ever holds $n$
+frames at once. That gap — exponential *time* but linear *space* — is the cliffhanger for the next
+lesson.
+
+<Callout type="why">
+Recursion is the native language of anything tree-shaped, and machine learning is full of trees:
+parsing a sentence into a syntax tree, evaluating a decision tree, and **backpropagation** itself is a
+recursive sweep that applies the chain rule from a network's output back to its inputs.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Procedural art" icon="🌳">
+A procedural tree is drawn by a function that draws one branch, then **calls itself** to draw two
+smaller branches at its tip, then those call themselves again. The base case: a branch too short to
+bother splitting. A handful of lines produces an entire forest — that is recursion as a content
+factory.
+</ExampleCard>
+
+<ExampleCard domain="Operating systems" icon="📁">
+"Find every file in this folder" is recursive: list the files here, and for each **sub-folder**, run
+the exact same search inside it. Folders nest arbitrarily deep, so a loop cannot know how far to go —
+but recursion simply follows the structure down until a folder has no more sub-folders (the base case).
+</ExampleCard>
+
+<ExampleCard domain="Puzzle games" icon="🪣">
+The paint-bucket fill (and the flood-reveal in Minesweeper) is recursion: color this cell, then ask
+each neighbor of the same color to fill itself the same way. The base case is a cell that is a
+different color or already filled. One small function floods an entire connected region.
+</ExampleCard>
+
+<ExampleCard domain="Everyday objects" icon="🪆">
+Opening a Matryoshka doll *is* the algorithm: open this doll, and if there is a smaller doll inside,
+do the exact same thing to it. The base case is the tiny solid doll that does not open. Each layer is a
+smaller copy of the whole task — the textbook picture of recursion.
+</ExampleCard>
+
+<Callout type="note">
+Notice every example has the same skeleton: a stopping condition plus a self-call on something smaller.
+If you can spot "a smaller copy of this problem," you can usually write it recursively.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What are the two essential parts of every recursive function?',
+      options: [
+        'A loop and a counter',
+        'A base case and a recursive case',
+        'An array and an index',
+        'A start value and an end value',
+      ],
+      answer: 1,
+      explain: 'The base case stops the recursion; the recursive case reduces the problem and calls itself. Missing the base case causes infinite recursion.',
+    },
+    {
+      q: 'Using factorial(n) = n · factorial(n−1) with factorial(0) = 1, what is factorial(4)?',
+      options: ['12', '16', '24', '64'],
+      answer: 2,
+      explain: '4 · 3 · 2 · 1 · 1 = 24. Each recursive call multiplies by one smaller number until it hits the base case of 1.',
+    },
+    {
+      q: 'Why does naive recursive Fibonacci get so slow as n grows?',
+      options: [
+        'It uses too much disk space',
+        'Each call branches into two, recomputing the same subproblems many times',
+        'The base case is wrong',
+        'Recursion is always slower than loops',
+      ],
+      answer: 1,
+      explain: 'Because F(n) calls F(n−1) and F(n−2), the same subproblems are recomputed repeatedly, making the number of calls grow roughly like 2ⁿ.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Recursion</strong> solves a problem by reducing it to a smaller copy of the same problem.',
+    'Every recursive function needs a <strong>base case</strong> (where it stops) and a <strong>recursive case</strong> (a self-call on smaller input).',
+    'The computer tracks paused calls on the <strong>call stack</strong>; its greatest depth is real memory you spend.',
+    'Recursion is <strong>divide and conquer</strong>: split the problem, trust the smaller calls, combine the results.',
+    'Naive branching recursion (like Fibonacci) can do <strong>exponential</strong> repeated work — a problem we fix next.',
+  ]}
+/>
+
+Next up: **space–time tradeoffs** — we keep that exploding Fibonacci tree and tame it with caching and
+lookup tables, spending a little memory to buy back a huge amount of time.

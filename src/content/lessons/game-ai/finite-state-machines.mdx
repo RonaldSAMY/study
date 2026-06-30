@@ -1,0 +1,152 @@
+---
+title: Finite State Machines
+track: game-ai
+summary: "Patrol, chase, flee: model an agent's behavior as a handful of states and the rules that switch between them."
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - game-ai/pathfinding-astar
+leadsTo:
+  - game-ai/behavior-trees
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import FSMStateSwitcher from '../../../components/demos/FSMStateSwitcher.tsx';
+
+## The hook: the guard who only knows three moods
+
+Sneak past a guard in almost any stealth game and you will feel it: when you are far away he **patrols** a fixed loop, when you step into his cone of vision he **chases**, and if you corner him with no escape he **flees**. He never does anything else. The guard isn't thinking — he is sitting in exactly one of three boxes, and stepping between boxes when the world crosses a line. That tidy little machine is the oldest and most useful trick in game AI: the **finite state machine**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **finite state machine** keeps an agent in exactly **one state** at a time, and switches to another state only when a **transition condition** becomes true.
+</Callout>
+
+## Intuition: states and the arrows between them
+
+You already used a graph in the pathfinding lesson — nodes joined by edges. A finite state machine (FSM) is just a tiny labelled graph with a special rule:
+
+- The **nodes** are *states* — named modes of behavior like `patrol`, `chase`, `flee`. Each state owns a bit of code that runs while you are in it ("walk the patrol loop", "run toward the player").
+- The **edges** are *transitions* — one-way arrows guarded by a condition. The arrow `patrol → chase` might be guarded by "player is within 170 units".
+- At every frame, **one and only one** state is active. The machine checks the outgoing arrows of the current state; the first condition that fires moves you to a new state.
+
+That "one state at a time" rule is what makes the behavior easy to reason about. There is never any ambiguity about what the guard is doing — there is a single token sitting on a single node, sliding along arrows.
+
+## Play with it
+
+Drag the player toward and away from the guard. Two dashed rings mark the transition thresholds. Watch the agent's active state flip, and notice the state graph on the right light up to match.
+
+<FSMStateSwitcher client:visible />
+
+<Callout type="tip">
+Try parking the player right on a ring. The state flickers — that is **transition thrashing**, a real FSM bug. The usual fix is *hysteresis*: leave a state only once you are clearly past the threshold, not the instant you touch it.
+</Callout>
+
+## The formal definition
+
+Formally, a finite state machine is a tuple
+
+$$
+M = (S,\; s_0,\; \Sigma,\; \delta)
+$$
+
+where $S$ is the finite set of states, $s_0 \in S$ is the start state, $\Sigma$ is the set of inputs (the events or world conditions), and $\delta$ is the **transition function**
+
+$$
+\delta : S \times \Sigma \rightarrow S .
+$$
+
+Read $\delta(s, e) = s'$ as "if you are in state $s$ and event $e$ happens, move to state $s'$." Because $\delta$ returns a single state, the machine is always in exactly one place. Our guard is
+
+$$
+\delta(\text{patrol}, \text{playerNear}) = \text{chase}, \qquad
+\delta(\text{chase}, \text{cornered}) = \text{flee}.
+$$
+
+A bare-bones update loop is just a switch over the current state:
+
+```python
+def update(state, world):
+    if state == "patrol" and world.dist < CHASE_R: return "chase"
+    if state == "chase"  and world.dist < FLEE_R:  return "flee"
+    if state == "chase"  and world.dist > CHASE_R: return "patrol"
+    return state  # no transition fired: stay put
+```
+
+<Callout type="why">
+FSMs are the foundation the rest of this track builds on. They are trivial to debug (one active state, a finite list of arrows) but they grow messy fast: $n$ states can need up to $n(n-1)$ transitions. That explosion is exactly why the next lesson reaches for **behavior trees**.
+</Callout>
+
+## The same idea, four different worlds
+
+The "one active mode, guarded transitions" pattern is everywhere once you see it.
+
+<ExampleCard domain="Traffic systems" icon="🚦">
+A traffic light is a textbook FSM: `green → yellow → red → green`. The transitions are fired by a **timer** rather than a sensor, and the cycle never skips a state — you can't jump straight from green to red without yellow in between.
+</ExampleCard>
+
+<ExampleCard domain="Home appliances" icon="🧺">
+A washing machine steps through `fill → wash → rinse → spin → done`. Each state runs until its job finishes, then transitions. Open the lid mid-cycle and an event forces a transition to a `paused` state — the same machine, just one more arrow.
+</ExampleCard>
+
+<ExampleCard domain="Aviation" icon="✈️">
+An autopilot holds one mode at a time — `climb`, `cruise`, `descend`, `hold` — and switches when altitude or a waypoint condition is met. Pilots train on exactly which inputs trigger which mode change, because a surprise transition is dangerous.
+</ExampleCard>
+
+<ExampleCard domain="Conversation design" icon="💬">
+A phone support bot is a dialog FSM: `greeting → ask_problem → troubleshoot → resolved` or `→ escalate`. Your spoken answer is the input event, and the bot can only be "listening for" one thing at any moment.
+</ExampleCard>
+
+<Callout type="note">
+Notice none of these are about games, yet the math is identical. An FSM is a way of *thinking*, not a game-only gadget — which is why compilers, network protocols, and UI flows all use it too.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the defining rule of a finite state machine?',
+      options: [
+        'Several states can be active and blended together',
+        'Exactly one state is active at any moment',
+        'States run in a fixed order and never branch',
+        'It has no memory of which state it is in',
+      ],
+      answer: 1,
+      explain: 'An FSM holds a single active state; transitions move that one token from state to state.',
+    },
+    {
+      q: 'A guard has states patrol, chase, flee. Roughly how many directed transitions might you need in the worst case to connect every state to every other?',
+      options: ['3', '6', '9', '2'],
+      answer: 1,
+      explain: 'With n = 3 states, the worst case is n(n-1) = 3 × 2 = 6 directed arrows. This blow-up is why large FSMs get unwieldy.',
+    },
+    {
+      q: 'The agent flickers between chase and patrol exactly at the boundary distance. What is the standard fix?',
+      options: [
+        'Add more states',
+        'Hysteresis — use different enter/exit thresholds',
+        'Remove the transition entirely',
+        'Run the machine less often',
+      ],
+      answer: 1,
+      explain: 'Hysteresis separates the enter and exit thresholds so the agent does not thrash on the boundary.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>finite state machine</strong> keeps an agent in exactly one state at a time.',
+    '<strong>States</strong> are named behaviors; <strong>transitions</strong> are condition-guarded arrows between them.',
+    'The transition function <strong>δ(state, event) → state</strong> always returns a single next state.',
+    'FSMs are easy to debug but transitions can explode as <strong>n(n-1)</strong>, so they scale poorly.',
+    '<strong>Hysteresis</strong> (separate enter/exit thresholds) cures flickering at a boundary.',
+  ]}
+/>
+
+Next up: **behavior trees** — a composable way to organize decisions that tames the transition explosion FSMs suffer from.

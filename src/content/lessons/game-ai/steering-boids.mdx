@@ -1,0 +1,159 @@
+---
+title: Steering & Boids
+track: game-ai
+summary: "Seek, flee and arrive build lifelike movement from steering forces, and three local rules turn a crowd into a flock."
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - game-math/vectors-in-games
+  - game-physics/forces-newton
+leadsTo:
+  - game-ai/utility-ai
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BoidsFlockCanvas from '../../../components/demos/BoidsFlockCanvas.tsx';
+
+## The hook: a thousand birds, no choreographer
+
+Watch a flock of starlings ripple across an evening sky and your first instinct is that *someone* is conducting it. There isn't. No bird can see the whole flock, no bird is in charge, and yet the swarm turns like a single fluid thing. In 1986 Craig Reynolds showed you can reproduce that magic with three dumb local rules per agent — he called his simulated birds **boids** — and that same idea steers crowds, fish, and enemy swarms in games today.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Steering** turns a goal into an acceleration: each frame you compute a desired velocity, subtract your current one to get a **steering force**, and let that force gently bend your motion — and flocking is just three such forces added together.
+
+</Callout>
+
+## Intuition: desired minus current
+
+You already know from the forces lesson that a force changes velocity, and from the vectors lesson that velocities are arrows you can add. Steering combines exactly those two ideas. For any goal, you ask: "what velocity do I *wish* I had right now?" Then the steering force is simply
+
+> **steering = desired velocity − current velocity**
+
+That subtraction is the whole trick. It nudges you *toward* the ideal heading without snapping to it, so motion curves smoothly instead of teleporting. Swap what "desired" means and you get a family of behaviors:
+
+- **Seek** — desired points straight at the target, at full speed.
+- **Flee** — desired points directly *away* from the threat.
+- **Arrive** — like seek, but the desired speed shrinks to zero as you close in, so you glide to a stop instead of overshooting.
+
+Flocking applies this three times at once. Each boid looks only at neighbors within a small radius and computes three desires: **separation** (steer away from those too close), **alignment** (match the average heading of neighbors), and **cohesion** (steer toward the average position of neighbors). Add the three forces, and a flock appears with nobody in charge.
+
+## Play with it
+
+Move your cursor over the canvas — the flock **seeks** it. Then tune the three flocking weights and watch the character of the swarm change.
+
+<BoidsFlockCanvas client:visible />
+
+<Callout type="tip">
+Drag cohesion to zero: the flock dissolves into loners. Now max out separation: they refuse to bunch up at all. The lifelike look lives in the *balance* of the three forces, not any single one.
+</Callout>
+
+## The formal definition
+
+A steered agent carries a position $\mathbf{p}$ and velocity $\mathbf{v}$. Given a target $\mathbf{t}$, **seek** first builds the desired velocity at maximum speed $v_{\max}$:
+
+$$
+\mathbf{v}_{\text{desired}} = v_{\max}\, \frac{\mathbf{t} - \mathbf{p}}{\lVert \mathbf{t} - \mathbf{p} \rVert}.
+$$
+
+The steering force is the difference, clamped to a maximum so turns stay believable:
+
+$$
+\mathbf{f} = \operatorname{clamp}\!\big(\mathbf{v}_{\text{desired}} - \mathbf{v},\; f_{\max}\big).
+$$
+
+Then you integrate exactly as in the physics lesson, with mass $m$ and timestep $\Delta t$:
+
+$$
+\mathbf{v} \leftarrow \operatorname{clamp}\!\big(\mathbf{v} + \tfrac{\mathbf{f}}{m}\,\Delta t,\; v_{\max}\big), \qquad
+\mathbf{p} \leftarrow \mathbf{p} + \mathbf{v}\,\Delta t.
+$$
+
+For a flock, sum the three weighted rules over the set $N$ of nearby neighbors before clamping:
+
+$$
+\mathbf{f} = w_s\,\mathbf{f}_{\text{sep}} + w_a\,\mathbf{f}_{\text{align}} + w_c\,\mathbf{f}_{\text{coh}}.
+$$
+
+<Callout type="why">
+Steering is **emergent** AI: there is no plan, no tree, no state — just local vector arithmetic run every frame. It is cheap (each boid only checks nearby neighbors) and it produces organic motion that scripted paths never match. That is why it pairs so well with the discrete decision-makers from the earlier lessons: a behavior tree decides *what* to do, steering decides *how to move* while doing it.
+</Callout>
+
+## The same idea, four different worlds
+
+Local rules creating global order is one of nature's favorite patterns.
+
+<ExampleCard domain="Marine biology" icon="🐟">
+A bait ball — thousands of sardines swirling as one — is pure boids. Each fish only tracks a few neighbors, yet separation, alignment and cohesion make the school flow around a predator like liquid.
+</ExampleCard>
+
+<ExampleCard domain="Film & VFX" icon="🎬">
+The stampedes and armies in big-budget films are crowd simulations built on steering. Animators set goals and weights for thousands of agents rather than hand-keying each one — the wildebeest in *The Lion King* remake were boids at heart.
+</ExampleCard>
+
+<ExampleCard domain="Drone shows" icon="🛸">
+Light-show drone swarms use separation to never collide and cohesion-style targets to hold formation. The same desired-minus-current steering keeps each craft gliding to its slot instead of jerking there.
+</ExampleCard>
+
+<ExampleCard domain="Crowd safety" icon="🚶">
+Urban planners model pedestrians as steering agents — seek the exit, separate from others — to find where a stadium or station will dangerously bottleneck before it is ever built.
+</ExampleCard>
+
+<Callout type="note">
+Every one of these uses only *local* information — what's near me right now. No agent ever sees the whole system, yet a coherent whole emerges. That is the deep lesson of boids.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the core formula for a steering force?',
+      options: [
+        'current velocity + target position',
+        'desired velocity − current velocity',
+        'position × speed',
+        'target − previous target',
+      ],
+      answer: 1,
+      explain: 'Steering = desired velocity − current velocity, which gently bends motion toward the goal.',
+    },
+    {
+      q: 'How does Arrive differ from Seek?',
+      options: [
+        'It steers away from the target',
+        'Its desired speed shrinks to zero near the target so the agent glides to a stop',
+        'It ignores the target entirely',
+        'It only works for flocks',
+      ],
+      answer: 1,
+      explain: 'Arrive scales desired speed down as it nears the target, preventing the overshoot that pure Seek suffers.',
+    },
+    {
+      q: 'Which three rules produce flocking?',
+      options: [
+        'Seek, flee, wander',
+        'Separation, alignment, cohesion',
+        'Patrol, chase, flee',
+        'Sequence, selector, condition',
+      ],
+      answer: 1,
+      explain: 'Reynolds’ boids combine separation (avoid crowding), alignment (match heading), and cohesion (steer toward the group center).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Steering = desired velocity − current velocity</strong>, then integrate that force like any other.',
+    '<strong>Seek, flee, and arrive</strong> are the same machinery with different desired velocities.',
+    'Flocking adds three local rules: <strong>separation, alignment, cohesion</strong>.',
+    'Boids use only <strong>local neighbor information</strong>, yet coherent group motion emerges with no leader.',
+    'Steering decides <strong>how to move</strong>; pair it with a behavior tree that decides <strong>what to do</strong>.',
+  ]}
+/>
+
+Next up: **utility AI** — instead of fixed rules or trees, agents will score every option with a number and simply pick the best.

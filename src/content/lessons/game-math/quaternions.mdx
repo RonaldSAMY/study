@@ -1,0 +1,189 @@
+---
+title: Quaternions
+track: game-math
+summary: "Smooth 3D rotation without gimbal lock: four numbers that turn an object cleanly and interpolate perfectly."
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - game-math/coordinate-spaces
+  - complex-numbers/eulers-formula
+leadsTo:
+  - game-math/angles-rotation
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import QuaternionSlerpStudio from '../../../components/demos/QuaternionSlerpStudio.tsx';
+
+## The hook: the spacecraft that froze mid-turn
+
+Apollo's guidance computer tracked the capsule's orientation with three mechanical gimbals — one each
+for yaw, pitch and roll. The astronauts were warned to avoid certain attitudes, because if two gimbals
+swung into the same plane the system would lose a whole axis of rotation and could tumble. Game engines
+hit the exact same wall: stack three rotation angles and there are orientations where two of them fight
+over the same motion. The fix the whole industry settled on is a four-number object that never jams and
+blends between orientations perfectly: the **quaternion**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A unit **quaternion** stores a 3D rotation as an **axis** plus an **angle**, packed into four numbers —
+so it spins an object around any axis at once, never locks, and interpolates along the shortest arc.
+</Callout>
+
+## Intuition: rotation is a single turn about one axis
+
+You already saw that a complex number $e^{i\theta}$ rotates the 2D plane: one number, one angle. In 3D,
+Euler's idea generalizes — **any** orientation, however twisted, is equivalent to a *single* rotation by
+some angle $\theta$ about some fixed axis $\mathbf{n}$. A quaternion is just the tidy way to carry that
+axis-and-angle around.
+
+Compare it to the alternative. **Euler angles** describe orientation as "yaw, then pitch, then roll."
+That works until pitch reaches $90°$: now the yaw axis and the roll axis point the same way, two of your
+three dials do the identical thing, and you have lost a degree of freedom. This is **gimbal lock**.
+A quaternion never decomposes the rotation into three sequential turns, so there is no special angle
+where the axes collapse.
+
+The second superpower is **interpolation**. To swing a character's head smoothly from looking left to
+looking up, you want to glide along the *shortest arc* at a steady rate. Quaternions do this with one
+operation — **slerp** (spherical linear interpolation) — and the in-between orientations are always
+valid rotations.
+
+## Play with it
+
+Switch to **Euler angles** and drag the **pitch** slider toward $90°$ — watch the inner and outer
+gimbal rings line up and turn red: that is gimbal lock, live. Now switch to **Quaternion slerp** and
+drag $t$ from 0 to 1: the cube glides from one orientation to another along a single clean arc, and the
+four quaternion numbers stay unit-length the whole way.
+
+<QuaternionSlerpStudio client:visible />
+
+<Callout type="tip">
+Press <strong>Play</strong> in Euler mode to sweep pitch through the danger zone automatically, then in
+Quaternion mode to watch slerp ping-pong forever without a single hitch. Same rotations, very different
+behavior.
+</Callout>
+
+## The formal definition
+
+A quaternion extends complex numbers with three imaginary units $i, j, k$:
+
+$$
+q = w + x\,i + y\,j + z\,k, \qquad i^2 = j^2 = k^2 = ijk = -1.
+$$
+
+To rotate by angle $\theta$ about a **unit** axis $\mathbf{n} = (n_x, n_y, n_z)$, you build a **unit
+quaternion** (one with $w^2 + x^2 + y^2 + z^2 = 1$):
+
+$$
+q = \cos\tfrac{\theta}{2} + \sin\tfrac{\theta}{2}\,\bigl(n_x\,i + n_y\,j + n_z\,k\bigr).
+$$
+
+The half-angle $\theta/2$ is the famous quirk — it is what makes the double-cover algebra work out. To
+actually rotate a vector $\mathbf{v}$, sandwich it between $q$ and its inverse:
+
+$$
+\mathbf{v}' = q\,\mathbf{v}\,q^{-1}.
+$$
+
+To blend two orientations $q_0$ and $q_1$ by a fraction $t \in [0, 1]$, use **slerp**, which walks the
+great-circle arc between them at constant angular speed:
+
+$$
+\mathrm{slerp}(q_0, q_1, t) = \frac{\sin\bigl((1-t)\,\Omega\bigr)}{\sin\Omega}\,q_0 + \frac{\sin\bigl(t\,\Omega\bigr)}{\sin\Omega}\,q_1,
+$$
+
+where $\Omega$ is the angle between the two quaternions.
+
+```csharp
+// Smoothly rotate toward a target orientation (Unity-style)
+Quaternion target = Quaternion.LookRotation(toEnemy);
+transform.rotation = Quaternion.Slerp(transform.rotation, target, t);
+```
+
+<Callout type="why">
+Storing rotations as quaternions is also numerically robust: tiny floating-point drift just nudges the
+length off 1, which a single renormalize fixes. Stacking rotation *matrices*, by contrast, slowly shears
+and scales the object — quaternions stay clean over thousands of frames.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Aerospace" icon="🛰️">
+A satellite's attitude-control system stores orientation as a quaternion precisely to dodge the Apollo
+gimbal-lock trap. Reaction wheels nudge the craft, the quaternion integrates the spin, and a periodic
+renormalize keeps it a valid rotation — no attitude is ever "forbidden."
+</ExampleCard>
+
+<ExampleCard domain="Virtual reality" icon="🥽">
+A VR headset fuses gyroscope readings into a quaternion many times per second. Because there is no lock,
+you can tilt your head straight up to look at the sky without the view suddenly snapping or spinning —
+the orientation stays smooth at every angle.
+</ExampleCard>
+
+<ExampleCard domain="Character animation" icon="🕺">
+Skeletal animation stores each bone's rotation as a quaternion. Blending a "walk" pose into a "run" pose
+is just slerp on every joint, so elbows and knees sweep along natural arcs instead of taking the bizarre
+shortcuts that averaging Euler angles would produce.
+</ExampleCard>
+
+<ExampleCard domain="Drone cinematography" icon="🚁">
+A camera gimbal keeps the horizon level while the drone banks and yaws. It tracks the desired camera
+orientation as a quaternion and slerps toward it each frame, giving that buttery stabilized footage with
+no jitter even during aggressive maneuvers.
+</ExampleCard>
+
+<Callout type="note">
+Quaternions are wonderful for <em>storing and blending</em> rotation but awkward to read by hand. Tools
+still expose yaw/pitch/roll in the inspector for humans, then convert to a quaternion under the hood for
+the actual math.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is gimbal lock?',
+      options: [
+        'When a quaternion grows longer than 1',
+        'When two of the three Euler rotation axes align and a degree of freedom is lost',
+        'When an object rotates too fast to render',
+        'When two objects collide while rotating',
+      ],
+      answer: 1,
+      explain: 'At certain Euler angles (e.g. pitch = 90°) two axes point the same way, so two of the three dials do the same thing and one axis of rotation disappears.',
+    },
+    {
+      q: 'A unit quaternion that rotates by angle θ about a unit axis stores which value in its w (scalar) component?',
+      options: ['sin θ', 'cos θ', 'cos(θ/2)', 'θ/2'],
+      answer: 2,
+      explain: 'q = cos(θ/2) + sin(θ/2)(nₓ i + n_y j + n_z k). The half-angle is what makes the sandwich q v q⁻¹ rotate by the full θ.',
+    },
+    {
+      q: 'Why is slerp preferred over averaging Euler angles when blending two orientations?',
+      options: [
+        'It uses fewer numbers',
+        'It walks the shortest arc at constant angular speed, and every in-between is a valid rotation',
+        'It is the only way to rotate in 2D',
+        'It avoids using any trigonometry',
+      ],
+      answer: 1,
+      explain: 'Slerp interpolates along the great-circle arc at a steady rate, so the motion is smooth and never passes through an invalid or locked orientation.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Any 3D orientation is a single rotation by an <strong>angle</strong> about one <strong>axis</strong> — exactly what a unit quaternion stores.',
+    '<strong>Gimbal lock</strong> is an Euler-angle disease: two axes align and a rotational freedom vanishes. Quaternions never lock.',
+    'A rotation quaternion is <strong>cos(θ/2) + sin(θ/2)·(axis)</strong>, and it rotates a vector via the sandwich <strong>q v q⁻¹</strong>.',
+    '<strong>Slerp</strong> blends two orientations along the shortest arc at constant speed — the basis of smooth animation and camera moves.',
+    'Quaternions are compact and <strong>numerically stable</strong>: renormalizing fixes drift, unlike accumulating rotation matrices.',
+  ]}
+/>
+
+Next up: **angles & rotation** — headings, `atan2`, and how to turn an object smoothly toward a target
+with a capped angular velocity.

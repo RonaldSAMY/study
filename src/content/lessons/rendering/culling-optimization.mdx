@@ -1,0 +1,139 @@
+---
+title: Culling & Optimization
+track: rendering
+summary: "Frustum and occlusion culling, draw calls, batching, and level of detail to draw only what you see, fast."
+difficulty: advanced
+estMinutes: 14
+prereqs:
+  - rendering/projection-cameras
+leadsTo:
+  - engine/game-loop
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import FrustumCullScene from '../../../components/demos/FrustumCullScene.tsx';
+
+## The hook: the fastest triangle is the one you never draw
+
+A modern game world might hold millions of objects, but your screen shows a few thousand at most. Naively sending everything to the GPU every frame would melt the budget. So the real art of real-time rendering is *avoiding work*: figuring out, as cheaply as possible, what the player cannot see and refusing to draw it. The frame you do not render is the cheapest frame of all.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Culling** removes objects the camera cannot see before they cost anything, while **batching** and **LOD** shrink the cost of the objects that remain.
+
+</Callout>
+
+## Intuition: see less, draw cheaper, ask less often
+
+Three families of trick, in order of impact:
+
+**1. Culling — skip the invisible.** From the **projection and cameras** lesson you know the camera sees only its **frustum**. **Frustum culling** tests each object against that wedge and discards anything outside it — usually with a fast bounding-sphere check, not the full mesh. **Occlusion culling** goes further: an object inside the frustum but fully hidden behind a wall is also skipped.
+
+**2. Batching — fewer, bigger asks.** Every time you tell the GPU "draw this," that **draw call** carries fixed overhead from the CPU. A thousand identical crates as a thousand calls is slow; merging them into one call (instancing or atlasing) is fast. The draw-call count is often the true bottleneck — more than the triangle count.
+
+**3. Level of detail (LOD) — match effort to importance.** A distant object covers a handful of pixels, so rendering its million-triangle mesh is wasteful. **LOD** swaps in simpler meshes (and cheaper shaders) as things recede, spending detail only where it shows.
+
+## Play with it
+
+Aim the camera by dragging in the scene and adjust its **FOV**. Objects inside the wedge draw solid; the rest are **culled** and shown faint. Toggle culling off to see everything drawn, and toggle **batching** to watch the draw-call counter collapse. Far objects drop to low **LOD** automatically.
+
+<FrustumCullScene client:visible />
+
+<Callout type="tip">
+Narrow the FOV and sweep the camera: the count of visible objects — and draw calls — drops sharply. Then enable batching and watch dozens of objects of the same type collapse into a single call. Those two numbers are what a profiler stares at all day.
+</Callout>
+
+## The formal definition
+
+Frustum culling tests an object's bounding sphere (center $\mathbf{c}$, radius $r$) against each of the frustum's six planes. A plane with unit normal $\mathbf{n}$ and offset $d$ gives a signed distance $\mathbf{n} \cdot \mathbf{c} + d$; the object is culled if, for any plane,
+
+$$
+\mathbf{n} \cdot \mathbf{c} + d < -r,
+$$
+
+meaning the whole sphere sits on the outside. One dot product per plane rejects an entire object.
+
+The payoff is measured in **draw calls**. If $N$ objects share $T$ distinct meshes/materials, naive rendering issues $N$ calls, frustum culling cuts it to the visible count $V$, and batching by type brings it down toward the number of distinct visible types:
+
+$$
+\text{calls}_{\text{naive}} = N \;\longrightarrow\; \text{calls}_{\text{culled}} = V \;\longrightarrow\; \text{calls}_{\text{batched}} \approx T_{\text{visible}}.
+$$
+
+<Callout type="why">
+These optimizations are pure dot products and bookkeeping, yet they often decide whether a game hits 60 FPS. Mastering them is how you turn a beautiful scene that stutters into one that runs — the bridge from rendering theory to a shippable engine.
+</Callout>
+
+## The same idea, across very different games
+
+Every shipped game fights the frame budget its own way.
+
+<ExampleCard domain="Battle royale" icon="🪂">
+Dropping from the plane, a battle-royale player sees a huge map at once, so it leans hard on **LOD** and distance fog: far buildings are crude blocks that swap to detailed meshes as you parachute down, keeping the draw budget sane.
+</ExampleCard>
+
+<ExampleCard domain="Corridor horror" icon="🚪">
+A claustrophobic horror game is mostly walls, so **occlusion culling** shines: rooms beyond a closed door are entirely skipped. Designers even use doorways as natural culling portals to guarantee only one or two rooms render at a time.
+</ExampleCard>
+
+<ExampleCard domain="Tower defense swarm" icon="🐛">
+A tower-defense game spawns hundreds of identical enemies. **Instanced batching** draws the whole swarm in one call with a per-instance position, so a horde costs barely more than a single creature on the CPU.
+</ExampleCard>
+
+<ExampleCard domain="VR experience" icon="🥽">
+A VR app must render twice per eye at high refresh, leaving almost no budget to waste. Aggressive **frustum culling** per eye plus tight LOD are non-negotiable — a missed frame budget literally makes players sick.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does frustum culling do?',
+      options: [
+        'Blurs distant objects',
+        'Skips drawing objects outside the camera’s visible volume',
+        'Adds more triangles to nearby objects',
+        'Corrects gamma on the framebuffer',
+      ],
+      answer: 1,
+      explain: 'Frustum culling discards objects outside the view frustum before they are drawn, saving GPU work.',
+    },
+    {
+      q: 'A scene has 500 identical crates. How does instanced batching help?',
+      options: [
+        'It deletes 499 of the crates',
+        'It draws them in roughly one call instead of 500, cutting CPU overhead',
+        'It makes each crate higher resolution',
+        'It moves them outside the frustum',
+      ],
+      answer: 1,
+      explain: 'Batching/instancing collapses many identical objects into a single draw call, slashing per-call CPU overhead.',
+    },
+    {
+      q: 'Why use level of detail (LOD) for distant objects?',
+      options: [
+        'Distant objects cover few pixels, so a simpler mesh looks the same but costs far less',
+        'Distant objects need more triangles to be visible',
+        'LOD increases the field of view',
+        'LOD removes the need for a framebuffer',
+      ],
+      answer: 0,
+      explain: 'Far objects occupy few pixels, so a low-detail mesh is visually equivalent while saving processing.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The cheapest work is work you skip — <strong>culling</strong> avoids drawing the invisible.',
+    '<strong>Frustum culling</strong> rejects objects outside the view (one dot product per plane); <strong>occlusion culling</strong> skips hidden ones.',
+    'Each <strong>draw call</strong> has CPU overhead, so the call count is often the real bottleneck.',
+    '<strong>Batching</strong> and instancing merge many objects into few calls.',
+    '<strong>Level of detail</strong> spends triangles only where they show, swapping in simpler meshes at distance.',
+  ]}
+/>
+
+Next up: the **game loop** — the heartbeat that ties rendering, culling, input, and physics together into a frame, every frame.

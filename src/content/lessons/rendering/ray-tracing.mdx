@@ -1,0 +1,141 @@
+---
+title: Ray Tracing
+track: rendering
+summary: "Casting rays into a scene, solving ray-sphere intersection, and following reflections."
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - rendering/lighting-pbr
+  - game-math/dot-cross-product
+leadsTo:
+  - rendering/culling-optimization
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import RaySphereBouncer from '../../../components/demos/RaySphereBouncer.tsx';
+
+## The hook: rendering the way light actually travels
+
+Everything so far has worked *forward*: take triangles, project them, fill pixels. Ray tracing flips the whole idea around. It asks, for each pixel, "if I shoot a ray *out through* this pixel into the scene, what is the first thing it hits, and what color is that point?" Follow the ray, bounce it off mirrors, trace it toward lights, and you get reflections, sharp shadows, and glass that bends light — effects that are awkward to fake with rasterization but fall out naturally here.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Ray tracing** shoots a ray from the camera through each pixel and finds the nearest surface it hits, then follows bounces toward lights and mirrors to compute color.
+</Callout>
+
+## Intuition: a ray is a point plus a direction
+
+A ray is the simplest possible object: a starting point (the **origin** $\mathbf{O}$) and a direction (a unit vector $\mathbf{D}$). Every point along it is
+
+$$
+P(t) = \mathbf{O} + t\,\mathbf{D}, \qquad t \ge 0,
+$$
+
+where $t$ is how far you have travelled. Rendering a pixel means firing one such ray and asking what it strikes first.
+
+The core operation is an **intersection test**. For a sphere, you ask: for which $t$ does $P(t)$ land exactly on the surface (distance from the center equals the radius)? Substituting the ray into the sphere equation gives a **quadratic in $t$** — and the dot product, again, does the heavy lifting in its coefficients. The number of real solutions is decided by the **discriminant**: two roots means the ray pierces the sphere (enter and exit), one means it grazes the edge, and none means a clean miss. The smallest positive root is the nearest hit.
+
+Once you have a hit, you compute the surface **normal** there and reuse everything from the lighting lesson. Want a mirror? **Reflect** the ray about that normal and trace again. Recursion gives reflections of reflections, naturally.
+
+## Play with it
+
+Drag the ray's origin and its aim. The ray marches forward, solves the ray-sphere quadratic to find the nearest hit, and **reflects** off the surface normal for several bounces. The readout shows hit/miss and the nearest $t$ — driven directly by the discriminant's sign.
+
+<RaySphereBouncer client:visible />
+
+<Callout type="tip">
+Aim so the ray just skims a circle's edge. The hit point and bounce angle change wildly for a tiny aim change — that is the discriminant passing through zero, the knife-edge between two intersections and none.
+</Callout>
+
+## The formal definition
+
+For a sphere with center $\mathbf{C}$ and radius $r$, a point is on the surface when $\lVert P - \mathbf{C} \rVert^2 = r^2$. Substituting $P(t) = \mathbf{O} + t\mathbf{D}$ (with $\mathbf{D}$ a unit vector) and letting $\mathbf{m} = \mathbf{O} - \mathbf{C}$ gives a quadratic:
+
+$$
+t^2 + 2(\mathbf{D} \cdot \mathbf{m})\,t + (\mathbf{m} \cdot \mathbf{m} - r^2) = 0.
+$$
+
+Its discriminant is $\Delta = (\mathbf{D} \cdot \mathbf{m})^2 - (\mathbf{m} \cdot \mathbf{m} - r^2)$. If $\Delta < 0$ the ray misses; otherwise the nearest hit is the smaller positive root $t = -(\mathbf{D} \cdot \mathbf{m}) - \sqrt{\Delta}$. At the hit point $P$, the unit normal is $\mathbf{N} = \frac{P - \mathbf{C}}{r}$, and a perfectly reflected ray is
+
+$$
+\mathbf{D}' = \mathbf{D} - 2(\mathbf{D} \cdot \mathbf{N})\,\mathbf{N}.
+$$
+
+<Callout type="why">
+Notice the cast: rendering reduces to *solving equations* per ray, and every coefficient is a dot product. The same reflect formula appears in physics for bouncing a ball off a wall — geometry you reuse across the whole engine, not just graphics.
+</Callout>
+
+## The same idea, across very different games
+
+Ray casting shows up far beyond photorealism.
+
+<ExampleCard domain="Stealth game line of sight" icon="🕵️">
+A guard "sees" you by casting a ray from its eyes toward you and checking whether anything blocks it before it arrives. The first hit decides detection — the exact nearest-intersection test, used for gameplay rather than pixels.
+</ExampleCard>
+
+<ExampleCard domain="Billiards game" icon="🎱">
+A pool game predicts a shot by casting the cue ball's path and testing ray-circle intersections against the other balls, then **reflecting** off cushions. The aiming line you see is literally a traced, bouncing ray.
+</ExampleCard>
+
+<ExampleCard domain="Tactical shooter bullets" icon="🔫">
+Hitscan weapons fire an instant ray from the muzzle; the nearest surface it strikes is the impact point, and its **normal** orients the bullet-hole decal. Reflective surfaces can even ricochet the ray for trick shots.
+</ExampleCard>
+
+<ExampleCard domain="Cinematic showcase" icon="✨">
+A graphics showpiece uses full **path tracing**: many rays per pixel bounce around the scene to gather soft shadows, mirror reflections, and color bleeding. Expensive, but it is light simulated almost as it behaves in reality.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A ray is described by P(t) = O + tD. What do O and D represent?',
+      options: [
+        'The origin point and the direction vector',
+        'Two points on a triangle',
+        'The near and far planes',
+        'A color and an alpha value',
+      ],
+      answer: 0,
+      explain: 'O is the starting point and D the (unit) direction; t slides the point along the ray.',
+    },
+    {
+      q: 'The ray-sphere discriminant comes out negative. What does that mean?',
+      options: [
+        'The ray hits the sphere twice',
+        'The ray grazes the sphere at one point',
+        'The ray misses the sphere entirely',
+        'The sphere is behind the camera',
+      ],
+      answer: 2,
+      explain: 'A negative discriminant means the quadratic has no real roots, so the ray never reaches the surface — a miss.',
+    },
+    {
+      q: 'After a ray hits a mirror with surface normal N, the reflected direction is…',
+      options: [
+        'D + 2(D·N)N',
+        'D − 2(D·N)N',
+        'N − D',
+        '−N',
+      ],
+      answer: 1,
+      explain: 'The mirror reflection formula is D′ = D − 2(D·N)N, flipping the component of D along the normal.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Ray tracing</strong> shoots a ray per pixel and finds the nearest surface it hits.',
+    'A ray is <strong>P(t) = O + tD</strong>; intersecting a sphere yields a <strong>quadratic in t</strong>.',
+    'The <strong>discriminant</strong> decides hit-vs-miss; the smallest positive root is the nearest surface.',
+    'Reflections come from the formula <strong>D′ = D − 2(D·N)N</strong>, enabling mirrors and ricochets.',
+    'The same ray casts power gameplay too — <strong>line of sight</strong>, hitscan bullets, and aim prediction.',
+  ]}
+/>
+
+Next up: **culling and optimization** — since tracing or drawing everything is costly, how engines skip the work the player will never see.

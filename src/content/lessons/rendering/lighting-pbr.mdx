@@ -1,0 +1,132 @@
+---
+title: Lighting & PBR
+track: rendering
+summary: "Normals, diffuse lighting from N dot L, specular highlights, ambient, and an intro to PBR."
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - rendering/shaders
+  - game-math/dot-cross-product
+leadsTo:
+  - rendering/textures-uv
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DiffuseLightStudio from '../../../components/demos/DiffuseLightStudio.tsx';
+
+## The hook: why does a ball look round?
+
+A sphere is just a smooth surface, yet on screen it reads instantly as round — bright where it faces the light, dark where it turns away, with a tight white glint where the light reflects straight at you. None of that is painted on; it is *computed*, per pixel, from a single geometric fact: how much each tiny patch of surface tilts toward the light. Lighting is what turns flat-shaded triangles into objects that feel solid, and it all rests on a quantity you already know — the **dot product**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A surface looks bright in proportion to how directly it faces the light, and that "how directly" is exactly the **dot product** of the surface **normal** and the **light direction**.
+</Callout>
+
+## Intuition: the normal does all the work
+
+The key object is the **normal**: a unit vector sticking straight out of the surface at a point. In the **dot product** lesson you learned that for two unit vectors, their dot product is the cosine of the angle between them — $1$ when aligned, $0$ when perpendicular, negative when opposed.
+
+Now point one vector at the light (call it $\mathbf{L}$) and let $\mathbf{N}$ be the surface normal. Their dot product $\mathbf{N} \cdot \mathbf{L}$ measures how squarely the surface faces the light:
+
+- facing the light → close to $1$ → fully lit,
+- side-on → near $0$ → dim,
+- facing away → negative → in shadow (clamp it to $0$).
+
+That single term is **diffuse** (Lambertian) lighting, the matte response of chalk or cloth. Real materials add two more pieces: a **specular** highlight, the mirror-like glint that appears when the reflected light points near your eye, and an **ambient** term, a small constant so shadowed areas are not pure black. Sum them and a sphere comes alive.
+
+## Play with it
+
+Drag the light around the sphere. Each pixel builds its own normal, takes $\mathbf{N} \cdot \mathbf{L}$ for the diffuse shading, and adds a specular glint. Slide the **ambient** floor and toggle the **specular** highlight.
+
+<DiffuseLightStudio client:visible />
+
+<Callout type="tip">
+Move the light to the very edge of the sphere. The bright band hugs the silhouette where normals graze the light direction, and the far side falls to just the ambient value. That smooth falloff is a cosine — the dot product — drawn in light.
+</Callout>
+
+## The formal definition
+
+With unit normal $\mathbf{N}$, unit light direction $\mathbf{L}$, unit view direction $\mathbf{V}$, and half-vector $\mathbf{H} = \frac{\mathbf{L} + \mathbf{V}}{\lVert \mathbf{L} + \mathbf{V} \rVert}$, a classic shading model sums three terms:
+
+$$
+\text{color} = \underbrace{k_a}_{\text{ambient}} + \underbrace{k_d \max(0, \mathbf{N} \cdot \mathbf{L})}_{\text{diffuse}} + \underbrace{k_s \,\big(\max(0, \mathbf{N} \cdot \mathbf{H})\big)^{\alpha}}_{\text{specular}}.
+$$
+
+The diffuse term is pure $\mathbf{N} \cdot \mathbf{L}$. The specular exponent $\alpha$ (the *shininess*) sharpens the highlight: large $\alpha$ gives a tiny, mirror-like glint, small $\alpha$ a broad sheen.
+
+**Physically based rendering (PBR)** keeps this spirit but enforces *energy conservation* — a surface cannot reflect more light than it receives — and parameterizes materials by intuitive properties like **roughness** and **metalness** instead of arbitrary constants. The same dot products appear inside, just wrapped in formulas tuned to match real measured materials.
+
+<Callout type="why">
+Lighting is where the dot product stops being abstract. The moment you see a sphere shade smoothly from a single $\mathbf{N} \cdot \mathbf{L}$, you understand why graphics programmers care so much about vectors, angles, and unit length.
+</Callout>
+
+## The same idea, across very different games
+
+Every lit game uses normals and dot products, but the style differs.
+
+<ExampleCard domain="Horror game flashlight" icon="🔦">
+A horror game leans on a low **ambient** term so unlit areas are nearly black, then a single moving flashlight provides the diffuse $\mathbf{N} \cdot \mathbf{L}$. The dread comes from how little of the scene clears the lighting threshold at any moment.
+</ExampleCard>
+
+<ExampleCard domain="Racing game car paint" icon="🏎️">
+Glossy car paint is almost all **specular** with a high shininess exponent, so the highlight is a sharp streak that slides across the body as the car turns. PBR's metalness and roughness let the same shader render both chrome trim and matte tires.
+</ExampleCard>
+
+<ExampleCard domain="Stylized mobile RPG" icon="📱">
+A mobile RPG bakes a **toon** look by snapping the diffuse $\mathbf{N} \cdot \mathbf{L}$ into two flat bands — lit and shadowed — instead of a smooth gradient. Cheap to compute and instantly readable on a small screen.
+</ExampleCard>
+
+<ExampleCard domain="Sci-fi space sim" icon="🛰️">
+In open space there is no sky to bounce light, so the **ambient** term is essentially zero and a ship's dark side is genuinely black. A single harsh sun gives crisp diffuse-and-specular shading, selling the vacuum.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Diffuse (Lambertian) brightness at a point is proportional to…',
+      options: [
+        'The distance to the camera',
+        'N · L, the dot product of the normal and the light direction',
+        'The number of triangles in the mesh',
+        'The screen resolution',
+      ],
+      answer: 1,
+      explain: 'Diffuse shading is max(0, N·L): the more directly the surface faces the light, the brighter it is.',
+    },
+    {
+      q: 'A surface normal points 90° away from the light direction. What is the diffuse contribution?',
+      options: ['Maximum (fully lit)', 'Zero', 'Negative and clamped up to maximum', 'Half of maximum'],
+      answer: 1,
+      explain: 'cos(90°) = 0, so N·L = 0 and the diffuse term vanishes — the surface is side-on to the light.',
+    },
+    {
+      q: 'What does increasing the specular exponent (shininess) α do?',
+      options: [
+        'Makes the highlight broader and softer',
+        'Makes the highlight smaller and sharper, like a mirror',
+        'Removes the ambient term',
+        'Turns off diffuse lighting',
+      ],
+      answer: 1,
+      explain: 'A larger exponent narrows the specular lobe, producing a tight, mirror-like glint.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>normal</strong> is the unit vector pointing out of a surface; lighting is computed from it per pixel.',
+    '<strong>Diffuse</strong> brightness is <strong>max(0, N · L)</strong> — the dot product of normal and light direction.',
+    '<strong>Specular</strong> highlights come from the reflected/half-vector dot product raised to a shininess power.',
+    'An <strong>ambient</strong> term keeps shadows from going pure black.',
+    '<strong>PBR</strong> adds energy conservation and intuitive roughness/metalness parameters atop the same dot-product math.',
+  ]}
+/>
+
+Next up: **textures and UV mapping** — wrapping detailed images onto these lit surfaces so they show wood grain, rust, and skin instead of flat color.

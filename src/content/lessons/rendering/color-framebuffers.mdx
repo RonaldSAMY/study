@@ -1,0 +1,137 @@
+---
+title: Color, Gamma & Framebuffers
+track: rendering
+summary: "How color is stored as RGBA, why gamma and sRGB matter, and how framebuffers blend layers."
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - binary-data/number-systems
+  - rendering/textures-uv
+leadsTo:
+  - rendering/ray-tracing
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import AlphaGammaCompositor from '../../../components/demos/AlphaGammaCompositor.tsx';
+
+## The hook: why does fading to black look muddy?
+
+Try cross-fading two bright images in some engines and the midpoint comes out strangely dark and dingy — not the clean blend you expected. The geometry was right, the colors were right, yet the *mixing* went wrong. The reason is that the numbers your GPU stores for color are not the amounts of light you think they are. Understanding how color is actually encoded — and where the final image gets assembled — is what separates blends that look right from ones that look muddy.
+
+<Callout type="intuition" title="The one-sentence idea">
+Stored color values are **gamma-encoded**, not raw light, so correct blending must first decode to **linear** light — and the **framebuffer** is the canvas where all those blends accumulate into the final image.
+</Callout>
+
+## Intuition: bits, light, and the canvas
+
+From the **number systems** lesson you know a byte holds $0$ to $255$. A pixel's color is four such channels — **RGBA**: red, green, blue, and **alpha** (opacity) — so a common pixel is 32 bits, often written in hex like a color code.
+
+Here is the twist. Human eyes are far more sensitive to dark tones than bright ones, so to use those 256 steps well, images store color in a **non-linear** curve called **sRGB / gamma**. A stored value of $128$ is *not* half the light of $255$ — it is closer to a fifth. That encoding is great for storage but wrong for math: adding or averaging gamma-encoded values does not correspond to adding light, which is why a naive 50% blend looks too dark.
+
+The fix is **gamma-correct** blending: decode each color from sRGB to **linear** light, do the math there, then re-encode to sRGB for display. Everything lands in the **framebuffer** — the block of memory holding the current image, one RGBA value per pixel. Each new triangle's pixels are **blended** into whatever is already there using their alpha, building the frame layer by layer.
+
+## Play with it
+
+Composite a translucent front color over a back color. Slide the **alpha**, change the hues, and toggle **gamma-correct** blending. Watch the gradient strip: naive sRGB blending darkens and dulls the midtones, while linear blending stays bright and clean.
+
+<AlphaGammaCompositor client:visible />
+
+<Callout type="tip">
+Set the back to green and the front to red at 50% alpha. With gamma off, the middle muddies toward brown; flip gamma on and the blend brightens to a clean transition. Same colors, same alpha — only the *space* the math happens in changed.
+</Callout>
+
+## The formal definition
+
+A standard "over" composite of a front color with alpha $\alpha$ onto a back color is:
+
+$$
+C_{\text{out}} = \alpha \, C_{\text{front}} + (1 - \alpha) \, C_{\text{back}}.
+$$
+
+But this is only correct in **linear** light. Converting a stored sRGB channel $c \in [0,1]$ to linear is approximately a power law:
+
+$$
+C_{\text{linear}} = c^{\,2.2}, \qquad c_{\text{sRGB}} = C_{\text{linear}}^{\,1/2.2}.
+$$
+
+So gamma-correct blending is: decode both colors with the $2.2$ exponent, apply the "over" equation in linear space, then re-encode with $1/2.2$ before writing to the framebuffer. Skip the decode/encode and the same equation produces the muddy result.
+
+<Callout type="why">
+Lighting math from the previous lessons — diffuse, specular, texture blends — is all *addition of light*, so it must happen in linear space too. Modern engines render in linear and apply the sRGB encode once at the very end. Knowing this is why your lights add up and your fades stay clean.
+</Callout>
+
+## The same idea, across very different games
+
+Color encoding and framebuffers touch every frame, in genre-specific ways.
+
+<ExampleCard domain="Cinematic adventure" icon="🎬">
+A story-driven adventure cross-fades between scenes constantly. Done in linear light, the dissolves stay luminous; done naively, every transition dips muddy in the middle. The fix is invisible when right and glaring when wrong.
+</ExampleCard>
+
+<ExampleCard domain="Particle-heavy shooter" icon="💥">
+Explosions stack dozens of translucent **alpha-blended** sprites into the framebuffer. Each adds its color weighted by alpha; with additive blending in linear space, overlapping flames brighten realistically instead of clipping to flat white.
+</ExampleCard>
+
+<ExampleCard domain="Pixel-art roguelike" icon="👾">
+A retro roguelike stores art in a tiny palette and relies on exact RGBA byte values for crisp, intentional colors. Here gamma still matters for fades and screen flashes, but the base art is authored to specific hex values that must survive untouched.
+</ExampleCard>
+
+<ExampleCard domain="HDR console game" icon="🖥️">
+A high-dynamic-range console title renders into a float **framebuffer** that can hold values above 1.0 — sunlight far brighter than a screen's white. A final **tone-mapping** and sRGB/HDR encode step compresses that range to what the display can show.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why is a stored sRGB value of 128 not half the light of 255?',
+      options: [
+        'Because the GPU is broken',
+        'Because color is stored on a non-linear (gamma) curve to match human vision',
+        'Because alpha reduces it',
+        'Because 128 is a hexadecimal number',
+      ],
+      answer: 1,
+      explain: 'sRGB encodes color non-linearly to spend more of the 0–255 range on darker tones, so 128 is far less than half the light.',
+    },
+    {
+      q: 'To blend two colors correctly, you should…',
+      options: [
+        'Average their stored sRGB bytes directly',
+        'Decode to linear light, blend there, then re-encode to sRGB',
+        'Convert them to hexadecimal first',
+        'Multiply their alpha values together',
+      ],
+      answer: 1,
+      explain: 'Light adds linearly, so correct blending decodes to linear space, mixes, then re-encodes for display.',
+    },
+    {
+      q: 'What is the framebuffer?',
+      options: [
+        'The list of vertices in the scene',
+        'The block of memory holding the current image as RGBA per pixel',
+        'A type of texture filter',
+        'The camera’s near plane',
+      ],
+      answer: 1,
+      explain: 'The framebuffer is the per-pixel RGBA memory where the frame is assembled before being shown.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Color is stored as <strong>RGBA</strong>, typically one byte (0–255) per channel — 32 bits per pixel.',
+    'Stored values are <strong>gamma/sRGB-encoded</strong>, non-linear to match human vision, so they are not raw light.',
+    'Correct blending and lighting happen in <strong>linear</strong> space, with an sRGB encode applied at the end.',
+    'The <strong>framebuffer</strong> is the per-pixel RGBA memory where each frame is assembled.',
+    'New pixels are <strong>alpha-blended</strong> over existing ones via the "over" equation, building the image in layers.',
+  ]}
+/>
+
+Next up: **ray tracing** — instead of projecting triangles forward, we shoot rays from the camera into the scene to compute light the way it physically travels.

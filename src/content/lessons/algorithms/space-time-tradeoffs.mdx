@@ -1,0 +1,188 @@
+---
+title: Space–Time Tradeoffs
+track: algorithms
+summary: "Spend memory to buy speed: caching, memoization and precomputed lookup tables turn repeated work into a single fast read."
+difficulty: advanced
+estMinutes: 14
+prereqs:
+  - algorithms/big-o
+  - data-structures/hash-maps
+leadsTo:
+  - game-math/vectors-in-games
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import LookupTableCacheLab from '../../../components/demos/LookupTableCacheLab.tsx';
+
+## The hook: the trig call that ate your frame
+
+Old consoles could not afford to compute a sine. Yet their games were full of bobbing coins, rippling
+water and spinning sprites — all driven by $\sin$ and $\cos$. The trick: nobody computed sine at
+runtime. At startup they filled an **array** with a few thousand precomputed sine values, and every
+"compute" became a single array read. They spent a sliver of memory **once** to make the math
+practically free **forever after**.
+
+That is the deal at the heart of performance engineering. You almost never get faster *and* smaller for
+free — but you can very often **trade one for the other**. Knowing which way to trade is the skill.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **space–time tradeoff** spends extra **memory** to save **time** (store an answer instead of
+recomputing it) — or spends extra time to save memory. You pick which resource you can spare.
+</Callout>
+
+## Intuition: stop redoing work you already did
+
+You met **Big-O** — the *shape* of how cost grows — and the **hash map** — instant lookup by key. This
+lesson is what happens when they shake hands.
+
+Recall the exploding Fibonacci tree from last lesson: the same subproblems were recomputed thousands of
+times. **Memoization** fixes that with one idea — *keep a notebook*. Before computing $F(n)$, check a
+cache (a hash map): if the answer is already there, return it; otherwise compute it once and write it
+down. The exponential $O(2^n)$ work collapses to linear $O(n)$, at the cost of one cache entry per
+distinct subproblem.
+
+There are two flavors of the same move:
+
+- **Memoization / caching** — fill the store **lazily**, on demand, the first time each answer is
+  needed. Great when you do not know in advance which answers you will use.
+- **Precomputed lookup table** — fill the store **eagerly**, up front, before the work starts. Great
+  when the inputs are a known, bounded set (like every angle from $0$ to $2\pi$).
+
+Either way you convert *repeated computation* into a *single read* — usually $O(1)$.
+
+## Play with it
+
+Start with **memoized Fibonacci** and drag the workload up: the naive (red) bar rockets past the 60fps
+budget line while the cached (green) bar barely moves. Then switch to the **sin lookup table** and push
+to a million calls per frame — watch how a tiny fixed table keeps you inside budget.
+
+<LookupTableCacheLab client:visible />
+
+<Callout type="tip">
+Watch the <strong>memory spent</strong> and <strong>speedup</strong> readouts together. The memory you
+pay is small and grows slowly; the time you save grows explosively. That asymmetry is exactly why the
+trade is usually worth it.
+</Callout>
+
+## The formal definition
+
+Caching changes a function's complexity by **amortizing** repeated work. For naive recursive Fibonacci:
+
+$$
+T_{\text{naive}}(n) = O(2^n) \ \text{time}, \qquad S_{\text{naive}}(n) = O(n) \ \text{space (the stack)}.
+$$
+
+Add a cache of already-computed values and each subproblem is solved exactly once:
+
+$$
+T_{\text{memo}}(n) = O(n) \ \text{time}, \qquad S_{\text{memo}}(n) = O(n) \ \text{space (the cache)}.
+$$
+
+The pattern in code is tiny — guard the work with a lookup, and store the result before returning:
+
+```python
+cache = {}
+def fib(n):
+    if n < 2:
+        return n
+    if n in cache:          # already computed? one O(1) read
+        return cache[n]
+    cache[n] = fib(n-1) + fib(n-2)   # compute once, write it down
+    return cache[n]
+```
+
+A precomputed table generalizes this. If a function over a bounded input is called $m$ times, naive
+costs $O(m \cdot c)$ where $c$ is the per-call compute cost. A table of $N$ entries costs $O(N)$ to
+build **once**, then $O(1)$ per call — total $O(N + m)$. When $m \gg N$ and $c$ is large, the table
+wins overwhelmingly.
+
+<Callout type="why">
+This trade powers modern ML serving. **KV-caching** in a transformer stores the keys and values of
+past tokens so each new token is generated without re-attending over the whole sequence from scratch —
+the same "store it once, read it back" bargain, just with tensors instead of integers.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Retro graphics" icon="🌊">
+Beyond sine, classic engines precomputed **rotation tables** and even full screen-blit offset tables.
+Every per-pixel transform that would have cost a multiply became an array read. The cartridge held a
+few extra kilobytes; the CPU got entire milliseconds back every frame.
+</ExampleCard>
+
+<ExampleCard domain="Rendering" icon="💡">
+**Baked lighting** is a space–time trade at asset scale. Instead of computing global illumination for a
+static scene every frame, the engine computes it once offline and stores the result in **lightmap**
+textures. You ship bigger files so the GPU can simply sample a pixel instead of simulating light.
+</ExampleCard>
+
+<ExampleCard domain="Databases" icon="🗄️">
+A database **index** is pure tradeoff: it stores an extra sorted structure (more disk) so a query
+becomes an $O(\log n)$ seek instead of an $O(n)$ full-table scan. Add too many indexes and writes slow
+down and storage balloons — the trade has a cost you must respect.
+</ExampleCard>
+
+<ExampleCard domain="Game AI" icon="🗺️">
+When hundreds of units swarm one target, recomputing a path per unit is brutal. Engines precompute a
+**flow field**: one pass stamps every tile with the direction toward the goal. Each unit then just
+reads its tile — one lookup instead of a full search. Memory for the grid buys real-time movement for a
+crowd.
+</ExampleCard>
+
+<Callout type="warning">
+The trade is not free or always wise. Caches cost memory, can go **stale** when inputs change, and add
+complexity. Cache when work is <em>repeated</em> and answers are <em>reusable</em> — not for a value
+you compute once.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a space–time tradeoff let you do?',
+      options: [
+        'Make a program faster and smaller at the same time, for free',
+        'Spend extra memory to save time (or extra time to save memory)',
+        'Remove the need for any algorithm analysis',
+        'Guarantee constant time for every function',
+      ],
+      answer: 1,
+      explain: 'You trade one resource for the other. Most caching spends memory to save time; you can also go the other way.',
+    },
+    {
+      q: 'Memoization changes naive Fibonacci from roughly O(2ⁿ) time to what time complexity?',
+      options: ['O(1)', 'O(log n)', 'O(n)', 'O(n²)'],
+      answer: 2,
+      explain: 'With a cache, each of the n distinct subproblems is computed exactly once, giving O(n) time for O(n) extra space.',
+    },
+    {
+      q: 'When is a precomputed lookup table the clear win over recomputing each time?',
+      options: [
+        'When the function is called only once',
+        'When inputs are unbounded and every call is unique',
+        'When a bounded set of inputs is queried many times and each computation is expensive',
+        'When memory is the scarcest resource',
+      ],
+      answer: 2,
+      explain: 'A table costs O(N) to build once, then O(1) per call. It wins when the number of queries far exceeds N and per-call compute is costly.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>space–time tradeoff</strong> exchanges memory for speed (or vice versa) — you rarely get both for free.',
+    '<strong>Memoization</strong> caches answers lazily; a <strong>lookup table</strong> precomputes them eagerly — both turn repeated work into an O(1) read.',
+    'Caching can collapse exponential <strong>O(2ⁿ)</strong> work to linear <strong>O(n)</strong> for a small, slowly growing memory cost.',
+    'Build a table once in <strong>O(N)</strong>, then answer each of m queries in O(1): total O(N + m), a huge win when m ≫ N.',
+    'Caches cost memory and can go <strong>stale</strong> — trade only when work is repeated and answers are reusable.',
+  ]}
+/>
+
+That wraps the algorithms track. Next you cross into **Game Math** — starting with **vectors in
+games**, where position, velocity and direction become the arrows that move everything on screen.

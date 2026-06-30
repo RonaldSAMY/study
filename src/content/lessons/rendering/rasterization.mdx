@@ -1,0 +1,138 @@
+---
+title: Rasterization
+track: rendering
+summary: "Turning triangles into filled pixels with edge functions and barycentric coordinates."
+difficulty: advanced
+estMinutes: 14
+prereqs:
+  - rendering/rendering-pipeline
+  - game-math/dot-cross-product
+leadsTo:
+  - rendering/projection-cameras
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TriangleRasterGrid from '../../../components/demos/TriangleRasterGrid.tsx';
+
+## The hook: the moment geometry becomes an image
+
+In the pipeline lesson you watched a triangle travel from raw corners down to the screen. There is one exact instant where it stops being *math about shapes* and becomes *light you can see*: the GPU looks at the triangle, looks at the grid of pixels, and decides — for every single pixel — "are you inside this triangle or not?" That decision, repeated billions of times a second, is **rasterization**. Get it right and a crisp character appears; get it wrong and you get gaps, jaggies, or holes between triangles.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Rasterization** asks, for each pixel, "is your center inside this triangle?" — and the answer comes from three **edge functions** whose signs tell you which side of each edge you are on.
+</Callout>
+
+## Intuition: which side of the line are you on?
+
+You already met the tool you need in the **dot and cross product** lesson. The 2D cross product of two vectors tells you their *turning direction* — positive for a left turn, negative for a right turn. Rasterization uses exactly that.
+
+Take one edge of the triangle, say from corner $A$ to corner $B$. For any pixel center $P$, the quantity
+
+$$
+E_{AB}(P) = (B_x - A_x)(P_y - A_y) - (B_y - A_y)(P_x - A_x)
+$$
+
+is just the 2D cross product of the edge vector and the vector to the pixel. Its **sign** says whether $P$ is to the left or right of that edge. A point is inside the triangle when it is on the *same side* of all three edges at once. Three sign checks — that is the whole test.
+
+The magnitudes of those three edge functions are a bonus: rescaled, they become the **barycentric coordinates**, the weights that say how much of each corner a pixel "belongs to." Those weights are how color, depth, and texture coordinates get smoothly blended across the triangle.
+
+## Play with it
+
+Drag the three corners. Each grid cell is a pixel; it lights up when its center is inside all three edges. Turn on **Barycentric color** to see each pixel mix the three corner colors by its weights — the same interpolation a GPU uses for everything.
+
+<TriangleRasterGrid client:visible />
+
+<Callout type="tip">
+Shrink the triangle until it is smaller than one cell. Notice it can light up *no* pixels — its center misses every sample point. That is why thin, far-away geometry flickers, and why anti-aliasing and extra sample points exist.
+</Callout>
+
+## The formal definition
+
+For triangle corners $V_0, V_1, V_2$ and a pixel point $P$, define the three edge functions:
+
+$$
+w_0 = E_{V_1 V_2}(P), \quad w_1 = E_{V_2 V_0}(P), \quad w_2 = E_{V_0 V_1}(P).
+$$
+
+The pixel is **inside** when $w_0, w_1, w_2$ all share the sign of the triangle's signed area. The normalized weights
+
+$$
+\lambda_0 = \frac{w_0}{w_0 + w_1 + w_2}, \quad \lambda_1 = \frac{w_1}{w_0 + w_1 + w_2}, \quad \lambda_2 = \frac{w_2}{w_0 + w_1 + w_2}
+$$
+
+are the **barycentric coordinates**, with $\lambda_0 + \lambda_1 + \lambda_2 = 1$. Any per-vertex value $a$ (color, depth, UV) is interpolated as $a_P = \lambda_0 a_0 + \lambda_1 a_1 + \lambda_2 a_2$.
+
+<Callout type="why">
+Edge functions are *incremental*: stepping one pixel right just adds a constant to each $w$. That turns the inside test into a few additions per pixel, which is exactly why GPUs can fill millions of triangles per frame.
+</Callout>
+
+## The same idea, across very different games
+
+The triangle test is universal, but each genre leans on a different corner of it.
+
+<ExampleCard domain="Retro pixel platformer" icon="🕹️">
+A deliberately low-resolution platformer keeps a coarse pixel grid on purpose. Because each pixel is large, the inside/outside decision is starkly visible — sprites have chunky, hard edges. The art style *is* the rasterizer's sampling grid, left unsmoothed.
+</ExampleCard>
+
+<ExampleCard domain="Fighting game replays" icon="🥋">
+Hit-detection overlays in a fighting game draw translucent triangular hit-boxes. The same barycentric weights that shade a triangle also let the engine find *where* on a limb a strike landed, blending damage values stored at each vertex of the collision mesh.
+</ExampleCard>
+
+<ExampleCard domain="Racing game minimap" icon="🏁">
+A track minimap fills thousands of tiny road triangles each frame. At speed, distant track segments shrink below a pixel and their centers fall between samples — so the minimap shimmers unless the engine adds extra sample points (multisampling) to catch those slivers.
+</ExampleCard>
+
+<ExampleCard domain="Strategy fog of war" icon="🗺️">
+A strategy game paints fog of war as a mesh of triangles whose corner values are "explored" or "hidden." Barycentric interpolation produces the soft gradient at the edge of your vision — a smooth fade computed per pixel from three corner numbers.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the sign of an edge function E_AB(P) tell you?',
+      options: [
+        'How far P is from the triangle’s center',
+        'Which side of the edge AB the point P lies on',
+        'The color of the pixel at P',
+        'Whether the triangle faces the camera',
+      ],
+      answer: 1,
+      explain: 'The edge function is a 2D cross product; its sign indicates which side of the directed edge the point falls on.',
+    },
+    {
+      q: 'A pixel is considered inside the triangle when…',
+      options: [
+        'Any one edge function is positive',
+        'All three edge functions share the triangle’s area sign',
+        'The sum of the edge functions is zero',
+        'Its barycentric coordinates are all negative',
+      ],
+      answer: 1,
+      explain: 'Being inside means being on the same side of all three edges, i.e. all three edge functions match the signed-area sign.',
+    },
+    {
+      q: 'A pixel has barycentric weights λ0 = 0.2, λ1 = 0.5, λ2 = 0.3. If the corner depths are 10, 20, and 30, what depth is interpolated at the pixel?',
+      options: ['20', '21', '18', '30'],
+      answer: 1,
+      explain: '0.2·10 + 0.5·20 + 0.3·30 = 2 + 10 + 9 = 21.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Rasterization</strong> decides, per pixel, whether the pixel center lies inside a triangle.',
+    'Three <strong>edge functions</strong> (2D cross products) give signs that locate a point relative to each edge.',
+    'A pixel is inside when all three edge functions match the triangle’s <strong>signed-area sign</strong>.',
+    'Normalized edge values are <strong>barycentric coordinates</strong> that interpolate color, depth, and UVs.',
+    'Geometry smaller than a pixel can miss every sample — the root cause of shimmering and the reason for <strong>anti-aliasing</strong>.',
+  ]}
+/>
+
+Next up: **projection and cameras** — how 3D points get squashed into the 2D triangles this stage fills, and what the view frustum throws away before rasterization ever runs.

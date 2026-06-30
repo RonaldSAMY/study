@@ -1,0 +1,178 @@
+---
+title: Interpolation & Easing
+track: game-math
+summary: "Lerp, slerp, Bézier curves and easing functions: the math that turns stiff jumps into juicy, alive motion."
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - game-math/vectors-in-games
+leadsTo:
+  - game-math/random-noise
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import EasingCurveStudio from '../../../components/demos/EasingCurveStudio.tsx';
+
+## The hook: why does one menu feel cheap and another feel expensive?
+
+Tap a button in a polished app and the panel slides in, slows as it arrives, and settles with a tiny
+bounce. Tap one in a rough prototype and the panel just *teleports*. Same start, same end — but one feels
+alive and the other feels broken. The difference is entirely in the **in-between frames**: how a value
+travels from A to B over time. That traveling is **interpolation**, and shaping its speed along the way is
+**easing**. It is the cheapest, highest-impact polish in all of game feel.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Interpolation** fills in the values between a start and an end as a fraction $t$ goes from 0 to 1, and
+**easing** bends how fast $t$ moves so motion can accelerate, slow down, or overshoot.
+
+</Callout>
+
+## Intuition: the blend knob t
+
+Every interpolation has one master control: a fraction $t$ that slides from 0 (fully at the start) to 1
+(fully at the end). The simplest blend is the **linear interpolation**, or **lerp** — you already used it
+without the name: walking from your position toward a target by a fraction each frame is a lerp.
+
+A lerp moves at a *constant* speed, which often looks robotic. Real objects start slow, speed up, and
+ease to a stop. **Easing** fixes this by remapping $t$ before you use it: feed in linear time, pass it
+through a curve, and get back a value that lingers near 0, rushes through the middle, then settles near 1.
+The classic in games is **smoothstep**, which has zero slope at both ends so motion glides in and out.
+
+For richer paths you blend more than two points. A **Bézier curve** uses control points to define a
+smooth path — the same curves type designers use for fonts and you used as easing presets. And when the
+thing being blended is an *orientation*, plain lerp distorts it, so you reach for **slerp**, the
+spherical interpolation you met with quaternions, which keeps a steady angular rate.
+
+## Play with it
+
+Pick an easing preset, then drag the two control points to sculpt your own timing curve. The green ball
+below uses that curve as its clock. Try **linear** (constant speed, lifeless), then **ease-in-out**
+(smooth), then **back** — whose curve dips below 0 and past 1, giving the ball a springy overshoot.
+
+<EasingCurveStudio client:visible />
+
+<Callout type="tip">
+The horizontal axis of the curve is <em>time</em> and the vertical axis is <em>progress</em>. A steep
+section means the ball moves fast; a flat section means it dawdles. That is the entire language of easing.
+</Callout>
+
+## The formal definition
+
+**Linear interpolation** between two values $a$ and $b$:
+
+$$
+\operatorname{lerp}(a, b, t) = a + (b - a)\,t = (1 - t)\,a + t\,b, \qquad t \in [0, 1].
+$$
+
+It works component-wise on vectors, so positions and colors lerp the same way. **Easing** simply
+replaces the straight $t$ with a shaped $f(t)$ where $f(0) = 0$ and $f(1) = 1$. A popular choice is
+**smoothstep**:
+
+$$
+f(t) = 3t^2 - 2t^3.
+$$
+
+A **cubic Bézier** curve blends four control points with the Bernstein weights:
+
+$$
+\mathbf{B}(t) = (1-t)^3\,\mathbf{P}_0 + 3(1-t)^2 t\,\mathbf{P}_1 + 3(1-t)\,t^2\,\mathbf{P}_2 + t^3\,\mathbf{P}_3.
+$$
+
+For orientations, **slerp** replaces lerp so the angular speed stays constant along the arc (see the
+quaternions lesson).
+
+```csharp
+// Frame-rate-aware smooth follow, plus an eased pop-in
+camera.position = Vector3.Lerp(camera.position, target, 1f - Mathf.Exp(-k * dt));
+float eased = t * t * (3f - 2f * t);   // smoothstep
+```
+
+<Callout type="why">
+Easing is not just decoration. A smooth curve means <strong>no sudden jumps in velocity</strong>, which
+reads to the eye as weight and intention. Game designers call the sum of these little touches "juice" —
+and it is mostly well-chosen interpolation.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="UI & menus" icon="📱">
+A settings panel slides in by lerping its position from off-screen to its resting spot, with an
+ease-out curve so it decelerates as it arrives. Swap in a "back" curve and it overshoots slightly then
+settles — the difference between functional and delightful.
+</ExampleCard>
+
+<ExampleCard domain="Camera work" icon="🎥">
+A follow camera does not snap to the player; it lerps toward them a fraction each frame, so quick
+player moves produce a soft, trailing pursuit. Designers tune that fraction to make the camera feel
+tight and responsive or loose and cinematic.
+</ExampleCard>
+
+<ExampleCard domain="Cutscenes" icon="🎬">
+A scripted camera glides along a Bézier path between handcrafted control points, sweeping past the hero
+in one continuous arc. Bézier curves give artists smooth, editable trajectories without keyframing every
+single frame.
+</ExampleCard>
+
+<ExampleCard domain="HUD feedback" icon="❤️">
+When you take damage, the health bar does not jump — it tweens from the old value to the new one over a
+fraction of a second with an easing curve, so your eye can track exactly how much you lost. Score and XP
+bars use the identical trick.
+</ExampleCard>
+
+<Callout type="note">
+A subtle gotcha: repeatedly calling <strong>lerp(current, target, 0.1)</strong> each frame is
+frame-rate dependent — it converges faster at higher frame rates. The exponential form in the snippet
+above fixes it by folding $\Delta t$ into the blend.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is lerp(10, 20, 0.25)?',
+      options: ['10', '12.5', '15', '17.5'],
+      answer: 1,
+      explain: 'lerp(a, b, t) = a + (b − a)·t = 10 + (20 − 10)·0.25 = 10 + 2.5 = 12.5.',
+    },
+    {
+      q: 'What does an easing function f(t) do compared to a plain linear t?',
+      options: [
+        'It changes the start and end values',
+        'It remaps how fast t progresses, so motion can accelerate, decelerate, or overshoot',
+        'It makes the animation longer',
+        'It converts positions into rotations',
+      ],
+      answer: 1,
+      explain: 'Easing keeps the endpoints fixed (f(0)=0, f(1)=1) but reshapes the speed in between — that is what produces ease-in, ease-out and overshoot.',
+    },
+    {
+      q: 'Why use slerp instead of lerp when blending two orientations?',
+      options: [
+        'slerp is faster',
+        'lerp on rotations distorts the speed and can leave invalid orientations, while slerp keeps a constant angular rate',
+        'lerp only works on colors',
+        'There is no difference',
+      ],
+      answer: 1,
+      explain: 'Linearly blending rotation representations does not move at a steady angular speed and can produce non-unit results; slerp walks the arc evenly and stays a valid rotation throughout.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Interpolation</strong> fills in values between a start and end as a fraction <strong>t</strong> goes 0 → 1.',
+    '<strong>lerp(a, b, t) = a + (b − a)·t</strong> is the workhorse — it runs at constant speed and works on vectors and colors alike.',
+    '<strong>Easing</strong> reshapes t with a curve like smoothstep or a cubic Bézier to add acceleration, deceleration and overshoot.',
+    '<strong>Bézier curves</strong> blend control points into smooth, editable paths for both motion and timing.',
+    'Blend orientations with <strong>slerp</strong>, and make per-frame lerps frame-rate-independent by folding in <strong>Δt</strong>.',
+  ]}
+/>
+
+Next up: **randomness & noise** — instead of hand-authoring every value, you will generate endless
+natural-looking variation with seeded PRNGs and Perlin noise.

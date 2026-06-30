@@ -1,0 +1,182 @@
+---
+title: Rigid-Body Dynamics
+track: game-physics
+summary: "Why an off-center hit makes a crate spin: torque, moment of inertia, and angular velocity."
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - game-physics/collision-response
+  - game-math/matrices-transforms
+leadsTo:
+  - game-physics/constraints-joints
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import OffCenterImpulseLab from '../../../components/demos/OffCenterImpulseLab.tsx';
+
+## The hook: why does the crate tumble when you shoot the corner?
+
+You fire a rocket at a wooden crate. Hit it dead-center and it slides straight back. Clip the
+top corner instead and it slews around, tumbling end over end as it flies away. Same crate, same
+shot strength — the only thing that changed was **where** the hit landed. Until now your physics
+engine has treated bodies as single points that only *move*. Real objects also *turn*, and the
+mathematics of turning is what separates a floaty arcade toy from a world that feels solid.
+
+<Callout type="intuition" title="The one-sentence idea">
+A force applied **off-center** does two jobs at once — it pushes the whole body (linear motion)
+**and** twists it around its center of mass (rotation). The twisting power is called **torque**.
+</Callout>
+
+## Intuition: turning is just translation's twin
+
+You already know the linear story from **Forces & Newton's Laws** and **Collision Response**: an
+impulse changes velocity, and heavier things resist that change. Rotation is the *exact same story*
+told with rotating words. Every linear idea has a spinning twin:
+
+- **force** becomes **torque** — the twisting effort around the center.
+- **mass** becomes **moment of inertia** — how stubbornly a shape resists being spun.
+- **velocity** becomes **angular velocity** — how fast it turns, in radians per second.
+
+Two facts make rotation click. First, torque depends on the **lever arm**: the farther from the
+center you push, the more twist you get — the reason a long wrench loosens a stubborn bolt. Second,
+moment of inertia depends on how the mass is *spread out*: a shape with mass flung far from the
+center is harder to spin than a compact one of the same weight. A pull aimed straight **through** the
+center has no lever arm at all, so it makes zero torque and the body only slides.
+
+## Play with it
+
+Drag the white dot to choose where the impulse lands on the crate, and drag the orange arrow to set
+its direction and strength. Hit **Launch** and watch the box both drift and spin. Try aiming the
+arrow straight through the green center dot — the spin vanishes.
+
+<OffCenterImpulseLab client:visible />
+
+<Callout type="tip">
+Keep the arrow the same length but slide the contact dot from the center out to a corner. The linear
+speed barely changes, yet the spin grows — that growing lever arm is torque in action.
+</Callout>
+
+## The formal definition
+
+In 2D, a rigid body has three "linear" numbers (position, velocity, mass) plus three rotational
+twins (angle $\theta$, angular velocity $\omega$, moment of inertia $I$).
+
+**Torque** from a force $\mathbf{F}$ applied at offset $\mathbf{r}$ from the center of mass is the 2D
+cross product — a single signed number:
+
+$$
+\tau = \mathbf{r} \times \mathbf{F} = r_x F_y - r_y F_x.
+$$
+
+Its sign tells you the spin direction (counter-clockwise is positive), and it vanishes exactly when
+$\mathbf{F}$ points along $\mathbf{r}$. Rotation then obeys Newton's law with the twins swapped in:
+
+$$
+\tau = I\,\alpha, \qquad \alpha = \frac{d\omega}{dt}.
+$$
+
+For a sudden hit we use an **impulse** $\mathbf{J}$ instead of a sustained force. It delivers both a
+linear and an angular kick in one instant:
+
+$$
+\Delta \mathbf{v} = \frac{\mathbf{J}}{m}, \qquad \Delta \omega = \frac{\mathbf{r} \times \mathbf{J}}{I}.
+$$
+
+The moment of inertia depends on the shape. For a solid rectangle of width $w$ and height $h$ spun
+about its center,
+
+$$
+I = \frac{m\,(w^2 + h^2)}{12}.
+$$
+
+<Callout type="why">
+This is the engine of every believable collision. When two bodies smash together, the contact point
+is almost never on the line between their centers — so the same impulse that bounces them apart also
+sets them spinning. Get $\mathbf{r} \times \mathbf{J}$ right and debris tumbles, cars fishtail, and
+ragdolls flop convincingly. Get it wrong and everything slides like air-hockey pucks.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Pool & billiards" icon="🎱">
+Strike the cue ball dead-center and it rolls straight. Tap it off-center — low, high, or to the side
+— and you put "english" on it: the lever arm $\mathbf{r}$ creates torque, so the ball curves, draws
+back, or follows through. Trick-shot artists are solving $\mathbf{r} \times \mathbf{J}$ by feel.
+</ExampleCard>
+
+<ExampleCard domain="Figure skating" icon="⛸️">
+A skater spinning with arms out pulls them in and suddenly whirls faster. No torque was added — they
+shrank their **moment of inertia** $I$. Because angular momentum $I\,\omega$ is conserved, a smaller
+$I$ forces a larger $\omega$. Game engines lean on the same conserved quantity to keep spins stable.
+</ExampleCard>
+
+<ExampleCard domain="Spaceflight sim" icon="🚀">
+A spacecraft with no wheels still turns using small **RCS thrusters** mounted off-center. Fire one
+and its push, applied far from the center of mass, is almost pure torque — the ship pivots in place.
+Pair two opposite thrusters and you cancel the drift to rotate without moving, a classic Asteroids
+move.
+</ExampleCard>
+
+<ExampleCard domain="Playground" icon="🎠">
+A merry-go-round is hard to start from rest but, once spinning, hard to stop — that stubbornness *is*
+moment of inertia. Pushing on the outer rail (big $\mathbf{r}$) works far better than shoving near
+the center pole, which is exactly why the handles are on the edge.
+</ExampleCard>
+
+<Callout type="note">
+Notice the pattern across all four: the *same* force does wildly different things depending on
+**where** it lands and **how the mass is arranged**. That "where times what" is the cross product,
+and "how it's arranged" is the moment of inertia.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You apply an impulse whose direction points straight through the box’s center of mass. What happens?',
+      options: [
+        'It spins but does not move',
+        'It moves in a straight line with no spin',
+        'It both moves and spins',
+        'Nothing happens',
+      ],
+      answer: 1,
+      explain: 'The offset r and the impulse J are parallel, so the cross product r × J is zero. No torque means no spin — only linear motion.',
+    },
+    {
+      q: 'A box has mass m = 2 and moment of inertia I = 2000. You hit it at offset r = (50, 0) with impulse J = (0, 100). What is the change in angular velocity Δω?',
+      options: ['0', '2.5', '0.5', '5000'],
+      answer: 1,
+      explain: 'Torque = rₓJᵧ − rᵧJₓ = 50·100 − 0·0 = 5000. Then Δω = 5000 / I = 5000 / 2000 = 2.5 rad/s.',
+    },
+    {
+      q: 'Two boxes have the same mass, but box A is long and thin while box B is compact. Which is harder to spin?',
+      options: [
+        'They are equally hard to spin',
+        'Box A, because its mass is spread farther from the center',
+        'Box B, because it is compact',
+        'It depends only on mass, not shape',
+      ],
+      answer: 1,
+      explain: 'Moment of inertia grows when mass sits farther from the center (I depends on w² + h²). The long box has a larger I, so it resists spinning more.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A force or impulse applied <strong>off-center</strong> produces both linear motion and rotation.',
+    '<strong>Torque</strong> is the 2D cross product τ = rₓFᵧ − rᵧFₓ; it is zero when the force points through the center of mass.',
+    '<strong>Moment of inertia</strong> I is rotation’s version of mass — it grows as mass is spread farther from the center.',
+    'The rotational Newton law is <strong>τ = I·α</strong>, and an impulse gives Δω = (r × J) / I alongside Δv = J / m.',
+    'Realistic collisions need the contact-point torque, or bodies slide instead of tumbling.',
+  ]}
+/>
+
+Next up: **Constraints & Joints** — chain rigid bodies together with springs, ropes, and hinges to
+build ragdolls and swinging bridges that respect every rule of torque you just learned.

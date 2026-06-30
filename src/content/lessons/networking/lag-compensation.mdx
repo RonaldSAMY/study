@@ -1,0 +1,185 @@
+---
+title: Lag Compensation & Interpolation
+track: networking
+summary: Other players arrive as sparse, late snapshots — render them slightly in the past and interpolate for buttery motion, then rewind time to judge hits fairly.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - networking/client-prediction
+  - game-math/interpolation-easing
+leadsTo:
+  - networking/state-synchronization
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import RemotePlayerSmoothingLab from '../../../components/demos/RemotePlayerSmoothingLab.tsx';
+
+## The hook: why does everyone else teleport?
+
+Prediction makes *your* avatar feel instant. But the other players? Their positions reach you as **snapshots** —
+maybe ten or twenty per second — each one already a little stale by the time it lands. If you simply drew each
+remote player wherever the latest snapshot said, they would jerk and teleport across the screen between updates.
+The fix is a beautiful sleight of hand: render everyone a tiny bit **in the past**, with enough buffered
+snapshots on hand to draw the smooth path *between* them.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Entity interpolation** renders remote players slightly behind real time and slides them smoothly between two
+buffered snapshots; **lag compensation** then rewinds the world to what you actually saw so the server can judge
+your shots fairly.
+</Callout>
+
+## Intuition: connect the dots, gently
+
+You already met **interpolation and easing** — given two endpoints and a fraction $u$ between 0 and 1, you can
+find the in-between point. That is the whole engine here. Each snapshot is a dot on a timeline; between two dots
+the remote player must be *somewhere*, and a straight blend is a great guess.
+
+The catch: to interpolate between snapshot A and snapshot B you need **both** in hand — including the *later*
+one. So the client deliberately renders on a small delay (often around 100 ms). By living slightly in the past
+it almost always has a snapshot on each side of the moment it is drawing, and can blend between them.
+
+- **Interpolation** — render time sits *between* two known snapshots. Safe and smooth.
+- **Extrapolation** — a snapshot is late, so render time runs *past* the last one. The client guesses ahead
+  using the last known velocity. Cheap, but it invents motion and can overshoot when the player changes
+  direction.
+
+This creates a fairness problem: you are seeing everyone slightly in the past, so when you fire at an enemy's
+*head*, on the server that enemy has already moved on. **Lag compensation** fixes it by **rewinding** — the
+server keeps a short history of positions and rewinds every target to the moment your screen actually showed,
+then tests the hit there.
+
+## Play with it
+
+The green dot is the remote player's true, smooth motion. The indigo dot does it the naive way — **snap to the
+latest snapshot** — and stutters. The blue dot **interpolates** between buffered snapshots and glides. Drop the
+**snapshot rate** to watch raw motion fall apart while smooth holds together. Then push the snapshot rate down
+*and* turn on **extrapolation** to see it guess ahead — and sometimes overshoot.
+
+<RemotePlayerSmoothingLab client:visible />
+
+<Callout type="tip">
+Raising the <strong>interpolation delay</strong> makes motion smoother because the buffer almost always has a
+snapshot on both sides to blend between. The cost: you are watching the remote player further in the past — the
+exact lag the server must rewind to compensate for.
+</Callout>
+
+## The formal definition
+
+Suppose two snapshots bracket the render moment: position $x_0$ at time $t_0$ and $x_1$ at time $t_1$. Render at
+
+$$
+t_{\text{render}} = t_{\text{now}} - d,
+$$
+
+where $d$ is the interpolation delay. Compute the blend fraction and the linear interpolation (**lerp**):
+
+$$
+u = \frac{t_{\text{render}} - t_0}{t_1 - t_0}, \qquad x(t_{\text{render}}) = (1 - u)\,x_0 + u\,x_1.
+$$
+
+```python
+# entity interpolation: render in the past, lerp between two snapshots
+t_render = now - delay
+s0, s1 = bracketing_snapshots(buffer, t_render)
+u = (t_render - s0.t) / (s1.t - s0.t)
+pos = (1 - u) * s0.pos + u * s1.pos        # buttery between updates
+```
+
+When no later snapshot exists yet, **extrapolate** along the last velocity $v$:
+
+$$
+x(t_{\text{render}}) = x_{\text{last}} + v \,\big(t_{\text{render}} - t_{\text{last}}\big).
+$$
+
+For a fair hit, the server stores a history buffer and, on a shot fired at client time $t_c$, rewinds every
+target to $t_c$ before running collision — *rewind-and-replay* hit detection.
+
+<Callout type="why">
+Interpolation here is the same convex combination $(1-u)\,x_0 + u\,x_1$ that appears everywhere in machine
+learning: blending checkpoints, mixing data in augmentation, or walking the line between two points in a latent
+space. Learn it once as "a weighted average that slides from one thing to another" and it pays off constantly.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Sports officiating" icon="⚽">
+A referee call uses video review to **rewind** to the exact frame the ball crossed the line, judges the event
+*there*, then returns to live play. That is precisely lag compensation: store the timeline, jump back to the
+decisive instant, rule on it, resume.
+</ExampleCard>
+
+<ExampleCard domain="Video streaming" icon="📺">
+A live stream holds a few seconds of video in a **jitter buffer** before showing it. By playing slightly behind
+real time it always has the next chunk ready, so playback stays smooth even when packets arrive unevenly — the
+same "render in the past for smoothness" trade as interpolation delay.
+</ExampleCard>
+
+<ExampleCard domain="Animation" icon="🎞️">
+Animators set sparse **keyframes** and let the software **tween** the frames between them. Modern tools even
+generate extra in-between frames to raise the frame rate. Choppy keyframes become fluid motion through exactly
+the interpolation you tuned in the demo.
+</ExampleCard>
+
+<ExampleCard domain="Robotics teleoperation" icon="🤖">
+Driving a Mars rover or a surgical arm over a delayed link, the operator's display **extrapolates** the tool's
+likely position ahead of the last telemetry so control feels responsive — while accepting the same overshoot
+risk you saw when extrapolation guesses through a turn.
+</ExampleCard>
+
+<Callout type="note">
+Interpolation is almost always safer than extrapolation: blending between two *known* points can't invent
+motion, while guessing past the last point can overshoot and snap back. Most engines interpolate by default and
+only extrapolate briefly when a snapshot is late.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does the client render remote players slightly in the past?',
+      options: [
+        'To save bandwidth by dropping snapshots',
+        'So it almost always has a snapshot on both sides of the render time to interpolate between',
+        'Because the server runs in the past too',
+        'To make the game harder',
+      ],
+      answer: 1,
+      explain: 'A small interpolation delay means the buffer usually holds a snapshot before and after the moment being drawn, so the client can smoothly blend instead of guessing.',
+    },
+    {
+      q: 'Snapshots arrive at t = 100 ms (pos 10) and t = 200 ms (pos 30). Where is the interpolated position at render time t = 150 ms?',
+      options: ['10', '15', '20', '30'],
+      answer: 2,
+      explain: 'u = (150 − 100)/(200 − 100) = 0.5, so x = (1 − 0.5)·10 + 0.5·30 = 20.',
+    },
+    {
+      q: 'What does rewind-and-replay (lag-compensated) hit detection do?',
+      options: [
+        'It speeds up the loser’s connection',
+        'It rewinds targets to the time the shooter actually saw, then tests the hit there',
+        'It disables interpolation during combat',
+        'It sends the shot to every peer for a vote',
+      ],
+      answer: 1,
+      explain: 'The server keeps a history of positions and rewinds the world to the shooter’s view at fire time, so what you aimed at is what gets tested.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Entity interpolation</strong> renders remote players slightly in the past and lerps between two buffered snapshots for smooth motion.',
+    'The blend is a convex combination: <strong>x = (1−u)·x₀ + u·x₁</strong>, with u set by where render time falls between the snapshots.',
+    '<strong>Extrapolation</strong> guesses past the last snapshot using velocity — responsive but prone to overshoot.',
+    'Interpolation delay trades a little staleness for a lot of smoothness, since the buffer keeps samples on both sides.',
+    '<strong>Lag compensation</strong> rewinds the world to what the shooter saw so hit detection stays fair across latency.',
+  ]}
+/>
+
+Next up: snapshots are the lifeblood of all this smoothing — so how do we ship them without flooding the
+network? **State synchronization** covers snapshots, delta compression, and keeping every world in agreement.

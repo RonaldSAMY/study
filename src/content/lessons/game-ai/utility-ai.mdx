@@ -1,0 +1,147 @@
+---
+title: Utility & Decision AI
+track: game-ai
+summary: "Score every possible action with a utility curve over the agent's needs, then simply pick the highest — decisions as arithmetic."
+difficulty: advanced
+estMinutes: 14
+prereqs:
+  - game-ai/behavior-trees
+leadsTo:
+  - networking/networking-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import UtilityCurvePicker from '../../../components/demos/UtilityCurvePicker.tsx';
+
+## The hook: how does a Sim decide to eat?
+
+A character in *The Sims* is hungry, tired, bored, and a little bit lonely all at once. No tree of yes/no questions captures the *trade-off* — eat now, or sleep first, or grab a quick chat? The game's answer is refreshingly numeric: every possible action rates how good an idea it is right now, as a single score, and the character just does whatever scores highest. This is **utility AI**, and it shines exactly where behavior trees feel rigid: messy situations with many competing priorities.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Utility AI** scores each candidate action with a number computed from the agent's current needs, then picks the action with the **highest score** — turning decision-making into "evaluate and take the max".
+</Callout>
+
+## Intuition: from yes/no to how-much
+
+A behavior tree asks **boolean** questions: is the enemy visible? do I have ammo? Great for clear priorities, awkward when everything is a matter of degree. Utility AI replaces *whether* with *how much*.
+
+The key tool is the **utility curve** (also called a *response curve*): a function that maps a need, measured on a 0-to-1 scale, to a desirability, also 0 to 1. The shape encodes your design intent:
+
+- A **linear** curve says desirability rises steadily with the need.
+- A **quadratic** curve (the need squared) stays low until the need gets high, then shoots up — perfect for "only panic when threat is *really* high".
+- An **inverse** curve (one minus the need) makes an action attractive when a need is *low* — you only Rest when you are *not* hungry.
+
+Each action combines a few such curves into one score, often by multiplying them so that *any* disqualifying factor (a high threat while eating) drags the whole score down. Then the agent compares all scores and takes the maximum. Change the inputs and the winner can change smoothly, which is why utility agents feel less robotic than rule-based ones.
+
+## Play with it
+
+Slide the agent's **hunger** and **threat**. Each action scores itself from those needs; the bars rank them and the top one is chosen. Find the threat level where Flee suddenly overtakes Eat.
+
+<UtilityCurvePicker client:visible />
+
+<Callout type="tip">
+Set hunger high and threat near zero — Eat wins. Now creep threat up. Because Flee uses a *squared* curve, it lurks near zero for a while, then rockets past everything. That late, sharp takeover is the curve shape doing the talking.
+</Callout>
+
+## The formal definition
+
+Each action $a$ has a score built from utility curves $u_1, u_2, \dots$ evaluated on the relevant inputs $x_i$. The most common scheme multiplies them:
+
+$$
+\text{Score}(a) = \prod_i u_i(x_i),
+$$
+
+and the agent chooses
+
+$$
+a^\star = \arg\max_{a \in A}\; \text{Score}(a).
+$$
+
+A curve is just a function $u : [0,1] \to [0,1]$. Three handy shapes:
+
+$$
+u_{\text{lin}}(x) = x, \qquad
+u_{\text{quad}}(x) = x^2, \qquad
+u_{\text{inv}}(x) = 1 - x.
+$$
+
+So "eat" might score $\text{hunger} \times (1 - \text{threat})$ — appealing when you are hungry **and** safe — while "flee" scores $\text{threat}^2$, ignoring hunger entirely. Multiplication acts like a soft AND: a single near-zero factor vetoes the action.
+
+<Callout type="why">
+Utility AI degrades gracefully. A behavior tree must have an explicit branch for every situation, but a utility agent simply scores whatever actions exist — add a new action with its own curve and it competes automatically, no rewiring. This is also the conceptual bridge to machine learning: a learned policy is, in the end, a function that scores actions and takes the best one, exactly like a utility curve you didn't have to hand-author.
+</Callout>
+
+## The same idea, four different worlds
+
+"Score the options, take the best" is one of the most reused ideas in all of computing.
+
+<ExampleCard domain="Personal finance" icon="💳">
+A budgeting app ranks where your next dollar should go: paying high-interest debt scores higher as the rate climbs, topping up savings scores higher when the balance is low. You follow the highest-scoring suggestion — a utility decision.
+</ExampleCard>
+
+<ExampleCard domain="Healthcare logistics" icon="🏥">
+An organ-transplant system scores each waiting patient on urgency, match quality, and wait time, then offers the organ to the top score. The curves are debated for years precisely because their *shapes* encode ethical priorities.
+</ExampleCard>
+
+<ExampleCard domain="Streaming infrastructure" icon="📶">
+A video player constantly scores quality levels: higher resolution is desirable, but its score collapses as the buffer drains. Each second it picks the bitrate with the best score — smooth playback from a running max.
+</ExampleCard>
+
+<ExampleCard domain="Sports strategy" icon="⚽">
+A football analytics model scores every pass option by chance of success times value gained. Coaches use it to ask whether a player consistently chose the lower-utility play — the same argmax, applied to humans.
+</ExampleCard>
+
+<Callout type="note">
+The danger of utility AI is *tuning*: dozens of curves interact, and a bad shape gives weird choices that are hard to trace. That is the flip side of its flexibility — there are no explicit branches to read, only numbers to balance.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How does a utility AI ultimately choose an action?',
+      options: [
+        'It takes the first action whose condition is true',
+        'It scores every action and takes the maximum',
+        'It picks randomly among all actions',
+        'It always repeats the previous action',
+      ],
+      answer: 1,
+      explain: 'Utility AI evaluates a score for each candidate action and selects the highest — an argmax over actions.',
+    },
+    {
+      q: 'Why multiply an action’s utility curves together rather than add them?',
+      options: [
+        'Multiplication is faster than addition',
+        'So any single near-zero factor can veto the whole action',
+        'It guarantees the score exceeds 1',
+        'Addition is impossible with curves',
+      ],
+      answer: 1,
+      explain: 'A product acts like a soft AND: one factor near zero drives the whole score toward zero, vetoing the action.',
+    },
+    {
+      q: 'Eat scores hunger × (1 − threat). With hunger = 0.8 and threat = 0.5, what is Eat’s score?',
+      options: ['0.8', '0.4', '1.3', '0.3'],
+      answer: 1,
+      explain: '0.8 × (1 − 0.5) = 0.8 × 0.5 = 0.4. The rising threat has cut the appeal of eating in half.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Utility AI</strong> scores each action with a number and takes the highest — decision-making as argmax.',
+    'A <strong>utility curve</strong> maps a need in [0,1] to a desirability in [0,1]; its shape encodes design intent.',
+    'Common shapes: <strong>linear (x)</strong>, <strong>quadratic (x²)</strong> for late spikes, and <strong>inverse (1−x)</strong>.',
+    'Multiplying curves acts as a <strong>soft AND</strong> — one near-zero factor vetoes an action.',
+    'It scales and degrades gracefully, but is <strong>hard to tune</strong> since there are no explicit branches to read.',
+  ]}
+/>
+
+Next up: we leave single-agent AI behind and connect many players across the internet — starting with **networking basics**.
