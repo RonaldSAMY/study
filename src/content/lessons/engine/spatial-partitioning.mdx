@@ -1,0 +1,193 @@
+---
+title: Spatial Partitioning
+track: engine
+summary: Grids, quadtrees/octrees, and BVHs carve space into cells so the engine only tests nearby objects, turning sluggish O(n²) spatial queries into near-instant ones.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - data-structures/trees
+  - game-physics/collision-detection
+leadsTo:
+  - engine/input-time
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import QuadtreeExplorer from '../../../components/demos/QuadtreeExplorer.tsx';
+
+## The hook: the bullet-hell that grinds to a halt
+
+Your shoot-'em-up is glorious — until the screen fills with bullets. With 200 bullets and 50 enemies,
+the naive collision check asks *"does every bullet hit every enemy?"* That is 200 times 50 tests, every
+single frame. Double the bullets and the cost quadruples. Now imagine an open world with 10,000 trees,
+crates, and NPCs, each asking *"who is near me?"* Checking every object against every other object is a
+quadratic landslide that buries your frame budget. The fix is not a faster CPU — it is a smarter
+question: **stop asking about objects that are obviously too far away.**
+
+<Callout type="intuition" title="The one-sentence idea">
+**Spatial partitioning** organizes objects by *where they are*, so a query only looks at the handful of
+objects in nearby cells instead of scanning the entire world.
+</Callout>
+
+## Intuition: divide the world before you search it
+
+You already know two ideas that combine here. From **trees**, recall that splitting data into a
+branching hierarchy turns a linear scan into a logarithmic descent — you skip whole subtrees that
+cannot contain your answer. From **collision detection**, recall the split between the cheap *broad
+phase* (roughly, who *might* be touching?) and the expensive *narrow phase* (exact contact math).
+
+Spatial partitioning is the broad phase done right. Instead of one flat list of objects, we impose a
+structure on **space itself**:
+
+1. A **uniform grid** chops the world into equal cells; each object is filed into the cell it sits in.
+   To find neighbors, you only read the few cells around you.
+2. A **quadtree** (2D) or **octree** (3D) does the same thing *adaptively* — it splits a region into 4
+   (or 8) children only where objects are crowded, so empty space stays cheap and dense clusters get
+   fine resolution.
+3. A **bounding volume hierarchy (BVH)** groups *objects* (not space) into nested boxes, which is the
+   tool of choice for ray tracing and irregular geometry.
+
+The payoff is identical to a tree lookup: a query prunes away entire branches of the world, so it
+touches a logarithmic slice instead of the whole thing.
+
+## Play with it
+
+Drag out a query box and watch how few objects the quadtree actually has to test — then compare that to
+the brute-force count. Switch to *add / move* mode and drop objects into one corner to see cells
+subdivide exactly where the crowd is.
+
+<QuadtreeExplorer client:visible />
+
+<Callout type="tip">
+Lower the **cell capacity** and cram objects together: the tree grows deeper right where it is busy,
+while sparse regions stay as one big cell. That is the whole point — resolution follows the data.
+</Callout>
+
+## The formal definition
+
+With $n$ objects, a naive "check every pair" broad phase examines every unordered pair:
+
+$$
+\binom{n}{2} = \tfrac{n(n-1)}{2} = O(n^2).
+$$
+
+At $n = 10{,}000$ that is about fifty million tests *per frame* — hopeless. Spatial partitioning attacks
+the exponent. For a single region query, a balanced quadtree or octree behaves like a tree lookup,
+visiting roughly
+
+$$
+O(\log n) \;\text{cells} \; + \; O(k) \;\text{candidates},
+$$
+
+where $k$ is the number of objects actually near the query. For an all-pairs broad phase over evenly
+spread objects, a grid or quadtree brings the whole pass down toward $O(n)$, because each object only
+compares against the constant-ish few sharing its neighborhood.
+
+The three workhorses trade off differently:
+
+- **Uniform grid** — $O(1)$ cell lookup, trivial to build, but wasteful when density varies wildly.
+- **Quadtree / octree** — adaptive depth; great for clustered or open worlds; rebuild or update as
+  objects move.
+- **BVH** — partitions objects into nested bounding boxes; the standard for ray casting and static
+  meshes.
+
+A quadtree query is just a guarded recursion: skip any cell whose box misses your range.
+
+```js
+function query(node, range, found) {
+  if (!node.box.intersects(range)) return;      // prune this whole subtree
+  for (const p of node.points)
+    if (range.contains(p)) found.push(p);
+  for (const child of node.children)            // empty if it is a leaf
+    query(child, range, found);
+}
+```
+
+<Callout type="why">
+A game loop must finish in about 16 ms to hold 60 FPS. Spatial partitioning is what keeps the
+*per-frame* cost flat as your world grows, so collisions, culling, and AI "who's near me?" queries do
+not blow the frame budget.
+</Callout>
+
+## The same idea, four different worlds
+
+Carving space (or data) into nested regions so you only inspect the relevant part shows up far beyond
+game engines.
+
+<ExampleCard domain="Libraries" icon="📚">
+A library does not pile every book in one heap. It partitions shelves by section, then subsection, then
+call number. To find one title you walk a short path — floor, aisle, shelf — instead of scanning every
+spine in the building. Crowded topics (a whole wall of fiction) get finer subdivisions; a tiny
+reference section stays one shelf, exactly like a quadtree adapting to density.
+</ExampleCard>
+
+<ExampleCard domain="Postal logistics" icon="📮">
+Mail centers sort by ZIP prefix before anything else: the first digits bucket a letter into a broad
+region, later digits refine it down to a route. A parcel is never compared against every address in the
+country — only the ones sharing its prefix. That hierarchical bucketing is a grid-plus-tree over
+geography.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="🌌">
+Simulating a galaxy means every star feels gravity from every other star — a brutal $O(n^2)$. The
+**Barnes-Hut** algorithm builds an octree over space and treats a distant, tightly-clustered group of
+stars as a single combined mass. By approximating far-away clumps, it drops the cost to $O(n \log n)$
+and makes million-body simulations feasible.
+</ExampleCard>
+
+<ExampleCard domain="Image compression" icon="🖼️">
+A quadtree can encode an image by recursively splitting it into quadrants only where detail lives. A
+flat blue sky becomes one big leaf storing a single color, while a detailed face subdivides deeply.
+Uniform regions cost almost nothing to store — adaptive partitioning turned into compression.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does a brute-force "check every pair" collision broad phase scale so badly?',
+      options: [
+        'It uses floating-point math, which is slow',
+        'The number of pairs grows like n²/2, so cost explodes as objects increase',
+        'It needs a separate thread per object',
+        'Trees are always faster than arrays',
+      ],
+      answer: 1,
+      explain: 'There are C(n,2) = n(n-1)/2 unordered pairs, which is O(n²). Doubling the objects roughly quadruples the work.',
+    },
+    {
+      q: 'A bullet-hell frame has 300 bullets. How many unordered pairs would a naive all-pairs check among the bullets test?',
+      options: ['300', '600', '44,850', '90,000'],
+      answer: 2,
+      explain: 'C(300,2) = 300·299/2 = 44,850. Spatial partitioning avoids almost all of these by only comparing bullets in the same neighborhood.',
+    },
+    {
+      q: 'What makes a quadtree adaptive compared with a uniform grid?',
+      options: [
+        'It only works in 3D',
+        'It subdivides a cell only when that cell holds too many objects, so dense areas get finer resolution',
+        'It stores objects in a single flat list',
+        'It never needs rebuilding when objects move',
+      ],
+      answer: 1,
+      explain: 'A quadtree splits a region into four children only when it exceeds its capacity, so crowded areas get deep detail while empty space stays one big cell.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Checking every pair of objects is <strong>O(n²)</strong> — fine for a few objects, fatal for thousands.',
+    '<strong>Spatial partitioning</strong> organizes objects by location so a query only inspects nearby cells.',
+    'A <strong>quadtree/octree</strong> subdivides adaptively, giving dense regions fine resolution and leaving empty space cheap.',
+    'Pick the structure for the job: <strong>uniform grids</strong> for even density, <strong>quadtrees/octrees</strong> for clustered or open worlds, <strong>BVH</strong> for ray casting and static meshes.',
+    'It is the engine\'s <strong>broad phase</strong>: a fast filter that hands a tiny candidate set to the expensive narrow-phase tests.',
+  ]}
+/>
+
+Next up: **input and time** — once queries are cheap, we turn to sampling the player's input and stepping
+the simulation on a steady clock so the whole loop stays smooth.

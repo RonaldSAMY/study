@@ -1,0 +1,186 @@
+---
+title: Forces & Newton's Laws
+track: game-physics
+summary: Stop setting acceleration by hand — sum up gravity, drag, thrust and impulses, divide by mass, and let F = ma drive every entity in your world.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - game-physics/kinematics
+leadsTo:
+  - game-physics/numerical-integration
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ForceAccumulatorLab from '../../../components/demos/ForceAccumulatorLab.tsx';
+
+## The hook: the spaceship that obeys you, not you it
+
+In the last lesson you *told* the entity its acceleration directly. But a spaceship does not know its
+acceleration — it knows that an engine is pushing it, that nothing slows it in the vacuum, and that it is
+heavy. Real game feel comes from flipping the control around: you apply **forces** — a thruster, gravity,
+drag, a sudden collision kick — pile them all up, and let the body *figure out* its own acceleration from
+how massive it is. That flip is Newton's second law, and it is the rule that makes a feather flutter and a
+boulder lumber using the exact same code.
+
+<Callout type="intuition" title="The one-sentence idea">
+Add up every force on a body into one net force, divide by its mass to get acceleration
+(<strong>a = F / m</strong>), and feed that into the kinematics loop you already know.
+
+</Callout>
+
+## Intuition
+
+Kinematics gave you the engine: `v += a·Δt; p += v·Δt`. The missing piece was *where does $\mathbf{a}$ come
+from?* Newton's answer is wonderfully mechanical:
+
+- **First law (inertia):** with zero net force, velocity never changes — a drifting ship coasts forever.
+- **Second law:** the net force equals mass times acceleration, $\mathbf{F} = m\mathbf{a}$. Rearranged for
+  a game, $\mathbf{a} = \mathbf{F}/m$.
+- **Third law:** every push has an equal and opposite push back (the recoil when a cannon fires).
+
+The practical trick is the **force accumulator**. Each frame you start a running total
+$\mathbf{F} = \mathbf{0}$, then *add* every force acting this instant: gravity pulls down, drag pushes back
+against velocity, a thruster shoves forward. Because forces are **vectors**, "adding them up" is just the
+tip-to-tail vector addition from earlier — heavier bodies simply respond less to the same total, because
+you divide by a bigger $m$.
+
+## Play with it
+
+Tune gravity, drag and mass, then **hold thrust** to fight gravity or fire a **kick** impulse. Watch the
+net force and the resulting acceleration ($a = F/m$) update live as the body rises, drifts, and bounces.
+
+<ForceAccumulatorLab client:visible />
+
+<Callout type="tip">
+Crank the mass up and hold thrust: the same engine force now produces a feebler acceleration, so the body
+lifts off sluggishly. That is <em>a = F/m</em> with a bigger denominator, right in front of you.
+</Callout>
+
+## The formal definition
+
+Sum the forces acting on a body into a single net force vector, then convert to acceleration with the
+second law:
+
+$$
+\mathbf{F}_{\text{net}} = \sum_i \mathbf{F}_i, \qquad \mathbf{a} = \frac{\mathbf{F}_{\text{net}}}{m}.
+$$
+
+Three forces cover most games. **Gravity** is proportional to mass (so all bodies fall together):
+
+$$
+\mathbf{F}_g = m\,\mathbf{g}.
+$$
+
+**Linear drag** opposes velocity, draining energy over time:
+
+$$
+\mathbf{F}_d = -k\,\mathbf{v}.
+$$
+
+An **impulse** is a force applied over a tiny time — a collision or a kick. It changes momentum instantly,
+so rather than feed it through acceleration you add it straight to velocity:
+
+$$
+\mathbf{J} = \mathbf{F}\,\Delta t = m\,\Delta \mathbf{v} \;\;\Rightarrow\;\; \Delta\mathbf{v} = \frac{\mathbf{J}}{m}.
+$$
+
+```js
+// Per frame: accumulate forces, then integrate.
+let F = { x: 0, y: 0 };
+F.y += body.m * g;          // gravity (down, if g is negative)
+F.x += -k * body.vx;        // drag opposes velocity
+F.y += -k * body.vy;
+if (thrusting) F.y += THRUST;          // held force
+const ax = F.x / body.m, ay = F.y / body.m;   // a = F / m
+body.vx += ax * dt; body.vy += ay * dt;       // then kinematics
+body.x  += body.vx * dt; body.y += body.vy * dt;
+```
+
+<Callout type="why">
+The force accumulator is the same pattern as summing gradients in a neural network: many independent
+contributions are added into one vector before a single update step. Whether it is forces on a rigid body
+or gradients on a weight, "sum the pushes, then take one step" is everywhere.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Space-sim thruster" icon="🚀">
+In a vacuum the only force is your engine, so the ship obeys the first law: cut the throttle and it coasts
+at constant velocity forever. Thrust adds a force in the facing direction; net force divided by the ship's
+mass gives the acceleration that slowly builds speed. Bigger freighters accelerate lazily — same engine,
+larger $m$.
+</ExampleCard>
+
+<ExampleCard domain="Skydiver + parachute" icon="🪂">
+Free-fall stacks gravity (down) against drag (up, growing with speed). The skydiver speeds up until drag
+balances weight and the net force hits zero — **terminal velocity**. Popping the chute spikes the drag
+coefficient $k$, so net force flips upward and they decelerate hard before drifting down gently.
+</ExampleCard>
+
+<ExampleCard domain="Pinball flipper" icon="🔮">
+A flipper barely touches the ball, yet it launches across the table. That is an **impulse**: a big force
+over a few milliseconds. Games skip the messy contact and just add $\mathbf{J}/m$ straight to the ball's
+velocity, instantly changing its momentum without ever computing the contact acceleration.
+</ExampleCard>
+
+<ExampleCard domain="Hot-air balloon" icon="🎈">
+Buoyancy is an upward force that beats gravity when the air inside is hot enough, so the net force points
+up and the balloon accelerates skyward. Cool the air and weight wins again. It is the accumulator with one
+extra upward term — gravity down, buoyancy up, drag resisting whichever way it moves.
+</ExampleCard>
+
+<Callout type="note">
+Notice the recurring shape: <strong>gravity + drag + something special</strong>. Swap the "something"
+(thrust, buoyancy, an impulse) and one accumulator powers wildly different feels.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A net force of 30 N acts on a body of mass 6 kg. What is its acceleration?',
+      options: ['180 m/s²', '36 m/s²', '5 m/s²', '0.2 m/s²'],
+      answer: 2,
+      explain: 'a = F / m = 30 / 6 = 5 m/s². The same force on a heavier body would give a smaller acceleration.',
+    },
+    {
+      q: 'Why do a feather and a cannonball fall at the same rate under gravity alone (no air)?',
+      options: [
+        'Gravity ignores mass entirely',
+        'The gravity force m·g scales with mass, but a = F/m divides it back out, so acceleration is the same g',
+        'The feather has more drag',
+        'Heavier objects always fall faster',
+      ],
+      answer: 1,
+      explain: 'Gravity force is m·g, so a = (m·g)/m = g. The mass cancels — without air resistance everything accelerates at g.',
+    },
+    {
+      q: 'How is a sudden collision (impulse) usually applied in a game?',
+      options: [
+        'By increasing the mass for one frame',
+        'By adding J/m directly to the velocity, changing momentum instantly',
+        'By setting acceleration to infinity',
+        'By turning off gravity briefly',
+      ],
+      answer: 1,
+      explain: 'An impulse J = m·Δv changes momentum over a tiny time, so games add Δv = J/m straight to velocity instead of routing it through acceleration.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    "<strong>Newton's second law</strong> turns forces into motion: net force over mass gives acceleration, <strong>a = F / m</strong>.",
+    'Each frame, <strong>accumulate every force</strong> (gravity, drag, thrust) into one net vector before integrating — forces add tip-to-tail like any vectors.',
+    '<strong>Gravity is m·g</strong>, so mass cancels in a = F/m and everything falls at the same g without air resistance.',
+    '<strong>Drag (−k·v)</strong> opposes velocity and produces terminal velocity when it balances the other forces.',
+    'An <strong>impulse</strong> changes momentum instantly — add <strong>J/m</strong> directly to velocity for kicks and collisions.',
+  ]}
+/>
+
+Next up: **Numerical Integration** — why naïve Euler steps drift and explode, and how smarter integrators keep your accumulated forces honest.

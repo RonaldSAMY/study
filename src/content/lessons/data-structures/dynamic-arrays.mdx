@@ -1,0 +1,175 @@
+---
+title: Dynamic Arrays
+track: data-structures
+summary: How a list grows past its reserved space — capacity doubling and why pushing stays cheap on average.
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - data-structures/arrays-memory
+leadsTo:
+  - data-structures/stacks-queues
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DynamicArrayGrowthLab from '../../../components/demos/DynamicArrayGrowthLab.tsx';
+
+## The hook: enemies keep spawning
+
+A wave-survival game keeps spawning monsters. You can't know in advance whether 8 or 8,000 will be on
+screen, so you can't reserve the perfect-sized array up front. Yet the list of active enemies you append
+to — `enemies.push(monster)` — never complains. It just grows. Behind that effortless `push` is one of the
+most elegant tricks in computing: when the list runs out of room, it quietly grabs a **bigger** block and
+moves in. The clever part is *how much* bigger.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **dynamic array** is a plain array plus spare room; when it fills, it allocates a new block of
+<strong>double</strong> the size and copies everything over — so growth is rare and, on average, free.
+</Callout>
+
+## Intuition: keep some empty seats
+
+From the last lesson you know a real array is a fixed contiguous block — its size is locked in when it's
+created. So how can a list "grow"? It can't, really. Instead it keeps two numbers:
+
+- **length** — how many elements you've actually stored, and
+- **capacity** — how many the current block *could* hold.
+
+When you push and `length < capacity`, there's a free slot — just drop the element in. That's $O(1)$,
+instant. But when `length == capacity`, the block is full. Now the list must:
+
+1. allocate a **brand-new, larger** block,
+2. **copy** every existing element into it,
+3. free the old block, and store the new one.
+
+The new block isn't just one slot bigger — that would force a copy on *every single push*. Instead it
+**doubles**. Doubling means the expensive copy happens less and less often as the list grows.
+
+## Play with it
+
+Keep pressing **push()**. Watch capacity sit still, then suddenly double — and notice the highlighted
+copy that happens at that moment. Track how the total number of copies grows much more slowly than the
+number of pushes.
+
+<DynamicArrayGrowthLab client:visible />
+
+<Callout type="tip">
+After many pushes, compare <strong>total copies</strong> to <strong>length</strong>. Total copies stays
+below roughly twice the length — even though you pushed hundreds of times. That gap is the doubling trick
+paying off.
+</Callout>
+
+## The formal definition
+
+Suppose you push $n$ elements into an empty dynamic array that doubles its capacity each time it fills,
+starting at capacity 1. Reallocations happen at sizes $1, 2, 4, 8, \dots$, and each copies that many
+elements. The **total** copying work is:
+
+$$
+1 + 2 + 4 + \cdots + \frac{n}{2} + n \;=\; \sum_{k=0}^{\log_2 n} 2^{k} \;<\; 2n.
+$$
+
+So $n$ pushes cost under $2n$ copies *in total* — that is $O(n)$ work spread across $n$ operations, or
+$O(1)$ **per push on average**. We call this the **amortized** cost: any single push might be expensive
+(a doubling), but averaged over the whole sequence, each is constant time.
+
+```python
+def push(arr, length, capacity, x):
+    if length == capacity:                 # block is full
+        capacity = max(1, capacity * 2)    # double it
+        arr = copy_into_new_block(arr, capacity)  # O(length) — but rare
+    arr[length] = x                        # the usual case: O(1)
+    return arr, length + 1, capacity
+```
+
+<Callout type="why">
+This is exactly how Python `list`, C++ `std::vector`, JavaScript arrays, and the tensors that hold a
+growing batch of data all behave. Knowing it explains real performance bugs: if you *know* you'll add a
+million items, reserving capacity once avoids ~20 reallocations and a heap of copying.
+</Callout>
+
+## The same idea, four different worlds
+
+"Reserve extra room now so you rarely have to move" is a pattern well beyond code.
+
+<ExampleCard domain="Restaurant" icon="🍽️">
+A café with 4 tables that gets popular doesn't add one chair at a time. It moves to a 8-table space, then
+a 16-table space. Each move is disruptive, so you do it rarely and double each time — fewer painful moves
+overall.
+</ExampleCard>
+
+<ExampleCard domain="Moving house" icon="📚">
+When your book collection outgrows a shelf, you buy a bookcase with lots of spare shelves, not one extra
+slot. Relocating every book is the costly copy; you do it seldom by leaving generous headroom.
+</ExampleCard>
+
+<ExampleCard domain="Concert venues" icon="🎤">
+A band outgrowing clubs jumps from a 500-seat hall to a 1,500-seat one to an arena. Each upgrade means
+re-rigging everything (the copy), so promoters scale up in big multiplicative leaps, not seat by seat.
+</ExampleCard>
+
+<ExampleCard domain="Cloud servers" icon="☁️">
+Autoscaling a web service doubles the server pool under load rather than adding one machine at a time.
+Spinning up and rebalancing is expensive, so big jumps keep the average request fast.
+</ExampleCard>
+
+<Callout type="warning">
+Doubling trades memory for speed: just after a resize, up to half the block can be empty. That's the
+price of cheap pushes — and why some libraries grow by 1.5× instead of 2× to waste a little less space.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the difference between a dynamic array\'s length and its capacity?',
+      options: [
+        'They are two names for the same number',
+        'Length is how many elements are stored; capacity is how many the current block can hold',
+        'Capacity is always exactly one more than length',
+        'Length is in bytes, capacity is in elements',
+      ],
+      answer: 1,
+      explain: 'Length counts what you have stored; capacity is the size of the reserved block. Pushing is free while length < capacity.',
+    },
+    {
+      q: 'Why does a dynamic array double its capacity instead of growing by one slot each time?',
+      options: [
+        'Doubling uses less memory',
+        'So the expensive copy happens rarely, keeping the average push O(1)',
+        'Because hardware can only allocate powers of two',
+        'To keep the array sorted',
+      ],
+      answer: 1,
+      explain: 'Growing by one would copy on every push (O(n) per push). Doubling makes reallocations rare, giving amortized O(1).',
+    },
+    {
+      q: 'A list at length 8 and capacity 8 gets one more push. What happens, roughly?',
+      options: [
+        'Nothing special — there is always room',
+        'It allocates a block of capacity 16 and copies the 8 existing elements over',
+        'It deletes the oldest element',
+        'It splits into two arrays',
+      ],
+      answer: 1,
+      explain: 'The block is full, so capacity doubles to 16, the 8 elements are copied into the new block, then the 9th is added.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>dynamic array</strong> is a fixed block plus spare capacity, tracking <strong>length</strong> and <strong>capacity</strong> separately.',
+    'A push with room to spare is <strong>O(1)</strong>; a push that fills the block triggers a resize.',
+    'On a full push the array allocates a <strong>doubled</strong> block and copies the old elements across.',
+    'Total copy work over n pushes is under 2n, giving <strong>amortized O(1)</strong> per push.',
+    'This is how Python lists, C++ vectors, and JS arrays grow — reserving capacity up front avoids repeated copying.',
+  ]}
+/>
+
+Next up: **stacks and queues** — two disciplined ways to use a growable list that power undo systems,
+turn order, and the search algorithms coming later.

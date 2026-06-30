@@ -1,0 +1,191 @@
+---
+title: Numerical Integration
+track: game-physics
+summary: Explicit Euler quietly pumps energy into your world and blows it up — meet semi-implicit Euler and Verlet, the stable steppers that keep orbits, springs and ragdolls from exploding.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - game-physics/forces-newton
+  - differential-equations/numerical-euler
+leadsTo:
+  - game-physics/collision-detection
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import IntegratorDriftLab from '../../../components/demos/IntegratorDriftLab.tsx';
+
+## The hook: why does my moon slingshot into deep space?
+
+You code up a tiny space sim. A planet sits at the center, a moon starts in a clean circular orbit, and
+gravity pulls it inward every frame. You hit play... and over a minute the moon's circle quietly grows
+into a spiral, swings wider and wider, and eventually escapes off-screen forever. You didn't add energy.
+Newton's law is exact. So where did the extra speed come from? The culprit is not your physics — it's the
+*way you stepped time forward*. The most obvious update rule, **explicit Euler**, silently injects energy
+on every frame. Choosing a smarter stepper fixes it for free.
+
+<Callout type="intuition" title="The one-sentence idea">
+Forces tell you acceleration, but turning acceleration into motion requires *stepping time in discrete
+chunks* — and the order in which you update velocity and position decides whether energy stays put or
+leaks in and blows your world apart.
+</Callout>
+
+## Intuition
+
+You already know Newton's second law gives acceleration from force: $\mathbf{a} = \mathbf{F}/m$. And you
+saw the plain **Euler step** in differential equations: take the current slope and march forward by a
+little time $\Delta t$. A physics engine does exactly that, sixty times a second, to push every entity's
+velocity and position forward.
+
+The subtlety is that you have *two* coupled quantities. Acceleration changes velocity, and velocity
+changes position. Plain (explicit) Euler updates both using only **old** values: it nudges position with
+the old velocity, and the old velocity with the old acceleration. For anything that curves — an orbit, a
+spring, a pendulum — those old values are always slightly stale, and the staleness consistently points
+*outward*. Frame after frame the error adds up in the same direction, so total energy creeps upward and
+the motion winds outward.
+
+The fix is almost insultingly small. **Semi-implicit (symplectic) Euler** updates velocity first, then
+moves position with the *new* velocity. **Verlet** is built so that a step and its time-reverse are
+symmetric. Both keep energy bounded forever, even though each individual step is no more accurate than
+Euler's. The takeaway: for games, *long-term stability* matters far more than per-step precision.
+
+## Play with it
+
+Below, the **same** orbit is integrated three ways at once from an identical start. Indigo is explicit
+Euler, sky is semi-implicit Euler, emerald is Verlet. Watch the energy readouts (they should read 100%
+forever) and drag the timestep slider to exaggerate the difference.
+
+<IntegratorDriftLab client:visible />
+
+<Callout type="tip">
+Push <strong>dt</strong> toward its maximum, hit Reset, and watch indigo balloon past 100% and spiral
+outward while sky and emerald stay glued to the dashed ideal orbit. Same force, same start — only the
+update rule differs.
+</Callout>
+
+## The formal definition
+
+Write the state as position $\mathbf{x}$ and velocity $\mathbf{v}$, with acceleration
+$\mathbf{a}(\mathbf{x}) = \mathbf{F}(\mathbf{x})/m$. Over one timestep $\Delta t$:
+
+**Explicit (forward) Euler** — everything uses old values:
+
+$$
+\mathbf{v}_{n+1} = \mathbf{v}_n + \mathbf{a}(\mathbf{x}_n)\,\Delta t, \qquad
+\mathbf{x}_{n+1} = \mathbf{x}_n + \mathbf{v}_n\,\Delta t.
+$$
+
+**Semi-implicit (symplectic) Euler** — velocity first, then move with the *new* velocity:
+
+$$
+\mathbf{v}_{n+1} = \mathbf{v}_n + \mathbf{a}(\mathbf{x}_n)\,\Delta t, \qquad
+\mathbf{x}_{n+1} = \mathbf{x}_n + \mathbf{v}_{n+1}\,\Delta t.
+$$
+
+**Velocity Verlet** — symmetric, second-order accurate, averages start and end accelerations:
+
+$$
+\mathbf{x}_{n+1} = \mathbf{x}_n + \mathbf{v}_n\,\Delta t + \tfrac{1}{2}\,\mathbf{a}_n\,\Delta t^2, \qquad
+\mathbf{v}_{n+1} = \mathbf{v}_n + \tfrac{1}{2}\,(\mathbf{a}_n + \mathbf{a}_{n+1})\,\Delta t.
+$$
+
+The single line that flips explicit into semi-implicit Euler is using $\mathbf{v}_{n+1}$ instead of
+$\mathbf{v}_n$ in the position update:
+
+```js
+// semi-implicit (symplectic) Euler — one body, one step
+v.x += a(x).x * dt;   // update velocity FIRST
+v.y += a(x).y * dt;
+x.x += v.x * dt;      // then move with the NEW velocity
+x.y += v.y * dt;
+```
+
+<Callout type="why">
+Semi-implicit Euler and Verlet are <em>symplectic</em>: they conserve a quantity extremely close to the
+true energy, so error oscillates around a bound instead of marching off to infinity. That is why almost
+every shipping game uses one of them — a stable, slightly-wrong simulation beats an accurate one that
+explodes after thirty seconds.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Space simulation" icon="🪐">
+An orbital sandbox like a Kerbal-style game must keep planets circling for *hours* of play. Explicit
+Euler would let every moon spiral outward and escape; symplectic integrators keep orbits closed so your
+solar system is still recognizable after a long session.
+</ExampleCard>
+
+<ExampleCard domain="Vehicle suspension" icon="🏎️">
+A car's wheels ride stiff spring-dampers. Stiff springs mean large accelerations, and explicit Euler on a
+stiff spring gains energy until the chassis vibrates itself off the track. Semi-implicit Euler with a
+small fixed timestep keeps the suspension planted and the ride believable.
+</ExampleCard>
+
+<ExampleCard domain="Cloth and rope" icon="🧵">
+A cape or flag is a mesh of point masses joined by springs. Verlet is the cloth simulator's favorite: it
+stores only positions (velocity is implied by the previous position), is trivially stable, and makes
+distance constraints — "these two points stay 5 cm apart" — easy to enforce by just nudging positions.
+</ExampleCard>
+
+<ExampleCard domain="Pendulum clocks" icon="🕰️">
+A swinging pendulum should keep the *same* amplitude forever with no friction. Under explicit Euler the
+swing grows wider every cycle as phantom energy accumulates; under a symplectic stepper the amplitude
+holds steady, which is exactly the energy-conserving behavior real physics demands.
+</ExampleCard>
+
+<Callout type="note">
+Whatever stepper you pick, use a <strong>fixed</strong> timestep for physics (accumulate real frame time
+and run, say, 60 Hz steps). Variable timesteps make collisions and stiff springs nondeterministic, which
+breaks replays, networking and "feel".
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does explicit (forward) Euler make a frictionless orbit spiral outward over time?',
+      options: [
+        'It rounds positions to integers each frame',
+        'It updates position using stale (old) velocity, so error consistently adds energy',
+        'Gravity is computed incorrectly',
+        'The timestep is negative',
+      ],
+      answer: 1,
+      explain: 'Explicit Euler uses old values for both updates. For curved motion the staleness biases outward every frame, so total energy creeps up and the orbit grows.',
+    },
+    {
+      q: 'What single change turns explicit Euler into semi-implicit (symplectic) Euler?',
+      options: [
+        'Use a much smaller timestep',
+        'Update position before velocity',
+        'Update velocity first, then move position using the NEW velocity',
+        'Average two accelerations',
+      ],
+      answer: 2,
+      explain: 'Semi-implicit Euler updates velocity first, then advances position with the freshly updated velocity. That one swap makes it symplectic and energy-bounded.',
+    },
+    {
+      q: 'A body has v = 4 m/s and constant acceleration a = 2 m/s². Using semi-implicit Euler with Δt = 0.5 s, what is the position change x_{n+1} − x_n this step?',
+      options: ['2.0 m', '2.5 m', '2.0 m using old v', '4.0 m'],
+      answer: 1,
+      explain: 'First update velocity: v_new = 4 + 2·0.5 = 5. Then move with the new velocity: Δx = 5·0.5 = 2.5 m.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Integration turns acceleration into motion by stepping time in discrete <strong>Δt</strong> chunks; the update order matters.',
+    '<strong>Explicit Euler</strong> uses only old values, injects energy on curved motion, and spirals/explodes.',
+    '<strong>Semi-implicit (symplectic) Euler</strong> updates velocity first, then position — one swap that keeps energy bounded.',
+    '<strong>Verlet</strong> is symmetric and second-order, ideal for cloth, rope and constraint-based physics.',
+    'For games, prefer a <strong>symplectic stepper with a fixed timestep</strong>: long-term stability beats per-step accuracy.',
+  ]}
+/>
+
+Next up: **collision detection** — now that things move stably, we need to know the instant two of them
+touch.

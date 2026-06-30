@@ -1,0 +1,159 @@
+---
+title: Stacks & Queues
+track: data-structures
+summary: Two disciplined ways to add and remove items — LIFO for undo, FIFO for fair turns — that power tons of game systems.
+difficulty: beginner
+estMinutes: 12
+prereqs:
+  - data-structures/dynamic-arrays
+leadsTo:
+  - data-structures/hash-maps
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import StackQueueSimulator from '../../../components/demos/StackQueueSimulator.tsx';
+
+## The hook: hitting Ctrl-Z
+
+You place a wall in your base-builder, rotate it, paint it, then mash **Ctrl-Z** three times. The game
+undoes them in *exactly the reverse order*: unpaint, unrotate, unplace. It never undoes the wall before
+the paint. Meanwhile, across town, your multiplayer match has a lobby: the first player to click "ready"
+is the first one dropped into the game. Two systems, two opposite rules about *what comes out first* — and
+both are built from the dynamic arrays you already know, just with strict discipline about **which end** you
+touch.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **stack** removes the <strong>most recently added</strong> item (last-in, first-out); a **queue**
+removes the <strong>oldest</strong> item (first-in, first-out).
+</Callout>
+
+## Intuition: which end do you take from?
+
+A dynamic array lets you add and remove anywhere, but unrestricted access invites bugs. Stacks and queues
+deliberately *limit* you to make behavior predictable.
+
+**Stack — LIFO (Last In, First Out).** Think of a stack of plates: you add to the top and take from the
+top. The last plate on is the first plate off. The two operations are **push** (add on top) and **pop**
+(remove the top). This naturally models *undo*: the last thing you did is the first thing reversed.
+
+**Queue — FIFO (First In, First Out).** Think of a line at a ticket booth: people join at the back and are
+served from the front. The first to arrive is the first served. The operations are **enqueue** (add at the
+back) and **dequeue** (remove from the front). This models fairness and order: matchmaking, print jobs,
+turn order.
+
+Both are usually just a dynamic array underneath — the magic is the *rule* about which end you use.
+
+## Play with it
+
+Switch between **Stack** and **Queue** and watch the difference. In stack mode, items pile upward and
+removal always takes the top. In queue mode, items line up and removal always takes the front. Same
+elements, opposite exit.
+
+<StackQueueSimulator client:visible />
+
+<Callout type="tip">
+Add three items, then remove them all. The stack hands them back <em>reversed</em>; the queue hands them
+back in the <em>same order</em> they arrived. That single difference is the whole lesson.
+</Callout>
+
+## The formal definition
+
+Both are **abstract data types**: defined by their operations, not their storage. Each operation is
+$O(1)$ — constant time — because it only ever touches one end.
+
+**Stack** (LIFO):
+
+$$
+\textbf{push}(x), \qquad \textbf{pop}() \rightarrow \text{last pushed}, \qquad \textbf{peek}() \rightarrow \text{top without removing}.
+$$
+
+**Queue** (FIFO):
+
+$$
+\textbf{enqueue}(x), \qquad \textbf{dequeue}() \rightarrow \text{oldest element}, \qquad \textbf{front}() \rightarrow \text{next to leave}.
+$$
+
+The defining contrast: a stack returns elements in **reverse** insertion order, a queue in the **same**
+insertion order.
+
+<Callout type="why">
+These two appear constantly under the hood of intelligent systems. The **call stack** runs every program
+and every recursive function. And the search lesson ahead uses a **queue** for breadth-first search (BFS)
+and a **stack** for depth-first search (DFS) — swapping the container literally changes how an AI explores
+a level.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Web browsing" icon="🌐">
+Your browser's <strong>back button</strong> is a stack. Each page you visit is pushed; pressing back pops
+the most recent one. That's why back always returns you to where you <em>just</em> were, never to page one.
+</ExampleCard>
+
+<ExampleCard domain="Cafeteria" icon="🍽️">
+A spring-loaded tray dispenser is a literal stack: staff push clean trays on top, diners take from the
+top. The tray sitting longest at the bottom is the last to be used — pure LIFO.
+</ExampleCard>
+
+<ExampleCard domain="Customer support" icon="🎧">
+A support hotline is a queue. Callers are answered in the order they dialed in — first in line, first
+helped. Jumping the queue would feel unfair, which is exactly why FIFO is the right rule here.
+</ExampleCard>
+
+<ExampleCard domain="Concert tickets" icon="🎟️">
+An online ticket waiting room holds buyers in a queue. The site admits people front-first as capacity
+frees up, so early arrivals get first pick — order in equals order served.
+</ExampleCard>
+
+<Callout type="note">
+A handy mental test: if reversing the order is the <em>feature</em> (undo, back-button, evaluating nested
+brackets), reach for a <strong>stack</strong>. If preserving order is the feature (fairness, scheduling,
+breadth-first exploration), reach for a <strong>queue</strong>.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'You push A, then B, then C onto a stack, then pop once. What comes out?',
+      options: ['A', 'B', 'C', 'Nothing — stacks do not pop'],
+      answer: 2,
+      explain: 'A stack is LIFO: the last item pushed (C) is the first popped.',
+    },
+    {
+      q: 'You enqueue A, then B, then C into a queue, then dequeue once. What comes out?',
+      options: ['A', 'B', 'C', 'All three at once'],
+      answer: 0,
+      explain: 'A queue is FIFO: the first item enqueued (A) is the first dequeued.',
+    },
+    {
+      q: 'Which structure best fits an undo feature, and why?',
+      options: [
+        'A queue, because actions should replay in order',
+        'A stack, because the most recent action must be reversed first',
+        'A queue, because undo is about fairness',
+        'Neither — undo needs a hash map',
+      ],
+      answer: 1,
+      explain: 'Undo must reverse the latest action first, which is exactly the last-in-first-out behavior of a stack.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>stack</strong> is <strong>LIFO</strong>: push adds on top, pop removes the most recent item.',
+    'A <strong>queue</strong> is <strong>FIFO</strong>: enqueue adds at the back, dequeue removes the oldest item.',
+    'Both are <strong>abstract data types</strong> — defined by their operations, usually backed by a dynamic array.',
+    'Every operation is <strong>O(1)</strong> because it only ever touches one end of the structure.',
+    'Stacks power undo, back buttons, and the call stack; queues power matchmaking, scheduling, and BFS.',
+  ]}
+/>
+
+Next up: **hash maps** — when you need to find an item not by its position or arrival order, but instantly
+by a *key* like a player's name or an item ID.

@@ -1,0 +1,183 @@
+---
+title: Particle Systems
+track: game-physics
+summary: Spawn thousands of tiny, short-lived points with random velocities and fading lifetimes to conjure sparks, smoke, fire, and explosions.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - game-physics/numerical-integration
+leadsTo:
+  - rendering/rendering-pipeline
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ParticleEmitterLab from '../../../components/demos/ParticleEmitterLab.tsx';
+
+## The hook: a million sparks from one rule
+
+A barrel explodes. Glowing embers blast outward, arc through the air, and wink out one by one. It looks like
+chaos you could never hand-author — and yet there is no choreography here at all. There is one **emitter** and
+one tiny rule applied to thousands of nearly identical specks: be born somewhere with a random velocity, fall
+under gravity, fade as you age, and disappear. Run that rule on a crowd and emergent beauty falls out for
+free.
+
+Particles are how games fake everything that is too wispy, too numerous, or too fluid to model as solid
+bodies: smoke, fire, dust, rain, magic, blood, foam. The math is gentle; the payoff is enormous.
+
+<Callout type="intuition" title="The one-sentence idea">
+A particle system is one emitter spawning many independent, short-lived points — each just integrates a
+simple motion equation and fades out over its lifetime.
+</Callout>
+
+## Intuition: numerical integration, but a thousand times
+
+You already know how to push one point forward in time: take its velocity, add gravity, step the position.
+That is plain **numerical integration** — the same explicit Euler step you used for a single projectile. A
+particle system is that step copied across a whole array, with two new ingredients bolted on.
+
+First, **randomization at birth**. If every spark launched identically you would see one boring line. Instead
+the emitter samples each new particle's velocity, lifetime, size, and color from a range, so the crowd fans
+out into a natural-looking spray. Second, a **lifetime**. Each particle carries an age that ticks up every
+frame; when age passes its lifetime the particle dies. Along the way you fade its transparency from 1 to 0 so
+it dissolves instead of popping out.
+
+The last practical trick is **recycling**. Allocating and freeing thousands of objects per second would
+hammer the garbage collector, so engines keep a fixed **pool** and simply mark dead particles as available,
+reusing those slots for the next batch. Same memory, forever.
+
+## Play with it
+
+Drag inside the canvas to move the emitter, then watch the fountain. Each spark is born at the emitter with a
+randomized upward velocity, falls under gravity, and fades as it ages.
+
+<ParticleEmitterLab client:visible />
+
+<Callout type="tip">
+Push the lifetime and spawn rate up together and watch the live count climb — that product, roughly $\text{rate} \times \text{lifetime}$, is how many particles are alive at once, and it is exactly what you must budget for on a real frame.
+</Callout>
+
+## The formal definition
+
+Each particle stores a position $\mathbf{p}$, velocity $\mathbf{v}$, an age $a$, and a lifetime $\tau$. Every
+frame it takes one explicit Euler step under acceleration $\mathbf{g}$:
+
+$$
+\mathbf{v} \leftarrow \mathbf{v} + \mathbf{g}\,\Delta t, \qquad
+\mathbf{p} \leftarrow \mathbf{p} + \mathbf{v}\,\Delta t, \qquad
+a \leftarrow a + \Delta t.
+$$
+
+The particle is alive while $a < \tau$, and its opacity fades linearly with the fraction of life elapsed:
+
+$$
+\alpha = 1 - \frac{a}{\tau}.
+$$
+
+At birth the emitter samples a random launch from a base speed $s$ and an angle range, for example
+$\mathbf{v}_0 = s\,(\cos\theta,\ \sin\theta)$ with $\theta$ drawn around straight up. The expected number of
+live particles in steady state is approximately $\text{rate} \times \bar{\tau}$.
+
+```js
+for (const p of pool) {
+  if (!p.active) continue;
+  p.vy += gravity * dt;          // accelerate
+  p.x += p.vx * dt;              // integrate position
+  p.y += p.vy * dt;
+  p.age += dt;
+  p.alpha = 1 - p.age / p.life;  // fade out
+  if (p.age >= p.life) p.active = false;  // recycle the slot
+}
+```
+
+<Callout type="why">
+Particles are the bridge from physics to <strong>rendering</strong>. Once you have positions and alphas, the
+GPU draws each particle as a textured, additively blended quad (a billboard). Thousands of these stacked with
+"lighter" blending are what give fire and magic their glow — which is exactly where the next track picks up.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Explosion VFX" icon="💥">
+An explosion is a one-shot <em>burst</em>: emit a few hundred particles in a single frame with high outward
+speed and short lifetimes, layering fast bright sparks over slower dark smoke. The randomized velocities give
+that ragged, no-two-alike blast shape.
+</ExampleCard>
+
+<ExampleCard domain="Campfire flame" icon="🔥">
+A flame is a continuous emitter with low spawn speed and *negative* gravity (buoyancy) so embers drift upward.
+Color shifts from white-hot at birth to deep red as each particle ages, and the alpha fade makes the tongue of
+fire taper to nothing at the top.
+</ExampleCard>
+
+<ExampleCard domain="Chimney smoke" icon="🏭">
+Smoke uses long lifetimes, large soft particles, gentle upward drift, and a sideways wind force. As particles
+age they grow and fade, so a thin stream from the chimney swells into a dispersing, billowing cloud.
+</ExampleCard>
+
+<ExampleCard domain="Fireworks" icon="🎆">
+A firework chains two systems: a rocket particle climbs, and on death it triggers a radial burst of hundreds
+of glowing sparks with gravity and a slow fade, producing the classic falling-willow trails against the night
+sky.
+</ExampleCard>
+
+<Callout type="note">
+The same machinery scales from cosmetic sparkles to <strong>simulation</strong>: GPU particle systems push
+millions of points for snow, rain, and even crude fluids, all driven by this one born-move-fade-recycle loop.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does an emitter randomize each new particle\'s velocity and lifetime?',
+      options: [
+        'To save memory',
+        'So the crowd fans out and looks natural instead of marching in a single identical line',
+        'To make particles live forever',
+        'To turn off gravity',
+      ],
+      answer: 1,
+      explain: 'Sampling birth properties from a range gives the varied, organic spray that sells effects like sparks and smoke.',
+    },
+    {
+      q: 'Why do particle systems reuse a fixed pool instead of allocating a new object per particle?',
+      options: [
+        'Because particles never die',
+        'To avoid constant allocation and garbage collection when spawning thousands per second',
+        'Because gravity requires it',
+        'To make the alpha fade work',
+      ],
+      answer: 1,
+      explain: 'A recycled pool marks dead slots as free and reuses them, keeping memory flat and avoiding GC churn.',
+    },
+    {
+      q: 'A particle has lifetime 2 seconds and its current age is 0.5 seconds. With a linear fade, what is its alpha?',
+      options: [
+        '0.25',
+        '0.5',
+        '0.75',
+        '1.0',
+      ],
+      answer: 2,
+      explain: 'alpha = 1 - age/lifetime = 1 - 0.5/2 = 0.75.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>particle system</strong> is one emitter spawning many independent, short-lived points.',
+    'Each particle just runs <strong>explicit Euler integration</strong> under gravity, exactly like a single projectile.',
+    '<strong>Randomized</strong> birth velocity and lifetime turn identical specks into a natural-looking spray.',
+    'A <strong>lifetime</strong> with a linear alpha fade (1 - age/lifetime) makes particles dissolve and then die.',
+    'A recycled <strong>pool</strong> keeps memory flat; live count is roughly rate times lifetime, which is your frame budget.',
+  ]}
+/>
+
+Next we hand these positions and alphas to the GPU: the **rendering pipeline** turns billboarded, blended
+particles into the glow you actually see on screen.

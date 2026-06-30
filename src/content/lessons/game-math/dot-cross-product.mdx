@@ -1,0 +1,169 @@
+---
+title: Dot & Cross Product
+track: game-math
+summary: Two small multiplications that reveal angles, facing checks, projections and surface normals.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - game-math/vectors-in-games
+  - linear-algebra/vector-ops-dot
+leadsTo:
+  - game-math/matrices-transforms
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DotCrossFacingLab from '../../../components/demos/DotCrossFacingLab.tsx';
+
+## The hook: can the guard see you?
+
+A stealth game lives or dies on one question asked thousands of times a second: *is the player inside
+the guard's vision cone?* The guard has a facing direction; you are somewhere relative to it. The engine
+does not run a fancy AI to decide — it does **one multiplication and one comparison**. The dot product
+tells it whether you're in front and roughly how far off-center; the cross product tells it whether
+you're to the left or the right. Two tiny operations answer "can the guard see you," "is the wall
+facing the light," and "did the car turn left or right" all at once.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **dot product** measures how much two vectors agree (front/back and angle); the **cross product**
+measures how much they differ in turn (left/right, and in 3D, the perpendicular direction).
+</Callout>
+
+## Intuition: agreement vs turning
+
+You already used the dot product for similarity. In games it wears two hats:
+
+- **Facing check.** With $\mathbf{f}$ the facing direction and $\mathbf{t}$ the direction to a target,
+  the sign of $\mathbf{f} \cdot \mathbf{t}$ says **in front** (positive) or **behind** (negative). Zero
+  means exactly side-on.
+- **Angle / cone.** If both are unit vectors, $\mathbf{f} \cdot \mathbf{t} = \cos\theta$ directly — so
+  comparing the dot to $\cos(\text{halfConeAngle})$ is the entire vision-cone test.
+
+The **cross product** is about *rotation between* the vectors. In 2D it collapses to a single number
+(the $z$ component): its **sign** tells you whether $\mathbf{t}$ is to the **left** ($+$) or **right**
+($-$) of $\mathbf{f}$, and its **magnitude** is the area of the parallelogram they span. In 3D the cross
+product returns a whole vector perpendicular to both — which is exactly how you compute a **surface
+normal** for lighting.
+
+## Play with it
+
+Drag the guard's facing $\mathbf{f}$ and the direction-to-target $\mathbf{t}$. Watch the dot, the angle,
+the cross-$z$, and the live "in front / behind" and "left / right" verdicts.
+
+<DotCrossFacingLab client:visible />
+
+<Callout type="tip">
+Sweep $\mathbf{t}$ slowly around in a circle. The dot flips sign as $\mathbf{t}$ crosses the side-on
+line; the cross flips sign as it crosses the facing line. Each one is a clean yes/no boundary.
+</Callout>
+
+## The formal definition
+
+For $\mathbf{a} = (a_x, a_y)$ and $\mathbf{b} = (b_x, b_y)$, the **dot product** is
+
+$$
+\mathbf{a} \cdot \mathbf{b} = a_x b_x + a_y b_y = \lVert \mathbf{a} \rVert\,\lVert \mathbf{b} \rVert \cos\theta.
+$$
+
+So the angle between them is $\theta = \arccos\!\left(\dfrac{\mathbf{a}\cdot\mathbf{b}}{\lVert\mathbf{a}\rVert\,\lVert\mathbf{b}\rVert}\right)$, and the **scalar projection** of $\mathbf{b}$ onto $\mathbf{a}$ is $\dfrac{\mathbf{a}\cdot\mathbf{b}}{\lVert\mathbf{a}\rVert}$.
+
+The **2D cross product** is a single scalar:
+
+$$
+\mathbf{a} \times \mathbf{b} = a_x b_y - a_y b_x = \lVert \mathbf{a} \rVert\,\lVert \mathbf{b} \rVert \sin\theta.
+$$
+
+In **3D** it is a vector perpendicular to both inputs:
+
+$$
+\mathbf{a} \times \mathbf{b} = \begin{bmatrix} a_y b_z - a_z b_y \\ a_z b_x - a_x b_z \\ a_x b_y - a_y b_x \end{bmatrix}.
+$$
+
+```glsl
+// A triangle's surface normal, the building block of lighting
+vec3 normal = normalize(cross(b - a, c - a));
+float brightness = max(dot(normal, lightDir), 0.0);  // facing the light?
+```
+
+<Callout type="why">
+The dot product is the most common single operation in graphics: <strong>every lit pixel</strong>
+computes <code>dot(normal, lightDir)</code> to decide how bright it is. The cross product builds the
+normals that dot product needs. The two are a team.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Stealth AI" icon="🥷">
+A guard sees you when you're inside its cone: normalize the direction to the player, then check
+$\mathbf{f} \cdot \hat{\mathbf{t}} > \cos(30°)$ for a 60°-wide cone. One dot product replaces any amount
+of hand-tuned trigonometry.
+</ExampleCard>
+
+<ExampleCard domain="Racing AI" icon="🏁">
+To know if a rival should steer left or right toward the next checkpoint, take the cross product of the
+car's forward vector with the direction to the checkpoint. Positive $z$? Turn left. Negative? Turn
+right. The magnitude even tells you how hard.
+</ExampleCard>
+
+<ExampleCard domain="3D lighting" icon="💡">
+A flat-shaded polygon's brightness is $\max(0, \mathbf{n} \cdot \mathbf{l})$ — the dot of its surface
+normal with the light direction. Faces pointing at the light glow; faces turned away (negative dot)
+clamp to black. The normal $\mathbf{n}$ itself came from a cross product of two edges.
+</ExampleCard>
+
+<ExampleCard domain="Physics: which side" icon="⚖️">
+Collision code asks "is this point on the inside of that wall?" by crossing the wall's edge vector with
+the vector to the point. The sign places the point left or right of the edge — the foundation of the
+separating-axis test and 2D polygon containment.
+</ExampleCard>
+
+<Callout type="note">
+Memory aid: <strong>dot → how aligned</strong> (a number that peaks when parallel), <strong>cross → how
+perpendicular / which side</strong> (peaks when at right angles, sign gives handedness).
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A guard faces f = [1, 0]. The player is in direction t = [-2, 1]. Is the player in front or behind?',
+      options: ['In front', 'Behind', 'Exactly side-on', 'Cannot tell'],
+      answer: 1,
+      explain: 'f · t = (1)(−2) + (0)(1) = −2, which is negative, so the player is behind the guard.',
+    },
+    {
+      q: 'Both f and t are unit vectors. Which test decides if t is inside a vision cone of half-angle 25°?',
+      options: [
+        'f × t > 25',
+        'f · t > cos(25°)',
+        'f · t < sin(25°)',
+        '|f − t| > 25',
+      ],
+      answer: 1,
+      explain: 'For unit vectors f · t = cos θ. Being inside the cone means θ < 25°, i.e. cos θ > cos(25°).',
+    },
+    {
+      q: 'For f = [1, 0] and t = [0, 1], the 2D cross product f × t = (1)(1) − (0)(0) = 1. What does the positive sign mean?',
+      options: ['t is behind f', 't is to the left of f', 't is to the right of f', 't equals f'],
+      answer: 1,
+      explain: 'A positive 2D cross product means t is rotated counter-clockwise from f — to its left.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>dot product</strong> equals ‖a‖‖b‖cos θ — its sign tells front (+) vs behind (−), and for unit vectors it <em>is</em> the cosine of the angle.',
+    'A <strong>vision-cone test</strong> is just <code>dot &gt; cos(halfAngle)</code> on normalized vectors.',
+    'The <strong>2D cross product</strong> is one number: its sign gives left (+) / right (−), its magnitude the spanned area.',
+    'The <strong>3D cross product</strong> returns a vector perpendicular to both — how surface <strong>normals</strong> are built.',
+    'Lighting multiplies the two ideas: <code>dot(normal, lightDir)</code> on a normal that came from a <code>cross</code>.',
+  ]}
+/>
+
+Next up: **matrices and transforms** — packaging translation, rotation and scaling into grids of
+numbers you can compose and apply to whole sprites at once.

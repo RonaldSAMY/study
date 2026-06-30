@@ -1,0 +1,171 @@
+---
+title: Client-Server vs P2P
+track: networking
+summary: Who owns the truth? Authoritative servers versus peer-to-peer, the topologies they imply, and how each one fights cheating.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - networking/networking-basics
+leadsTo:
+  - networking/client-prediction
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import NetTopologyDiagram from '../../../components/demos/NetTopologyDiagram.tsx';
+
+## The hook: who decides whether you got the kill?
+
+Two players, two computers, one disagreement: your screen says you fired first, theirs says they did. Somebody
+has to be **right**. The answer to "who decides?" shapes everything about a multiplayer game — its cost, its
+latency, and how hard it is to cheat. There are two classic answers. In **client-server**, one trusted machine
+is the referee. In **peer-to-peer (P2P)**, the players talk directly and somehow agree among themselves. Now
+that you know packets cross a network with real latency, let's see how those packets are *routed* between
+players.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **client-server** game has one authoritative referee that owns the real game state; a **peer-to-peer** game
+has no referee — players exchange state directly and must trust each other.
+</Callout>
+
+## Intuition: a referee versus a group chat
+
+Picture the network you built last lesson, but now there are several players. How do their packets find each
+other?
+
+- **Client-server**: every player (a *client*) sends input to a central **server**. The server simulates the
+  one true world, then broadcasts the result to everyone. Two hops — client to server, server to clients —
+  but exactly **one source of truth**.
+- **Peer-to-peer**: every player connects to every other player and sends their own state directly. One hop,
+  but the number of connections explodes, and **nobody is in charge**.
+
+That second point — who is in charge — is the heart of **cheating**. If your own machine decides "I hit them,"
+a hacked client can simply *claim* anything. If a server decides, your client can only ever *ask*.
+
+## Play with it
+
+Toggle between the two topologies and click any player to send an update. In **client-server**, the message
+takes two hops through the SERVER and the link count stays small. In **peer-to-peer**, every player wires
+directly to every other, so the connections multiply fast.
+
+<NetTopologyDiagram client:visible />
+
+<Callout type="tip">
+Count the links as you switch. With 4 players, client-server needs 4 connections; P2P needs 6. The P2P number
+grows much faster — which is exactly the formula in the next section.
+</Callout>
+
+## The formal definition
+
+In **client-server** with $n$ players, each client holds exactly one connection to the server:
+
+$$
+\text{links}_{\text{CS}} = n.
+$$
+
+In a **full-mesh P2P** game, every pair of players is connected, so the count is "$n$ choose 2":
+
+$$
+\text{links}_{\text{P2P}} = \binom{n}{2} = \frac{n(n-1)}{2}.
+$$
+
+That quadratic growth is brutal. Each peer must also *send* its state to every other peer, so one peer's
+upload scales like $n - 1$, and the **total** messages per update step grow like
+
+$$
+M_{\text{P2P}} = n(n-1) = O(n^2),
+$$
+
+versus client-server's $O(n)$ relayed through the hub. For cheating, define an **authority** function $A$ that
+maps a proposed action to the accepted game state. Client-server sets $A = \text{server}$ (one trusted
+evaluator); pure P2P sets $A = \text{each client for itself}$, which is why it is so easy to exploit.
+
+<Callout type="why">
+Authority is the security model. An **authoritative server** validates every action against the real rules:
+"Were you actually in line of sight? Do you actually have ammo?" A cheating client can lie about its inputs,
+but it cannot forge the server's verdict. This is why nearly all competitive games are server-authoritative —
+and why the prediction tricks coming next are needed to make a *remote* referee still feel instant.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="MMORPG" icon="🐉">
+A world with thousands of players can't be full-mesh — $\binom{5000}{2}$ is over twelve million links. MMOs use
+big authoritative **server clusters**, sharding the world across machines so each one referees a region. The
+topology choice is forced by the math.
+</ExampleCard>
+
+<ExampleCard domain="Fighting games" icon="🥊">
+One-on-one fighters often use P2P with **rollback netcode**: only two peers, so $\binom{2}{2}=1$ link and
+minimal latency between them. With just two trusted friends and frame-perfect timing needs, P2P's directness
+wins over a server's extra hop.
+</ExampleCard>
+
+<ExampleCard domain="Co-op party games" icon="🎲">
+Many casual co-op titles use a **listen server**: one player's machine acts as both a client *and* the host.
+Cheap and simple for friends, but the host has a latency advantage and could tamper with the game — fine for
+a living-room session, risky for ranked play.
+</ExampleCard>
+
+<ExampleCard domain="Blockchain / Web3 games" icon="⛓️">
+Decentralized games push P2P to its limit: no single server, so they replace the referee with **consensus** —
+the network collectively agrees on state. It removes the trusted host but pays with heavy coordination cost,
+the same $O(n^2)$ chatter tax shown in the demo.
+</ExampleCard>
+
+<Callout type="note">
+Real games blend these. A "client-server" shooter still lets clients *predict* locally (next lesson), and a
+"P2P" fighter still nominates a host for matchmaking. The labels describe *where authority lives*, not a rigid
+wiring diagram.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In a full-mesh P2P game with 6 players, how many direct connections exist?',
+      options: ['6', '12', '15', '36'],
+      answer: 2,
+      explain: 'Use n(n−1)/2 = 6·5/2 = 15. Every pair of players needs its own link, which is why P2P scales poorly.',
+    },
+    {
+      q: 'Why is an authoritative server the standard choice for competitive games?',
+      options: [
+        'It removes all network latency',
+        'It is the only topology that works on the internet',
+        'One trusted machine validates every action, so a hacked client can lie about inputs but cannot forge the outcome',
+        'It uses less bandwidth than any alternative',
+      ],
+      answer: 2,
+      explain: 'Authority is the security model: when the server decides outcomes, clients can only request actions, not dictate results. That makes cheating far harder.',
+    },
+    {
+      q: 'A studio expects matches of up to 100 players. Which architecture does the scaling math favor?',
+      options: [
+        'Full-mesh P2P, because direct links are always fastest',
+        'Client-server, because messages grow like n instead of n²',
+        'Either one — player count does not affect cost',
+        'P2P, because it needs no servers',
+      ],
+      answer: 1,
+      explain: 'P2P links grow as n(n−1)/2 — about 4950 links for 100 players — while client-server grows linearly with n. Large matches need a hub.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'In <strong>client-server</strong>, one authoritative machine owns the true state; in <strong>P2P</strong>, peers exchange state directly with no referee.',
+    'P2P links grow quadratically as <strong>n(n−1)/2</strong>, while client-server grows linearly as <strong>n</strong>.',
+    '<strong>Authority</strong> is the anti-cheat model: a server can reject illegal actions a hacked client cannot.',
+    'P2P shines for tiny, trusted groups (2-player fighters); client-server dominates large or competitive games.',
+    'Real games <strong>blend</strong> both — the label says where authority lives, not the exact wiring.',
+  ]}
+/>
+
+Next up: if the referee is far away, how can the controls still feel instant? Enter **client-side prediction
+and server reconciliation** — the trick that hides the round trip you measured in lesson one.

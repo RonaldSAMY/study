@@ -1,0 +1,174 @@
+---
+title: Matrices & Transforms
+track: game-math
+summary: Packaging translation, rotation and scaling into matrices you can compose and apply to whole sprites.
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - linear-algebra/matrix-multiplication
+  - game-math/vectors-in-games
+leadsTo:
+  - game-math/coordinate-spaces
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SpriteTransformMatrixLab from '../../../components/demos/SpriteTransformMatrixLab.tsx';
+
+## The hook: one number-grid moves a whole sprite
+
+A character sprite is hundreds of vertices. When the player turns, jumps onto a moving platform, and the
+camera zooms, every one of those vertices must move *together* and *consistently*. You could write three
+separate code paths — one to shift, one to spin, one to resize — but games instead fold all of it into a
+single **transform matrix**. Multiply each vertex by that one grid of numbers and it is simultaneously
+translated, rotated and scaled. Better still, matrices **compose**: parent a sword to a hand to an arm,
+and you just multiply their matrices.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **transform matrix** is a single grid of numbers that, when multiplied by a point, moves, turns and
+resizes it all at once — and chaining transforms is just **multiplying** their matrices.
+
+</Callout>
+
+## Intuition: why a 3×3 for a 2D world?
+
+You already know matrix multiplication composes linear transformations. Rotation and scaling are linear
+— they keep the origin fixed — so a $2 \times 2$ matrix handles them. But **translation** (sliding) is
+*not* linear: it moves the origin. The fix is a famous trick: add a third coordinate that's always 1
+("homogeneous coordinates"), so a 2D point becomes $(x, y, 1)$. Now a $3 \times 3$ matrix can sneak the
+translation into its last column, and *all three* operations live in one matrix.
+
+$$
+\begin{bmatrix} x' \\ y' \\ 1 \end{bmatrix} =
+\begin{bmatrix} a & b & t_x \\ c & d & t_y \\ 0 & 0 & 1 \end{bmatrix}
+\begin{bmatrix} x \\ y \\ 1 \end{bmatrix}.
+$$
+
+The top-left $2\times2$ block does rotation and scaling; the top-right column $(t_x, t_y)$ does the
+slide; the bottom row stays $[0\ 0\ 1]$ to keep the trick consistent.
+
+## Play with it
+
+Slide the controls to translate, rotate and scale the sprite. The ghost square is the original; the
+indigo square is transformed. Watch the composed matrix $M = T \cdot R \cdot S$ update live.
+
+<SpriteTransformMatrixLab client:visible />
+
+<Callout type="tip">
+Set rotation to 90° and notice the scale-x slider now stretches the sprite <em>vertically</em> on
+screen. Order matters: in $T \cdot R \cdot S$ the scale happens first (in the sprite's own frame), then
+the rotation, then the translation.
+</Callout>
+
+## The formal definition
+
+The three primitive 2D transforms as homogeneous matrices:
+
+$$
+T = \begin{bmatrix} 1 & 0 & t_x \\ 0 & 1 & t_y \\ 0 & 0 & 1 \end{bmatrix}, \quad
+R = \begin{bmatrix} \cos\theta & -\sin\theta & 0 \\ \sin\theta & \cos\theta & 0 \\ 0 & 0 & 1 \end{bmatrix}, \quad
+S = \begin{bmatrix} s_x & 0 & 0 \\ 0 & s_y & 0 \\ 0 & 0 & 1 \end{bmatrix}.
+$$
+
+A combined transform is their product. The conventional **scale, then rotate, then translate** order is
+
+$$
+M = T \cdot R \cdot S.
+$$
+
+Because matrix multiplication is **not commutative**, $T \cdot R \neq R \cdot T$: rotating then sliding
+sends an object somewhere different than sliding then rotating. Read the chain **right-to-left** — the
+matrix nearest the point acts first.
+
+```glsl
+// A vertex shader's heart: one matrix-times-point per vertex
+gl_Position = u_model * vec4(localPos, 1.0);  // local -> world in one multiply
+```
+
+<Callout type="why">
+The GPU runs this exact multiply for <em>every vertex of every object every frame</em> — millions of
+times. Folding T, R and S into one matrix means the GPU does a single multiply instead of three, which
+is a big reason games push so much geometry.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="2D platformers" icon="🎮">
+A spinning coin pickup has a matrix $T(\text{coinPos}) \cdot R(\text{spin}) \cdot S(\text{bob})$. The
+engine rebuilds it each frame from three numbers and the coin translates, rotates and gently pulses with
+one multiply per vertex.
+</ExampleCard>
+
+<ExampleCard domain="RPG equipment" icon="🗡️">
+A sword's world matrix is the hand's matrix times the sword's local matrix. Parent the hand to the arm to
+the torso and the chain of multiplications means the blade follows every joint automatically — no manual
+position juggling. This is the scene graph.
+</ExampleCard>
+
+<ExampleCard domain="Strategy games" icon="🏰">
+Placing a hundred identical barracks reuses one mesh with a hundred different transform matrices — each
+just a translate, a facing rotation and a scale. The GPU instances them, drawing the lot in essentially
+one call.
+</ExampleCard>
+
+<ExampleCard domain="UI & menus" icon="🖱️">
+A pop-up that slides in while growing from nothing animates a single matrix: translate from off-screen
+and scale from 0 to 1 over a fraction of a second. The same matrix math that moves 3D worlds also drives
+the buttons you click.
+</ExampleCard>
+
+<Callout type="note">
+Multiplication order is the number-one transform bug. "Scale-rotate-translate" ($T\,R\,S$ applied to a
+column point) is the safe default; flip it and your object orbits the origin instead of spinning in place.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why do 2D game engines use 3×3 matrices instead of 2×2 for transforms?',
+      options: [
+        'To make rotation faster',
+        'So that translation (which is not linear) can be included alongside rotation and scale',
+        'Because the screen is 3-dimensional',
+        'It is just a tradition with no real reason',
+      ],
+      answer: 1,
+      explain: 'Translation moves the origin and is not a linear map, so it cannot fit in a 2×2 matrix. Homogeneous coordinates add a third row/column so a 3×3 matrix can carry the translation too.',
+    },
+    {
+      q: 'You build M = T · R · S and multiply it by a point. Which transform is applied to the point first?',
+      options: ['T (translate)', 'R (rotate)', 'S (scale)', 'They all apply simultaneously with no order'],
+      answer: 2,
+      explain: 'Read right-to-left: the matrix closest to the point acts first, so S (scale) happens first, then R, then T.',
+    },
+    {
+      q: 'Why is the order of T and R important?',
+      options: [
+        'Matrix multiplication is not commutative, so T·R and R·T give different results',
+        'It is not important; the result is always the same',
+        'Because rotation matrices have no inverse',
+        'Because translation is always zero',
+      ],
+      answer: 0,
+      explain: 'Matrix multiplication does not commute. Rotating then translating places the object differently than translating then rotating.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>transform matrix</strong> moves, rotates and scales a point in a single multiplication.',
+    '<strong>Homogeneous coordinates</strong> (adding a 1) let a 3×3 matrix include translation, which a 2×2 cannot.',
+    'Combine transforms by <strong>multiplying matrices</strong>; the usual order is M = T · R · S.',
+    'Matrix multiplication is <strong>not commutative</strong> — order changes the result, and you read the chain right-to-left.',
+    'Parenting objects (a <strong>scene graph</strong>) is just chaining each object’s matrix onto its parent’s.',
+  ]}
+/>
+
+Next up: **coordinate spaces** — following a point as its transforms carry it from local space, into the
+world, through the camera, and finally onto your screen.

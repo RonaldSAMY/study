@@ -1,0 +1,183 @@
+---
+title: Kinematics
+track: game-physics
+summary: Every frame, an entity's acceleration nudges its velocity and its velocity nudges its position — that tiny chain is how games make things move.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - calculus-1/derivative
+  - game-math/vectors-in-games
+leadsTo:
+  - game-physics/forces-newton
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ProjectileArcLab from '../../../components/demos/ProjectileArcLab.tsx';
+
+## The hook: why does Mario's jump look so *right*?
+
+Press jump in any good platformer and the hero leaps up, slows at the top, hangs for a heartbeat, then
+falls faster and faster until they land. Nobody hand-drew that arc. The engine knows three numbers about
+Mario — where he is, how fast he is going, and how gravity is changing that speed — and it just updates
+them sixty times a second. That trio is **position, velocity, and acceleration**, and the rule that
+links them is the beating heart of every physics engine ever shipped.
+
+<Callout type="intuition" title="The one-sentence idea">
+Acceleration changes velocity, velocity changes position, and a game just repeats <strong>v += a·Δt;
+p += v·Δt</strong> every single frame.
+</Callout>
+
+## Intuition
+
+You already know from calculus that the **derivative** measures a rate of change. Kinematics is that idea
+wearing a costume:
+
+- **Velocity is the derivative of position** — how fast your location is changing right now.
+- **Acceleration is the derivative of velocity** — how fast your speed-and-direction is changing.
+
+A game runs this backwards. It does not differentiate; it **integrates**, one tiny step at a time. Given
+the current acceleration, it adds a little to the velocity; given the new velocity, it adds a little to
+the position. Each step covers $\Delta t$ seconds (the time since the last frame). Stack thousands of
+these micro-steps together and a smooth, believable arc falls out — exactly the curve a derivative would
+have predicted, rebuilt from the bottom up.
+
+And because position and velocity are **vectors** (from the previous lesson), the very same update runs
+independently on $x$ and $y$. Horizontal motion coasts along untouched while gravity quietly drains the
+vertical velocity — which is precisely why a jump traces a parabola.
+
+## Play with it
+
+Set a launch speed, an angle, and a gravity strength, then press **Launch** and watch the integrator
+trace the arc one frame at a time. The dashed indigo curve is the textbook prediction; the green trail
+is what the frame-by-frame update actually produces.
+
+<ProjectileArcLab client:visible />
+
+<Callout type="tip">
+Crank gravity down toward the moon and the same launch sails far and floats; crank it up and the arc
+slams back fast. Notice the horizontal velocity never changes — only the vertical part feels gravity.
+</Callout>
+
+## The formal definition
+
+Track an entity with a position vector $\mathbf{p}$, a velocity vector $\mathbf{v}$, and an acceleration
+vector $\mathbf{a}$. Calculus defines velocity and acceleration as derivatives:
+
+$$
+\mathbf{v} = \frac{d\mathbf{p}}{dt}, \qquad \mathbf{a} = \frac{d\mathbf{v}}{dt} = \frac{d^2\mathbf{p}}{dt^2}.
+$$
+
+A game cannot take a true derivative mid-play, so it approximates the integral with small steps of size
+$\Delta t$. The workhorse is **semi-implicit Euler** — update velocity first, then use that fresh velocity
+to move position:
+
+$$
+\mathbf{v}_{\text{new}} = \mathbf{v} + \mathbf{a}\,\Delta t, \qquad
+\mathbf{p}_{\text{new}} = \mathbf{p} + \mathbf{v}_{\text{new}}\,\Delta t.
+$$
+
+For the special case of *constant* acceleration (like gravity), calculus even gives a closed form you can
+check the simulation against:
+
+$$
+\mathbf{p}(t) = \mathbf{p}_0 + \mathbf{v}_0\,t + \tfrac{1}{2}\,\mathbf{a}\,t^2.
+$$
+
+```js
+// One physics step (per frame). dt = seconds since last frame.
+function integrate(body, dt) {
+  body.vx += body.ax * dt;   // velocity gets nudged by acceleration
+  body.vy += body.ay * dt;
+  body.x  += body.vx * dt;   // position gets nudged by the new velocity
+  body.y  += body.vy * dt;
+}
+```
+
+<Callout type="why">
+This step-by-step integration is the same trick machine learning uses in gradient descent: you can't jump
+to the answer, so you take many small steps in the direction of change. Games integrate motion; optimizers
+integrate down a loss surface. Master the loop once and both click into place.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Platformers" icon="🍄">
+A jump sets vertical velocity to a big upward value, then every frame gravity subtracts from it. The hero
+rises while $v_y$ is positive, freezes for one frame as $v_y$ crosses zero (the famous "hang time"), then
+falls as $v_y$ goes negative. Tuning gravity and jump speed is literally tuning $\mathbf{a}$ and
+$\mathbf{v}_0$.
+</ExampleCard>
+
+<ExampleCard domain="Basketball free throw" icon="🏀">
+A shooting game launches the ball with an initial speed and angle, then only gravity acts. Whether it
+swishes is decided entirely by $\mathbf{p}(t) = \mathbf{p}_0 + \mathbf{v}_0 t + \tfrac{1}{2}\mathbf{a}t^2$
+passing through the hoop's position at some time $t$. Aim is just solving that equation.
+</ExampleCard>
+
+<ExampleCard domain="Artillery games" icon="💣">
+In Worms or a tank-duel game, you pick power (initial speed) and angle; the shell then free-falls under a
+constant downward acceleration. Wind can be modeled as a small *horizontal* acceleration, so $a_x$ is no
+longer zero and the horizontal velocity slowly drifts — a tiny change to the same update loop.
+</ExampleCard>
+
+<ExampleCard domain="Drag racing" icon="🏎️">
+A dragster sim holds a large *forward* acceleration while the throttle is down, so velocity climbs every
+frame and the distance covered grows like $\tfrac{1}{2}a t^2$. The speedometer reads $\lVert\mathbf{v}\rVert$,
+and the quarter-mile time is just asking when accumulated position hits the finish line.
+</ExampleCard>
+
+<Callout type="note">
+Same four lines of code, four genres. The only thing that changes between a jump, a free throw, an
+artillery shell, and a dragster is the <strong>acceleration vector</strong> you feed the loop.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the per-frame loop, what is the correct order of updates (semi-implicit Euler)?',
+      options: [
+        'Update position from velocity, then velocity from acceleration',
+        'Update velocity from acceleration, then position from the new velocity',
+        'Update position and velocity from acceleration at the same time',
+        'Update acceleration from position, then velocity',
+      ],
+      answer: 1,
+      explain: 'Acceleration nudges velocity first; the fresh velocity then nudges position. That ordering (semi-implicit Euler) is more stable than updating position first.',
+    },
+    {
+      q: 'A projectile starts with vy = 12 m/s upward and gravity gives a = -10 m/s². Using v += a·Δt with Δt = 0.5 s, what is vy after one step?',
+      options: ['12 m/s', '7 m/s', '2 m/s', '-5 m/s'],
+      answer: 1,
+      explain: 'vy_new = 12 + (-10)(0.5) = 12 - 5 = 7 m/s. Gravity shaved 5 m/s off the upward speed.',
+    },
+    {
+      q: 'Why does multiplying by Δt matter in the update?',
+      options: [
+        'It makes the numbers larger so motion is visible',
+        'It keeps motion frame-rate independent, so the same distance is covered per second on any hardware',
+        'It converts velocity into acceleration',
+        'It is only needed when there is no gravity',
+      ],
+      answer: 1,
+      explain: 'Δt is the seconds elapsed this frame. Scaling by it means a 144 Hz PC and a 30 Hz phone take different-sized steps but cover the same real distance per second.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Velocity is the derivative of position</strong> and <strong>acceleration is the derivative of velocity</strong> — kinematics is just calculus running per frame.',
+    'Games <strong>integrate</strong> instead of differentiate: each frame add <strong>a·Δt</strong> to velocity, then <strong>v·Δt</strong> to position.',
+    'Update <strong>velocity first, then position</strong> (semi-implicit Euler) for stable, believable motion.',
+    'Because position and velocity are <strong>vectors</strong>, x and y update independently — constant gravity on y alone produces a parabolic arc.',
+    'Multiplying by <strong>Δt</strong> makes movement <strong>frame-rate independent</strong>: same distance per second on fast or slow hardware.',
+  ]}
+/>
+
+Next up: **Forces & Newton's Laws** — where instead of setting acceleration by hand, we *earn* it by summing up gravity, drag, thrust and impulses with $\mathbf{a} = \mathbf{F}/m$.

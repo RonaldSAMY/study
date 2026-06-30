@@ -1,0 +1,167 @@
+---
+title: Hash Maps
+track: data-structures
+summary: Find anything instantly by key — turning a name or ID into an array index through hashing, and handling collisions.
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - data-structures/arrays-memory
+leadsTo:
+  - data-structures/trees
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import HashBucketDistributor from '../../../components/demos/HashBucketDistributor.tsx';
+
+## The hook: finding a player by name
+
+Your game server has 100,000 players online. Someone whispers `/tell Aria hello`. The server has to find
+Aria's record — health, position, inventory — *right now*, before the next frame. It can't scan 100,000
+players looking for "Aria"; that would lag the whole world. Instead it does something that feels like
+cheating: it turns the **name** "Aria" directly into a storage slot, jumps there, and grabs the record.
+No search. The structure that pulls this off is the **hash map** (also called a hash table or dictionary).
+
+<Callout type="intuition" title="The one-sentence idea">
+A **hash map** turns a key into an array index by running it through a <strong>hash function</strong>, so
+you can store and retrieve values by name in roughly one step.
+</Callout>
+
+## Intuition: from key to slot
+
+Arrays are brilliant when you know the *numeric index*. But real data is keyed by *names*: a username, an
+item ID, a country code. A hash map bridges the gap with a **hash function** — a little routine that
+chews up any key and spits out a number.
+
+The recipe is simple:
+
+1. **Hash** the key into a big number: `hash("Aria")` might be `2,041,553`.
+2. **Squeeze** it into the array's range with the remainder operator: that number mod the bucket count.
+3. **Store** the value in that bucket. To look it up later, repeat the same steps — you land on the same
+   bucket and there it is.
+
+Because hashing and the remainder are both fixed, fast operations, this is $O(1)$ on average — the time to
+find Aria doesn't grow as more players join.
+
+But two different keys can hash to the *same* bucket. That's a **collision**, and it's unavoidable: you're
+mapping unlimited possible keys into a finite number of buckets. A common fix, **chaining**, simply keeps a
+short list in each bucket. As long as the buckets stay roughly balanced, those lists stay tiny and lookup
+stays fast.
+
+## Play with it
+
+Insert some names. Watch each one get hashed, reduced to a bucket index, and dropped in. Add enough and
+you'll trigger a **collision** — two names sharing a bucket, chained into a little list.
+
+<HashBucketDistributor client:visible />
+
+<Callout type="tip">
+Insert the same name twice — nothing changes, because it hashes to the same bucket and the key already
+exists. That's the "map" promise: one value per key, found in one hop.
+</Callout>
+
+## The formal definition
+
+A hash map stores key–value pairs across an array of $m$ buckets. A hash function $h$ maps a key to a
+bucket index:
+
+$$
+\text{index} = h(\text{key}) \bmod m.
+$$
+
+The **load factor** measures how full it is — entries $n$ divided by buckets $m$:
+
+$$
+\alpha = \frac{n}{m}.
+$$
+
+With a good hash function spreading keys evenly, the average chain length is $\alpha$, so insert, lookup,
+and delete are all $O(1)$ **on average**. If $\alpha$ grows too large, the map **resizes** (more buckets)
+and rehashes — keeping chains short. The worst case, where every key collides into one bucket, degrades to
+$O(n)$, which is why a good hash function matters.
+
+<Callout type="why">
+Hash maps are everywhere in ML and AI plumbing: tokenizers map a word to its integer ID via a hash-backed
+vocabulary, feature stores look up embeddings by entity ID, and caches avoid recomputing results by keying
+on their inputs. "Look it up by name, instantly" is one of the most reused ideas in all of computing.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Library" icon="📚">
+A library's catalog turns a title into a shelf code, sending you straight to the right aisle instead of
+walking past every book. Two books assigned the same code sit together — a real-world collision handled by
+just checking the few books there.
+</ExampleCard>
+
+<ExampleCard domain="Postal system" icon="📮">
+A postcode hashes a street address into a delivery zone. The sorting machine reads the code and flings the
+parcel into the matching bin in one motion — no reading the full address to decide where it goes.
+</ExampleCard>
+
+<ExampleCard domain="Coat check" icon="🧥">
+You hand over a coat and get a numbered tag. The number is a key straight to the hook holding your coat —
+the attendant doesn't search the rack, they go to hook 47 directly.
+</ExampleCard>
+
+<ExampleCard domain="Contacts app" icon="📇">
+Your phone finds a friend's number the instant you type their name. The contact name is the key; the app
+hashes it to jump straight to the record rather than reading the whole address book.
+</ExampleCard>
+
+<Callout type="warning">
+A hash map gives up one thing the array and tree keep: <strong>order</strong>. Iterating a hash map yields
+keys in a scrambled, hash-dependent sequence. If you need sorted or ordered traversal, that's a job for the
+trees coming next.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the job of the hash function in a hash map?',
+      options: [
+        'To sort the keys alphabetically',
+        'To turn a key into an array index where its value is stored',
+        'To compress the values to save memory',
+        'To encrypt the keys for security',
+      ],
+      answer: 1,
+      explain: 'The hash function maps an arbitrary key to a bucket index, letting you store and retrieve by key in about one step.',
+    },
+    {
+      q: 'Two different keys hash to the same bucket. What is this called, and is it avoidable?',
+      options: [
+        'A crash; it must be prevented',
+        'A collision; it is unavoidable but handled (e.g. by chaining)',
+        'A rehash; it never happens with good code',
+        'A load factor; it only happens when full',
+      ],
+      answer: 1,
+      explain: 'Mapping unlimited keys into finite buckets guarantees collisions. Chaining keeps a short list per bucket to handle them.',
+    },
+    {
+      q: 'A hash map has 8 buckets and currently holds 6 entries. What is its load factor?',
+      options: ['0.75', '1.33', '6', '48'],
+      answer: 0,
+      explain: 'Load factor α = n / m = 6 / 8 = 0.75. Keeping α modest keeps chains short and lookups near O(1).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>hash map</strong> stores values by key, using a <strong>hash function</strong> to turn a key into a bucket index.',
+    'The index is <strong>h(key) mod m</strong>, giving average <strong>O(1)</strong> insert, lookup, and delete.',
+    'Different keys can map to the same bucket — a <strong>collision</strong> — handled by chaining short lists.',
+    'The <strong>load factor</strong> n/m tracks fullness; when it grows, the map resizes and rehashes to stay fast.',
+    'Hash maps trade away <strong>order</strong> for speed, and underpin tokenizers, caches, and ID lookups everywhere.',
+  ]}
+/>
+
+Next up: **trees** — when your data isn't a flat lookup but a branching hierarchy, like a scene graph, a
+skill tree, or a folder of game assets.

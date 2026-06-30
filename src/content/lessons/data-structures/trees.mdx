@@ -1,0 +1,151 @@
+---
+title: Trees
+track: data-structures
+summary: Branching hierarchies of nodes — from scene graphs to skill trees — and the orders in which you can walk them.
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - data-structures/dynamic-arrays
+leadsTo:
+  - data-structures/graphs
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TreeTraversalExplorer from '../../../components/demos/TreeTraversalExplorer.tsx';
+
+## The hook: the skill tree
+
+Open the character screen in almost any RPG and you'll see it: a **skill tree**. *Combat* branches into
+*Melee* and *Magic*; *Melee* unlocks *Sword* and *Shield*. You can't grab *Sword* without first taking
+*Melee*, which needs *Combat*. The data isn't a flat list or a lookup table — it's a **hierarchy**, where
+each thing has a parent and may have children. That branching shape is a **tree**, and once you see it you
+will find it everywhere: the folders holding your game's assets, the menu you're navigating, even the scene
+of objects the engine draws each frame.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **tree** is a set of nodes where each node has exactly one parent (except the top <strong>root</strong>)
+and any number of children — a branching hierarchy with no loops.
+
+</Callout>
+
+## Intuition: family trees for data
+
+Unlike an array (a flat row) or a hash map (an unordered pile), a tree captures *containment* and
+*ancestry*. The vocabulary borrows straight from family trees:
+
+- The **root** is the single node at the top, with no parent.
+- A node's **children** are the nodes directly below it; their shared node above is the **parent**.
+- A **leaf** is a node with no children — the end of a branch.
+- The **depth** of a node is how many steps it is from the root.
+
+A very common special case is the **binary tree**, where each node has at most two children (a "left" and a
+"right"). It's the backbone of search trees, decision trees, and the expression trees a compiler builds.
+
+Crucially, trees have **no cycles**: follow parents upward and you always reach the root, never a loop.
+That guarantee is what makes them safe to walk recursively — and walking them is what we do next.
+
+## Play with it
+
+Below is a small skill tree. **Tap any branch node** to collapse or expand its subtree — just like
+folding a folder. Then run a **traversal** and watch the nodes light up in the order that traversal
+visits them.
+
+<TreeTraversalExplorer client:visible />
+
+<Callout type="tip">
+Compare <strong>Pre</strong> and <strong>Level (BFS)</strong>. Pre-order dives deep down one branch before
+backing up; level-order sweeps across each row top-to-bottom. Same tree, completely different walking
+order — and that choice matters enormously for the graph search coming next.
+</Callout>
+
+## The formal definition
+
+A tree with $n$ nodes has exactly $n - 1$ edges (every node but the root is reached by one edge from its
+parent). To process every node we **traverse** it. The four classic orders are:
+
+- **Pre-order:** visit the node, then its children. *(root → left → right)*
+- **In-order:** left child, node, right child — only meaningful for binary trees. *(left → root → right)*
+- **Post-order:** children first, then the node. *(left → right → root)*
+- **Level-order:** all depth-0 nodes, then depth-1, and so on — a breadth-first sweep.
+
+Each visits all $n$ nodes exactly once, so every traversal is $O(n)$. The depth-first orders (pre, in,
+post) are naturally **recursive** — they lean on the call **stack** from the stacks lesson — while
+level-order uses an explicit **queue**.
+
+<Callout type="why">
+Trees are load-bearing in machine learning. A <strong>decision tree</strong> classifies data by walking
+root-to-leaf, asking one question per node; random forests and gradient boosting stack hundreds of them.
+And a <strong>scene graph</strong> — the tree of objects in a 3D world — is traversed every frame to figure
+out where everything is drawn.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Biology" icon="🌳">
+The tree of life is literally a tree: a common ancestor at the root branches into kingdoms, then species.
+Tracing any two animals back to their shared ancestor is climbing to their lowest common parent.
+</ExampleCard>
+
+<ExampleCard domain="Company org chart" icon="🏢">
+A CEO sits at the root; managers branch into teams branch into employees. Everyone has exactly one direct
+boss (one parent), and the chain of command upward never loops — a textbook hierarchy.
+</ExampleCard>
+
+<ExampleCard domain="Cooking" icon="🍰">
+A recipe breaks into sub-recipes: a cake needs a batter and an icing; the batter needs dry and wet mixes.
+Making it bottom-up — finish each sub-mix before combining — is a <em>post-order</em> traversal in the
+kitchen.
+</ExampleCard>
+
+<ExampleCard domain="Web pages" icon="🧩">
+A web page is a tree of nested elements (the DOM): a page contains sections, which contain paragraphs,
+which contain words. The browser walks this tree to lay everything out and draw it.
+</ExampleCard>
+
+<Callout type="note">
+A tree is the strict, well-behaved cousin of the structure ahead. Loosen the rules — let a node have
+several parents, allow cycles — and a tree becomes a <strong>graph</strong>, the most general structure of
+all.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In a tree, how many parents does every node have (other than the root)?',
+      options: ['Zero', 'Exactly one', 'Exactly two', 'Any number'],
+      answer: 1,
+      explain: 'Every non-root node has exactly one parent. The root alone has none — that is what makes the structure a tree.',
+    },
+    {
+      q: 'A binary tree has a root A with children B (left) and C (right). What is the in-order traversal?',
+      options: ['A, B, C', 'B, A, C', 'B, C, A', 'C, A, B'],
+      answer: 1,
+      explain: 'In-order is left, root, right: visit B, then A, then C → B, A, C.',
+    },
+    {
+      q: 'Which traversal visits a tree level by level (all of depth 0, then depth 1, …) and uses a queue?',
+      options: ['Pre-order', 'In-order', 'Post-order', 'Level-order (BFS)'],
+      answer: 3,
+      explain: 'Level-order sweeps breadth-first across each depth, driven by a queue rather than recursion.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>tree</strong> is a branching hierarchy: one root, every other node with exactly one parent, and no cycles.',
+    'Key terms: <strong>root</strong>, <strong>parent</strong>, <strong>child</strong>, <strong>leaf</strong>, and <strong>depth</strong>.',
+    'A <strong>binary tree</strong> limits each node to at most two children — left and right.',
+    'Traversals visit every node once in <strong>O(n)</strong>: pre-, in-, post-order (depth-first) and level-order (breadth-first).',
+    'Depth-first orders use the call <strong>stack</strong>; level-order uses a <strong>queue</strong> — and trees power decision trees and scene graphs.',
+  ]}
+/>
+
+Next up: **graphs** — drop the "one parent, no loops" rule and you get the most general structure of all,
+the one behind maps, social networks, and game-level navigation.

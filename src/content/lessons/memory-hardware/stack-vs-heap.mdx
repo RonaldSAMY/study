@@ -1,0 +1,187 @@
+---
+title: Stack vs Heap
+track: memory-hardware
+summary: Two ways memory is organized, and when each is used.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - memory-hardware/pointers-references
+leadsTo:
+  - memory-hardware/memory-allocation
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import StackHeapVisualizer from '../../../components/demos/StackHeapVisualizer.tsx';
+
+## The hook: where does a variable actually live?
+
+Your game spawns an enemy. Somewhere in the machine, a `hp` value and a position get real bytes of
+memory. But there are *two completely different neighborhoods* those bytes might come from, and they
+behave like opposite worlds. One is a tidy spring-loaded pile that cleans itself up the instant a
+function ends. The other is a vast warehouse where space stays rented until *you* say otherwise. Pick
+the wrong one and you get either a crash or a slow memory leak that bloats your game over an hour of
+play. These two neighborhoods are the **stack** and the **heap**.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **stack** grows and shrinks automatically with your function calls (last in, first out), while
+the **heap** is a free-for-all pool where you allocate memory by hand and it stays until you free it.
+</Callout>
+
+## Intuition
+
+You already know a **pointer** holds an address. The next question is: an address pointing *where*?
+
+Every running program has a **call stack**. Each time you call a function, the machine pushes a
+**stack frame** onto it — a little bundle holding that call's local variables and the **return
+address** (where to jump back to when the function finishes). When the function returns, its frame is
+**popped** off and every local inside it disappears instantly. No cleanup code, no bookkeeping — just
+moving a marker. That is why locals are described as having *automatic* lifetime.
+
+Because frames are pushed and popped in strict **last-in, first-out** order, the most recent call is
+always the one that finishes first. Call A, which calls B, which calls C: you must finish C before B,
+and B before A. That nesting is exactly what makes recursion work — and what makes runaway recursion
+crash, because each call eats a little more stack until there is none left (**stack overflow**).
+
+The **heap** plays by different rules. When you need memory that must *outlive* the function that
+created it — say, a list of every enemy that should persist across frames — you ask the heap for a
+block. You reach it through a **pointer**, and it stays alive until you explicitly hand it back. The
+stack is fast and automatic but short-lived; the heap is flexible and long-lived but entirely your
+responsibility.
+
+## Play with it
+
+Push and pop stack frames, then allocate on the heap and watch a frame's local pointer reach across to
+a heap block. Try this: allocate a block, then press **Return** *without* freeing it — see the block
+turn red.
+
+<StackHeapVisualizer client:visible />
+
+<Callout type="tip">
+When a frame holding the only pointer to a heap block pops, that block becomes unreachable but still
+allocated — a **memory leak**. The stack cleaned up after itself; the heap did not, because that was
+your job.
+</Callout>
+
+## The formal definition
+
+Think of the stack as memory addressed by a single moving marker, the **stack pointer** $SP$. Calling
+a function whose frame needs $s$ bytes does one cheap arithmetic step:
+
+$$
+\text{call:}\quad SP \leftarrow SP - s, \qquad\qquad \text{return:}\quad SP \leftarrow SP + s.
+$$
+
+(On most machines the stack grows toward lower addresses, hence the subtraction.) After $n$ nested
+calls, the total stack memory in use is simply the sum of the frame sizes:
+
+$$
+M_{\text{stack}} = \sum_{i=1}^{n} s_i \;\le\; M_{\max}.
+$$
+
+If that sum exceeds the fixed stack limit $M_{\max}$ (often a few megabytes), you get a stack
+overflow. The heap has no such tidy formula: a block lives across the half-open interval from when you
+`malloc` it to when you `free` it, independent of any function's lifetime.
+
+```c
+void demo() {
+    int local = 42;                          // on the STACK — freed automatically
+    int *heapData = malloc(sizeof(int) * 100); // on the HEAP — lives until freed
+    heapData[0] = local;
+    free(heapData);                          // you must return heap memory yourself
+}                                            // 'local' disappears here, automatically
+```
+
+<Callout type="why">
+Games and engines live and die by this split. Per-frame scratch values go on the stack so they vanish
+for free at zero cost; long-lived game objects go on the heap so they survive across frames. Choosing
+the right one — and freeing the heap exactly once — is the difference between a smooth 60 FPS and a
+slow leak that crashes after an hour.
+</Callout>
+
+## The same idea, four everyday worlds
+
+The stack-versus-heap contrast is really a contrast between *strictly nested, automatic* lifetimes and
+*open-ended, manual* ones. You meet both all the time.
+
+<ExampleCard domain="Cafeteria" icon="🍽️">
+A spring-loaded **tray dispenser** is a stack. You can only take the **top** tray, and a clean tray
+returns to the top. Last one placed is the first one taken — exactly LIFO. You never reach into the
+middle, just as a program never pops a frame that isn't on top.
+</ExampleCard>
+
+<ExampleCard domain="Toys" icon="🪆">
+**Matryoshka nesting dolls** mirror nested function calls. To reach the smallest doll you must open
+each outer one in order, and you can only close them back up from the inside out. The innermost doll —
+the most recent "call" — is the first one you close. That is the call stack made of wood.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A **self-storage warehouse unit** is the heap. You rent a unit for as long as you like, keep the key
+(the pointer), and your stuff stays there across many visits. But the unit is yours until you
+explicitly end the rental — forget to, and you keep paying for space you no longer use. That forgotten
+rental is a memory leak.
+</ExampleCard>
+
+<ExampleCard domain="Web browsing" icon="🌐">
+Your browser's **back button** walks a call stack of pages. Each link you follow pushes the new page;
+pressing back pops to the previous one. You always return to the *most recent* page first, never
+jumping to one buried three steps down — the same last-in, first-out discipline as function returns.
+</ExampleCard>
+
+<Callout type="note">
+Notice the pattern: the first two examples are automatic and strictly nested (stack), while the
+storage unit is open-ended and manually managed (heap). Same two lifetime models, four different
+worlds.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What happens to a function’s local variables when the function returns?',
+      options: [
+        'They move to the heap',
+        'Their stack frame is popped and they disappear automatically',
+        'They stay until you free them',
+        'They are copied into the caller',
+      ],
+      answer: 1,
+      explain: 'Returning pops the frame off the stack, so all of its locals vanish automatically — no manual cleanup needed.',
+    },
+    {
+      q: 'Each stack frame uses 2 KB and the stack limit is 1 MB (1024 KB). Roughly how many nested calls fit before a stack overflow?',
+      options: ['About 64', 'About 512', 'About 1024', 'About 2048'],
+      answer: 1,
+      explain: 'Total use is the sum of frame sizes: 1024 KB ÷ 2 KB per frame ≈ 512 frames before the limit is hit.',
+    },
+    {
+      q: 'You malloc a heap block inside a function, then the function returns without calling free. What happens?',
+      options: [
+        'The block is freed automatically with the frame',
+        'The block leaks: still allocated but now unreachable',
+        'The program crashes immediately',
+        'The block moves onto the stack',
+      ],
+      answer: 1,
+      explain: 'Heap memory is not tied to the frame. If the only pointer was a local that just popped, the block stays allocated yet unreachable — a leak.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>stack</strong> holds a frame per function call (locals + return address), pushed on call and popped on return in strict <strong>LIFO</strong> order.',
+    'Stack memory has <strong>automatic lifetime</strong> and is extremely fast — allocating is just moving the stack pointer.',
+    'The <strong>heap</strong> is for memory that must outlive its function; you reach it via pointers and it lives until you explicitly free it.',
+    'Deep or runaway recursion grows the stack past its fixed limit and causes a <strong>stack overflow</strong>.',
+    'Forgetting to free a heap block whose last pointer is gone causes a <strong>memory leak</strong> — the stack cleans up after itself, the heap does not.',
+  ]}
+/>
+
+Next up: **Memory Allocation** — how the allocator and the OS actually carve up the heap, hand out
+blocks with `malloc`, and why free space can exist yet still fail a request.

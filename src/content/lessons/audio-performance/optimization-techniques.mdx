@@ -1,0 +1,167 @@
+---
+title: Optimization Techniques
+track: audio-performance
+summary: Batching, instancing, LOD and culling — the art of drawing far more by doing far less work.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - memory-hardware/data-oriented-design
+leadsTo: []
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import DrawCallOptimizer from '../../../components/demos/DrawCallOptimizer.tsx';
+
+## The hook: how does one frame draw a million blades of grass?
+
+A modern open world fills the screen with grass, trees, rocks and crowds — far more than any GPU could
+draw "one object at a time" inside 16.6 ms. The trick is never to do the obvious thing. The fastest
+work is the work you **skip**, and the cheapest object is the one you **don't draw in full**. Every
+high-end engine is a stack of clever ways to do *less* while looking like *more*.
+
+<Callout type="intuition" title="The one-sentence idea">
+The way to fit a huge scene inside the frame budget is not to compute faster but to **compute less**:
+skip what can't be seen, merge what's similar, and simplify what's far away.
+</Callout>
+
+## Intuition: four ways to do less
+
+You learned the **frame budget** and you learned **data-oriented design** — laying data out so the CPU
+streams through it cache-friendly. Optimization techniques put that mindset to work on rendering. Four
+ideas carry most of the weight:
+
+- **Culling** — don't draw what the camera can't see. Objects outside the view frustum, or hidden
+  behind others, are skipped entirely. The cheapest object costs nothing.
+- **Batching** — combine many objects that share a material into a single **draw call**, because the
+  CPU cost of *telling* the GPU to draw is often higher than the drawing itself.
+- **Instancing** — when thousands of objects share one mesh (grass, trees, bullets), send the mesh
+  **once** plus a list of positions. One call draws them all.
+- **Level of detail (LOD)** — a distant object covers a few pixels, so swap its high-poly mesh for a
+  cheap one. Nobody can tell, and the savings are enormous.
+
+The unifying theme is **data-oriented**: store like with like so you can process whole groups at once,
+rather than touching scattered objects one at a time.
+
+## Play with it
+
+Start with everything off and a frame way over budget. Toggle each optimization and watch the
+frame-time bar fall under the dashed budget line — and see culled objects dim out on the scene.
+
+<DrawCallOptimizer client:visible />
+
+<Callout type="tip">
+Turn on <strong>instancing</strong> alone and watch the draw-call count collapse from thousands to a
+handful. Submitting a draw call has a fixed CPU cost, so fewer-but-bigger calls is almost always a win.
+</Callout>
+
+## The formal definition
+
+Model the CPU cost of a frame as a fixed overhead plus a per-draw-call cost plus per-object shading:
+
+$$
+T = T_0 + N_{\text{calls}} \cdot c_{\text{call}} + \sum_{j} c_j .
+$$
+
+Each technique attacks a different term. **Culling** shrinks the set of objects, cutting the sum and
+the calls. **Instancing** collapses many calls into one, so $N_{\text{calls}}$ drops from "one per
+object" to "one per mesh type":
+
+$$
+N_{\text{calls}} = M \quad (\text{mesh types}) \;\; \text{instead of} \;\; N \quad (\text{objects}).
+$$
+
+**LOD** cuts each far object's shading cost $c_j$ by using a mesh with far fewer triangles. The payoff
+is biggest where you'd expect: a scene with many copies of few meshes (a forest) gains enormously from
+instancing, while a scene that is mostly off-screen gains from culling.
+
+```python
+visible  = [o for o in scene if in_frustum(o, camera)]  # culling
+groups   = group_by(visible, key=lambda o: o.mesh)      # batch / instance
+for mesh, objs in groups.items():
+    lod = choose_lod(mesh, distance(objs, camera))      # LOD
+    draw_instanced(lod, [o.transform for o in objs])    # ONE call per group
+```
+
+<Callout type="why">
+This is data-oriented design paying off. Grouping objects by mesh and storing their transforms
+contiguously means the CPU streams through tight arrays and issues one call per group — cache-friendly
+and call-light at the same time. The math and the memory layout reinforce each other.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Open-world RPGs" icon="🌳">
+A forest is thousands of copies of a dozen tree meshes. <strong>Instancing</strong> draws each species
+in one call, and <strong>LOD</strong> turns distant trees into flat billboards. Without both, the view
+distance you take for granted would be impossible.
+</ExampleCard>
+
+<ExampleCard domain="Real-time strategy" icon="⚔️">
+An RTS may field thousands of units. <strong>Culling</strong> ignores everyone off the mini-map view,
+and units sharing a model are <strong>batched</strong> so the CPU isn't drowned issuing one draw call
+per soldier — the bottleneck in big battles is call count, not pixels.
+</ExampleCard>
+
+<ExampleCard domain="Mobile" icon="📱">
+Phone GPUs are tiny and power-limited, so doing less is survival. Aggressive <strong>LOD</strong> and
+texture atlases (a form of batching) keep draw calls low; many mobile engines cap calls per frame as a
+hard rule, because each one costs precious battery.
+</ExampleCard>
+
+<ExampleCard domain="Racing" icon="🏎️">
+At 200 km/h the roadside whips past, so far scenery can be brutally simplified — players never focus on
+it. <strong>LOD</strong> plus <strong>occlusion culling</strong> (skipping what's hidden behind the car
+and barriers) keeps the frame locked at 60 while the track stays sharp where the eye actually looks.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does instancing speed up rendering thousands of identical trees?',
+      options: [
+        'It makes each tree smaller',
+        'It sends the mesh once and draws all copies in a single draw call',
+        'It deletes most of the trees',
+        'It increases the frame budget',
+      ],
+      answer: 1,
+      explain: 'Instancing collapses many per-object draw calls into one call plus a list of transforms, slashing the CPU cost of submitting work.',
+    },
+    {
+      q: 'A distant object covers only a handful of pixels. Which technique most directly reduces its cost?',
+      options: ['Batching', 'Level of detail (LOD)', 'More memory', 'A bigger seed'],
+      answer: 1,
+      explain: 'LOD swaps a far object for a cheaper, lower-poly mesh — its on-screen size is tiny, so the simplification is invisible.',
+    },
+    {
+      q: 'Frustum culling improves performance mainly by...',
+      options: [
+        'Drawing hidden objects faster',
+        'Not drawing objects the camera cannot see at all',
+        'Adding more draw calls',
+        'Raising the resolution',
+      ],
+      answer: 1,
+      explain: 'Culling removes off-screen (or occluded) objects from the work entirely — the fastest work is the work you skip.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The best optimization is to <strong>do less work</strong>: skip, merge, or simplify before you try to compute faster.',
+    '<strong>Culling</strong> removes objects the camera can\'t see — the cheapest object is one you never draw.',
+    '<strong>Batching</strong> and <strong>instancing</strong> cut the number of <strong>draw calls</strong>, whose CPU overhead often dominates.',
+    '<strong>LOD</strong> swaps distant objects for cheaper meshes, saving shading cost with no visible loss.',
+    'These wins come from <strong>data-oriented</strong> layout: group like with like and process whole batches cache-friendly.',
+  ]}
+/>
+
+That completes the Audio & Performance track — and with it, the journey from a single pressure wave to
+a world rendered, profiled, generated and optimized inside 16.6 milliseconds.

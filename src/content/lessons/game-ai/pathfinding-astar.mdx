@@ -1,0 +1,186 @@
+---
+title: Pathfinding (A*)
+track: game-ai
+summary: Find the shortest route through a grid or graph with Dijkstra and A* — the search that powers every unit that walks around a wall.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - data-structures/graphs
+  - algorithms/big-o
+leadsTo:
+  - game-ai/finite-state-machines
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import AStarGridSearch from '../../../components/demos/AStarGridSearch.tsx';
+
+## The hook: the unit that walks around the wall
+
+You right-click across the map in a strategy game and your soldier glides smoothly around a lake, through
+a gap in the trees, and up to the spot you clicked. It never bumps the wall, never doubles back, never
+takes the long way. Behind that one click is a tiny piece of brilliance that runs millions of times a day
+in games, robots and map apps: a **graph search** that finds the *shortest* path without checking every
+possible route. The crown jewel of those searches is **A\***.
+
+<Callout type="intuition" title="The one-sentence idea">
+A\* finds the shortest path by always expanding the spot that looks most promising — the one whose
+**cost so far plus an optimistic guess of the cost remaining** is smallest.
+</Callout>
+
+## Intuition: a smarter flood fill
+
+From the **graphs** lesson you know a map is just **nodes** (places you can stand) joined by **edges**
+(moves you can make), each edge carrying a **cost**. Pathfinding is the question: what is the cheapest
+chain of edges from start to goal?
+
+The simplest correct answer is **Dijkstra's algorithm**: flood outward from the start, always growing the
+frontier at the cheapest-known node first. It is guaranteed to find the shortest path — but it spreads in
+*every* direction equally, like ripples in a pond, exploring tons of cells that point away from the goal.
+
+A\* adds one ingredient: a **heuristic**, a cheap guess of how far each cell still is from the goal. By
+preferring cells that are both cheap to reach *and* estimated to be close to the goal, A\* aims the flood
+like a flashlight instead of a floodlight. Same shortest path, a fraction of the work.
+
+We score every candidate cell $n$ with:
+
+$$
+f(n) = g(n) + h(n)
+$$
+
+where $g(n)$ is the real cost to reach $n$ from the start, and $h(n)$ is the heuristic estimate of the
+cost from $n$ to the goal. Dijkstra is just A\* with $h(n) = 0$ everywhere.
+
+## Play with it
+
+Paint some walls, then press **Run A\***. Blue cells are the ones the search pulled off its frontier and
+expanded; the emerald line is the shortest path it returned. Now untick the heuristic to fall back to
+plain Dijkstra and run again — watch how many more cells it has to explore for the *same* path.
+
+<AStarGridSearch client:visible />
+
+<Callout type="tip">
+Build a long wall between the start and goal with a single small gap. A\* will probe toward the goal,
+hit the wall, and curl through the gap — you can almost see it "thinking".
+</Callout>
+
+## The formal definition
+
+On a graph with non-negative edge costs, A\* keeps a priority queue (the **open set**) ordered by $f(n)$.
+Each step it pops the lowest-$f$ node, marks it closed, and **relaxes** its neighbours: if going through
+the current node reaches a neighbour more cheaply than any path found so far, record the new cost and
+push it.
+
+$$
+g(\text{nb}) \leftarrow g(\text{cur}) + \text{cost}(\text{cur}, \text{nb}), \qquad
+f(\text{nb}) = g(\text{nb}) + h(\text{nb}).
+$$
+
+```python
+for nb in neighbors(current):
+    tentative = g[current] + cost(current, nb)
+    if tentative < g[nb]:          # found a cheaper way to nb
+        g[nb] = tentative
+        f[nb] = tentative + heuristic(nb, goal)
+        came_from[nb] = current     # remember the path
+```
+
+On a 4-connected grid the natural heuristic is the **Manhattan distance** (you can only step along axes):
+
+$$
+h(n) = |n_x - \text{goal}_x| + |n_y - \text{goal}_y|.
+$$
+
+The magic property is **admissibility**: as long as $h$ never *overestimates* the true remaining cost,
+A\* is guaranteed to return the genuinely shortest path. Manhattan distance is admissible on a grid
+because the real route can only be longer once walls get in the way.
+
+<Callout type="why">
+This is the search at the heart of game AI, and the same template runs over <em>any</em> graph — road
+networks, dialogue trees, even the state space of a puzzle. Pick the right heuristic and an
+exponential-looking problem becomes interactive-fast. Pick one that overestimates and you trade a little
+optimality for even more speed (that is what "weighted A\*" does on purpose).
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Real-time strategy" icon="⚔️">
+When you order a squad across an RTS map, each unit runs A\* over a navigation grid. The terrain cost of
+a swamp cell can be set high so units *prefer* the road — A\* naturally trades a longer-but-faster route
+for a shorter-but-slower one, because cost, not raw distance, is what it minimises.
+</ExampleCard>
+
+<ExampleCard domain="Warehouse robotics" icon="📦">
+A fulfilment-centre robot must reach a shelf without crashing into racks or other robots. The floor is a
+grid graph; A\* plans the route, and the heuristic (straight-line distance to the bay) keeps it from
+wandering down the wrong aisle. Thousands of robots replan continuously as the warehouse changes.
+</ExampleCard>
+
+<ExampleCard domain="Sliding-tile puzzles" icon="🧩">
+The 15-puzzle isn't a map at all — each *arrangement* of tiles is a node, and a move is an edge. A\*
+solves it by treating "number of tiles out of place" (or summed Manhattan distances of every tile) as the
+heuristic, slicing a search space of billions down to something solvable in milliseconds.
+</ExampleCard>
+
+<ExampleCard domain="Ride-hailing dispatch" icon="🚕">
+Matching a driver to a rider means searching a city road graph where edges are streets weighted by live
+traffic. A\* with a distance-based heuristic finds the quickest pickup route far faster than flooding the
+whole map — and reruns the instant a road jams up.
+</ExampleCard>
+
+<Callout type="note">
+Notice the leap: the first two examples are literally maps, but the puzzle is a graph of <em>game
+states</em> with no geometry at all. A\* doesn't care — it only needs nodes, edge costs, and an
+admissible guess of the distance remaining.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does A* add on top of Dijkstra’s algorithm?',
+      options: [
+        'It allows negative edge costs',
+        'A heuristic h(n) that estimates the remaining cost to the goal',
+        'It removes the need for a priority queue',
+        'It searches breadth-first instead of by cost',
+      ],
+      answer: 1,
+      explain: 'A* orders its frontier by f(n) = g(n) + h(n). The heuristic h steers the search toward the goal; with h = 0 it reduces to Dijkstra.',
+    },
+    {
+      q: 'A cell is 4 steps right and 3 steps up from the goal on a 4-connected grid. Its Manhattan-distance heuristic h(n) is:',
+      options: ['5', '7', '12', '1'],
+      answer: 1,
+      explain: 'Manhattan distance sums the axis gaps: |Δx| + |Δy| = 4 + 3 = 7. (Straight-line distance would be 5, but you can’t move diagonally here.)',
+    },
+    {
+      q: 'Why must the heuristic never overestimate the true remaining cost?',
+      options: [
+        'So the priority queue stays small',
+        'So that A* is guaranteed to return the shortest path (admissibility)',
+        'Because heuristics must always be zero',
+        'So the algorithm terminates at all',
+      ],
+      answer: 1,
+      explain: 'An admissible (never-overestimating) heuristic guarantees optimality. Overestimating can make A* settle for a path that isn’t truly shortest.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A map is a <strong>graph</strong>: nodes are places, edges are moves, and pathfinding minimises total edge <strong>cost</strong>.',
+    '<strong>Dijkstra</strong> floods outward by cheapest-known cost and always finds the shortest path — but explores in every direction.',
+    'A\\* scores each cell by <strong>f(n) = g(n) + h(n)</strong>: cost so far plus an optimistic guess of the cost remaining.',
+    'An <strong>admissible</strong> heuristic (never overestimates) guarantees A\\* returns the truly shortest path while expanding far fewer nodes.',
+    'The same search runs over <strong>any graph</strong> — game grids, road networks, even puzzle states — just by choosing nodes, costs and a heuristic.',
+  ]}
+/>
+
+Next up: once a unit *can* reach you, it needs to decide *what to do* — patrol, chase, or run. That logic
+starts with the simplest brain in game AI: the **finite state machine**.

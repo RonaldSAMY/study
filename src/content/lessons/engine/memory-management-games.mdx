@@ -1,0 +1,192 @@
+---
+title: Memory Management for Games
+track: engine
+summary: Object pools, arena/stack allocators, and free lists let a game reuse memory instead of constantly allocating — killing the GC stutter and fragmentation that turn a smooth frame into a hitch.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - memory-hardware/memory-allocation
+leadsTo:
+  - game-ai/pathfinding-astar
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ObjectPoolDemo from '../../../components/demos/ObjectPoolDemo.tsx';
+
+## The hook: the game that hitches every few seconds
+
+Your shooter runs at a buttery 60 frames per second — until it doesn't. Every few seconds the
+camera lurches, the input feels mushy for a single frame, and then it's smooth again. You profile
+it and the spikes line up with one thing: the **garbage collector**. Every bullet, spark, and
+damage number you spawned became garbage the instant it died, and now the runtime is freezing the
+whole world to sweep it up. In a tight C++ loop the villain has a different name — thousands of
+`malloc` and `free` calls per frame — but the symptom is the same: a smooth game that **stutters**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Instead of asking the system for fresh memory every time you need an object and throwing it away
+when you're done, keep a **stash of objects you reuse** — so allocation stops happening in the hot
+loop, and there's almost nothing left for the collector to clean up.
+</Callout>
+
+## Intuition
+
+You already know from the **memory-allocation** prereq that asking for memory isn't free. A call to
+`malloc` walks the allocator's bookkeeping to find a free block of the right size, and `free` hands
+it back; do this constantly with many different sizes and the heap turns into Swiss cheese —
+**fragmentation** — where plenty of memory is free but no single piece is big enough. A
+garbage-collected runtime hides the `free`, but it pays for it later by periodically scanning the
+heap and pausing your program to reclaim dead objects.
+
+Games make this worse than almost any other software, because they create and destroy thousands of
+tiny, short-lived objects *every single frame*: particles, projectiles, audio voices, network
+packets. The trick is to stop fighting the allocator and simply **stop calling it** in the hot path.
+If you create your objects once and recycle them forever, allocation drops to near zero, the
+collector stays asleep, and the heap never fragments.
+
+## Play with it
+
+Watch a fountain of short-lived particles. Toggle between allocating a fresh object on every spawn
+and reusing them from a pool, and watch the counters and the frame-time graph.
+
+<ObjectPoolDemo client:visible />
+
+<Callout type="tip">
+In <strong>Allocate fresh</strong> mode the allocation counter climbs without bound and the
+frame-time graph spikes each time the simulated GC fires. Switch to <strong>Use object pool</strong>
+and allocations plateau almost immediately — the same number of live particles, but the graph goes
+flat. That flat line is a game that never hitches.
+</Callout>
+
+## The formal definition
+
+**Object pools.** Pre-allocate a fixed array of $N$ objects up front and keep a **free list** of the
+ones not currently in use. To create an object you *acquire* (pop one off the free list); to destroy
+it you *release* (push it back). No `new`, no `malloc`, no garbage. Acquire and release are each
+amortized $O(1)$ — a pointer or index move — and the total memory is fixed and known in advance:
+
+$$
+\text{pool memory} = N \times \text{sizeof(obj)}.
+$$
+
+A free list is just a stack of available slots, so both ends of the lifecycle are constant-time:
+
+$$
+\text{acquire} = O(1), \qquad \text{release} = O(1).
+$$
+
+```js
+function makePool(create, size) {
+  const free = Array.from({ length: size }, create); // pre-allocate N
+  return {
+    acquire: () => free.pop() ?? create(),  // O(1): reuse a slot
+    release: (obj) => { free.push(obj); },  // O(1): hand it back
+  };
+}
+```
+
+**Arena / stack / bump allocators.** A different recycling strategy for objects that all die at the
+same time (say, everything you allocate during one frame). Grab one big block of memory and keep a
+single pointer to the next free byte. Allocating is just *bumping* that pointer forward by the
+requested size:
+
+$$
+\text{ptr} \leftarrow \text{ptr} + \text{size}.
+$$
+
+That's it — no search, no per-object bookkeeping. You never free objects individually; at the end of
+the frame you **free everything at once** by resetting the pointer back to the start of the block.
+Because allocation is strictly sequential, an arena can never fragment.
+
+Both techniques avoid GC stutter for the same reason: the number of live allocations the collector
+can see stops growing. Pre-allocated, reused memory is memory the collector never has to scan, sweep,
+or compact — so the stop-the-world pauses simply don't happen, and the heap layout stays contiguous.
+
+## The same idea, four everyday worlds
+
+Reusing a fixed set of things instead of making and discarding new ones is an old, everyday trick.
+
+<ExampleCard domain="Restaurant" icon="🍽️">
+A busy kitchen doesn't buy disposable plates for every order — it owns a fixed stack of real plates.
+A plate is *acquired* when a dish goes out and *released* back to the wash station when it returns.
+The dishwasher (the pool) keeps clean plates ready, so the kitchen never waits on a supplier
+mid-service. A mobile bullet-hell game does exactly this with on-screen bullets to protect battery and
+dodge GC hitches.
+</ExampleCard>
+
+<ExampleCard domain="Library" icon="📚">
+A library lends and reclaims the same physical books for decades. Borrowing is acquire, returning is
+release, and the catalog is the free list that knows what's available. It never prints a fresh copy
+per reader and pulps it on return — that would be the "allocate fresh every spawn" disaster.
+</ExampleCard>
+
+<ExampleCard domain="Car rental" icon="🚗">
+A rental company runs a fixed fleet of $N$ cars. Customers acquire and return vehicles all day; the
+fleet size is the pool's memory budget. Open-world games stream the world in fixed-size chunks the
+same way — as you drive forward, far-behind terrain tiles are released and reused for the tiles
+appearing ahead, instead of allocating new ones forever.
+</ExampleCard>
+
+<ExampleCard domain="Coat check" icon="🧥">
+A coat check is a pure stack/arena allocator. Coats pile in as guests arrive, and at the end of the
+night the whole rack is cleared at once — nobody reclaims individual hangers mid-event. That's
+exactly a per-frame arena: bump a pointer as you allocate, then reset it all in one move when the
+frame ends.
+</ExampleCard>
+
+<Callout type="note">
+Notice the trade-off shared by all four: you commit to a fixed capacity up front. A pool that's too
+small forces a fallback allocation; too large wastes memory. Picking $N$ is a budgeting decision —
+the same one a restaurant makes when deciding how many plates to own.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does reusing objects from a pool reduce garbage-collector pauses?',
+      options: [
+        'It makes each object smaller',
+        'It keeps the number of live allocations from growing, so there is little garbage to collect',
+        'It disables the garbage collector entirely',
+        'It moves objects to the GPU',
+      ],
+      answer: 1,
+      explain: 'Pooled objects are reused rather than discarded, so almost no garbage is produced and the collector has nearly nothing to scan or sweep — the stop-the-world pauses stop happening.',
+    },
+    {
+      q: 'You pre-allocate a pool of 500 particles, each 64 bytes. How much memory does the pool reserve up front?',
+      options: ['564 bytes', '32,000 bytes (about 32 KB)', '500 bytes', '64,000 bytes'],
+      answer: 1,
+      explain: 'Pool memory = N × sizeof(obj) = 500 × 64 = 32,000 bytes, roughly 32 KB, reserved once at startup.',
+    },
+    {
+      q: 'What makes a bump (arena) allocator so fast, and what is its main restriction?',
+      options: [
+        'It searches for the best-fit block; you can free any object anytime',
+        'It just moves a pointer forward to allocate; you free everything at once, not individually',
+        'It compresses memory on every allocation; objects must be identical',
+        'It uses the GPU; objects must be textures',
+      ],
+      answer: 1,
+      explain: 'Allocation is a single pointer bump (no search, no per-object bookkeeping), which is why it cannot fragment — but the cost is that you reset the whole arena at once instead of freeing objects one by one.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Games create thousands of short-lived objects per frame; doing that with <strong>malloc/free or the GC</strong> causes stutter and fragmentation.',
+    'An <strong>object pool</strong> pre-allocates N objects and reuses them via a free list — <strong>acquire and release are O(1)</strong> and produce no garbage.',
+    'An <strong>arena / bump allocator</strong> allocates by moving a single pointer and frees everything at once, so it is fast and can never fragment.',
+    'Pool memory is fixed and predictable: <strong>N × sizeof(obj)</strong> — the cost is committing to a capacity up front.',
+    'The unifying win is that <strong>live allocations stop growing</strong>, so the collector stays calm and frame times stay flat.',
+  ]}
+/>
+
+Next up: **A\* pathfinding** — now that your enemies can spawn without hitching, let's make them
+navigate the world intelligently.

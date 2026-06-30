@@ -1,0 +1,196 @@
+---
+title: Memory Allocation
+track: memory-hardware
+summary: How the OS and hardware hand out memory — malloc, free and the allocator.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - memory-hardware/stack-vs-heap
+leadsTo:
+  - memory-hardware/cache-hierarchy
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import AllocatorVisualizer from '../../../components/demos/AllocatorVisualizer.tsx';
+
+## The hook: who actually hands you the bytes?
+
+In the last lesson you said *"ask the heap for a block"* — but who is on the other end of that request?
+When your code calls `malloc(64)`, no genie conjures 64 bytes from nothing. A piece of software called
+the **allocator** is keeping a ledger of a big pool of memory, and it has to *find* 64 free bytes,
+mark them used, and hand back their address. Underneath it, the operating system and the hardware feed
+that pool in fixed-size chunks called **pages**. Understanding this machinery explains a puzzle that
+trips up every systems programmer: how a program can have *plenty* of free memory and still fail to
+allocate.
+
+<Callout type="intuition" title="The one-sentence idea">
+An **allocator** manages a pool of memory: `malloc` finds a free block big enough and marks it used,
+`free` returns it — and over time the pool can shatter into gaps too small to reuse.
+</Callout>
+
+## Intuition
+
+Picture the heap as one long row of bytes. The allocator keeps a **free list** — its record of which
+stretches are unused. When you request $n$ bytes, it scans that list for a **run** of free space at
+least $n$ long, splits off the piece you need, marks it used, and returns a pointer to its start. When
+you `free`, that block flips back to "free" and rejoins the list, ideally merging with any free
+neighbors.
+
+This is where the puzzle appears. Suppose you allocate many small blocks, then free *every other*
+one. The total free space might be huge, but it is scattered in tiny isolated gaps. Now ask for one
+block bigger than any single gap, and the request **fails** — even though the bytes exist in total.
+This is **external fragmentation**: free space exists, but not *contiguously*. It is the central
+headache of memory allocation.
+
+Where does the pool itself come from? The OS does not hand out single bytes. Its **virtual memory**
+system gives memory in fixed-size **pages** — commonly 4 KB each. The allocator requests whole pages
+from the OS and then carves them into the small blocks your program asks for. So there are two layers:
+the OS deals in coarse pages; the allocator retails them as fine-grained blocks.
+
+## Play with it
+
+Choose a request size, pick **first-fit** or **best-fit**, and allocate. Click any block to free it.
+Then press **Fragment it** and try to allocate 5 cells — watch it fail while plenty of space sits
+free, just not together.
+
+<AllocatorVisualizer client:visible />
+
+<Callout type="tip">
+Watch the **largest run** readout (emerald outline). A request succeeds only if it fits inside the
+largest *contiguous* gap — not the total free space. When fragmentation climbs, those two numbers
+drift far apart.
+</Callout>
+
+## The formal definition
+
+A call to `malloc(n)` searches the free list for a block of size $b \ge n$ and returns its starting
+address, or `NULL` if none exists. Two classic search strategies:
+
+$$
+\text{first-fit: pick the first } b \ge n, \qquad
+\text{best-fit: pick the smallest } b \ge n.
+$$
+
+Hardware also demands **alignment**: an address must be a multiple of some $A$ (e.g. 8 or 16 bytes), so
+the allocator rounds each request up to
+
+$$
+n' = \left\lceil \frac{n}{A} \right\rceil \cdot A.
+$$
+
+The OS supplies the pool in **pages** of size $P$ (say $P = 4096$ bytes), so holding $B$ bytes of heap
+costs whole pages:
+
+$$
+\text{pages} = \left\lceil \frac{B}{P} \right\rceil.
+$$
+
+And the condition that defines external fragmentation: with total free $F$ and largest contiguous run
+$L$, a request for $n$ bytes fails whenever
+
+$$
+L < n \le F.
+$$
+
+```c
+void *p = malloc(64);   // allocator finds a 64-byte block, marks it used
+if (p) {                // always check — it returns NULL on failure
+    /* ... use the block ... */
+    free(p);            // return it to the free list for reuse
+}
+```
+
+<Callout type="why">
+Game engines rarely trust the default allocator in their hot loop. Thousands of tiny allocations per
+frame fragment the heap and stall on bookkeeping, so engines preallocate big pools and use custom
+allocators (arenas, pool allocators) that hand out blocks in constant time and sidestep fragmentation.
+Knowing how `malloc` works is what lets you decide when to replace it.
+</Callout>
+
+## The same idea, four everyday worlds
+
+Allocation is the universal problem of *fitting requests of different sizes into a shared space and
+reclaiming it afterward.* It shows up far beyond programming.
+
+<ExampleCard domain="Parking" icon="🅿️">
+A **garage attendant** slots arriving cars into open spaces. After a busy day of cars coming and going,
+the lot may have twenty empty spaces — but scattered one-here, one-there. A delivery truck needing
+three spaces in a row can't park, even though twenty are free. That is external fragmentation on
+wheels.
+</ExampleCard>
+
+<ExampleCard domain="Air travel" icon="✈️">
+**Seat assignment** for a family of four needs four *adjacent* seats. The plane might have forty seats
+open, but if they are singles dotted across the cabin, the system can't seat the group together — it
+needs a contiguous run, exactly like `malloc` needs contiguous bytes.
+</ExampleCard>
+
+<ExampleCard domain="Shipping" icon="🚢">
+A **container yard** stacks boxes into bays. Pull containers out over time and you leave odd holes;
+a new oversized shipment may not fit any single bay despite ample total room. Yards periodically
+**reshuffle** to consolidate space — the physical version of compaction.
+</ExampleCard>
+
+<ExampleCard domain="Theatre" icon="🎭">
+A **box office** seats parties of varying sizes. Best-fit thinking shines here: slot a couple into the
+*smallest* gap that holds them, saving the long unbroken rows for the big group that calls next.
+Choosing which gap to fill is the same trade-off an allocator faces.
+</ExampleCard>
+
+<Callout type="note">
+Every example splits into the same two roles: a coarse supplier of bulk space (the lot, the plane, the
+OS pages) and a fine-grained manager that fits individual requests and tracks what's free (the
+attendant, the booking system, the allocator).
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does external fragmentation mean?',
+      options: [
+        'The program ran completely out of memory',
+        'Free memory exists in total, but no single contiguous run is big enough',
+        'A block was freed twice',
+        'The stack grew past its limit',
+      ],
+      answer: 1,
+      explain: 'Fragmentation is free-but-scattered: enough free bytes overall, but split into gaps too small to satisfy a larger request.',
+    },
+    {
+      q: 'You request 200 bytes and the allocator aligns to A = 16 bytes. How many bytes does it actually reserve?',
+      options: ['200', '208', '216', '256'],
+      answer: 1,
+      explain: 'Round up to the next multiple of 16: ⌈200 / 16⌉ = 13, and 13 × 16 = 208 bytes.',
+    },
+    {
+      q: 'The total free space is 30 KB, but the largest contiguous run is 6 KB. A request for 10 KB will…',
+      options: [
+        'Succeed, since 30 KB > 10 KB',
+        'Fail, because no single run is at least 10 KB',
+        'Succeed by splitting across gaps',
+        'Always trigger a page fault',
+      ],
+      answer: 1,
+      explain: 'A block must be contiguous. With the largest run only 6 KB, a 10 KB request fails even though 30 KB is free overall (L < n ≤ F).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>allocator</strong> manages the heap pool: <code>malloc</code> finds a free run big enough and marks it used, <code>free</code> returns it to the <strong>free list</strong>.',
+    '<strong>First-fit</strong> grabs the first run that fits; <strong>best-fit</strong> grabs the smallest run that fits, leaving big runs intact.',
+    '<strong>External fragmentation</strong> means free space exists but is split into gaps too small — a request fails when the largest run is smaller than it (L < n ≤ F).',
+    'The OS hands out memory in fixed-size <strong>pages</strong> (e.g. 4 KB); the allocator carves those pages into the small blocks your program requests.',
+    'Hardware <strong>alignment</strong> rounds each request up to a multiple of A, so allocated sizes are often a little larger than asked.',
+  ]}
+/>
+
+Next up: the **Cache & Memory Hierarchy** — why *where* your allocated blocks sit, and how close
+together they are, can make the very same code run an order of magnitude faster.

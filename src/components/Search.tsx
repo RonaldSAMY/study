@@ -8,9 +8,12 @@ interface Doc {
   track: string;
   icon: string;
   stage: string;
+  course: 'ml' | 'gamedev';
   ready: boolean;
   text: string;
 }
+
+const COURSE_LABEL: Record<string, string> = { ml: 'ML Maths', gamedev: 'Game Dev' };
 interface Hit extends Doc { score: number; snippet: string; }
 
 let CACHE: Doc[] | null = null;
@@ -135,7 +138,7 @@ export default function Search() {
                       <span class="flex-1 text-sm font-semibold leading-tight">{h.title}</span>
                       {!h.ready && <span class="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">soon</span>}
                     </div>
-                    <div class="mt-0.5 text-xs text-muted">{h.track}</div>
+                    <div class="mt-0.5 text-xs text-muted">{COURSE_LABEL[h.course] ?? ''} · {h.track}</div>
                     {h.snippet && <div class="mt-1 line-clamp-2 text-xs text-muted">{h.snippet}</div>}
                   </a>
                 </li>

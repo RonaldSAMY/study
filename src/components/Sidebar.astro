@@ -1,16 +1,16 @@
 ---
-import { TRACKS, STAGES } from '../data/curriculum';
+import { TRACKS, COURSES, courseOfStage } from '../data/curriculum';
 import { getReadySlugs } from '../lib/lessons';
 import { url, stripBase } from '../lib/url';
 import Search from './Search.tsx';
 
 const current = stripBase(Astro.url.pathname); // current slug, base removed
-// Only show stages that actually have tracks.
-const stages = STAGES.filter((s) => TRACKS.some((t) => t.stage === s));
 const ready = await getReadySlugs();
-// Which stage/track is currently open? Used to auto-expand the right sections.
-const activeTrackId = TRACKS.find((t) => current.startsWith(t.id))?.id;
-const activeStage = TRACKS.find((t) => t.id === activeTrackId)?.stage;
+
+// Which course / stage / track is active? Used to auto-expand the right sections.
+const activeTrack = TRACKS.find((t) => current.startsWith(t.id));
+const activeStage = activeTrack?.stage;
+const activeCourse = activeTrack ? courseOfStage(activeTrack.stage) : undefined;
 ---
 
 <aside
@@ -19,8 +19,8 @@ const activeStage = TRACKS.find((t) => t.id === activeTrackId)?.stage;
 >
   <div class="p-5">
     <a href={url('/')} class="mb-5 hidden items-center gap-2 text-lg font-extrabold lg:flex">
-      <span class="grid h-9 w-9 place-items-center rounded-xl bg-brand text-white">∑</span>
-      Maths for ML
+      <span class="grid h-9 w-9 place-items-center rounded-xl bg-brand text-white">🎓</span>
+      LearnLab
     </a>
 
     <div class="mb-5 grid grid-cols-2 gap-2">
@@ -42,47 +42,62 @@ const activeStage = TRACKS.find((t) => t.id === activeTrackId)?.stage;
       <Search client:load />
     </div>
 
-    {stages.map((stage) => (
-      <details class="mb-2 group/stage" open={stage === activeStage || (!activeStage && stage === stages[0])}>
-        <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg px-1 py-1.5 text-xs font-bold uppercase tracking-wider text-muted hover:text-text">
-          <svg class="h-3.5 w-3.5 transition group-open/stage:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6" /></svg>
-          <span class="flex-1">{stage}</span>
-        </summary>
-        <div class="mt-1">
-        {TRACKS.filter((t) => t.stage === stage).map((track) => (
-          <details class="group mb-1" open={current.startsWith(track.id)}>
-            <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold hover:bg-surface-2">
-              <span class="text-base">{track.icon}</span>
-              <span class="flex-1">{track.title}</span>
-              <svg class="h-4 w-4 text-muted transition group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6" /></svg>
-            </summary>
-            <ul class="ml-3 border-l border-border pl-3">
-              {track.lessons.map((lesson) => {
-                const slug = `${track.id}/${lesson.id}`;
-                const active = current === slug;
-                return (
-                  <li>
-                    <a
-                      href={url(`/${slug}`)}
-                      data-lesson-slug={slug}
-                      class={`group/li flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition ${
-                        active ? 'bg-brand-soft font-semibold text-brand' : 'text-muted hover:bg-surface-2 hover:text-text'
-                      }`}
-                    >
-                      <span data-check class="text-calculus opacity-0 transition-opacity">✓</span>
-                      <span class="flex-1">{lesson.title}</span>
-                      {!ready.has(slug) && (
-                        <span class="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">soon</span>
-                      )}
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          </details>
-        ))}
-        </div>
-      </details>
-    ))}
+    {COURSES.map((course, ci) => {
+      const courseStages = course.stages.filter((s) => TRACKS.some((t) => t.stage === s));
+      const courseOpen = activeCourse ? activeCourse === course.id : ci === 0;
+      return (
+        <details class="mb-3 group/course" open={courseOpen}>
+          <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg bg-surface-2 px-3 py-2.5 text-sm font-extrabold hover:bg-brand-soft">
+            <span class="text-lg">{course.icon}</span>
+            <span class="flex-1">{course.short}</span>
+            <svg class="h-4 w-4 text-muted transition group-open/course:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6" /></svg>
+          </summary>
+          <div class="mt-2 pl-1">
+          {courseStages.map((stage) => (
+            <details class="mb-2 group/stage" open={stage === activeStage || (course.id === (activeCourse ?? COURSES[0].id) && !activeStage && stage === courseStages[0])}>
+              <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg px-1 py-1.5 text-xs font-bold uppercase tracking-wider text-muted hover:text-text">
+                <svg class="h-3.5 w-3.5 transition group-open/stage:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6" /></svg>
+                <span class="flex-1">{stage}</span>
+              </summary>
+              <div class="mt-1">
+              {TRACKS.filter((t) => t.stage === stage).map((track) => (
+                <details class="group mb-1" open={current.startsWith(track.id)}>
+                  <summary class="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-2 text-sm font-semibold hover:bg-surface-2">
+                    <span class="text-base">{track.icon}</span>
+                    <span class="flex-1">{track.title}</span>
+                    <svg class="h-4 w-4 text-muted transition group-open:rotate-90" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6" /></svg>
+                  </summary>
+                  <ul class="ml-3 border-l border-border pl-3">
+                    {track.lessons.map((lesson) => {
+                      const slug = `${track.id}/${lesson.id}`;
+                      const active = current === slug;
+                      return (
+                        <li>
+                          <a
+                            href={url(`/${slug}`)}
+                            data-lesson-slug={slug}
+                            class={`group/li flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition ${
+                              active ? 'bg-brand-soft font-semibold text-brand' : 'text-muted hover:bg-surface-2 hover:text-text'
+                            }`}
+                          >
+                            <span data-check class="text-calculus opacity-0 transition-opacity">✓</span>
+                            <span class="flex-1">{lesson.title}</span>
+                            {!ready.has(slug) && (
+                              <span class="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted">soon</span>
+                            )}
+                          </a>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
+              ))}
+              </div>
+            </details>
+          ))}
+          </div>
+        </details>
+      );
+    })}
   </div>
 </aside>

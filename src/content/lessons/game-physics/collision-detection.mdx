@@ -1,0 +1,194 @@
+---
+title: Collision Detection
+track: game-physics
+summary: From cheap AABB and circle tests to the Separating Axis Theorem for rotated shapes — plus the broad-vs-narrow phase split that keeps thousands of objects testable in real time.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - game-math/dot-cross-product
+leadsTo:
+  - game-physics/collision-response
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ShapeOverlapLab from '../../../components/demos/ShapeOverlapLab.tsx';
+
+## The hook: did the bullet actually hit?
+
+A boss fires a wall of bullets. The player weaves through. On exactly which frame does a bullet count as a
+hit — and how does the engine answer that question for hundreds of bullets, sixty times a second, without
+melting the CPU? Collision detection is the unglamorous machinery behind every hit, pickup, wall-stop and
+explosion in games. It comes down to a deceptively simple question asked over and over: **do these two
+shapes overlap right now?** The trick is answering it *cheaply*, and the answer leans almost entirely on
+one tool you already have — the **dot product**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Two convex shapes overlap if and only if you *cannot* slide a flat wall between them — and you check for
+such a wall by projecting both shapes onto candidate directions with the dot product.
+</Callout>
+
+## Intuition
+
+Recall the **dot product**: $\mathbf{a}\cdot\mathbf{b}$ measures how much one vector points along another.
+Projecting a point onto a direction $\hat{\mathbf{n}}$ is just the dot product $\mathbf{p}\cdot
+\hat{\mathbf{n}}$ — it collapses 2D positions onto a single number line aligned with $\hat{\mathbf{n}}$.
+That one operation is the whole game.
+
+Picture two shapes and a direction. Project every part of both shapes onto that direction and you get two
+intervals (a low-to-high range each). If those intervals have a gap, you have found a **separating axis**:
+a line you could draw with empty space on each side, so the shapes definitely do *not* touch. If *no*
+direction produces a gap, they overlap. That is the **Separating Axis Theorem**, and it is the honest
+general test for convex shapes.
+
+The good news is that simple shapes let you skip the search. For **circles**, the only direction that
+matters is the line joining their centers — so the test is just "distance between centers versus sum of
+radii". For **axis-aligned boxes** (AABBs), the only candidate axes are horizontal and vertical, so you
+just check whether the x-ranges overlap *and* the y-ranges overlap. Rotated boxes need the full SAT, but
+only a handful of axes.
+
+## Play with it
+
+Drag the two shapes together and watch them flash red the instant they overlap. Flip between the AABB,
+circle, and rotated-box (SAT) tests, and in SAT mode spin box B with the angle slider.
+
+<ShapeOverlapLab client:visible />
+
+<Callout type="tip">
+In <strong>SAT</strong> mode, set box B's angle and slide it until they just separate — the readout flips
+to "separated" exactly when one projection axis opens up a gap. That single gap is all the proof you need
+that the boxes are apart.
+</Callout>
+
+## The formal definition
+
+**Circle vs circle.** Centers $\mathbf{c}_1,\mathbf{c}_2$, radii $r_1,r_2$. They overlap when the squared
+center distance is below the squared radius sum (squaring avoids a square root):
+
+$$
+\lVert \mathbf{c}_1 - \mathbf{c}_2 \rVert^2 \;<\; (r_1 + r_2)^2.
+$$
+
+**AABB vs AABB.** Box $A$ spans $[a_x^{\min}, a_x^{\max}]\times[a_y^{\min}, a_y^{\max}]$, similarly $B$.
+They overlap only if both axes overlap:
+
+$$
+a_x^{\min} \le b_x^{\max} \;\wedge\; b_x^{\min} \le a_x^{\max} \;\wedge\;
+a_y^{\min} \le b_y^{\max} \;\wedge\; b_y^{\min} \le a_y^{\max}.
+$$
+
+**Separating Axis Theorem.** For two convex shapes, project both onto a candidate unit axis
+$\hat{\mathbf{n}}$ via the dot product, giving intervals $[\min_A,\max_A]$ and $[\min_B,\max_B]$ where
+$\min_A = \min_{\mathbf{p}\in A}\,\mathbf{p}\cdot\hat{\mathbf{n}}$. A gap on *any* tested axis means no
+collision:
+
+$$
+\exists\,\hat{\mathbf{n}}: \quad \max_A < \min_B \;\;\text{or}\;\; \max_B < \min_A
+\;\;\Longrightarrow\;\; \text{separated}.
+$$
+
+For two boxes you only need each box's edge normals as candidate axes.
+
+```js
+// SAT overlap on ONE axis (n is a unit vector); returns penetration depth
+const projA = corners(A).map((p) => p.x * n.x + p.y * n.y);
+const projB = corners(B).map((p) => p.x * n.x + p.y * n.y);
+const overlap = Math.min(...projA.concat(...[Math.max(...projA)]), Math.max(...projB))
+              - Math.max(Math.min(...projA), Math.min(...projB));
+return overlap; // <= 0 means this axis separates them
+```
+
+<Callout type="why">
+Real games run a <strong>broad phase</strong> then a <strong>narrow phase</strong>. The broad phase uses
+cheap AABBs (or a spatial grid / tree) to throw out the millions of pairs that are nowhere near each
+other; the narrow phase runs the exact, pricier test (circle or SAT) only on the few survivors. Testing
+every pair is $O(n^2)$ and dies at a few hundred objects — the broad phase is what makes thousands of
+entities possible.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Billiards / pool" icon="🎱">
+Pool balls are perfect circles, so the engine never needs anything fancier than the distance-versus-radii
+test. Two balls collide the instant $\lVert \mathbf{c}_1 - \mathbf{c}_2 \rVert$ drops below $r_1 + r_2$,
+and the center-to-center line is exactly the direction the impulse acts along.
+</ExampleCard>
+
+<ExampleCard domain="Platformers" icon="🍄">
+A running character against a tilemap is the classic AABB case: the player's box versus each solid tile's
+box. Because tiles are axis-aligned, every test is four comparisons of overlapping ranges — fast enough to
+check the handful of tiles the player straddles every single frame.
+</ExampleCard>
+
+<ExampleCard domain="Bullet-hell shooters" icon="🔫">
+With hundreds of bullets, brute force is hopeless. A broad phase buckets bullets into a spatial grid so
+each one only narrow-phase tests the player against bullets in nearby cells. Hitboxes are usually small
+circles, keeping the precise test a single distance comparison.
+</ExampleCard>
+
+<ExampleCard domain="Physics crates (RTS / sandbox)" icon="📦">
+Stacked crates tumble at arbitrary angles, so AABBs would report false hits on the empty corners of a
+tilted box. Here the full SAT on each box's edge normals is the right tool, and the smallest overlap it
+finds doubles as the push-out direction for the collision response that follows.
+</ExampleCard>
+
+<Callout type="note">
+A positive SAT result hands you a bonus: the axis with the <strong>smallest</strong> overlap is the
+minimum-translation direction. Push the shapes apart along it by that depth and they are exactly resolved
+— which is precisely what the next lesson, collision response, needs.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'According to the Separating Axis Theorem, two convex shapes are NOT colliding when...',
+      options: [
+        'their centers are different',
+        'there exists at least one axis on which their projected intervals leave a gap',
+        'all tested axes show overlapping projections',
+        'they have different areas',
+      ],
+      answer: 1,
+      explain: 'Finding a single axis whose projections have a gap proves a separating wall exists, so the shapes are apart. Only if every axis overlaps do they collide.',
+    },
+    {
+      q: 'Why do real engines run a broad phase before the exact collision test?',
+      options: [
+        'To make the graphics look better',
+        'Because the exact test is wrong without it',
+        'To cheaply discard the vast majority of non-touching pairs and avoid O(n²) exact tests',
+        'To convert circles into boxes',
+      ],
+      answer: 2,
+      explain: 'The broad phase (AABBs, grids, trees) eliminates pairs that are far apart so the costly narrow-phase test runs only on a few candidates, dodging the O(n²) blowup.',
+    },
+    {
+      q: 'Two balls have centers (1, 2) and (4, 6) with radii 2 and 3. Are they overlapping?',
+      options: [
+        'Yes — distance 5 is less than radius sum 5... actually equal, so just touching',
+        'Yes — distance 4 is less than 5',
+        'No — distance 5 equals the radius sum 5, so they are exactly touching, not overlapping',
+        'No — distance 7 exceeds 5',
+      ],
+      answer: 2,
+      explain: 'Distance = √((4−1)² + (6−2)²) = √(9 + 16) = √25 = 5, and r₁ + r₂ = 5. Equal means just touching; overlap needs distance strictly less than the sum.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Collision detection answers one question fast: <strong>do these two shapes overlap right now?</strong>',
+    '<strong>Circles</strong> compare center distance to the sum of radii; <strong>AABBs</strong> check x-range and y-range overlap.',
+    'The <strong>Separating Axis Theorem</strong> says convex shapes miss if any axis (found via the dot product) shows a projection gap.',
+    'Engines split work into a cheap <strong>broad phase</strong> and an exact <strong>narrow phase</strong> to beat O(n²).',
+    'SAT bonus: the <strong>smallest overlap axis</strong> is the minimum push-out direction for resolving the hit.',
+  ]}
+/>
+
+Next up: **collision response** — once you know two things touched, how hard do they bounce, and which way?

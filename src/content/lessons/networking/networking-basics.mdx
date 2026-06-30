@@ -1,0 +1,179 @@
+---
+title: Networking Basics
+track: networking
+summary: Packets, TCP vs UDP, and the timing trio — latency, jitter, and bandwidth — that decide how a game feels online.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - binary-data/bits-bytes
+leadsTo:
+  - networking/client-server-p2p
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PacketLinkSimulator from '../../../components/demos/PacketLinkSimulator.tsx';
+
+## The hook: why does your shot "miss" a player who's already dead?
+
+You line up the perfect headshot, click, and... nothing. A heartbeat later the enemy crumples, or worse, the
+game decides you missed. The bullet was never the problem. The problem is that your computer and the game
+server are separated by hundreds of kilometres of cable, and information takes *time* to cross it. Online
+games live or die by how they tame that delay. Before we can hide latency, we have to understand the raw
+materials: **bits grouped into packets**, the two ways to ship them (**TCP** and **UDP**), and the timing
+numbers — **latency, jitter, and bandwidth** — that describe the pipe between you and everyone else.
+
+<Callout type="intuition" title="The one-sentence idea">
+The network breaks your data into small **packets** and ships them across a wire that has a **speed limit**
+(bandwidth), a **travel time** (latency), and an annoying habit of being **inconsistent** (jitter) and
+sometimes **losing** packets entirely.
+</Callout>
+
+## Intuition: from bits to packets to a felt experience
+
+You already know that everything is **bits grouped into bytes**. A network doesn't send your game state as
+one giant blob — it chops it into **packets**: small, self-contained chunks (often a few hundred to ~1500
+bytes) each wearing a header that says where it came from and where it's going, like an envelope around a
+short letter.
+
+Three numbers describe the journey of those envelopes:
+
+- **Latency** — how long *one* packet takes to travel one way. The round trip (there and back) is the **RTT**.
+- **Bandwidth** — how *many* bits the wire can carry per second. Think width of the pipe, not speed of a drop.
+- **Jitter** — how much the latency *wobbles* from packet to packet. Steady 80 ms feels far better than a
+  chaotic 40–160 ms.
+
+And then there's **packet loss**: envelopes that simply never arrive. How you react to loss is the whole
+difference between the two transport protocols below.
+
+## Play with it
+
+Send packets across a link. Drag the **latency** up and watch every packet take longer to cross. Crank the
+**loss** and switch between **UDP** (fire-and-forget — lost packets are just gone) and **TCP** (lost packets
+are detected and **resent**, in amber). Notice the trade: TCP delivers everything, but a resend costs you an
+extra round trip.
+
+<PacketLinkSimulator client:visible />
+
+<Callout type="tip">
+Watch the RTT readout: it is roughly **twice** the one-way latency. When people say "my ping is 80",
+they mean an RTT of about 80 ms — your input needs that long to be seen and acknowledged.
+</Callout>
+
+## The formal definition
+
+A packet's total one-way delay is a sum of pieces. The two that matter most for games are the fixed
+**propagation delay** (distance over signal speed) plus the **transmission delay** (size over bandwidth):
+
+$$
+t_{\text{latency}} = \underbrace{\frac{d}{s}}_{\text{propagation}} + \underbrace{\frac{B}{R}}_{\text{transmission}} + t_{\text{queue}}
+$$
+
+where $d$ is distance, $s$ the signal speed in the medium, $B$ the packet size in bits, and $R$ the link rate
+(bandwidth) in bits per second. The round-trip time is
+
+$$
+\text{RTT} \approx 2 \, t_{\text{latency}}.
+$$
+
+**Jitter** is the variability of that latency — concretely, the standard deviation (or mean absolute change)
+of successive one-way delays:
+
+$$
+J = \operatorname{stddev}(t_1, t_2, \dots, t_n).
+$$
+
+A handy sanity check is the **bandwidth-delay product**, the amount of data "in flight" on the wire at once:
+
+$$
+\text{BDP} = R \times \text{RTT}.
+$$
+
+<Callout type="why">
+Games almost always pick **UDP**. A late packet in a shooter is *useless* — by the time TCP resends a 30 ms-old
+position, the world has moved on. UDP lets the game say "drop it, I'll send a fresher update next tick."
+Reliability, when needed (chat, loot pickups), is rebuilt *selectively* on top of UDP rather than forced on
+everything.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Competitive FPS" icon="🎯">
+At 64-tick, a server updates the world about every 16 ms. If your RTT is 60 ms, your click is seen ~30 ms
+late and the reply takes ~30 ms more. That gap is why the next lessons exist: prediction and lag
+compensation paper over an RTT you can never fully remove.
+</ExampleCard>
+
+<ExampleCard domain="Voice chat (VoIP)" icon="🎙️">
+A teammate's voice is split into tiny audio packets sent over UDP. Lose one and you hear a brief glitch —
+acceptable. *Resend* it and you'd hear that syllable arrive a full RTT late, after the conversation moved on.
+Freshness beats completeness, the same reason games avoid TCP.
+</ExampleCard>
+
+<ExampleCard domain="Mobile gaming on the move" icon="📱">
+On a train switching cell towers, your bandwidth is fine but **jitter** spikes wildly — 40 ms one moment,
+200 ms the next. Steady high latency is playable; unpredictable latency makes prediction guess wrong, which
+is why mobile titles buffer aggressively.
+</ExampleCard>
+
+<ExampleCard domain="Live sports streaming" icon="📺">
+A stream cares about **bandwidth** (enough bits per second for 4K) and tolerates latency by buffering several
+seconds ahead. A game is the opposite: tiny bandwidth, but every millisecond of latency is felt. Same wire,
+opposite priorities.
+</ExampleCard>
+
+<Callout type="note">
+Bandwidth and latency are independent. A fat 1 Gbps satellite link can still have a 600 ms RTT — a very
+*wide* pipe that is also very *long*. Buying a faster plan rarely lowers your ping.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Your one-way latency to a server is 45 ms. Roughly what is your RTT ("ping")?',
+      options: ['22 ms', '45 ms', '90 ms', '45 seconds'],
+      answer: 2,
+      explain: 'RTT is about twice the one-way latency: 2 × 45 = 90 ms — the time for input to reach the server and a reply to return.',
+    },
+    {
+      q: 'Why do most fast-paced games send gameplay over UDP instead of TCP?',
+      options: [
+        'UDP has unlimited bandwidth',
+        'UDP never loses packets',
+        'A resent stale packet arrives too late to be useful; UDP lets the game drop it and send fresher data',
+        'TCP cannot cross the internet',
+      ],
+      answer: 2,
+      explain: 'TCP guarantees delivery by resending, but a resend costs a round trip. By then the position is stale, so games prefer UDP and rebuild only the reliability they actually need.',
+    },
+    {
+      q: 'Two connections both average 80 ms latency. Connection A is steady at 80 ms; B swings between 30 and 160 ms. Which feels worse and why?',
+      options: [
+        'A, because higher numbers are always worse',
+        'B, because high jitter makes timing unpredictable',
+        'They feel identical since the average matches',
+        'B, because its bandwidth is lower',
+      ],
+      answer: 1,
+      explain: 'Jitter — the variability of latency — is what breaks prediction and smoothing. A predictable 80 ms is far easier to hide than a wildly swinging one.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Data crosses the network as small <strong>packets</strong> — bytes wrapped in a header that routes them.',
+    '<strong>Latency</strong> is one-way travel time; <strong>RTT</strong> (your "ping") is roughly double it.',
+    '<strong>Bandwidth</strong> (bits per second) and latency are independent — a wide pipe can still be a long one.',
+    '<strong>Jitter</strong> (latency variability) and <strong>packet loss</strong> often hurt feel more than raw latency does.',
+    'Games favor <strong>UDP</strong> — fresh-but-lossy beats TCP\'s complete-but-late, and reliability is added back only where needed.',
+  ]}
+/>
+
+Next up: who is actually in charge of the game world? We compare the **client-server** and **peer-to-peer**
+architectures — and see why one of them makes cheaters' lives much harder.

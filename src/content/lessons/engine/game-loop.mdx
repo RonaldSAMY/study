@@ -1,0 +1,215 @@
+---
+title: The Game Loop
+track: engine
+summary: A game is an endless update-then-render cycle; separating a fixed-timestep physics update (with an accumulator and leftover dt) from rendering keeps the simulation consistent no matter the frame rate.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - game-physics/numerical-integration
+leadsTo:
+  - engine/ecs
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TimestepComparator from '../../../components/demos/TimestepComparator.tsx';
+
+## The hook: why the boss is unbeatable on your friend's laptop
+
+You finally beat the level. Your friend tries it on an older laptop and the boss moves in
+*slow motion*, jumps half as high, and sometimes phases straight through the floor. Same code, same
+boss, completely different physics. The culprit isn't the GPU or the art — it's the **game loop**: how
+the engine decides *how much time has passed* between one frame and the next, and what it does with that
+time. Get this wrong and your game literally plays differently on every machine.
+
+<Callout type="intuition" title="The one-sentence idea">
+A game loop repeats **update, then render** forever — and if you advance the physics in **fixed-size
+time steps** instead of "however long the last frame took," the simulation behaves identically on a fast
+PC, a slow laptop, or a phone.
+</Callout>
+
+## Intuition: a flipbook that has to keep perfect time
+
+In the previous lesson on **numerical integration** you saw that stepping physics forward means taking
+the current velocity and position and nudging them by a small amount of time $\Delta t$. Euler and
+semi-implicit Euler are only *approximations*: the bigger the step, the more error you accumulate. A
+ball under gravity stepped once per second looks nothing like the same ball stepped 60 times per second.
+
+Now connect that to a real game. Each loop iteration does two jobs:
+
+1. **Update** — move the world forward by some amount of time (run physics, AI, input).
+2. **Render** — draw the current state to the screen.
+
+The naive approach is to measure how long the last frame took — the **delta time** $\Delta t$ — and feed
+*that* straight into the physics. It seems reasonable: a frame took 33 ms, so advance the world 33 ms.
+But $\Delta t$ now depends on the hardware, the GPU load, even a background download. A frame-time
+**spike** hands your integrator one giant step, and (just like the integration lesson warned) the
+approximation blows up: the ball tunnels through the floor or gains energy from nowhere.
+
+The fix is to *decouple* the size of the physics step from the frame rate. We always advance physics in
+small, **fixed** chunks of $\Delta t$, and we use an **accumulator** to bank up real elapsed time and
+spend it one fixed chunk at a time.
+
+## Play with it
+
+Below, the *same* bouncing ball is simulated two ways. The left lane uses a fixed-timestep accumulator;
+the right lane feeds the raw frame time straight into the integrator. The faint emerald ghost is the
+ground truth.
+
+<TimestepComparator client:visible />
+
+Drag the **frame rate** slider down toward 4 fps, or hit **Inject frame spike**, and watch the sky ball
+peel away from the truth (its "drift" climbs) while the indigo ball stays locked on.
+
+<Callout type="tip">
+Watch the <strong>fixed steps / frame</strong> readout. At a low frame rate one frame banks a lot of
+time, so the accumulator spends it as <em>several</em> small fixed steps in a row — same total time,
+tiny per-step error. The variable lane takes that whole time in one reckless leap.
+</Callout>
+
+## The formal definition
+
+Let real wall-clock time advance by a measured **delta time** each frame:
+
+$$
+\Delta t_{\text{frame}} = t_{\text{now}} - t_{\text{prev}}.
+$$
+
+A **variable timestep** loop integrates with that value directly, so the state update is
+
+$$
+\mathbf{s}_{n+1} = \mathbf{s}_n + \Delta t_{\text{frame}} \; f(\mathbf{s}_n),
+$$
+
+where $f$ is the derivative (velocity, acceleration) from the integration lesson. Because
+$\Delta t_{\text{frame}}$ changes every frame and can spike, the trajectory is **not reproducible**.
+
+A **fixed timestep** loop instead chooses one constant step $\Delta t$ (say $\tfrac{1}{120}\,\text{s}$)
+and keeps an **accumulator** $A$ of unspent real time. Each frame it adds the frame's elapsed time and
+then drains the accumulator in whole steps:
+
+$$
+A \mathrel{+}= \Delta t_{\text{frame}}, \qquad
+\text{while } A \ge \Delta t: \quad \mathbf{s} \leftarrow \mathbf{s} + \Delta t \, f(\mathbf{s}), \;\; A \mathrel{-}= \Delta t.
+$$
+
+```js
+accumulator += frameDt;            // bank the real time that passed
+while (accumulator >= DT) {         // spend it in equal fixed chunks
+  prev = state;                     // remember last state for interpolation
+  state = integrate(state, DT);     // every step is exactly DT seconds
+  accumulator -= DT;
+}
+const alpha = accumulator / DT;     // leftover < DT, as a fraction
+render(lerp(prev, state, alpha));   // smooth between the two latest steps
+```
+
+Whatever real time is left over is the remainder $A < \Delta t$. Rather than waste it, we render a blend
+between the previous and current physics states using the **interpolation factor**
+
+$$
+\alpha = \frac{A}{\Delta t}, \qquad \mathbf{s}_{\text{render}} = (1 - \alpha)\,\mathbf{s}_{\text{prev}} + \alpha\,\mathbf{s}_{\text{cur}},
+$$
+
+with $\alpha \in [0, 1)$. This keeps physics perfectly deterministic while rendering stays buttery smooth
+even when the frame rate and the step rate don't line up.
+
+<Callout type="why">
+The fixed loop is the same total amount of integration as the variable loop — it just refuses to take
+one big inaccurate step when it could take several small accurate ones. That single discipline is what
+makes a replay recorded on one machine play back identically on another.
+</Callout>
+
+## The same idea, four different worlds
+
+The "advance in fixed chunks, keep the leftover" trick shows up far beyond game physics.
+
+<ExampleCard domain="Rhythm games" icon="🎵">
+A rhythm game must judge taps against a song at exact beats. If timing were tied to the frame rate, a
+dropped frame would shift every note and "Perfect" hits would become "Misses." Instead the audio clock
+is the fixed master step; the renderer interpolates note positions toward the next beat. The music never
+drifts even when the graphics stutter.
+</ExampleCard>
+
+<ExampleCard domain="Film & animation" icon="🎬">
+Movies are a fixed timestep made physical: 24 frames per second, every frame exactly
+$\tfrac{1}{24}\,\text{s}$ of story time. Slow motion is just rendering many fixed steps between two
+moments; "pulldown" to show 24 fps film on 60 Hz TVs is literally an accumulator deciding when to repeat
+a frame. Consistent step size is why a film looks the same in every cinema.
+</ExampleCard>
+
+<ExampleCard domain="Networked multiplayer" icon="🌐">
+Competitive games run **deterministic lockstep**: every client advances the simulation in identical
+fixed ticks (e.g. 60 per second) and exchanges only inputs. Because the step is fixed, two machines that
+start equal stay equal, so a tiny input log can reproduce an entire match. A variable step would diverge
+within seconds, and rewind-and-replay netcode would be impossible.
+</ExampleCard>
+
+<ExampleCard domain="Factory automation" icon="🏭">
+A conveyor-line controller (a PLC) runs a fixed **scan cycle**: read all sensors, update logic, drive
+all actuators, repeat on a guaranteed interval. The fixed period is what makes the line behave the same
+shift after shift; if the cycle time wandered with CPU load, a packer arm would grab at the wrong moment
+and parts would scatter.
+</ExampleCard>
+
+<Callout type="note">
+Notice the split each time: a **fixed master clock** does the real work, while a faster, looser layer
+just *presents* it (render, display, draw the note). Update and render are different jobs running at
+different rates on purpose.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does a variable-timestep simulation behave differently on a slow machine?',
+      options: [
+        'Slow machines round numbers differently',
+        'A larger, hardware-dependent delta time makes the integrator less accurate, changing the result',
+        'Gravity is weaker at lower frame rates',
+        'Rendering and physics are the same step, so it cannot differ',
+      ],
+      answer: 1,
+      explain: 'With variable dt, a slow frame hands the integrator a big step. Euler-style integration error grows with step size, so the trajectory changes — exactly the divergence the demo shows.',
+    },
+    {
+      q: 'A frame measures 50 ms of elapsed time and the accumulator already held 4 ms. With a fixed step of dt = 8 ms, how many fixed steps run this frame, and what is left over?',
+      options: [
+        '5 steps, 4 ms left over',
+        '6 steps, 6 ms left over',
+        '7 steps, 6 ms left over',
+        '6 steps, 0 ms left over',
+      ],
+      answer: 1,
+      explain: 'The accumulator becomes 4 + 50 = 54 ms. Each step spends 8 ms, and 54 / 8 = 6.75, so 6 whole steps run (consuming 48 ms), leaving a 6 ms remainder to carry into the next frame.',
+    },
+    {
+      q: 'What is the interpolation factor alpha used for in a fixed-timestep loop?',
+      options: [
+        'To make the physics step larger when frames are slow',
+        'To blend the previous and current physics states so rendering looks smooth between fixed steps',
+        'To skip rendering entirely on slow frames',
+        'To change gravity based on frame rate',
+      ],
+      answer: 1,
+      explain: 'alpha = leftover / dt is the fraction of a step still unspent. Rendering lerps between the last two states by alpha, giving smooth visuals without touching the deterministic physics.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A game loop is an endless <strong>update, then render</strong> cycle — and those two jobs should run at different rates.',
+    'A <strong>variable timestep</strong> feeds raw, hardware-dependent delta time into the integrator, so results change with frame rate and frame spikes.',
+    'A <strong>fixed timestep</strong> advances physics in equal chunks of <strong>dt</strong>, using an <strong>accumulator</strong> to bank leftover real time and spend it one step at a time.',
+    'The leftover time gives an <strong>interpolation factor α = A / dt</strong>, used to lerp between the last two states so rendering stays smooth.',
+    'Fixed steps make a simulation <strong>deterministic and reproducible</strong> — the foundation of replays, lockstep netcode, and consistent physics everywhere.',
+  ]}
+/>
+
+Next up: **Entity-Component-System** — now that we know *when* to update the world, we'll see a
+cache-friendly way to organize *what* lives in it.

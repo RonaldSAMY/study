@@ -1,0 +1,159 @@
+---
+title: Graphs
+track: data-structures
+summary: "Nodes connected by edges — the most general structure — plus the two ways to explore one: BFS and DFS."
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - data-structures/trees
+leadsTo:
+  - algorithms/big-o
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import GraphSearchTraversal from '../../../components/demos/GraphSearchTraversal.tsx';
+
+## The hook: every door in the dungeon
+
+Picture a dungeon level: a Spawn room with a door to a Hall, the Hall opening into a Vault and a Lab, the
+Lab leading to the Boss. The map isn't a neat hierarchy — rooms loop back, shortcuts connect distant areas,
+a single room may have three exits. A tree can't capture this; it forbids loops and allows only one parent.
+What you need is the most flexible structure in all of computing: the **graph**. It's how a game finds a
+path to the player, how a map app routes around traffic, and how a social network knows who your friends'
+friends are.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **graph** is just a set of <strong>nodes</strong> connected by <strong>edges</strong> — with no rules
+about parents, loops, or direction, which makes it general enough to model almost any relationship.
+</Callout>
+
+## Intuition: trees with the rules removed
+
+A graph keeps the *nodes* of a tree but throws away its restrictions. There is no single root, a node can
+connect to any number of others, and **cycles** (loops back to where you started) are allowed. Edges can be
+**undirected** (a two-way door between rooms) or **directed** (a one-way drop, a "follows" link).
+
+To store a graph we need to record who connects to whom. Two layouts dominate:
+
+- **Adjacency list** — for each node, keep a list of its neighbors. Compact when edges are few (most real
+  graphs), and the natural choice for level maps and social networks.
+- **Adjacency matrix** — an $n \times n$ grid where cell $(i, j)$ is 1 if an edge connects $i$ and $j$.
+  Fast to check a specific pair, but uses $n^2$ space even when edges are sparse.
+
+Once stored, the key operation is **exploration**: starting from one node, systematically visit everything
+reachable. Because graphs have cycles, we must remember which nodes we've already **visited** — otherwise we
+loop forever. There are two classic strategies, and you already met both containers behind them.
+
+## Play with it
+
+Choose **Connect rooms** to add or remove doors, pick a start room, then run **BFS** and **DFS** and watch
+the order rooms get visited. BFS spreads out evenly; DFS plunges down one path first.
+
+<GraphSearchTraversal client:visible />
+
+<Callout type="tip">
+Run BFS, then DFS, from the same start. BFS visits all the <em>nearby</em> rooms before venturing further —
+perfect for "shortest number of doors." DFS commits to one corridor all the way to its end before
+backtracking. Same graph, two personalities.
+</Callout>
+
+## The formal definition
+
+A graph is a pair $G = (V, E)$ where $V$ is the set of nodes (vertices) and $E$ is the set of edges, each
+edge joining two nodes. The two ways to explore it from a start node:
+
+- **Breadth-First Search (BFS)** uses a **queue**. It visits the start, then all its neighbors, then *their*
+  unvisited neighbors — expanding outward in rings of distance. On an unweighted graph, BFS finds the
+  **shortest path** (fewest edges).
+- **Depth-First Search (DFS)** uses a **stack** (often the recursion call stack). It follows one path as
+  deep as possible, then backtracks to the last branch and tries another.
+
+Both visit every reachable node once and look at every edge once, so each runs in $O(V + E)$ time. Both rely
+on a **visited** set to avoid revisiting nodes in cycles.
+
+<Callout type="why">
+Graph search is the skeleton of game AI and beyond. Pathfinding (A* is BFS with a smart priority queue)
+moves enemies through a level; DFS detects cycles and explores state spaces; and a neural network itself is
+a <strong>directed graph</strong> of operations that autodiff traverses to compute gradients. Master BFS and
+DFS and you've met the core of countless algorithms.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Social networks" icon="👥">
+People are nodes; friendships are edges. "People you may know" runs a breadth-first search two hops out:
+your friends, then their friends. The famous "six degrees of separation" is just a short BFS path length.
+</ExampleCard>
+
+<ExampleCard domain="Navigation" icon="🗺️">
+Cities are nodes and roads are weighted edges. A route planner searches this graph for the lowest-cost path,
+re-running the search when traffic changes an edge's weight. Your GPS is graph search in your pocket.
+</ExampleCard>
+
+<ExampleCard domain="Chemistry" icon="⚗️">
+A molecule is a graph: atoms are nodes, bonds are edges. Software compares molecules by checking whether
+their graphs match, and rings in the structure are literally cycles in the graph.
+</ExampleCard>
+
+<ExampleCard domain="The web" icon="🔗">
+Web pages are nodes; hyperlinks are directed edges. Search engines crawl this graph with BFS and rank pages
+by how the link graph is connected — the original idea behind PageRank.
+</ExampleCard>
+
+<Callout type="note">
+A tree is simply a special graph: connected, undirected, with no cycles and exactly one path between any two
+nodes. So everything you learned about traversal carries over — a graph just adds the bookkeeping to handle
+loops.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What makes a graph more general than a tree?',
+      options: [
+        'Graphs store numbers, trees store text',
+        'Graphs allow cycles and any number of connections per node, with no single root',
+        'Graphs are always sorted',
+        'Trees can have edges but graphs cannot',
+      ],
+      answer: 1,
+      explain: 'A graph drops the tree restrictions: it allows cycles, multiple connections, optional direction, and has no required root.',
+    },
+    {
+      q: 'Which search uses a queue and finds the shortest path (fewest edges) in an unweighted graph?',
+      options: ['Depth-First Search', 'Breadth-First Search', 'Binary search', 'In-order traversal'],
+      answer: 1,
+      explain: 'BFS expands outward in rings using a queue, so it reaches each node by the fewest edges — the shortest unweighted path.',
+    },
+    {
+      q: 'Why must graph traversal keep a "visited" set, unlike most tree traversal?',
+      options: [
+        'To sort the nodes',
+        'Because graphs can have cycles, so without it the search could loop forever',
+        'To save memory',
+        'Because graphs have no edges',
+      ],
+      answer: 1,
+      explain: 'Cycles mean you can return to a node you already saw. Marking nodes visited prevents infinite loops. Trees have no cycles, so they rarely need this.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>graph</strong> is nodes plus edges, with no root, optional direction, and cycles allowed — the most general structure.',
+    'Store it as an <strong>adjacency list</strong> (compact, sparse graphs) or an <strong>adjacency matrix</strong> (fast pair checks, n² space).',
+    '<strong>BFS</strong> uses a queue, explores by distance, and finds shortest unweighted paths.',
+    '<strong>DFS</strong> uses a stack, dives deep then backtracks; both run in <strong>O(V + E)</strong>.',
+    'Cycles force a <strong>visited</strong> set, and graphs model maps, social networks, molecules, and neural nets.',
+  ]}
+/>
+
+That wraps the data-structures track. Next you'll measure these structures head-to-head with **Big-O
+notation** — the language for saying exactly how fast (or slow) each operation really is.

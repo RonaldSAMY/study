@@ -1,0 +1,174 @@
+---
+title: Collision Response
+track: game-physics
+summary: When two bodies touch, an impulse along the contact normal flips their speeds — scaled by restitution for bounce and shaved by friction for grip.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - game-physics/collision-detection
+  - game-physics/forces-newton
+leadsTo:
+  - game-physics/rigid-body-dynamics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BounceRestitutionLab from '../../../components/demos/BounceRestitutionLab.tsx';
+
+## The hook: why does the ball stop bouncing?
+
+Drop a basketball in your game and it should bounce — high at first, then lower, then a flurry of little
+taps until it rests. Drop a lump of clay and it just *splats*. Same fall, same floor, wildly different
+endings. Your collision detector already told you **that** two things touched and **where**. But it says
+nothing about what happens next: does the ball rocket back up, slide along, or die on the spot? That is
+**collision response**, and it is the moment a contact turns into new velocities.
+
+<Callout type="intuition" title="The one-sentence idea">
+At a contact, fire a single **impulse** along the surface normal that reverses the approaching speed —
+multiply that reversal by **restitution** to set the bounciness, and rub off sideways speed with
+**friction**.
+</Callout>
+
+## Intuition: detection found the touch, now respond
+
+Collision *detection* hands you two facts: a contact point and a unit **normal** $\mathbf{n}$ pointing
+out of the surface. Newton's laws (forces and $\mathbf{F} = m\mathbf{a}$) told you how velocity builds up
+over a frame. Response stitches them together at the instant of contact.
+
+Split the incoming velocity into two pieces relative to the surface:
+
+- The **normal** part — how fast the body drives *into* the surface. This is the part that must turn
+  around, or the body would tunnel straight through.
+- The **tangential** part — how fast it slides *along* the surface. Friction acts here.
+
+Restitution $e$ is a single dial from $0$ to $1$. At $e = 1$ the normal speed comes back untouched (a
+perfect, lossless bounce); at $e = 0$ none returns (the body sticks, like clay). Anything in between
+keeps a fraction, so each bounce is a little weaker than the last and the ball eventually settles. That
+shrinking is energy leaving the system — exactly what you watched the spring lose to damping, now packed
+into one number per collision.
+
+## Play with it
+
+Drag **restitution** down and watch the bounces collapse; nudge **friction** up and the balls stop
+skating sideways and pile up instead. The on-canvas energy number ticks down whenever $e < 1$.
+
+<BounceRestitutionLab client:visible />
+
+<Callout type="tip">
+Park restitution at exactly 1 and the total energy should hold roughly steady — the balls bounce
+forever. Drop it to 0 and they slam down once and quit. Everything fun lives in between.
+</Callout>
+
+## The formal definition
+
+Let two bodies approach with relative velocity $\mathbf{v}_{\text{rel}}$ at the contact, and let
+$\mathbf{n}$ be the unit contact normal. The speed of approach along the normal is the projection
+$\mathbf{v}_{\text{rel}} \cdot \mathbf{n}$. The scalar **impulse** that resolves the collision is
+
+$$
+j = \frac{-(1 + e)\,(\mathbf{v}_{\text{rel}} \cdot \mathbf{n})}{\frac{1}{m_1} + \frac{1}{m_2}},
+$$
+
+where $e$ is the restitution and $m_1, m_2$ are the masses. Each body then updates its velocity by that
+impulse, split by its own mass and pushed in opposite directions along $\mathbf{n}$:
+
+$$
+\mathbf{v}_1' = \mathbf{v}_1 + \frac{j}{m_1}\,\mathbf{n}, \qquad
+\mathbf{v}_2' = \mathbf{v}_2 - \frac{j}{m_2}\,\mathbf{n}.
+$$
+
+For the common case of a ball hitting an immovable floor, take $m_2 \to \infty$ and the whole thing
+collapses to flipping and scaling the normal speed: $v_n' = -e\,v_n$. Friction then shaves the
+tangential speed $v_t$ toward zero by some fraction $\mu$, so $v_t' = (1 - \mu)\,v_t$.
+
+```js
+// Ball vs static floor: reflect the normal speed, scale by e.
+const vn = v.x * n.x + v.y * n.y;        // speed into the surface
+if (vn < 0) {                            // only if actually approaching
+  v.x -= (1 + e) * vn * n.x;             // v_n' = -e * v_n  (when |n| = 1)
+  v.y -= (1 + e) * vn * n.y;
+}
+```
+
+<Callout type="why">
+The factor $(1 + e)$ is doing two jobs at once: the $1$ cancels the incoming normal speed (stop the
+penetration), and the $e$ adds back the rebound. So $e = 0$ just halts the approach, while $e = 1$ both
+halts it and launches an equal speed back out.
+</Callout>
+
+## The same idea, four arcades
+
+<ExampleCard domain="Pinball bumpers" icon="🎯">
+A pop bumper is restitution turned up past 1 in spirit: it doesn't just reflect the ball, it injects
+extra impulse along the normal so the ball leaves *faster* than it arrived. Drop $e$ to a normal value
+and the same bumper feels dead — the ball dribbles off instead of snapping away.
+</ExampleCard>
+
+<ExampleCard domain="Breakout / Arkanoid" icon="🧱">
+The ball-vs-paddle hit is a near-perfect bounce ($e \approx 1$) so the rally never loses energy. Many
+versions cheat the normal based on *where* the ball strikes the paddle, steering the rebound angle — a
+deliberate lie on top of the honest reflection.
+</ExampleCard>
+
+<ExampleCard domain="Pool break" icon="🎱">
+Racking balls have high restitution, so the cue ball's impulse barely fades as it scatters the pack
+through chains of contacts. The break looks explosive precisely because $e$ is close to 1 and almost no
+energy is lost at each click.
+</ExampleCard>
+
+<ExampleCard domain="Bouncy platformer" icon="🦘">
+A trampoline tile sets a high restitution just for the player's feet, so landing reverses the downward
+speed into a bigger upward launch. Tune $e$ per surface and the same jump button gives a soft mat, a
+springy pad, or a sticky tar pit.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A ball strikes the floor moving straight down at 10 m/s with restitution e = 0.6. How fast does it leave, going up?',
+      options: ['10 m/s', '6 m/s', '4 m/s', '16 m/s'],
+      answer: 1,
+      explain: 'For a ball on a static floor the normal speed flips and scales by e: v = e * 10 = 0.6 * 10 = 6 m/s upward.',
+    },
+    {
+      q: 'What does restitution e control?',
+      options: [
+        'How much sideways speed is lost to friction',
+        'The fraction of the normal (approach) speed returned after a bounce',
+        'The direction of the contact normal',
+        'The total mass of the two bodies',
+      ],
+      answer: 1,
+      explain: 'Restitution sets how much of the normal closing speed comes back: e = 1 is lossless, e = 0 sticks. Friction, separately, handles the tangential speed.',
+    },
+    {
+      q: 'Why does the impulse formula use the factor (1 + e) rather than just e?',
+      options: [
+        'To make the math harder',
+        'The 1 cancels the incoming normal speed; the e then adds the rebound back on top',
+        'Because masses are always added together',
+        'To convert speed into force',
+      ],
+      answer: 1,
+      explain: 'You first need to remove the approaching normal speed (the 1) and then add back a rebound proportional to e — together that is (1 + e).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Collision <strong>detection</strong> finds the contact point and normal; collision <strong>response</strong> computes the new velocities.',
+    'Resolve a contact with a single <strong>impulse</strong> fired along the contact normal, sized by the masses and the approach speed.',
+    'Split velocity into a <strong>normal</strong> part (reversed and scaled by restitution) and a <strong>tangential</strong> part (shaved by friction).',
+    '<strong>Restitution</strong> runs from 0 (sticks, like clay) to 1 (lossless bounce); anything less than 1 bleeds energy on every hit.',
+    'For a body against an immovable surface the rule simplifies to <em>flip the normal speed and scale it by e</em>.',
+  ]}
+/>
+
+Next up: **rigid-body dynamics** — what happens when that impulse lands *off* the center of mass and the
+body starts to spin.

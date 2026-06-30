@@ -29,6 +29,7 @@ export const GET: APIRoute = async () => {
     track: l.trackTitle,
     icon: l.trackIcon,
     stage: l.stage,
+    course: l.course,
     ready: bodyBySlug.has(l.slug),
     text: bodyBySlug.has(l.slug) ? strip(bodyBySlug.get(l.slug)!) : '',
   }));

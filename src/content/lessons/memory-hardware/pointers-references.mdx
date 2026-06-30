@@ -1,0 +1,181 @@
+---
+title: Pointers & References
+track: memory-hardware
+summary: Variables that hold addresses — the key to real understanding.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - memory-hardware/how-memory-works
+leadsTo:
+  - memory-hardware/stack-vs-heap
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PointerDiagram from '../../../components/demos/PointerDiagram.tsx';
+
+## The hook: how do 50 enemies all chase the *same* player?
+
+In a busy game, dozens of enemies share one target: you. Now imagine each enemy stored its *own
+private copy* of the player. Move once, and you'd have to update fifty copies — and they'd instantly
+disagree about where you are. Real engines don't do that. Each enemy just remembers *where the player
+lives in memory* and looks there whenever it needs your position. That "where it lives" value is an
+**address**, and a variable that stores an address is a **pointer**.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **pointer** is a variable whose value is the **address** of another variable — so instead of holding
+data, it holds directions to where the data lives.
+</Callout>
+
+## Intuition: a sticky note that says "it's over there"
+
+Last lesson, memory was a street of numbered boxes: every variable lives at some address and holds a
+value. A normal variable like `health` might sit at address `0x2000` holding the value 42.
+
+A pointer is just another variable — it also lives at some address and also holds a value. The twist
+is *what* it holds: not 42, but the **address** `0x2000` itself. It's a sticky note that reads
+"the real thing is over at 0x2000."
+
+Two operations make this useful:
+
+- **Address-of** (`&x`) asks "what is the address of `x`?" — that's the value you put into a pointer.
+- **Dereference** (`*p`) says "follow the address in `p` and use the value you find there." Reading
+  `*p` fetches the pointed-to value; writing `*p = 99` changes the original variable, not the pointer.
+
+If two pointers hold the same address, they're **aliases**: two names for one box. A pointer that
+points at nothing holds a special address — the **null** pointer — and following it is a classic crash.
+
+## Play with it
+
+On the left are three variables, each at its own address. The indigo box on the right is the pointer
+`p`; its value is the address it currently stores. Click a variable (or use the buttons) to change
+which address `p` holds, and watch the arrow follow.
+
+<PointerDiagram client:visible />
+
+<Callout type="tip">
+Press <strong>Dereference *p</strong> to light up the box the arrow lands on — that's the value
+<code>*p</code> gives you. Notice the arrow always points to the box whose address equals
+<code>p</code>'s stored value. Change <code>p</code>, and you've redirected the whole program's
+attention without copying any data.
+</Callout>
+
+## The formal definition
+
+Let a variable $x$ live at address $a_x$ and hold value $v_x$. A pointer $p$ to $x$ is a variable
+whose stored value is that address:
+
+$$
+p = a_x = \;\&x.
+$$
+
+Dereferencing follows the address back to the value, so the two operations undo each other:
+
+$$
+*p = \text{mem}(p) = \text{mem}(a_x) = v_x, \qquad *(\&x) = x.
+$$
+
+Writing through the pointer, `*p = w`, sets $\text{mem}(a_x) = w$, which changes $x$ itself. Because a
+pointer is also a variable in memory, you can even have a **pointer to a pointer** — a value $q$ with
+$q = \&p$, so that $*q = p$ and $**q = x$. The null pointer is the reserved address (written `NULL`
+or `nullptr`) that points at nothing; dereferencing it is undefined and usually crashes.
+
+In C, the whole story is three lines:
+
+```c
+int x = 42;     // x holds 42
+int *p = &x;    // p holds the ADDRESS of x
+*p = 99;        // follow p and overwrite: now x == 99
+```
+
+<Callout type="why">
+Pointers are how programs share data without copying it. An enemy's `target` field is a pointer to the
+one player entity; a particle system points at a shared texture; an undo system points back at the
+object it will restore. Move or update the original once, and everyone holding a pointer sees the
+change for free.
+</Callout>
+
+## The same idea, four different worlds
+
+A pointer is the everyday idea of a *reference*: something small that tells you where the real thing is.
+
+<ExampleCard domain="Contacts app" icon="📇">
+"Mom" in your phone isn't your mother — it's an entry that *refers* to a stored phone number. Tapping
+it follows the reference and dials the real person. Change Mom's number once and every call still
+reaches her: you updated the target, not the hundred places that point to it.
+</ExampleCard>
+
+<ExampleCard domain="Treasure map" icon="🗺️">
+A map doesn't contain the gold; the X marks a **location**. The map is tiny, the treasure is heavy.
+Reading the map is harmless — until you walk to the X and dig, which is the dereference. Two maps with
+the same X are aliases for one buried chest.
+</ExampleCard>
+
+<ExampleCard domain="Restaurant pager" icon="🍔">
+The buzzer they hand you isn't your meal — it *references* your order in the kitchen. When the food is
+ready, the buzzer points you to the counter. A buzzer that was never assigned to an order is like a
+null pointer: follow it and you get nothing.
+</ExampleCard>
+
+<ExampleCard domain="Game entity handle" icon="🎮">
+An enemy's "chase target" is a pointer to the player entity, not a copy of it. Fifty enemies can hold
+the same pointer and all read your live position. Defeat the player and you set those pointers to null
+so nobody chases a ghost — exactly the alias-and-null pattern, in a game loop.
+</ExampleCard>
+
+<Callout type="warning">
+The number-one pointer bug is following an address that points at nothing valid — a **null** or a
+**dangling** pointer (one whose target was already freed). The fix is discipline: only dereference a
+pointer you know is currently aimed at live data.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a pointer actually store?',
+      options: [
+        'A copy of the data it refers to',
+        'The address of another variable',
+        'A number from 0 to 255 only',
+        'The name of a variable as text',
+      ],
+      answer: 1,
+      explain: 'A pointer is a variable whose value is an address — directions to where the real data lives, not the data itself.',
+    },
+    {
+      q: 'After int x = 42; int *p = &x; *p = 99; what is the value of x?',
+      options: ['42', '99', 'the address of x', '0'],
+      answer: 1,
+      explain: 'Writing *p = 99 follows p to x and overwrites it, so x becomes 99. Dereferencing changes the original variable.',
+    },
+    {
+      q: 'Why might 50 enemies all use a pointer to the player instead of each storing a copy?',
+      options: [
+        'Pointers make the game look nicer',
+        'So every enemy reads the one live player and stays in sync without copying',
+        'Because copies are illegal in C',
+        'To use more memory on purpose',
+      ],
+      answer: 1,
+      explain: 'Sharing one address means all enemies see the same up-to-date player; updating the player once is enough, and no duplicate data drifts out of sync.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>pointer</strong> is a variable whose value is the <strong>address</strong> of another variable.',
+    '<strong>Address-of</strong> (<code>&x</code>) produces an address; <strong>dereference</strong> (<code>*p</code>) follows it to the value.',
+    'Writing through a pointer (<code>*p = w</code>) changes the <strong>original</strong> variable — they become aliases.',
+    'A pointer can point at another pointer, and a <strong>null</strong> pointer points at nothing (do not dereference it).',
+    'Pointers let programs <strong>share data without copying</strong> — the foundation of entities, references, and handles.',
+  ]}
+/>
+
+Next up: **stack vs heap** — the two regions where those addresses come from, and why choosing the
+right one decides whether your data survives past the end of a function.

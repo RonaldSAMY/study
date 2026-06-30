@@ -1,0 +1,165 @@
+---
+title: Floating-Point Numbers
+track: binary-data
+summary: How real numbers are squeezed into sign, exponent, and mantissa bits — and why 0.1 + 0.2 isn't quite 0.3.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - binary-data/twos-complement
+leadsTo:
+  - binary-data/text-encoding
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import FloatBitsExplorer from '../../../components/demos/FloatBitsExplorer.tsx';
+
+## The hook: the wall you can almost walk through
+
+In countless games, a player who walks slowly into a wall sometimes jitters, clips, or sinks a hair into
+it. A big reason is that the position `x = 10.0` a game *thinks* it stored is really `10.000000476...`.
+Integers from the last lessons can't hold a position like 10.3 or a velocity of −0.5 at all. For that we
+need **floating-point** numbers — and they trade exactness for enormous range. Understanding that trade
+explains physics glitches, money-rounding bugs, and why training a neural net uses "float32."
+
+<Callout type="intuition" title="The one-sentence idea">
+A **floating-point** number is binary **scientific notation**: a sign, a fraction (the *mantissa*), and an
+*exponent* that slides the binary point — giving huge range at the cost of tiny rounding errors.
+</Callout>
+
+## Intuition: scientific notation, in binary
+
+You already know scientific notation: $6.022 \times 10^{23}$ is a fraction (6.022) times a power of ten.
+Floating-point is the exact same idea in **base 2**. A number is split into three parts packed into bits:
+
+1. **Sign** (1 bit) — positive or negative, just like the sign bit from two's complement.
+2. **Exponent** — *where* the binary point floats. This is what gives floats their gigantic range, from
+   subatomic to astronomical.
+3. **Mantissa** (also called the *fraction* or *significand*) — the actual digits, the precision. More
+   mantissa bits means more decimal places of accuracy.
+
+The name "floating" point is literal: the exponent lets the point slide, so the same handful of bits can
+represent 0.00001 or 1,000,000. The catch is that the mantissa has a **fixed** number of bits. Just as you
+can't write one-third exactly in decimal (0.3333...), most everyday decimals can't be written exactly in
+binary — so the computer stores the **nearest** value it can and the rest is rounding error.
+
+## Play with it
+
+This is a tiny 8-bit "minifloat" — 1 sign, 4 exponent, 3 mantissa bits — the same structure as a real
+float, just small enough to see. Slide each part and watch the value. Notice how nudging the
+**exponent** scales the number by powers of two, while the **mantissa** fine-tunes in between.
+
+<FloatBitsExplorer client:visible />
+
+<Callout type="tip">
+Push the <strong>exponent</strong> all the way up while keeping the mantissa fixed: the value leaps in big
+multiplicative jumps. Now there are <em>gaps</em> between representable numbers — and the bigger the value,
+the bigger the gap. That is exactly why huge floats lose precision in the small digits.
+</Callout>
+
+## The formal definition
+
+A normalized floating-point value is built from a sign $s$, an exponent field $e$ with a fixed **bias**,
+and a mantissa fraction $m$:
+
+$$
+x = (-1)^{s} \times 2^{\,e - \text{bias}} \times \left(1 + \frac{m}{2^{p}}\right),
+$$
+
+where $p$ is the number of mantissa bits. The leading $1$ is "free" (always assumed), which buys one extra
+bit of precision. The **IEEE-754** standard fixes the field sizes:
+
+$$
+\textbf{float32:}\ 1 + 8 + 23 \text{ bits}, \qquad \textbf{float64:}\ 1 + 11 + 52 \text{ bits}.
+$$
+
+The decimal 0.1 has no exact finite binary form (it repeats forever in base 2), so it is rounded. The same
+for 0.2. Add the two rounded values and the small errors survive:
+
+```python
+print(0.1 + 0.2)          # 0.30000000000000004
+print(0.1 + 0.2 == 0.3)   # False
+```
+
+<Callout type="why">
+Neural networks store weights and activations as float32 (or even 16-bit floats) precisely because of this
+trade: floats give the gigantic dynamic range training needs, and a little rounding error per number is
+acceptable. Knowing floats are <em>approximate</em> is why you compare them with a tolerance, never with ==.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Game physics" icon="🎮">
+A character's position is three floats (x, y, z). Far from the world origin, the gaps between
+representable floats grow, so objects visibly <em>jitter</em>. Big open-world games "re-center" the world
+around the player to keep coordinates small — a direct workaround for floating-point precision loss.
+</ExampleCard>
+
+<ExampleCard domain="Money & banking" icon="💵">
+Never store currency as a float: 0.10 + 0.20 not landing on 0.30 means cents quietly vanish or appear.
+Banks store amounts as <strong>integers</strong> (counts of cents) instead, sidestepping the rounding
+problem entirely. The float bug is a real accounting hazard.
+</ExampleCard>
+
+<ExampleCard domain="Space navigation" icon="🛰️">
+A probe must represent both tiny thruster nudges and distances of billions of kilometers. Floating-point's
+exponent gives that range from one compact format — the same reason scientists write 6.022 × 10²³ instead
+of a number with 24 digits.
+</ExampleCard>
+
+<ExampleCard domain="Audio synthesis" icon="🎚️">
+Digital audio samples are often floats between −1.0 and +1.0. The mantissa's precision sets how finely a
+waveform's amplitude is captured; too few bits and you hear quantization "hiss." More mantissa bits buy a
+cleaner signal — precision you can literally hear.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What are the three parts of a floating-point number?',
+      options: [
+        'Sign, exponent, mantissa',
+        'Integer, decimal, fraction',
+        'Red, green, blue',
+        'Whole, half, quarter',
+      ],
+      answer: 0,
+      explain: 'A float packs a sign bit, an exponent (where the binary point floats), and a mantissa (the precision).',
+    },
+    {
+      q: 'Why does 0.1 + 0.2 not exactly equal 0.3 in float arithmetic?',
+      options: [
+        'The computer is broken',
+        '0.1 and 0.2 have no exact finite binary representation, so they are rounded',
+        'Addition is unreliable',
+        'Because 0.3 is negative',
+      ],
+      answer: 1,
+      explain: '0.1 and 0.2 repeat forever in binary, so each is stored as the nearest float; the tiny rounding errors add up.',
+    },
+    {
+      q: 'What mainly determines a floating-point number’s RANGE (how big or small it can get)?',
+      options: ['The sign bit', 'The mantissa', 'The exponent', 'The number of decimal digits'],
+      answer: 2,
+      explain: 'The exponent slides the binary point, giving range. The mantissa controls precision, not range.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Floating-point</strong> is binary scientific notation: <strong>sign</strong>, <strong>exponent</strong>, and <strong>mantissa</strong>.',
+    'The <strong>exponent</strong> sets the range (where the point floats); the <strong>mantissa</strong> sets the precision.',
+    'IEEE-754 fixes the formats: <strong>float32</strong> (1+8+23) and <strong>float64</strong> (1+11+52).',
+    'Most decimals (like 0.1) have <strong>no exact binary form</strong>, so floats store the nearest value — rounding error.',
+    'Floats are <strong>approximate</strong>: compare with a tolerance, and use integers for exact money.',
+  ]}
+/>
+
+Next up: **text encoding** — we've turned numbers, both whole and fractional, into bits. Next you'll see
+how letters, emoji, and every written language become bytes too.

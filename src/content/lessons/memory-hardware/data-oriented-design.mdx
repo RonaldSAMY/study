@@ -1,0 +1,187 @@
+---
+title: Data-Oriented Design
+track: memory-hardware
+summary: Laying out data for the cache — the secret of fast games.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - memory-hardware/cache-hierarchy
+leadsTo:
+  - data-structures/arrays-memory
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import AosSoaDemo from '../../../components/demos/AosSoaDemo.tsx';
+
+## The hook: the same loop, ten times faster
+
+Two game studios write the *exact same* feature: move ten thousand enemies one step to the right each
+frame. Same algorithm, same number of additions, same language. One runs at a smooth 120 FPS; the other
+stutters at 12. The difference is not the code that runs — it is the **order the data sits in memory**.
+One studio laid out its bytes so the cache stays full of useful numbers; the other drags mostly-unused
+data through the cache on every pass. Welcome to **data-oriented design**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Group the data your loop actually touches so it arrives together in a cache line — instead of storing
+each object's fields side by side and paying to load the parts you never read.
+
+</Callout>
+
+## Intuition: the cache moves whole lines, not single fields
+
+From the cache lesson, remember the golden rule: memory does not travel one byte at a time. When the
+CPU reads an address, it pulls the entire surrounding **cache line** (typically 64 bytes) into fast
+memory. If the next bytes you need are right there, you get a cache *hit*; if not, you pay a slow trip
+to main memory — a cache *miss*.
+
+Now picture a game entity with several fields: position `x`, `y`, `health`, and a `sprite` pointer.
+The obvious layout is an **Array of Structs (AoS)**: store each entity's fields together, then the next
+entity's, and so on — `x y health sprite | x y health sprite | ...`. It reads naturally. But suppose a
+system loops over every entity and updates *only* `x`. Each cache line you load is mostly `y`,
+`health`, and `sprite` — fields this loop never touches. You are paying full bandwidth to move data you
+throw away.
+
+The fix is **Struct of Arrays (SoA)**: store all the `x` values in one contiguous array, all the `y`
+values in another, and so on — `x x x x ... | y y y y ... | ...`. Now the `x`-only loop walks a tight,
+packed array. Every cache line is nearly all `x` values: few misses, full utilization. Same data, same
+math, dramatically better cache behavior. This is the core idea behind **Entity Component Systems**
+and data-oriented engines.
+
+## Play with it
+
+Toggle between **AoS** and **SoA**, pick which field the loop reads, and watch which cache lines (the
+sky-outlined rows) the CPU must load. Keep your eye on the **utilization** number.
+
+<AosSoaDemo client:visible />
+
+<Callout type="tip">
+In AoS, reading one field lights up *every* cache line — utilization sits near 25% with four fields. Switch
+to SoA and the same loop touches a tight block of lines at close to 100%. That gap is free speed.
+</Callout>
+
+## The formal definition
+
+Say each entity has $F$ fields, every field is $b$ bytes, and a cache line holds $L$ bytes. A loop reads
+**one** field across $N$ entities. The useful data is always
+
+$$
+\text{useful} = N \cdot b \ \text{bytes.}
+$$
+
+With **AoS**, that field's values sit $F \cdot b$ bytes apart, so almost every line you load contains
+just one wanted value surrounded by $F - 1$ unwanted fields. The bytes actually moved are about
+
+$$
+\text{loaded}_{\text{AoS}} \approx N \cdot F \cdot b, \qquad
+\text{utilization} \approx \frac{1}{F}.
+$$
+
+With **SoA**, the field is contiguous, so a line of $L$ bytes carries $L / b$ useful values and you load
+only
+
+$$
+\text{loaded}_{\text{SoA}} \approx N \cdot b, \qquad
+\text{utilization} \approx 1.
+$$
+
+The two layouts in code are just a transpose of each other:
+
+```cpp
+// AoS: fields interleaved, one struct per entity
+struct Entity { float x, y, health; Sprite* sprite; };
+Entity entities[N];          // x y h s | x y h s | ...
+
+// SoA: each field is its own packed array
+struct World {
+    float x[N], y[N], health[N];
+    Sprite* sprite[N];       // x x x ... | y y y ... | ...
+};
+```
+
+<Callout type="why">
+A modern CPU can do billions of additions per second, but only if the numbers arrive in time. The real
+bottleneck in game loops, physics, and ML preprocessing is usually **memory bandwidth**, not
+arithmetic. Choosing SoA for hot, single-field loops can cut the bytes moved by the field count $F$ —
+often a several-times speedup with zero change to the math.
+</Callout>
+
+## The same idea, four different worlds
+
+Storing things "by attribute" instead of "by object" pays off any time you read one attribute across
+many items.
+
+<ExampleCard domain="Sports analytics" icon="🏟️">
+Full player cards (one card per athlete, all stats together) are AoS. But to compute the league's
+average points, you only want the points column. A spreadsheet that keeps each stat in its own column
+(SoA) lets you sum points without flipping through every card's height, weight, and team.
+</ExampleCard>
+
+<ExampleCard domain="Spreadsheets" icon="📊">
+Exporting one *column* from a million-row sheet is instant when the file stores data column-by-column,
+but slow when it stores complete rows — you must skip past every other field of every row. This is
+exactly why analytics databases store data in columns rather than rows.
+</ExampleCard>
+
+<ExampleCard domain="Library archives" icon="🗂️">
+An index drawer filed by a single attribute — say, publication year — lets a librarian sweep one
+contiguous run of cards to answer "what came out in 1998?" The full catalog cards (title, author,
+shelf, year together) would force reading everything to extract just the years.
+</ExampleCard>
+
+<ExampleCard domain="Music library" icon="🎵">
+To total the listening time of 50,000 tracks, you want only each track's *duration*. If durations live
+in one packed array, the sum flies; if every track is a fat record bundling title, artist, artwork, and
+lyrics, you drag megabytes of cover art through the cache to add up a few numbers.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A loop updates only the x position of every entity. Why is SoA usually faster than AoS here?',
+      options: [
+        'SoA uses less total memory',
+        'SoA stores all x values contiguously, so each cache line is nearly all useful data',
+        'SoA avoids using the cache entirely',
+        'AoS cannot store floating-point numbers',
+      ],
+      answer: 1,
+      explain: 'A cache line moves ~64 bytes at once. In SoA the x values are packed together, so loaded lines are almost all x; in AoS each line drags along the other unused fields.',
+    },
+    {
+      q: 'An entity has 4 fields of 4 bytes each. A loop reads one field across all entities. Roughly what cache-line utilization do you expect from AoS?',
+      options: ['About 100%', 'About 75%', 'About 25%', 'About 0%'],
+      answer: 2,
+      explain: 'With AoS, each loaded line holds one wanted field plus three unwanted ones, so utilization is about 1 / F = 1/4 = 25%.',
+    },
+    {
+      q: 'What hardware fact makes data layout matter so much?',
+      options: [
+        'The CPU reads memory one byte at a time',
+        'Memory is fetched in whole cache lines, so nearby bytes come along for free (or for waste)',
+        'SoA arrays are stored in registers',
+        'Caches only store integers',
+      ],
+      answer: 1,
+      explain: 'Because the cache transfers a whole line at once, the bytes physically next to what you asked for are loaded too — useful if you need them, wasted bandwidth if you do not.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Data-oriented design optimizes the <strong>layout of data</strong> for the cache, not just the algorithm.',
+    '<strong>AoS</strong> keeps each entity\'s fields together; <strong>SoA</strong> keeps each field in its own contiguous array.',
+    'The cache moves <strong>whole lines</strong>, so a one-field loop over AoS wastes bandwidth on the other fields — utilization near <strong>1/F</strong>.',
+    'For hot single-field loops, <strong>SoA</strong> packs only the needed bytes into each line, reaching near-100% utilization.',
+    'This is why <strong>ECS</strong> and data-oriented engines are fast: they feed the CPU and GPU useful bytes instead of waste.',
+  ]}
+/>
+
+Next up: **arrays and memory layout** — the contiguous block of memory that makes all of this packing
+possible, and why the humble array is the fastest data structure there is.

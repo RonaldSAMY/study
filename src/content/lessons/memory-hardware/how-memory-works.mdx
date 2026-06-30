@@ -1,0 +1,179 @@
+---
+title: How Memory Works
+track: memory-hardware
+summary: RAM, addresses and the giant array that is your computer's memory.
+difficulty: beginner
+estMinutes: 12
+prereqs:
+  - binary-data/bits-bytes
+leadsTo:
+  - memory-hardware/pointers-references
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import MemoryStripExplorer from '../../../components/demos/MemoryStripExplorer.tsx';
+
+## The hook: where does your game *keep* the player's health?
+
+You press start. The hero spawns with 100 health, a sword, and a position somewhere on the map.
+But where do those numbers actually *live* while the game runs? Not on the disk — that's just the
+save file. They live in **RAM**: random-access memory, the fast scratchpad the CPU reads and writes
+millions of times per second. And the secret of RAM is almost embarrassingly simple: it's one
+enormous row of numbered boxes, and every box holds exactly one byte.
+
+<Callout type="intuition" title="The one-sentence idea">
+Your computer's memory is **one giant array of bytes**: each slot holds a number from 0 to 255, and
+each slot has its own numeric **address** so the CPU can find it instantly.
+</Callout>
+
+## Intuition: a street of numbered boxes
+
+You already know a **byte** is 8 bits and can store any value from 0 to 255. Memory is just a colossal
+line of those bytes, sitting side by side. Picture a street where every house is identical and the
+houses are numbered 0, 1, 2, 3, and so on for billions of houses. Each house holds a single byte.
+
+The number on the house is its **address**. To *read* memory you say "give me what's at address
+4096." To *write* memory you say "put 99 into address 4096." That's it — that's the whole interface.
+Because the CPU can jump to any address directly (it doesn't have to walk past the others first), we
+call it *random-access* memory.
+
+This is exactly the **array indexing** you already know: `memory[4096]` is the byte at address 4096,
+just like `scores[3]` is the fourth score in a list. Memory is the original array.
+
+## Play with it
+
+Below is a tiny slice of memory — a strip of byte cells, each labeled with its address (in hex) and
+the value it holds. Tap a cell to select it, then change its byte and watch the same value appear in
+decimal, hex, and binary at once.
+
+<MemoryStripExplorer client:visible />
+
+<Callout type="tip">
+Press <strong>Write sprite row</strong> to stamp a little pattern across several cells at once — that's
+what a game does when it copies a sprite's pixels into a memory buffer. Notice that nothing magic
+happens: it's just bytes being set, one address at a time.
+</Callout>
+
+## The formal definition
+
+Model memory as a function from an address to a byte. If there are $N$ bytes of memory, the valid
+addresses are the integers $0, 1, 2, \dots, N-1$, and memory is the mapping
+
+$$
+\text{mem} : \{0, 1, \dots, N-1\} \;\longrightarrow\; \{0, 1, \dots, 255\}.
+$$
+
+Reading is evaluating that function at an address $a$, giving the byte $\text{mem}(a)$. Writing
+replaces one value: after storing $v$ at address $a$, we have $\text{mem}(a) = v$ while every other
+slot is unchanged. Each slot stores one byte, so its value $v$ always satisfies
+
+$$
+0 \le v \le 2^8 - 1 = 255.
+$$
+
+Addresses are usually written in **hexadecimal** because each hex digit packs exactly 4 bits, so one
+byte is two tidy hex digits and round numbers like 4096 become the clean $\texttt{0x1000}$.
+
+In a language like C, that "read" and "write" is literally array indexing into raw memory:
+
+```c
+unsigned char *mem = ...;   // memory as an array of bytes
+unsigned char hp = mem[0x1000];  // read the byte at address 0x1000
+mem[0x1000] = 99;           // write 99 back to that same address
+```
+
+<Callout type="why">
+Every data structure you will ever use — a sprite buffer, a tile map, a list of enemies, a save
+file in memory — is ultimately bytes laid out in this one flat array. "Optimizing memory" really
+means choosing *which bytes go at which addresses* so the CPU can fetch them quickly.
+</Callout>
+
+## The same idea, four different worlds
+
+The "numbered slots, each holding one item" pattern shows up far beyond computers.
+
+<ExampleCard domain="Apartment mailboxes" icon="📫">
+A lobby has a wall of identical mailboxes numbered 1 to 200. The **number** is the address; the
+**mail inside** is the value. The mail carrier doesn't search every box — they jump straight to box
+137. Reading is opening a box; writing is dropping in a letter. Random access, in metal.
+</ExampleCard>
+
+<ExampleCard domain="Game tilemap" icon="🗺️">
+A 2D level is stored as a flat array of tile codes. Tile index 0 is grass, 1 is wall, 2 is lava.
+Cell number 350 holding the value 2 means "the 350th tile is lava." The renderer walks the array by
+index — each tile slot is a memory cell, and the level is just bytes in a row.
+</ExampleCard>
+
+<ExampleCard domain="Audio sampler" icon="🎚️">
+A one-second sound clip is thousands of **samples** stored at consecutive addresses. Slot after slot
+holds the loudness at each instant. To play it back, the chip reads address 0, then 1, then 2, in
+order. Edit the byte at one address and you've changed the waveform at that exact moment in time.
+</ExampleCard>
+
+<ExampleCard domain="Library shelf" icon="📚">
+A reference library has numbered slots: shelf 12, slot 4. The catalog tells you the slot number, and
+you walk straight to it instead of scanning every book. The slot number is the address; the book is
+the stored value. Re-shelve a different book in slot 4 and you've "written" new data there.
+</ExampleCard>
+
+<Callout type="note">
+In all four, the address and the contents are different things. Box 137 is not the same as the letter
+inside it. Holding onto that distinction is exactly what unlocks the next lesson.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a single memory address identify?',
+      options: [
+        'A whole file on disk',
+        'One byte-sized slot in RAM',
+        'The speed of the CPU',
+        'A pixel on the screen',
+      ],
+      answer: 1,
+      explain: 'Memory is a flat array of bytes; each address is the index of exactly one byte-sized slot.',
+    },
+    {
+      q: 'A memory cell currently holds the value 200. You add 100 to it. What is the largest value a single byte can actually store, and what does this tell you?',
+      options: [
+        '255 — so 300 will not fit in one byte',
+        '300 — it fits fine',
+        '1000 — bytes are big',
+        '128 — bytes are signed only',
+      ],
+      answer: 0,
+      explain: 'One byte ranges 0–255 (that is 2^8 − 1). 300 exceeds 255, so it cannot fit in a single byte without wrapping or using more bytes.',
+    },
+    {
+      q: 'Why are memory addresses usually shown in hexadecimal?',
+      options: [
+        'Hex makes RAM faster',
+        'Each hex digit maps cleanly to 4 bits, so a byte is two neat hex digits',
+        'Computers cannot use decimal',
+        'It hides the real address for security',
+      ],
+      answer: 1,
+      explain: 'One hex digit is exactly 4 bits, so a byte is two hex digits and address arithmetic lines up neatly with the underlying binary.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'RAM is <strong>one giant array of bytes</strong>; reading and writing memory is just indexing into that array.',
+    'Each slot has a numeric <strong>address</strong> (its index) and holds <strong>one byte</strong>, a value from 0 to 255.',
+    'Access is <strong>random</strong>: the CPU jumps straight to any address without scanning the others.',
+    'Addresses are written in <strong>hexadecimal</strong> because each hex digit is exactly 4 bits.',
+    'An address and the value stored there are <strong>two different things</strong> — the slot number versus its contents.',
+  ]}
+/>
+
+Next up: **pointers** — what happens when a variable's value *is itself an address*, letting one part
+of your program point straight at another.

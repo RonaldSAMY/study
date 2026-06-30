@@ -1,0 +1,182 @@
+---
+title: CPU Architecture
+track: memory-hardware
+summary: Registers, instructions, the clock and the pipeline.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - memory-hardware/cache-hierarchy
+leadsTo:
+  - memory-hardware/gpu-architecture
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PipelineSimulator from '../../../components/demos/PipelineSimulator.tsx';
+
+## The hook: how does a chip do a billion things a second?
+
+Your game runs its update loop, moves a thousand enemies, and redraws the screen — sixty times every
+second. None of that is magic. Deep inside the CPU there is a tiny, relentless machine that does one
+boring thing over and over: grab the next instruction, figure out what it means, do it, and repeat. It
+just does it **billions of times per second**. Once you see that loop — and the clever trick that lets
+several instructions run at once — the whole machine stops being a black box.
+
+<Callout type="intuition" title="The one-sentence idea">
+A CPU is a tiny worker that endlessly **fetches, decodes, and executes** instructions from memory,
+driven by a clock — and it overlaps those steps like an assembly line so many instructions are in
+flight at the same time.
+</Callout>
+
+## Intuition: the worker, its notepad, and its rhythm
+
+In the last lessons you saw memory as a giant array, and you saw that the cache keeps the data the CPU
+needs close by. The CPU is the thing doing the asking. To work fast it keeps a handful of ultra-tiny
+storage slots called **registers** right inside the chip — even closer and faster than L1 cache. A
+register holds a single value the CPU is working on *right now*, like the score it is about to add to.
+
+Everything the CPU does is broken into small steps called **instructions**: "load this number,"
+"add these two registers," "store the result." It runs them with a repeating cycle:
+
+1. **Fetch** — read the next instruction from memory.
+2. **Decode** — work out what it asks for.
+3. **Execute** — actually do the arithmetic or logic.
+4. **Memory / Writeback** — read or write memory if needed, then save the result into a register.
+
+A **clock** sets the rhythm: every tick, the machine advances. A 3 GHz chip ticks three billion times a
+second. The clever part is that the CPU doesn't wait for one instruction to fully finish before
+starting the next — it **pipelines** them, the way a factory keeps every station busy.
+
+## Play with it
+
+Below is a 5-stage pipeline. Press **Tick** to advance the clock one step, or **Run** to let it go.
+Watch how, in *Pipelined* mode, a new instruction enters Fetch while the one ahead moves to Decode —
+the diagram fills in a diagonal. Then switch to **One-at-a-time** and see how much slower it is when
+each instruction must finish completely before the next begins.
+
+<PipelineSimulator client:visible />
+
+<Callout type="tip">
+In pipelined mode all five stages are busy at once, so you finish about one instruction *per tick*
+after the pipeline fills. Serially, every instruction costs all five stages — five times the work for
+the same result.
+</Callout>
+
+## The formal definition
+
+A processor repeatedly applies the **instruction cycle**. For instruction $i$ the stages happen in
+order, but pipelining shifts each instruction's start by one clock tick. If there are $N$ instructions
+and a pipeline of depth $k$ stages, the finish times compare like this:
+
+$$
+T_{\text{serial}} = N \cdot k, \qquad T_{\text{pipelined}} = N + k - 1 .
+$$
+
+For large $N$ the throughput approaches **one instruction per clock cycle**, a speedup of about $k$
+over doing them one at a time:
+
+$$
+\text{speedup} = \frac{N \cdot k}{N + k - 1} \xrightarrow{\;N \to \infty\;} k .
+$$
+
+A few instructions in pseudo-assembly — each line is roughly one fetch-decode-execute:
+
+```c
+LOAD  r1, [score]   // fetch the score from memory into register r1
+ADD   r2, r1, 10    // r2 = r1 + 10  (executed in the ALU)
+STORE [score], r2   // write r2 back to memory
+```
+
+In real chips the dream of "one per cycle" is dented by **hazards**: a branch (an `if`) means the CPU
+doesn't yet know which instruction comes next, and a result might not be ready when the next
+instruction needs it. CPUs hide these with branch prediction and forwarding, but a wrong guess
+**stalls** the pipeline — it has to throw away partial work and refill.
+
+<Callout type="why">
+This is why branchy, unpredictable game code (lots of scattered `if`s) can run slower than tight,
+predictable loops even with the *same* number of operations: mispredicted branches flush the pipeline.
+Writing predictable, data-friendly code keeps the assembly line full — the theme of the next lessons.
+</Callout>
+
+## The same idea, four different worlds
+
+The fetch-decode-execute rhythm and the assembly-line overlap show up far outside silicon.
+
+<ExampleCard domain="Car manufacturing" icon="🚗">
+A car assembly line has stations: weld the frame, drop in the engine, paint, fit the interior. You
+*could* build one car start-to-finish before touching the next — but no factory does. While car 1 is
+being painted, car 2 gets its engine and car 3 is being welded. Every station is always busy. That is
+**exactly** a CPU pipeline: stages overlap so a finished car rolls out far more often than the time to
+build one.
+</ExampleCard>
+
+<ExampleCard domain="Laundromat" icon="🧺">
+You have wash, dry, and fold. With three loads you don't wait for load 1 to be washed, dried, *and*
+folded before starting load 2 — you move load 1 to the dryer and immediately start washing load 2.
+Three overlapping stages, three loads finishing in roughly five time-slots instead of nine. Overlap
+turns idle machines into throughput.
+</ExampleCard>
+
+<ExampleCard domain="Restaurant kitchen" icon="🍳">
+A line cook reads the next ticket (**fetch**), works out which dish and which pans (**decode**), then
+cooks it (**execute**). The ticket rail is the instruction stream; the cook's small prep area of
+ready ingredients is the registers — the few things in hand right now, distinct from the big walk-in
+fridge (memory).
+</ExampleCard>
+
+<ExampleCard domain="Orchestra" icon="🎻">
+A conductor's baton is the **clock**: every beat, all the musicians advance together by one step. Raise
+the tempo and everyone plays faster in lockstep — exactly what raising a CPU's clock frequency does.
+And if one section comes in wrong, the whole passage has to be restarted, just like a pipeline stall.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What are the three core steps of the basic instruction cycle?',
+      options: [
+        'Compile, link, run',
+        'Fetch, decode, execute',
+        'Allocate, use, free',
+        'Read, sort, write',
+      ],
+      answer: 1,
+      explain: 'The CPU repeatedly fetches the next instruction, decodes what it means, and executes it (then writes back results).',
+    },
+    {
+      q: 'A pipeline has 5 stages and runs 100 instructions with no stalls. Roughly how many clock ticks until all finish?',
+      options: ['About 500', 'About 104', 'About 100', 'About 20'],
+      answer: 1,
+      explain: 'Pipelined time is N + k − 1 = 100 + 5 − 1 = 104 ticks, versus 500 if each instruction finished before the next started.',
+    },
+    {
+      q: 'Why can a mispredicted branch (an unexpected if-result) slow the CPU down?',
+      options: [
+        'It uses more registers',
+        'It forces the pipeline to throw away partial work and refill',
+        'It makes the clock tick slower',
+        'It moves data out of the cache',
+      ],
+      answer: 1,
+      explain: 'The CPU had begun fetching instructions down the wrong path; on a wrong guess it must flush those and start over, stalling the pipeline.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A CPU endlessly <strong>fetches, decodes, and executes</strong> instructions — that simple loop, run billions of times a second, is all computation.',
+    '<strong>Registers</strong> are the tiny, fastest storage right inside the chip, holding the values being worked on this instant.',
+    'The <strong>clock</strong> sets the pace: each tick advances the machine, and higher frequency means more ticks per second.',
+    '<strong>Pipelining</strong> overlaps instruction stages like an assembly line, approaching one finished instruction per clock cycle (about a k× speedup for k stages).',
+    'Branches and data dependencies cause <strong>stalls</strong> — so predictable code keeps the pipeline full and runs faster.',
+  ]}
+/>
+
+Next up: the **GPU** — instead of one fast worker, thousands of simpler ones running the same
+instruction on different data, which is exactly what drawing millions of pixels needs.

@@ -1,0 +1,197 @@
+---
+title: Asset Pipeline & Serialization
+track: engine
+summary: How games import and "cook" raw art into engine-ready formats, then serialize objects to JSON or packed binary archives and back.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - binary-data/text-encoding
+leadsTo:
+  - engine/memory-management-games
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import AssetSerializerDemo from '../../../components/demos/AssetSerializerDemo.tsx';
+
+## The hook: the 4K texture that can't ship
+
+An artist hands you a gorgeous 4K PNG and a `.blend` file straight out of Blender. Beautiful — and
+completely unshippable. The PNG decompresses to tens of megabytes the GPU can't even sample
+efficiently, and your engine has no idea how to read a `.blend` at runtime. Worse, your level is made
+of *5000* tiny files: every prop, sound, and config its own little asset. Open them one at a time on a
+phone at startup and the loading screen drags for 30 seconds, mostly spent *waiting for files*, not
+reading data.
+
+The fix is two ideas working together: a **pipeline** that converts raw source art into a lean
+engine-ready format ahead of time, and **serialization** that turns your game objects into a compact
+byte stream you can pack into one file and stream back fast.
+
+<Callout type="intuition" title="The one-sentence idea">
+Serialization is flattening a living object into an ordered stream of **bytes** you can store or send —
+and deserialization is rebuilding the exact same object from those bytes.
+</Callout>
+
+## Intuition: it all comes back to bytes
+
+In the **text encoding** lesson you saw that a string like `"Hero"` is not magic — it's just bytes,
+with UTF-8 deciding which byte sequence stands for which character. Serialization is the same trick
+applied to a *whole object*, not just a string.
+
+A game object in memory is a tangle of fields and pointers: an id, a name, a position, a health value,
+a list of inventory items. The CPU understands that layout, but a disk or a network only understands a
+flat run of bytes. So you make a choice about representation:
+
+- A **text** representation (like JSON) writes the object as human-readable characters — easy to read,
+  diff, and debug, but bulky.
+- A **binary** representation writes each field directly as its raw bytes — compact and fast, but opaque
+  to the naked eye.
+
+Both are "the same object as bytes." They just trade readability against size, exactly like text versus
+binary did for a single character.
+
+## Play with it
+
+Edit the game object below. Watch the **JSON** view and the **packed binary** byte view update together,
+compare their sizes, then hit round-trip to confirm the bytes parse back into the identical object.
+
+<AssetSerializerDemo client:visible />
+
+<Callout type="tip">
+Add a few inventory items and watch the JSON balloon with quotes, braces, and field names repeated every
+time — while the binary only grows by the raw bytes it actually needs. That gap is why shipped games
+pack assets in binary.
+</Callout>
+
+## The formal definition
+
+The **asset pipeline** is an offline step often called *import*, *cook*, or *bake*: it takes a
+**source** asset (a `.psd`, `.blend`, `.wav`) and produces an **engine-ready** artifact (a
+GPU-compressed texture, a triangle mesh, a streamable audio clip). You run it once at build time so the
+runtime never pays that cost.
+
+**Serialization** is the function that maps an object to a byte stream, and **deserialization** is its
+inverse:
+
+$$
+\text{serialize}: \text{Object} \to \text{Bytes}, \qquad \text{deserialize} = \text{serialize}^{-1}.
+$$
+
+For a fixed-layout binary record, the size is simply the sum of its field sizes. If a record has fields
+of sizes $s_1, s_2, \dots, s_n$ bytes, then
+
+$$
+\text{size} = \sum_{i=1}^{n} s_i.
+$$
+
+For the demo's header fields — id as a 4-byte integer, health as 1 byte, and two 4-byte floats for
+position — the fixed part is $4 + 1 + 4 + 4 = 13$ bytes, before the variable-length name and inventory.
+
+When you pack many records into one **archive**, the file is a small **header** plus the records laid
+end to end. With $N$ records each of size $r$, the total is
+
+$$
+\text{total} = \text{header} + \sum_{i=1}^{N} r_i.
+$$
+
+The header (or a table beside it) stores an **offset** for each asset — the byte position where it
+begins — so the engine can jump straight to asset number 4000 without reading the first 3999. That is
+the whole reason one packed file beats 5000 loose ones: one open, then cheap seeks.
+
+```js
+const bytes = serialize(player);     // Object -> Uint8Array
+const copy  = deserialize(bytes);    // Uint8Array -> Object
+console.log(JSON.stringify(copy) === JSON.stringify(player)); // true
+```
+
+<Callout type="why">
+Text formats win when humans must read them — config, save-game debugging, version control. Binary wins
+when the machine is the only reader — shipped builds, network packets, anything size- or speed-critical.
+Most engines use both: JSON-ish in the editor, packed binary at runtime.
+</Callout>
+
+## The same idea, four different worlds
+
+Flattening something structured into an ordered stream, then rebuilding it later, shows up far outside
+game engines.
+
+<ExampleCard domain="Flat-pack furniture" icon="🪑">
+A bookshelf is "serialized" into flat panels, screws, and a numbered instruction sheet that fits in one
+box. The instructions are the **schema**: follow the steps in order and you **deserialize** the pile
+back into the exact same shelf. Ship the assembled shelf instead and you pay for shipping air.
+</ExampleCard>
+
+<ExampleCard domain="Moving house" icon="📦">
+Vacuum-packing clothes squeezes the air out so a bulky duvet becomes a thin slab — same contents, far
+fewer bytes of space. A binary asset format is the vacuum bag: identical data, padding and whitespace
+removed, so a mobile game's download shrinks from gigabytes toward something a player will actually wait for.
+</ExampleCard>
+
+<ExampleCard domain="Food science" icon="🥡">
+Freeze-drying turns a meal into a light, shelf-stable block; add water and it reconstitutes. That is a
+lossy-but-faithful **round-trip**: cook (serialize) to a storable form, rehydrate (deserialize) on
+demand. Open-world games stream chunks of the world this way, reconstituting regions as you walk toward them.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="🚢">
+A shipping container's **manifest** lists every crate and its position so customs can locate item 812
+without unpacking the whole box. That manifest is an **offset table**: the packed archive plus an index
+that says where each asset starts, turning a linear scan into a direct jump.
+</ExampleCard>
+
+<Callout type="note">
+Notice the constant: a rich structure becomes an ordered stream plus a recipe for rebuilding it. Whether
+the stream is bytes, panels, or crates, the win is the same — compact to store, fast to ship, exact to restore.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does "serialization" mean for a game object?',
+      options: [
+        'Drawing the object to the screen each frame',
+        'Converting the object into an ordered byte stream that can be stored or sent, then rebuilt',
+        'Giving the object a unique serial number',
+        'Compressing every texture to half resolution',
+      ],
+      answer: 1,
+      explain: 'Serialization flattens an in-memory object into bytes; deserialization rebuilds the identical object from those bytes.',
+    },
+    {
+      q: 'A binary record packs a 4-byte id, a 1-byte health, and two 4-byte floats for position. How many bytes is the fixed part?',
+      options: ['9 bytes', '13 bytes', '16 bytes', '4 bytes'],
+      answer: 1,
+      explain: 'Sum the field sizes: 4 + 1 + 4 + 4 = 13 bytes (before any variable-length fields like a name).',
+    },
+    {
+      q: 'Why ship one packed archive with an offset table instead of 5000 separate asset files?',
+      options: [
+        'Packed binary always looks nicer to artists',
+        'One file means one open plus cheap seeks to any asset, instead of thousands of slow file opens',
+        'Offsets make the textures higher resolution',
+        'JSON cannot store more than 5000 objects',
+      ],
+      answer: 1,
+      explain: 'The header offsets let the engine jump straight to any asset, so startup pays one file open instead of thousands.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Serialization</strong> flattens an object into an ordered byte stream; <strong>deserialization</strong> rebuilds the identical object — a faithful round-trip.',
+    'The <strong>asset pipeline</strong> (import/cook/bake) converts raw source art into engine-ready formats offline so the runtime stays fast.',
+    '<strong>Text formats</strong> like JSON are readable but bulky; <strong>binary formats</strong> are compact and fast but opaque — engines use both.',
+    'A fixed binary record’s size is the <strong>sum of its field sizes</strong>; an archive is a header plus records laid end to end.',
+    'An <strong>offset table</strong> turns one packed file into random access, so loading 5000 assets is one open plus cheap seeks.',
+  ]}
+/>
+
+Next up: once those bytes are deserialized into live objects, *where do they live?* The
+**memory management for games** lesson covers pools and arenas — allocating all that asset data without
+causing frame-rate stutter.

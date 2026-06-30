@@ -1,0 +1,162 @@
+---
+title: Bits & Bytes
+track: binary-data
+summary: The atom of computing — how on/off switches group into bytes that count from 0 to 255.
+difficulty: beginner
+estMinutes: 12
+prereqs: []
+leadsTo:
+  - binary-data/number-systems
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BitByteToggler from '../../../components/demos/BitByteToggler.tsx';
+
+## The hook: what is a saved game made of?
+
+When you hit *"Save"* in a game, your hero's health, position, level, and inventory all get written to
+a file on disk. But that disk has no idea what "health" or "sword" means. It only knows how to store
+one thing, billions of times over: a tiny switch that is either **on** or **off**. Every character,
+every color, every score in every game you have ever played is built from nothing but these switches.
+That switch is the **bit**, and learning to think in bits is the foundation of understanding computers.
+
+<Callout type="intuition" title="The one-sentence idea">
+A **bit** is a single on/off switch (1 or 0); group **8 bits** together and you get a **byte**, which
+can represent 256 different values — enough for a number, a letter, or one color channel.
+</Callout>
+
+## Intuition: counting with switches
+
+A single bit isn't very exciting — it holds one of two states, like a light switch. The magic happens
+when you line several up. With 2 bits you can make 4 combinations: `00`, `01`, `10`, `11`. Add a third
+bit and you double again to 8 combinations. Each bit you add **doubles** the number of things you can
+represent.
+
+That doubling is why you keep seeing the same numbers in computing: 2, 4, 8, 16, 32, 64, 128, 256.
+They are the **powers of two**. A group of 8 bits — a **byte** — gives $2^8 = 256$ possibilities,
+which we usually read as the whole numbers from 0 up to 255.
+
+Inside a byte, each bit has a **place value**, just like the columns in ordinary decimal numbers. The
+rightmost bit is worth 1, the next is worth 2, then 4, 8, and so on up to 128 on the far left. To find
+the byte's value, you switch on the bits you want and add up their place values.
+
+## Play with it
+
+Click the bits below to turn them on and off. Watch the byte's value change in decimal, hex, and binary
+all at once. Try to make the number 255, then 1, then your favorite two-digit number.
+
+<BitByteToggler client:visible />
+
+<Callout type="tip">
+Turn on <strong>only the leftmost bit</strong> (worth 128) and notice the value is exactly 128 — not
+255. The leftmost bit is the "biggest" switch. Turning on <em>every</em> bit gives 128 + 64 + ... + 1 = 255,
+the largest value a single byte can hold.
+</Callout>
+
+## The formal definition
+
+A **bit** holds one binary digit: $b \in \{0, 1\}$. A **byte** is an ordered group of 8 bits. Reading
+those bits as a number, each bit $b_i$ is multiplied by its place value $2^i$:
+
+$$
+\text{value} = \sum_{i=0}^{7} b_i \cdot 2^i = b_7 \cdot 128 + b_6 \cdot 64 + \cdots + b_1 \cdot 2 + b_0 \cdot 1.
+$$
+
+With $n$ bits you can represent $2^n$ distinct values, spanning $0$ to $2^n - 1$:
+
+$$
+n = 8 \;\Rightarrow\; 2^8 = 256 \text{ values}, \quad \text{range } 0 \text{ to } 255.
+$$
+
+Larger units are just stacks of bytes. Historically these used powers of two, and the precise (binary)
+units make that explicit:
+
+$$
+1\ \text{KiB} = 2^{10}\ \text{bytes} = 1024, \qquad 1\ \text{MiB} = 2^{20}\ \text{bytes} = 1{,}048{,}576.
+$$
+
+```text
+1 bit   = one on/off switch
+8 bits  = 1 byte        (0 .. 255)
+1024 B  = 1 KiB
+1024 KiB= 1 MiB
+```
+
+<Callout type="why">
+Everything a computer touches — a model's weights, a texture, a chat message — is ultimately a pile of
+bytes. Knowing that a byte tops out at 255 explains a thousand real bugs: color channels that wrap, save
+counters that reset, and characters that turn into garbage.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Game inventory" icon="🎒">
+A character's status effects — *poisoned, shielded, invisible, on-fire* — are often packed into a single
+byte as a **bit flag**: one bit per effect. Bit on means "active." One byte tracks up to 8 effects at
+once, and checking "is the player poisoned?" is just reading one bit. Compact and lightning fast.
+</ExampleCard>
+
+<ExampleCard domain="Pixel color" icon="🎨">
+A standard pixel stores red, green, and blue as **one byte each** (0–255). That is why color pickers go
+up to 255: pure red is 255 for red and 0 for the others. Three bytes (24 bits) give over 16 million
+colors — the "true color" you see on screen.
+</ExampleCard>
+
+<ExampleCard domain="File sizes" icon="💾">
+A retro sprite sheet might be 64 KiB; a modern game install is tens of GiB. Each step up the ladder —
+byte, kilobyte, megabyte, gigabyte — multiplies by about 1024. When a download "stalls at 99%," it is
+still shuffling the last few thousand bytes into place.
+</ExampleCard>
+
+<ExampleCard domain="Networking" icon="📡">
+Internet speeds are measured in **bits** per second (Mbps), but files are measured in **bytes**. Because
+1 byte = 8 bits, a "100 Mbps" connection downloads only about 12.5 megabytes per second. Mixing up bits
+and bytes is the classic reason a download feels 8× slower than the advertised speed.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How many different values can a single byte (8 bits) represent?',
+      options: ['8', '64', '256', '1024'],
+      answer: 2,
+      explain: '8 bits give 2^8 = 256 combinations, usually read as the numbers 0 through 255.',
+    },
+    {
+      q: 'In a byte, which bits are turned on to make the value 5?',
+      options: [
+        'The bits worth 4 and 1',
+        'The bits worth 5 and 0',
+        'The bits worth 2 and 3',
+        'Only the bit worth 5',
+      ],
+      answer: 0,
+      explain: 'Place values are powers of two. 4 + 1 = 5, so the bits worth 4 and 1 are on (binary 00000101).',
+    },
+    {
+      q: 'Your internet plan is 80 Mbps (megabits per second). Roughly how many megabytes per second is that?',
+      options: ['80 MB/s', '640 MB/s', '10 MB/s', '8 MB/s'],
+      answer: 2,
+      explain: 'There are 8 bits in a byte, so divide by 8: 80 / 8 = 10 megabytes per second.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>bit</strong> is a single on/off switch (1 or 0); <strong>8 bits</strong> make a <strong>byte</strong>.',
+    'Each added bit <strong>doubles</strong> the number of representable values — the powers of two: 2, 4, 8, 16, ...',
+    'A byte holds <strong>2<sup>8</sup> = 256</strong> values, the whole numbers <strong>0 to 255</strong>.',
+    'Inside a byte each bit has a <strong>place value</strong> (1, 2, 4, ... 128); add the on-bits to get the number.',
+    'Bigger units stack bytes: <strong>1 KiB = 1024 bytes</strong>, <strong>1 MiB = 1024 KiB</strong> — and bits ≠ bytes.',
+  ]}
+/>
+
+Next up: **number systems** — once you can read a byte's bits, you'll learn to write numbers in binary
+and hexadecimal, the two bases every programmer reads fluently.

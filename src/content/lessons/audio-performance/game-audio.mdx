@@ -1,0 +1,181 @@
+---
+title: Game Audio & DSP
+track: audio-performance
+summary: Sound is a wave of numbers — sample it, mix it, and place it in 3D space so players can hear the world.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - fourier/fourier-transform
+leadsTo:
+  - audio-performance/performance-profiling
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import WaveAttenuationLab from '../../../components/demos/WaveAttenuationLab.tsx';
+
+## The hook: why does the dragon sound like it's *behind* you?
+
+You hear a low rumble. It is quieter in your left ear, and it fades as you sprint away. Without
+looking, you *know* the dragon is to your right and far off. Your game never told you "dragon, right,
+40 metres" in words — it shaped a **wave of air pressure** so precisely that your brain reconstructed
+the scene. Game audio is the craft of turning positions and events in a virtual world into those
+waves, thousands of times a second.
+
+<Callout type="intuition" title="The one-sentence idea">
+Sound is a wave of pressure over time; a computer stores it as a stream of numbers (samples), and
+**DSP** — digital signal processing — is just arithmetic on those numbers to mix, shape, and place
+the sound in space.
+</Callout>
+
+## Intuition: from a wiggling wave to a list of numbers
+
+You already met the **Fourier transform**: any sound is a sum of pure sine waves, each with a
+**frequency** (pitch) and **amplitude** (loudness). To store such a wave, the computer measures its
+height at evenly spaced instants — this is **sampling**. The number of measurements per second is the
+**sample rate**; CD-quality audio uses 44,100 samples per second.
+
+Two knobs control a single tone:
+
+- **Frequency** — how many cycles per second (hertz). Higher frequency, higher pitch.
+- **Amplitude** — how tall the wave is. Higher amplitude, louder sound.
+
+To place a sound in 3D, two more effects matter. **Attenuation** makes distant sources quieter, and
+**panning** sends more signal to the ear that faces the source. Together they are most of what "3D
+audio" means.
+
+## Play with it
+
+Slide **frequency** and **amplitude** to reshape the live wave, then drag **distance** to push the
+source away and watch the heard wave shrink. The **pan** slider splits the signal between the left and
+right channels.
+
+<WaveAttenuationLab client:visible />
+
+<Callout type="tip">
+Notice the faint wave never changes — that is the source at full power. The bold wave is what survives
+the trip to your ears. Doubling the distance does <strong>not</strong> halve loudness by a fixed step;
+the rolloff curve is steep up close and gentle far away.
+</Callout>
+
+## The formal definition
+
+A continuous sound $x(t)$ is sampled at rate $f_s$ to give a sequence $x[n] = x(n / f_s)$. A single
+sampled tone is
+
+$$
+x[n] = A \, \sin\!\left( 2\pi f \, \frac{n}{f_s} + \varphi \right),
+$$
+
+where $A$ is amplitude, $f$ is frequency in hertz, and $\varphi$ is the phase. **Mixing** several
+sources is simply adding their samples:
+
+$$
+y[n] = \sum_{i} g_i \, x_i[n].
+$$
+
+The per-source gain $g_i$ is where 3D audio lives. A common **distance attenuation** model uses an
+inverse rolloff from a reference distance $d_0$:
+
+$$
+g(d) = \frac{d_0}{\max(d_0,\; d)}.
+$$
+
+Stereo **panning** with angle parameter $p \in [-1, 1]$ splits one source into two channels using the
+constant-power law:
+
+```python
+# one mixed stereo frame from many positioned sources
+theta = (pan + 1) * (math.pi / 4)        # 0..pi/2
+gain  = ref_dist / max(ref_dist, dist)   # distance attenuation
+left  += sample * gain * math.cos(theta) # constant-power pan
+right += sample * gain * math.sin(theta)
+```
+
+<Callout type="why">
+The Fourier view tells you *what* a sound is made of; DSP is how you *act* on it. Filtering out
+rumble, reverb in a cave, the muffling of a wall — each is a small arithmetic operation on the sample
+stream, applied to thousands of samples per frame.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Rhythm games" icon="🎵">
+A rhythm game lives or dies on timing. It schedules notes against the audio clock — the running
+**sample count** — not the frame clock, because frames stutter but samples never do. Hit windows are
+measured in milliseconds, which at 48 kHz is just a count of samples since the song began.
+</ExampleCard>
+
+<ExampleCard domain="Open-world survival" icon="🏔️">
+A campfire emits a looping crackle. As you walk away its gain follows the rolloff curve, and panning
+swings it from your right ear to your left as you circle it. Dozens of such emitters are summed into
+one stereo mix every frame — addition of samples, exactly the formula above.
+</ExampleCard>
+
+<ExampleCard domain="Horror" icon="🕯️">
+A whisper is run through a **low-pass filter** when it comes from behind a door: the high frequencies
+are attenuated, leaving a muffled hush. That filter is a handful of multiply-adds per sample — DSP
+turning geometry (a wall between you and the source) into a felt sense of space.
+</ExampleCard>
+
+<ExampleCard domain="Mobile" icon="📱">
+A phone game can't mix 200 voices — the CPU and battery won't allow it. It uses **voice limiting**:
+only the loudest few sources (after attenuation) are mixed; the rest are dropped. The attenuation math
+decides *which sounds are worth computing at all*.
+</ExampleCard>
+
+<Callout type="note">
+Every one of these is the same pipeline: sample the wave, scale by a gain, add the results, ship the
+buffer to the speakers — repeated tens of thousands of times per second.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the "sample rate" of audio measure?',
+      options: [
+        'How loud the sound is',
+        'How many amplitude measurements are taken per second',
+        'The pitch of the highest note',
+        'The number of speakers',
+      ],
+      answer: 1,
+      explain: 'The sample rate is how many times per second the wave height is measured — e.g. 44,100 samples per second for CD audio.',
+    },
+    {
+      q: 'Using the rolloff g(d) = d0 / max(d0, d) with reference distance d0 = 2 m, what gain does a source at 8 m have?',
+      options: ['1.0', '0.5', '0.25', '0.0'],
+      answer: 2,
+      explain: 'g = 2 / 8 = 0.25 — the source is at a quarter of its reference loudness.',
+    },
+    {
+      q: 'How are several simultaneous sound sources combined into one output?',
+      options: [
+        'By multiplying their samples together',
+        'By keeping only the loudest one',
+        'By adding their (gain-scaled) samples together',
+        'By averaging their frequencies',
+      ],
+      answer: 2,
+      explain: 'Mixing is summation: each source is scaled by its gain, then the samples are added to form the output buffer.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Sound is a <strong>pressure wave</strong>; a computer stores it as evenly spaced <strong>samples</strong>, counted by the <strong>sample rate</strong>.',
+    'A tone is set by <strong>frequency</strong> (pitch) and <strong>amplitude</strong> (loudness); the Fourier view says any sound is a sum of such tones.',
+    '<strong>Mixing</strong> is just adding gain-scaled samples — DSP is arithmetic on the sample stream.',
+    '<strong>3D audio</strong> = distance <strong>attenuation</strong> (a rolloff curve) plus <strong>panning</strong> (constant-power split across channels).',
+    'On tight hardware, the attenuation math also decides <strong>which</strong> sounds are worth mixing at all.',
+  ]}
+/>
+
+All this mixing happens inside a single frame — and a frame has a hard deadline. Next: the **frame
+budget**, and how to find what is eating it.

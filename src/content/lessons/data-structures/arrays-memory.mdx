@@ -1,0 +1,157 @@
+---
+title: Arrays & Memory Layout
+track: data-structures
+summary: Why the humble array is the fastest container there is — contiguous memory and O(1) indexing.
+difficulty: beginner
+estMinutes: 12
+prereqs:
+  - memory-hardware/how-memory-works
+leadsTo:
+  - data-structures/dynamic-arrays
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import ArrayAddressMapper from '../../../components/demos/ArrayAddressMapper.tsx';
+
+## The hook: your inventory bar, and why slot 7 is instant
+
+You are playing an RPG. Your hotbar has slots 0 through 9, and you slam the **7** key to drink a
+potion. The game finds that potion *instantly* — it doesn't peek into slot 0, then slot 1, then slot 2
+hunting for it. It jumps **straight** to slot 7. How? Because the hotbar is an **array**, and arrays
+have a superpower: given an index, the computer can compute the exact memory location with a single
+piece of arithmetic. No searching. Ever.
+
+<Callout type="intuition" title="The one-sentence idea">
+An **array** stores its elements back-to-back in one unbroken block of memory, so the address of any
+element is just <strong>start + index × element-size</strong> — found in a single step.
+</Callout>
+
+## Intuition: a row of identical boxes
+
+You already know from *How Memory Works* that memory is one giant numbered strip of bytes, and every
+byte has an **address**. An array takes advantage of this in the simplest possible way: it places its
+elements **contiguously** — right next to each other, with no gaps.
+
+Because every element is the **same size** (say 4 bytes for an integer), the elements line up like
+floor tiles. If the array starts at address 4096 and each element is 4 bytes, then:
+
+- element 0 lives at 4096,
+- element 1 at 4096 + 4 = 4100,
+- element 2 at 4096 + 8 = 4104,
+
+and so on. To reach element $i$ you never walk the row — you compute where it *must* be and go directly
+there. That direct jump is what "fast" really means here.
+
+## Play with it
+
+Tap any inventory slot below. Watch the address get computed from the start address, the index, and the
+element size. Then change the element size and see every address shift.
+
+<ArrayAddressMapper client:visible />
+
+<Callout type="tip">
+Notice that picking slot 0 versus slot 7 takes the <em>exact same work</em>: one multiply and one add.
+The array's size never enters the calculation — that is the whole point.
+</Callout>
+
+## The formal definition
+
+An array of length $n$ stores elements $a_0, a_1, \dots, a_{n-1}$ in one contiguous block. If the block
+begins at base address $B$ and each element occupies $s$ bytes, the address of element $i$ is:
+
+$$
+\text{addr}(i) = B + i \cdot s.
+$$
+
+This formula runs in **constant time**, written $O(1)$: it takes the same amount of work regardless of
+how large $n$ is — whether the array holds 10 items or 10 million. Contrast that with *finding* a value
+you don't have the index for, which may require scanning every element, costing $O(n)$.
+
+<Callout type="why">
+Almost every fast data structure and number-crunching library is built on this one trick. A matrix of
+neural-network weights, a texture in GPU memory, a batch of training examples — all are arrays under the
+hood, and that $B + i \cdot s$ jump is why hardware can stream through them at full speed.
+</Callout>
+
+## The same idea, four different worlds
+
+The "row of equal boxes you can index instantly" pattern shows up far beyond game hotbars.
+
+<ExampleCard domain="Music" icon="🎵">
+A digital song is an array of **samples** — 44,100 numbers per second. To jump to the 90-second mark the
+player computes sample number $90 \times 44100 = 3{,}969{,}000$ and lands on it directly. Scrubbing a
+track is just index arithmetic.
+</ExampleCard>
+
+<ExampleCard domain="Cinema seating" icon="🎬">
+A theatre row is a real array. "Seat G12" is base-of-row-G plus 12 seats. The usher walks straight to it
+instead of checking every seat from the aisle — same constant-time lookup, in the physical world.
+</ExampleCard>
+
+<ExampleCard domain="Photography" icon="📷">
+A photo is a grid of pixels stored as one long array, row after row. Pixel $(x, y)$ in a width-$W$ image
+sits at index $y \cdot W + x$. Every filter and crop you apply is built on this address math.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A warehouse aisle of identical bins is indexed by position. A picker robot computes which bin holds order
+#3,512 and drives straight there — no aisle-by-aisle search — because the bins are laid out contiguously.
+</ExampleCard>
+
+<Callout type="note">
+The catch: contiguity is rigid. To keep that fast jump, every element must be the same size and the block
+must stay unbroken — which is exactly why inserting into the middle of an array is slow, and why we'll
+soon need <strong>dynamic arrays</strong>.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why can an array find element number i without scanning the earlier elements?',
+      options: [
+        'It keeps a secret sorted copy',
+        'Its address is computed directly as base + i × element-size',
+        'Arrays remember the last element you used',
+        'It asks the operating system each time',
+      ],
+      answer: 1,
+      explain: 'Because elements are contiguous and equally sized, the address is pure arithmetic — no traversal needed.',
+    },
+    {
+      q: 'An array starts at address 2000 and each element is 8 bytes. Where does element 5 live?',
+      options: ['2005', '2040', '2008', '2048'],
+      answer: 1,
+      explain: 'addr = 2000 + 5 × 8 = 2000 + 40 = 2040.',
+    },
+    {
+      q: 'Indexing an array by position is described as O(1). What does that mean here?',
+      options: [
+        'It always takes exactly one nanosecond',
+        'The work does not grow as the array gets larger',
+        'It only works for arrays of length 1',
+        'It needs one byte of memory',
+      ],
+      answer: 1,
+      explain: 'O(1) / constant time means the cost is independent of n — slot 0 and slot 1,000,000 cost the same.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>array</strong> stores elements <strong>contiguously</strong> — one unbroken block of equal-sized slots.',
+    'The address of element i is <strong>base + i × element-size</strong>, computed in a single step.',
+    'That direct jump makes indexing <strong>O(1)</strong>: the array\'s length never affects the cost.',
+    'Equal element size plus contiguity is the deal — it buys speed but makes mid-array inserts expensive.',
+    'Arrays underpin almost everything fast: audio, images, matrices, and GPU buffers are all arrays.',
+  ]}
+/>
+
+Next up: **dynamic arrays** — what happens when your inventory needs to grow past the slots you reserved,
+and the clever doubling trick that keeps it fast anyway.

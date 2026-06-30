@@ -1,0 +1,173 @@
+---
+title: Big-O Notation
+track: algorithms
+summary: A simple language for how an algorithm's cost grows as the input grows — and why it decides whether your game holds 60fps.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - data-structures/arrays-memory
+leadsTo:
+  - algorithms/searching
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BigOGrowthPlot from '../../../components/demos/BigOGrowthPlot.tsx';
+
+## The hook: the frame that took too long
+
+Your game runs at a buttery 60 frames per second. That means every frame — physics, AI, rendering,
+everything — must finish in about **16.7 milliseconds**. Miss that window and the player *sees* it:
+a stutter, a dropped frame, a jolt.
+
+Now you add a feature: every object checks whether it has bumped into every other object. With 100
+objects it is invisible. With 1,000 objects the game crawls. You didn't write *slower* code — you
+wrote code whose cost **grows faster than the input**. Big-O is the language that would have warned
+you in advance.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Big-O** describes how the work an algorithm does **grows** as its input gets bigger — ignoring
+constants and small details, so you can compare algorithms before you ever run them.
+</Callout>
+
+## Intuition: shape, not stopwatch
+
+You already know that an **array** lets you read element number 5,000 just as fast as element number
+2 — one jump to a memory address. That "same cost no matter how big the array" is the whole spirit of
+Big-O. We don't care that the jump takes 3 nanoseconds on your laptop and 5 on your phone. We care
+about the **shape** of the growth.
+
+Think of it as answering one question: *"If I make the input twice as big, what happens to the work?"*
+
+- **$O(1)$ — constant**: nothing changes. Doubling the input doesn't add work (array lookup).
+- **$O(n)$ — linear**: work doubles. Twice the enemies, twice the update loop.
+- **$O(n \log n)$ — linearithmic**: a little worse than linear. The best general sorts live here.
+- **$O(n^2)$ — quadratic**: work *quadruples*. Every object checking every other object.
+
+The constants (is each step 3ns or 30ns?) only shift the curve up or down. The **exponent** decides
+whether you survive at scale.
+
+## Play with it
+
+Slide the input size and watch how many operations each complexity class needs. Toggle the curves and
+flip between linear and log scale. Notice how $O(n^2)$ rockets past the dashed "frame budget" line
+while $O(\log n)$ barely lifts off the floor.
+
+<BigOGrowthPlot client:visible />
+
+<Callout type="tip">
+Switch to <strong>linear scale</strong> and turn on only $O(n)$ and $O(n^2)$. At small $n$ they look
+similar — that's the trap. Drag $n$ to the right and the quadratic curve explodes. Algorithms that
+"work fine in testing" die exactly this way in production.
+</Callout>
+
+## The formal definition
+
+We say a function $f(n)$ is $O(g(n))$ when, for large enough $n$, $f$ grows **no faster** than $g$ up
+to a constant factor. Formally:
+
+$$
+f(n) = O\bigl(g(n)\bigr) \iff \exists\, c > 0,\, n_0 > 0 \ \text{ such that } \ f(n) \le c \cdot g(n) \ \text{ for all } n \ge n_0.
+$$
+
+In words: past some starting point $n_0$, the curve $f$ stays under a scaled copy of $g$. This is why
+we **drop constants and lower-order terms**. A loop costing $3n + 50$ steps is just $O(n)$, and
+$2n^2 + 100n$ is just $O(n^2)$ — for big $n$, the $n^2$ term swamps everything else:
+
+$$
+2n^2 + 100n + 7 \;=\; O(n^2).
+$$
+
+A quick way to read code: a single loop over the input is $O(n)$, a loop inside a loop is $O(n^2)$,
+and repeatedly **halving** the problem gives a $\log n$ factor.
+
+```js
+// O(n^2): every object tests every other object
+for (let i = 0; i < n; i++)
+  for (let j = i + 1; j < n; j++)
+    if (overlap(obj[i], obj[j])) resolve(i, j);
+```
+
+<Callout type="why">
+Big-O is the vocabulary of every performance conversation in machine learning and games alike.
+"Attention is $O(n^2)$ in sequence length" is *exactly* this idea — and it's why long-context models
+are hard. Same notation, same trap, different field.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Game physics" icon="🧱">
+A brawler with $n$ on-screen characters checks each pair for collisions: that's $\tfrac{n(n-1)}{2}$
+checks, or $O(n^2)$, **every single frame**. At 50 characters that's ~1,225 checks; at 500 it's
+~125,000. The fix isn't faster checks — it's a smarter algorithm (spatial grids) that avoids most
+pairs entirely.
+</ExampleCard>
+
+<ExampleCard domain="Biology" icon="🧬">
+Scanning a DNA strand of length $n$ for a single marker reads each base once: $O(n)$. Double the
+genome, double the time — predictable and fine. But aligning *two* sequences by comparing every base
+against every base is $O(n^2)$, which is why genomics leans hard on clever sub-quadratic algorithms.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A warehouse robot that visits $n$ shelves and, for each, rescans the full pick-list is doing $O(n^2)$
+work. Sorting the pick-list once into shelf order ($O(n \log n)$) and walking it in a single pass
+turns the whole route into $O(n \log n)$ — the difference between minutes and milliseconds.
+</ExampleCard>
+
+<ExampleCard domain="Social media" icon="📱">
+"People you may know" suggests friends-of-friends. If everyone has about $k$ friends, exploring two
+hops touches $k^2$ people — growth that explodes for popular accounts. Platforms cap the hops and
+cache results precisely because the naive cost grows too fast.
+</ExampleCard>
+
+<Callout type="note">
+Notice none of these examples timed anything. Big-O let us rank approaches — $O(n)$ beats $O(n^2)$ —
+without a single benchmark. That's the power: it predicts trouble at a scale you haven't tested yet.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does Big-O actually measure?',
+      options: [
+        'The exact running time in milliseconds',
+        'How the amount of work grows as the input grows',
+        'How much memory a single variable uses',
+        'The number of lines of code',
+      ],
+      answer: 1,
+      explain: 'Big-O describes the growth rate of work as a function of input size, ignoring machine-specific constants.',
+    },
+    {
+      q: 'A function does 5n² + 1000n + 20 operations. What is its Big-O?',
+      options: ['O(n)', 'O(1000n)', 'O(n²)', 'O(5n² + 1000n + 20)'],
+      answer: 2,
+      explain: 'Drop constants and lower-order terms; for large n the n² term dominates, so it is O(n²).',
+    },
+    {
+      q: 'You double the number of enemies and an O(n²) collision loop runs. Roughly how does its work change?',
+      options: ['Stays the same', 'Doubles', 'Quadruples', 'Halves'],
+      answer: 2,
+      explain: 'For O(n²), doubling n multiplies the work by 2² = 4 — it quadruples. That is why quadratic loops break at scale.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Big-O</strong> describes how work grows with input size — the <em>shape</em> of the cost, not a stopwatch reading.',
+    'Always <strong>drop constants and lower-order terms</strong>: 3n + 50 is O(n); 2n² + 100n is O(n²).',
+    'The ladder from fast to slow: <strong>O(1) &lt; O(log n) &lt; O(n) &lt; O(n log n) &lt; O(n²)</strong>.',
+    'A nested loop over the input is <strong>O(n²)</strong>; repeatedly halving the problem adds a <strong>log n</strong> factor.',
+    'At 60fps you have ~16.7 ms per frame — the wrong complexity quietly eats that budget as your game scales.',
+  ]}
+/>
+
+Next up: **searching** — our first head-to-head between an $O(n)$ algorithm and an $O(\log n)$ one,
+and why sorting your data first changes everything.

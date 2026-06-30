@@ -1,0 +1,201 @@
+---
+title: Cache & the Memory Hierarchy
+track: memory-hardware
+summary: Why nearby data is fast and random access is slow.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - memory-hardware/how-memory-works
+leadsTo:
+  - memory-hardware/cpu-architecture
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CacheAccessDemo from '../../../components/demos/CacheAccessDemo.tsx';
+
+## The hook: two loops, a 10x difference
+
+You write a game and it stutters. A profiler shows the hot spot: a loop walking through every
+enemy in the level. You swap one detail — how the enemy data is laid out in memory — and the *exact
+same math* now runs many times faster. Nothing about the work changed. What changed is whether the
+CPU could find the data **nearby** or had to go fetch it from far away. That gap between "near" and
+"far" is the most important performance story in modern hardware, and it has a name: the **memory
+hierarchy**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Your CPU keeps small, blazing-fast copies of recently and nearby used data close by; if the data you
+ask for is already close it is nearly free, and if it isn't you pay a long trip out to main memory.
+</Callout>
+
+## Intuition: a stack of stores, each bigger but slower
+
+From the previous lesson you know RAM is one giant addressable array. But the CPU does not read RAM
+directly for every operation — RAM is *slow* compared to how fast the CPU can compute. So hardware
+designers build a ladder of storage, each rung bigger but slower than the one above it:
+
+- **Registers** — a handful of slots inside the CPU. Instant.
+- **L1 cache** — a few kilobytes, almost instant.
+- **L2 cache** — hundreds of kilobytes, still very fast.
+- **L3 cache** — a few megabytes, shared between cores.
+- **Main memory (RAM)** — gigabytes, but far away and slow.
+
+Here are rough, illustrative latencies (in CPU cycles) so the shape sinks in:
+
+| Level | Size (rough) | Latency (~cycles) |
+| --- | --- | --- |
+| Register | bytes | ~1 |
+| L1 | tens of KB | ~4 |
+| L2 | hundreds of KB | ~12 |
+| L3 | a few MB | ~40 |
+| RAM | many GB | ~200 |
+
+The jump from L1 to RAM is roughly **50x**. That is the cliff your stuttering loop fell off.
+
+Two more ideas make the whole thing work. When the CPU fetches one byte from RAM it does not grab
+just that byte — it grabs a whole **cache line**, a contiguous block of about **64 bytes**, and stores
+the copy in cache. And it bets on **locality**:
+
+- **Temporal locality** — if you used something just now, you will probably use it again soon.
+- **Spatial locality** — if you used one address, you will probably use its neighbors soon.
+
+A request the cache can satisfy is a **hit** (fast). One it cannot is a **miss** (you pay the slow
+trip and a fresh line gets loaded).
+
+## Play with it
+
+Below is a block of memory drawn as cells, where **each row is one cache line**. Step the access
+pointer through it. A miss flashes red and loads the whole line (it tints sky-blue); later touches in
+a loaded line flash green and cost almost nothing. Toggle **Sequential** vs **Random** and watch the
+hit rate.
+
+<CacheAccessDemo client:visible />
+
+<Callout type="tip">
+Run it in <strong>Sequential</strong> mode: one miss drags in eight cells, then you get seven free
+hits in a row — the hit rate climbs toward 90%. Switch to <strong>Random</strong> and the pointer
+keeps landing in lines that were just evicted, so almost every access pays the full miss cost.
+</Callout>
+
+## The formal definition
+
+Treat each access as either a hit or a miss. If the fraction of accesses that hit is the **hit rate**
+$h$, then the miss rate is $1 - h$, and the **average cost per access** is a simple weighted average:
+
+$$
+T_{\text{avg}} = h \cdot T_{\text{hit}} + (1 - h) \cdot T_{\text{miss}}.
+$$
+
+With the illustrative numbers $T_{\text{hit}} = 4$ and $T_{\text{miss}} = 200$ cycles, a sequential
+loop with $h = 0.9$ costs about $0.9 \cdot 4 + 0.1 \cdot 200 = 23.6$ cycles per access, while a random
+pattern with $h = 0.25$ costs about $0.25 \cdot 4 + 0.75 \cdot 200 = 151$ cycles. Same instructions,
+roughly $6\times$ the time — purely from layout.
+
+Spatial locality has a clean knob too. If a cache line holds $B$ elements and you read an array
+straight through, you take **one** miss every $B$ elements, so the miss rate floor is about $1 / B$.
+Bigger lines amortize each slow trip over more useful data — *as long as you actually use the
+neighbors you dragged in*.
+
+```c
+// Cache-friendly: strides by 1, uses every byte of each line it loads.
+long sum = 0;
+for (int i = 0; i < n; i++)
+    sum += data[i];        // neighbors data[i+1], data[i+2]... already in cache
+```
+
+<Callout type="why">
+This is why "the same algorithm" can be fast or slow in a game engine. Looping over objects packed
+contiguously (an array) streams cache lines and stays near 90% hits; chasing pointers scattered across
+the heap (a linked list of objects) misses constantly. Big-O counts operations; the cache decides what
+each operation actually costs.
+</Callout>
+
+## The same idea, four different worlds
+
+A hierarchy of "fast and near" versus "slow and far," plus the trick of grabbing a whole batch at
+once, shows up far outside computers.
+
+<ExampleCard domain="Cooking" icon="🧑‍🍳">
+A chef's *mise en place* is a cache. The cutting board and the small bowls within arm's reach are
+**L1** — grabbing salt is instant. The pantry across the kitchen is **RAM**: a slow walk. A good chef
+pulls everything a recipe needs to the counter first (loads the "line"), then cooks without a single
+trip. A disorganized cook walks to the pantry for every pinch — constant misses.
+</ExampleCard>
+
+<ExampleCard domain="Woodworking" icon="🪚">
+On the bench sits a tool tray with the chisels and the marking gauge you are using right now — a hit
+is a quick reach. Anything not on the tray means a drive to the **hardware store**: the worst-case
+miss. So you lay out the few tools this joint needs before starting, the same way the CPU pulls a
+cache line in before it computes.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A warehouse picker filling an order is access-pattern bound. When the items sit in **adjacent bins**,
+one walk down the aisle grabs them all — sequential access, high hit rate. When the order is items
+**scattered** across the building, the picker zig-zags everywhere, walking far more than they carry.
+Smart warehouses *re-shelve* popular items together, exactly the way a cache keeps hot lines close.
+</ExampleCard>
+
+<ExampleCard domain="Office work" icon="🗄️">
+The papers in your desk's top drawer are reachable in a second; documents in the **offsite archive**
+take a day to retrieve. You naturally keep the file you are working on in the drawer (temporal
+locality) and pull the whole folder, not one page, when you fetch it (spatial locality) — so you do
+not order a retrieval again tomorrow.
+</ExampleCard>
+
+<Callout type="note">
+Notice the universal trade-off: storage that is fast is always small and storage that is huge is
+always slow. Nobody can give you "huge and instant," so every level — kitchens, warehouses, CPUs —
+keeps a small fast copy of what is hot.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does reading one byte from RAM also pull in its neighbors?',
+      options: [
+        'To save power',
+        'Because memory moves in fixed-size cache lines (~64 bytes), betting on spatial locality',
+        'Because RAM is encrypted in blocks',
+        'To check the data for errors',
+      ],
+      answer: 1,
+      explain: 'Memory transfers happen a whole cache line at a time. Hardware bets you will soon use the neighbors, so it grabs the block, not a single byte.',
+    },
+    {
+      q: 'A loop has a hit rate of 0.8. With hit cost 4 cycles and miss cost 200 cycles, what is the average cost per access?',
+      options: ['About 4 cycles', 'About 43 cycles', 'About 160 cycles', 'About 200 cycles'],
+      answer: 1,
+      explain: '0.8 × 4 + 0.2 × 200 = 3.2 + 40 = 43.2 cycles. Even a 20% miss rate dominates the cost, because a miss is ~50x a hit.',
+    },
+    {
+      q: 'Why is walking an array in order usually much faster than chasing a linked list of scattered nodes?',
+      options: [
+        'Arrays use less total memory',
+        'Sequential access enjoys spatial locality — one miss loads a line, then many hits follow; scattered pointers miss on nearly every step',
+        'Linked lists store more data per element',
+        'The CPU cannot read linked lists at all',
+      ],
+      answer: 1,
+      explain: 'Contiguous, in-order access reuses each loaded cache line for many elements (high hit rate). Pointer chasing jumps to fresh, uncached addresses, so almost every access is a miss.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>memory hierarchy</strong> stacks registers, L1, L2, L3 and RAM — each rung is bigger but slower, with RAM roughly 50x slower than L1.',
+    'Data moves in <strong>cache lines</strong> of about 64 bytes; one miss drags in a whole block, betting on spatial locality.',
+    'A <strong>hit</strong> is served from cache and is nearly free; a <strong>miss</strong> pays the long trip to RAM, so average cost is <strong>h·T_hit + (1−h)·T_miss</strong>.',
+    '<strong>Sequential access</strong> reuses each loaded line for many hits; <strong>random access</strong> thrashes the cache and misses constantly.',
+    'Because a miss costs ~50x a hit, <strong>data layout often matters more than Big-O</strong> for real-world speed.',
+  ]}
+/>
+
+Next up: **CPU Architecture** — now that the data is close, how does the processor actually fetch,
+decode, and execute instructions, and overlap them on an assembly line to do even more per tick?

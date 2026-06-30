@@ -1,0 +1,172 @@
+---
+title: Performance & Profiling
+track: audio-performance
+summary: A frame has 16.6 ms to render at 60 FPS — learn the budget, find what blows it, and read a flame graph.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - engine/game-loop
+  - memory-hardware/cache-hierarchy
+leadsTo:
+  - audio-performance/procedural-generation
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import FrameBudgetMeter from '../../../components/demos/FrameBudgetMeter.tsx';
+
+## The hook: the most important number in your game is 16.6
+
+At 60 frames per second, your **entire game** — physics, AI, animation, audio, rendering, gameplay —
+must finish in one sixtieth of a second. That is **16.6 milliseconds**. Miss it, even occasionally,
+and the player feels a hitch. The game loop you already know runs update-then-render on a relentless
+clock; profiling is the discipline of making sure every pass through that loop fits inside the budget.
+
+<Callout type="intuition" title="The one-sentence idea">
+Each frame has a fixed **time budget**; the sum of every system's cost must stay under it, and
+**profiling** is measuring where that time actually goes so you fix the real bottleneck — not the one
+you guessed.
+</Callout>
+
+## Intuition: a budget you spend every frame
+
+Think of 16.6 ms as a wallet you are handed 60 times a second and must empty *and not overdraw* each
+time. Every system spends some of it. If the systems together cost more than the budget, the frame
+runs long and your frame rate drops.
+
+A frame can be limited by one of two very different things:
+
+- **CPU-bound** — the processor can't finish its work (physics, AI, game logic, issuing draw
+  commands) in time. The GPU sits idle waiting.
+- **GPU-bound** — the graphics card can't shade all those pixels in time. The CPU sits idle waiting.
+
+These call for *opposite* fixes, so guessing is expensive. A **profiler** records how long each
+function took and shows it as a **flame graph**: a stack of bars where width is time and stacking shows
+who-called-whom. The widest bar at the bottom that you didn't expect is your bottleneck.
+
+<Callout type="warning">
+Optimizing the wrong thing is the classic trap. If you are GPU-bound, shaving CPU work changes nothing
+— the CPU was already waiting. Measure first, always.
+</Callout>
+
+## Play with it
+
+Each slider is one system's cost this frame. Push them and watch the stacked bar grow toward — and
+past — the dashed **budget** line. Switch the target between 60 and 30 FPS to see the budget itself
+change.
+
+<FrameBudgetMeter client:visible />
+
+<Callout type="tip">
+Drop the target to 30 FPS and the budget <strong>doubles</strong> to 33.3 ms — which is exactly why
+demanding console games offer a "performance" (60 FPS) and a "quality" (30 FPS) mode. More budget per
+frame buys richer visuals.
+</Callout>
+
+## The formal definition
+
+The frame budget for a target frame rate $R$ is
+
+$$
+B = \frac{1000}{R} \;\text{ms}.
+$$
+
+So $R = 60$ gives $B \approx 16.6$ ms and $R = 30$ gives $B \approx 33.3$ ms. With per-system costs
+$c_1, c_2, \dots, c_k$ running in series, the frame holds only if
+
+$$
+\sum_{i=1}^{k} c_i \;\le\; B.
+$$
+
+The achievable frame rate is bounded by the slower of the CPU and GPU passes:
+
+$$
+R_{\text{actual}} = \frac{1000}{\max(T_{\text{cpu}},\; T_{\text{gpu}})}.
+$$
+
+That $\max$ is the whole story of being CPU- or GPU-bound: improving the smaller term does nothing.
+And because a stutter is one *single* long frame, the metric that matters is not the average but the
+tail — the **99th-percentile** (or worst) frame time, often called the **1% low**.
+
+<Callout type="why">
+Cache behavior, which you met in the memory hierarchy, hides inside these costs. A system that chases
+pointers all over RAM stalls waiting on memory and shows up as a fat, mysterious bar in the profiler —
+even though its code "looks" cheap. Profiling reveals the true cost the source code hides.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Competitive shooters" icon="🎯">
+Esports titles chase 240+ FPS, a budget under 4.2 ms per frame. At that scale a single uncached memory
+read matters. Teams profile the <strong>1% low</strong> obsessively, because one 20 ms frame in a
+firefight is a lost duel — average FPS looks fine while the player feels betrayed.
+</ExampleCard>
+
+<ExampleCard domain="Open-world streaming" icon="🌆">
+As you drive into a new district, the engine loads assets. Naively done, that disk and decompression
+work lands in one frame and causes a visible <strong>hitch</strong>. Profiling reveals the spike;
+the fix is to spread (amortize) the work across many frames so each stays under budget.
+</ExampleCard>
+
+<ExampleCard domain="VR" icon="🥽">
+VR is the harshest budget in games: 90 FPS to each eye, about 11 ms, and missing it makes players
+physically ill. Developers profile relentlessly and lean on reprojection, because here a dropped frame
+is not an annoyance — it is nausea.
+</ExampleCard>
+
+<ExampleCard domain="Mobile" icon="📱">
+A phone that renders fast also gets hot, then the chip <strong>throttles</strong> and frame times
+balloon ten minutes in. Mobile profiling watches sustained frame time and even battery draw, not just
+a cold-start benchmark, because thermal limits are the real budget.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the per-frame budget for a 60 FPS target?',
+      options: ['60 ms', '16.6 ms', '33.3 ms', '6 ms'],
+      answer: 1,
+      explain: '1000 ms / 60 frames ≈ 16.6 ms per frame.',
+    },
+    {
+      q: 'A profiler shows the CPU finishing its work in 8 ms while the GPU takes 14 ms each frame. The game is...',
+      options: [
+        'CPU-bound; optimize game logic',
+        'GPU-bound; optimize shading/draw work',
+        'Perfectly balanced; nothing to do',
+        'Impossible to tell without the average',
+      ],
+      answer: 1,
+      explain: 'Frame time is set by the slower pass (max of the two). The GPU at 14 ms is the limiter, so it is GPU-bound.',
+    },
+    {
+      q: 'Why do developers track the 1% low (worst) frame time rather than only the average?',
+      options: [
+        'Averages are hard to compute',
+        'A single long frame is a felt stutter that the average hides',
+        'The GPU only reports worst-case numbers',
+        'It is the same as the average anyway',
+      ],
+      answer: 1,
+      explain: 'Smoothness is about the worst frames. A good average can still contain stutters that ruin the feel, so the tail matters most.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The frame budget is <strong>1000 / target FPS</strong> — about <strong>16.6 ms</strong> at 60 FPS, 33.3 ms at 30 FPS.',
+    'A frame holds only if the <strong>sum of all system costs</strong> stays under the budget.',
+    'Frame rate is limited by the slower of CPU and GPU work — being <strong>CPU-bound vs GPU-bound</strong> needs opposite fixes.',
+    'A <strong>flame graph</strong> shows time as bar width and call structure as stacking; find the bottleneck before optimizing.',
+    'Smoothness is about the <strong>worst</strong> frame (1% low), not the average — and watch for memory stalls and thermal throttling.',
+  ]}
+/>
+
+Once you know where the time goes, you can spend it wisely — including on generating whole worlds at
+runtime. Next: **procedural generation**.

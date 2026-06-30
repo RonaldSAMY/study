@@ -1,0 +1,173 @@
+---
+title: Vectors in Games
+track: game-math
+summary: Position, velocity and direction — the vectors that move every entity in a game.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - linear-algebra/vectors
+leadsTo:
+  - game-math/dot-cross-product
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import GameVectorEntityLab from '../../../components/demos/GameVectorEntityLab.tsx';
+
+## The hook: why does the spaceship keep drifting?
+
+Fire up any space shooter and let go of the controls. The ship keeps gliding. Tap a thruster and it
+slowly curves. Nothing in that scene is a single number — the ship's **place** on screen, the way it's
+**heading**, how **fast** it moves: every one of those is an arrow with a size and a direction. Games
+are, underneath the art, a giant pile of arrows being added together sixty times a second. That arrow
+is the **vector**, and once you see entities as vectors you can move, steer and chase anything.
+
+<Callout type="intuition" title="The one-sentence idea">
+Every moving thing in a game is described by **position** (where it is) and **velocity** (where it's
+going and how fast) — and each frame the engine just does <strong>position += velocity</strong>.
+</Callout>
+
+## Intuition: from arrows to entities
+
+You already met vectors as arrows with a length and direction, or equivalently a list of numbers. Game
+code uses exactly that, with three jobs that come up constantly:
+
+- **Position** $\mathbf{p}$ — an arrow from the world origin to the entity. In 2D it's $(x, y)$.
+- **Velocity** $\mathbf{v}$ — how the position changes *per second*. Its length is the **speed**; its
+  direction is where the entity travels.
+- **Direction** $\hat{\mathbf{d}}$ — velocity with its length thrown away, kept at exactly 1. This is
+  the **unit vector**, and it answers "which way is the player facing?" independent of speed.
+
+The single most-used trick is **normalizing**: take any vector, divide by its length, and you get a
+unit vector pointing the same way. That lets you separate *where* from *how fast* — aim with the unit
+vector, then multiply by whatever speed you want.
+
+## Play with it
+
+Drag the ship to reposition it, or drag the velocity tip to re-aim it. Press **Play** and watch the
+engine repeatedly add velocity onto position. The dashed green arrow is the normalized direction.
+
+<GameVectorEntityLab client:visible />
+
+<Callout type="tip">
+Try making the velocity long, then short, while keeping the same heading — the green unit arrow never
+changes length. That's the whole point of normalizing: <em>direction without speed</em>.
+</Callout>
+
+## The formal definition
+
+An entity in 2D carries a position and a velocity, both vectors in $\mathbb{R}^2$:
+
+$$
+\mathbf{p} = \begin{bmatrix} x \\ y \end{bmatrix}, \qquad
+\mathbf{v} = \begin{bmatrix} v_x \\ v_y \end{bmatrix}.
+$$
+
+Each frame advances the position by the velocity scaled by the time step $\Delta t$ (seconds since the
+last frame):
+
+$$
+\mathbf{p}_{\text{new}} = \mathbf{p} + \mathbf{v}\,\Delta t.
+$$
+
+The **speed** is the magnitude of the velocity, straight from Pythagoras:
+
+$$
+\lVert \mathbf{v} \rVert = \sqrt{v_x^2 + v_y^2}.
+$$
+
+And **normalizing** turns any nonzero vector into a unit-length direction:
+
+$$
+\hat{\mathbf{v}} = \frac{\mathbf{v}}{\lVert \mathbf{v} \rVert}, \qquad \lVert \hat{\mathbf{v}} \rVert = 1.
+$$
+
+```csharp
+// Move toward a target at a fixed speed (Unity-style, per frame)
+Vector2 toTarget = target - position;       // direction arrow
+Vector2 dir = toTarget.normalized;          // length 1
+position += dir * speed * deltaTime;         // step along it
+```
+
+<Callout type="why">
+Multiplying by $\Delta t$ is what makes movement **frame-rate independent**: a 144 Hz gaming PC and a
+30 Hz phone take different-sized steps but cover the same distance per second. Forget it and your game
+literally runs faster on faster hardware.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Platformers" icon="🍄">
+A jumping plumber has velocity $\begin{bmatrix} v_x \\ v_y \end{bmatrix}$. Pressing right nudges $v_x$;
+the jump sets $v_y$ upward and gravity subtracts from it every frame. The arc you see is just position
+accumulating a velocity whose vertical part keeps shrinking.
+</ExampleCard>
+
+<ExampleCard domain="Top-down shooters" icon="🔫">
+A bullet is spawned at the gun's muzzle with velocity $\hat{\mathbf{d}} \cdot \text{muzzleSpeed}$, where
+$\hat{\mathbf{d}}$ is the unit aim direction. Normalize first, then scale — otherwise diagonal shots
+would travel faster than straight ones (a classic beginner bug).
+</ExampleCard>
+
+<ExampleCard domain="Racing games" icon="🏎️">
+A car's **speedometer** literally shows $\lVert \mathbf{v} \rVert$, the magnitude of its velocity
+vector. The direction of that vector is where the nose points; drifting is the moment velocity and
+facing direction stop agreeing.
+</ExampleCard>
+
+<ExampleCard domain="RPG companions" icon="🧙">
+A follower computes $\mathbf{p}_{\text{player}} - \mathbf{p}_{\text{self}}$ to get the arrow toward you,
+normalizes it, and walks along it at its move speed. Subtracting two position vectors to get a "from A
+to B" arrow is the most common operation in all of game AI.
+</ExampleCard>
+
+<Callout type="note">
+Subtraction is the unsung hero: <strong>target − self</strong> is always the arrow pointing from you to
+your goal. Normalize it to steer, measure its length to know how far away the goal is.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'An entity sits at p = [2, 5] with velocity v = [3, -1] per second. Where is it after one second (Δt = 1)?',
+      options: ['[5, 4]', '[6, -5]', '[2, 5]', '[3, -1]'],
+      answer: 0,
+      explain: 'p_new = p + v·Δt = [2+3, 5−1] = [5, 4]. Add velocity onto position.',
+    },
+    {
+      q: 'Why do we normalize a direction vector before multiplying by speed?',
+      options: [
+        'To make the numbers smaller',
+        'So the entity moves at the intended speed regardless of the direction vector’s original length',
+        'Because vectors must always have length 1',
+        'To convert it into a position',
+      ],
+      answer: 1,
+      explain: 'Normalizing fixes the length to 1, so multiplying by speed gives exactly that speed in every direction — diagonal shots no longer travel faster than straight ones.',
+    },
+    {
+      q: 'What is the speed of an entity with velocity v = [3, 4]?',
+      options: ['7', '5', '12', '1'],
+      answer: 1,
+      explain: 'Speed is the magnitude √(3² + 4²) = √25 = 5.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Every game entity is described by a <strong>position</strong> vector and a <strong>velocity</strong> vector.',
+    'Movement is just <strong>position += velocity · Δt</strong>, applied every frame.',
+    'A velocity’s <strong>magnitude</strong> is the speed; its <strong>direction</strong> is where the entity goes.',
+    '<strong>Normalizing</strong> (divide by length) yields a unit direction — separating <em>which way</em> from <em>how fast</em>.',
+    'Subtracting positions (<strong>target − self</strong>) gives the arrow from one entity to another — the basis of all steering.',
+  ]}
+/>
+
+Next up: the **dot and cross products** — two tiny multiplications that tell you the angle between
+vectors, whether a target is in front of you, and which way a surface faces.

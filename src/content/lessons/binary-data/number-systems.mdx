@@ -1,0 +1,160 @@
+---
+title: Number Systems (Binary & Hex)
+track: binary-data
+summary: Counting in base 2 and base 16, converting between them and decimal, and why hex is everywhere in code.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - binary-data/bits-bytes
+leadsTo:
+  - binary-data/twos-complement
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import BaseConverterLab from '../../../components/demos/BaseConverterLab.tsx';
+
+## The hook: why is red written as #FF0000?
+
+Open any game's settings or a web page's stylesheet and you'll find colors written like `#FF0000` for
+red or `#00FF00` for green. Those aren't random letters — they're numbers, just written in a different
+**base**. In the last lesson you saw a byte is 8 bits. Now you'll learn to *write* those bits compactly:
+in **binary** (base 2, what the machine uses) and **hexadecimal** (base 16, what programmers use to read
+binary without going cross-eyed).
+
+<Callout type="intuition" title="The one-sentence idea">
+A **number system** is just a choice of how many digits you count with before "carrying": decimal uses
+10, **binary** uses 2, and **hexadecimal** uses 16 — and they all describe the *same* underlying value.
+</Callout>
+
+## Intuition: it's all place values
+
+You already count in **base 10** without thinking. The number 273 means
+$2 \times 100 + 7 \times 10 + 3 \times 1$ — each column is a power of ten. Every base works the same way;
+only the "weight" of each column changes.
+
+- **Binary (base 2)** has only the digits 0 and 1. Columns are powers of two: 1, 2, 4, 8, 16, ... So
+  `101` means $1\times4 + 0\times2 + 1\times1 = 5$. This is exactly the byte place-values from last lesson.
+- **Hexadecimal (base 16)** uses sixteen digits: 0–9 then A, B, C, D, E, F for the values 10–15. Columns
+  are powers of sixteen: 1, 16, 256, ...
+
+Here is the trick that makes hex worth learning: **one hex digit equals exactly 4 bits** (because
+$2^4 = 16$). So a full byte is always exactly **two hex digits**. Instead of reading `11111111`, you
+read `FF`. Hex is just binary in comfortable, bite-sized chunks.
+
+## Play with it
+
+Type a value into any of the three boxes — decimal, binary, or hex — and the other two update instantly.
+Drag the slider and watch the place-value strip show how the binary 1s add up to the decimal total.
+
+<BaseConverterLab client:visible />
+
+<Callout type="tip">
+Set the value to <strong>255</strong>. Binary shows <code>11111111</code> (all on) and hex shows
+<code>FF</code> — the largest single byte. Now try <strong>16</strong>: binary jumps to a single 1 in the
+"16" column, and hex rolls over to <code>10</code>. Each base "carries" at a different point.
+</Callout>
+
+## The formal definition
+
+A number written with digits $d_k d_{k-1} \dots d_1 d_0$ in **base** $B$ has the value:
+
+$$
+\text{value} = \sum_{i=0}^{k} d_i \cdot B^{\,i}.
+$$
+
+For our three bases, $B$ is 10, 2, or 16. Converting between them:
+
+- **To decimal:** multiply each digit by its place value and add (the formula above).
+- **Decimal to binary/hex:** repeatedly divide by the base; the remainders, read bottom-up, are the digits.
+
+Because $16 = 2^4$, regrouping binary into hex is purely mechanical — slice the bits into groups of four:
+
+$$
+\underbrace{1010}_{\text{A}}\,\underbrace{1101}_{\text{D}} \;=\; \text{AD}_{16} \;=\; 173_{10}.
+$$
+
+```python
+value = 0b10101101      # binary literal
+print(value)            # 173
+print(hex(value))       # '0xad'
+print(bin(173))         # '0b10101101'
+```
+
+<Callout type="why">
+Memory addresses, color codes, hashes, and raw file bytes are all shown in hex because it maps cleanly
+onto bytes. When you debug a crash and see `0x7FFE...`, that's a memory address in hex — two hex digits
+per byte, no translation needed.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Game art / color codes" icon="🟥">
+A hex color like <code>#FF8800</code> is three bytes: <code>FF</code> (255 red), <code>88</code>
+(136 green), <code>00</code> (0 blue) — a warm orange. Artists tweak the two hex digits per channel to
+nudge a color, because each pair is exactly one byte from 0 to 255.
+</ExampleCard>
+
+<ExampleCard domain="Speedrunning / memory" icon="🎮">
+Speedrunners who hunt for glitches read a game's live memory in hex. A value like <code>0x63</code> for
+"99 lives" is instantly recognizable, and editing one byte from <code>0x00</code> to <code>0xFF</code>
+maxes a stat. Hex is the native language of memory inspectors.
+</ExampleCard>
+
+<ExampleCard domain="Network packets" icon="📦">
+When engineers capture network traffic, each packet is shown as a grid of hex bytes. A protocol's
+"magic number" — say <code>0x1F8B</code> at the start of a gzip stream — identifies the format at a
+glance. Reading raw bytes in binary would be hopeless; hex makes the structure pop.
+</ExampleCard>
+
+<ExampleCard domain="Cooking measurements" icon="🍳">
+Even kitchens change base: 3 teaspoons "carry" into 1 tablespoon, and 16 tablespoons make 1 cup. It's the
+same idea as base 16 — you regroup small units into a bigger one at a fixed threshold. Bases are just
+agreed-upon points where small units roll over into a larger one.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the binary number 1011 in decimal?',
+      options: ['7', '9', '11', '13'],
+      answer: 2,
+      explain: 'Place values: 8 + 0 + 2 + 1 = 11. (The bits worth 8, 2, and 1 are on.)',
+    },
+    {
+      q: 'Why can one hexadecimal digit always be written as exactly 4 binary bits?',
+      options: [
+        'Because 16 = 2 × 4',
+        'Because 16 = 2^4, so 4 bits cover all 16 hex digit values',
+        'Because hex has 4 letters',
+        'It cannot — the count varies',
+      ],
+      answer: 1,
+      explain: '4 bits give 2^4 = 16 combinations, exactly matching the 16 hex digits 0–F.',
+    },
+    {
+      q: 'The hex byte 0x2A equals which decimal value?',
+      options: ['20', '32', '42', '52'],
+      answer: 2,
+      explain: '0x2A = 2×16 + 10 (A) = 32 + 10 = 42.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>base</strong> is how many digits you count with before carrying: decimal 10, binary 2, hex 16.',
+    'Every base uses <strong>place values</strong> — powers of the base — and all describe the same number.',
+    '<strong>Binary</strong> is what hardware uses; <strong>hex</strong> is a compact way for humans to read binary.',
+    'One <strong>hex digit = 4 bits</strong>, so one <strong>byte = exactly two hex digits</strong> (00 to FF).',
+    'Convert to decimal by summing digit × place value; convert from decimal by repeated division.',
+  ]}
+/>
+
+Next up: **two's complement** — so far every number has been positive. Next you'll see the clever trick
+that lets the very same bits store negative integers too.

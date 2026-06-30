@@ -1,0 +1,172 @@
+---
+title: Text Encoding
+track: binary-data
+summary: How characters become numbers and then bytes — ASCII, Unicode code points, and UTF-8.
+difficulty: beginner
+estMinutes: 13
+prereqs:
+  - binary-data/number-systems
+leadsTo:
+  - memory-hardware/how-memory-works
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import Utf8ByteInspector from '../../../components/demos/Utf8ByteInspector.tsx';
+
+## The hook: why does a name turn into "Ã©"?
+
+You load an old save file and your character "José" shows up as "JosÃ©". You paste an emoji into a chat
+and the other player sees a box. Both are **text-encoding** mismatches: the bytes were written using one
+rulebook and read using another. Computers don't store letters — they store numbers. To get from the "A"
+key to a byte on disk, every character needs an agreed-upon number, and a rule for turning that number
+into bytes. This lesson is that rulebook.
+
+<Callout type="intuition" title="The one-sentence idea">
+Text is stored by giving every character a number (its **code point**) and then encoding that number as
+bytes — **ASCII** covers English in one byte each, while **UTF-8** encodes *every* character in 1 to 4 bytes.
+</Callout>
+
+## Intuition: characters → numbers → bytes
+
+There are two separate steps, and keeping them apart is the whole secret:
+
+1. **Character to number (the code point).** A giant lookup table called **Unicode** assigns every
+   character a unique number. `A` is 65, `a` is 97, the digit `0` is 48, `é` is 233, and the alien emoji
+   👾 is 128,374. We write code points as `U+` followed by hex, like `U+0041` for `A`.
+2. **Number to bytes (the encoding).** A code point is just a number; we still have to store it as bytes.
+   The encoding is the rule for that. The dominant one is **UTF-8**.
+
+The original scheme, **ASCII**, used a single byte per character and only defined 128 codes (0–127) —
+enough for English letters, digits, and punctuation. It couldn't represent é, ñ, Ω, or any emoji.
+
+**UTF-8** is the brilliant fix. It is **variable-width**: the first 128 code points use exactly one byte
+(identical to ASCII, so old English text still works), and bigger code points expand to 2, 3, or 4 bytes.
+That's why a plain English message and its byte count match, but adding one emoji suddenly adds four bytes.
+
+## Play with it
+
+Type any character — a letter, an accented vowel, a symbol, an emoji — and see its Unicode code point and
+the exact UTF-8 bytes that encode it. Watch the byte count grow as you move up the Unicode range.
+
+<Utf8ByteInspector client:visible />
+
+<Callout type="tip">
+Compare <code>A</code> (one byte, <code>0x41</code>) with <code>é</code> (two bytes) and an emoji (four
+bytes). Same "one character" to you — very different byte counts. This is why "string length" is
+ambiguous: do you mean characters or bytes?
+</Callout>
+
+## The formal definition
+
+A **code point** is an integer identifying a character; Unicode currently spans
+$\text{U+}0000$ to $\text{U+}10\text{FFFF}$ (just over 1.1 million slots). **ASCII** is the subset using a
+single 7-bit byte:
+
+$$
+\text{ASCII: } 0 \le c \le 127, \qquad \text{e.g. } \texttt{'A'} = 65, \ \texttt{'a'} = 97.
+$$
+
+**UTF-8** maps a code point to a variable number of bytes by range:
+
+$$
+\begin{aligned}
+\text{U+}0000 &\text{–U+}007\text{F} &&\rightarrow 1 \text{ byte} \\
+\text{U+}0080 &\text{–U+}07\text{FF} &&\rightarrow 2 \text{ bytes} \\
+\text{U+}0800 &\text{–U+}\text{FFFF} &&\rightarrow 3 \text{ bytes} \\
+\text{U+}10000 &\text{–U+}10\text{FFFF} &&\rightarrow 4 \text{ bytes}
+\end{aligned}
+$$
+
+The leading bits of the first byte announce how many bytes follow, so a decoder always knows where each
+character ends:
+
+```python
+print(ord('A'))            # 65   (the code point)
+print('A'.encode('utf-8')) # b'A'        -> 1 byte
+print('é'.encode('utf-8')) # b'\xc3\xa9' -> 2 bytes
+print('👾'.encode('utf-8'))# 4 bytes
+```
+
+<Callout type="why">
+Language models read text as bytes or tokens, not letters — so they inherit UTF-8's quirks. The reason a
+model can "spell" English easily but stumbles on rare scripts often traces back to how those characters
+are chopped into bytes and tokens. Encoding is where text meets machine learning.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Player names & chat" icon="💬">
+A game's chat box must accept names from every language — François, 山田, Владимир — plus emoji. Storing
+chat as UTF-8 lets one format hold them all. The old "JosÃ©" bug appears when bytes saved as UTF-8 are
+mistakenly read as a one-byte-per-character legacy encoding.
+</ExampleCard>
+
+<ExampleCard domain="QR codes & barcodes" icon="📷">
+A QR code is just bytes arranged in a grid; the text mode encodes characters (often as UTF-8) before
+turning them into black and white squares. Scan it and the reader reverses the steps: squares → bytes →
+code points → the URL you see.
+</ExampleCard>
+
+<ExampleCard domain="Morse code" icon="📻">
+Morse is a human text encoding: each letter maps to a sequence of dots and dashes, and common letters
+(like E) get *short* codes while rare ones get long ones. UTF-8 borrows the same idea — common characters
+cost one byte, rare ones cost more.
+</ExampleCard>
+
+<ExampleCard domain="Sheet music" icon="🎼">
+Written music encodes sound: a symbol on a staff stands for a pitch and duration, which a player decodes
+back into notes. It's the same character-to-meaning mapping as text encoding — a shared rulebook that lets
+the writer and reader agree on what each symbol means.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is a Unicode "code point"?',
+      options: [
+        'The pixels that draw a character',
+        'The unique number assigned to a character',
+        'The font used to display text',
+        'The color of the text',
+      ],
+      answer: 1,
+      explain: 'A code point is the number Unicode assigns to each character, written like U+0041 for "A".',
+    },
+    {
+      q: 'How many bytes does UTF-8 use for a plain ASCII character like "A"?',
+      options: ['1 byte', '2 bytes', '4 bytes', '8 bytes'],
+      answer: 0,
+      explain: 'UTF-8 encodes the first 128 code points (U+0000–U+007F) in a single byte, identical to ASCII.',
+    },
+    {
+      q: 'Why might an emoji add 4 bytes to a message even though it looks like one character?',
+      options: [
+        'Emoji are images, not text',
+        'UTF-8 is variable-width; high code points need up to 4 bytes',
+        'Every character is always 4 bytes',
+        'The message was corrupted',
+      ],
+      answer: 1,
+      explain: 'UTF-8 is variable-width: low code points use 1 byte, but high ones (like emoji) need up to 4 bytes.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Computers store text as <strong>numbers</strong>: each character gets a Unicode <strong>code point</strong> (e.g. A = U+0041).',
+    '<strong>ASCII</strong> covers English in one byte each, but only 128 characters — no accents or emoji.',
+    '<strong>Unicode</strong> assigns a code point to over a million characters from every writing system.',
+    '<strong>UTF-8</strong> is variable-width: 1 byte for ASCII, up to 4 bytes for the rest — and backward compatible.',
+    'Most "garbled text" bugs are an <strong>encoding mismatch</strong>: bytes written one way and read another.',
+  ]}
+/>
+
+That wraps the **Binary & Data Representation** track — you can now read how numbers, both kinds, and text
+become bytes. Next track: **how memory works**, where those bytes actually live and how the machine finds them.

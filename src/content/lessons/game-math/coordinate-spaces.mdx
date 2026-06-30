@@ -1,0 +1,174 @@
+---
+title: Coordinate Spaces
+track: game-math
+summary: How a point travels from local to world to view to clip to screen — and the matrices between them.
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - game-math/matrices-transforms
+leadsTo:
+  - game-math/quaternions
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CoordinateSpacePipeline from '../../../components/demos/CoordinateSpacePipeline.tsx';
+
+## The hook: where is the dragon's nose, really?
+
+Ask "where is the dragon's nose?" and there are five honest answers. It's at the tip of the model
+(its own coordinates). It's hovering over the castle (world coordinates). It's slightly left of where
+the camera looks (view coordinates). It's at pixel (812, 240) on your monitor (screen coordinates). Each
+answer is correct *in its own space*, and rendering is nothing more than walking the nose through these
+spaces one matrix at a time. Understand the journey and projection, cameras and screen-space UI all stop
+being mysterious.
+
+<Callout type="intuition" title="The one-sentence idea">
+A point lives in many **coordinate spaces** at once; rendering carries it **local → world → view → clip
+→ screen**, and each arrow is a single matrix multiplication.
+</Callout>
+
+## Intuition: a chain of frames
+
+You already know a transform matrix moves a point from one frame to another. Coordinate spaces are just
+the standard chain of those frames:
+
+- **Local (model) space** — the object's own coordinates, authored around its center. The dragon's nose
+  is always the same local point no matter where the dragon walks.
+- **World space** — the shared stage. The **model matrix** $M$ places each object into it.
+- **View (camera) space** — the world re-expressed *from the camera's point of view*. The **view matrix**
+  $V$ is essentially the inverse of the camera's world transform, so the camera sits at the origin.
+- **Clip / NDC space** — the **projection matrix** $P$ applies perspective and squashes everything into a
+  cube from $-1$ to $1$, ready for clipping.
+- **Screen space** — the **viewport transform** stretches that cube to actual pixels.
+
+The whole pipeline for a vertex is one stacked product, $\mathbf{p}_{\text{clip}} = P\,V\,M\,\mathbf{p}_{\text{local}}$, famous in shader code as the MVP matrix.
+
+## Play with it
+
+Pick a stage and watch the same ship — and one tracked green nose vertex — drawn in that space as it
+orbits. Notice how in **view** space the camera snaps to the origin, and in **screen** space everything
+lands inside the viewport rectangle, measured in pixels.
+
+<CoordinateSpacePipeline client:visible />
+
+<Callout type="tip">
+Flip between <strong>world</strong> and <strong>view</strong>. Nothing about the ship's shape changes —
+only the <em>frame of reference</em> does. The view matrix doesn't move the world; it relabels every
+coordinate as "relative to the camera."
+</Callout>
+
+## The formal definition
+
+A local vertex becomes a clip-space vertex through the **Model–View–Projection** product:
+
+$$
+\mathbf{p}_{\text{clip}} = \underbrace{P}_{\text{projection}}\;\underbrace{V}_{\text{view}}\;\underbrace{M}_{\text{model}}\;\mathbf{p}_{\text{local}}.
+$$
+
+The view matrix is the inverse of the camera's world transform:
+
+$$
+V = M_{\text{camera}}^{-1}.
+$$
+
+After projection, the GPU divides by the $w$ component (the **perspective divide**) to reach normalized
+device coordinates, then the viewport transform maps $[-1, 1]$ to pixels:
+
+$$
+x_{\text{screen}} = \frac{x_{\text{ndc}} + 1}{2}\,\text{width}, \qquad
+y_{\text{screen}} = \frac{1 - y_{\text{ndc}}}{2}\,\text{height}.
+$$
+
+```glsl
+// Standard vertex shader: the whole journey in one line
+gl_Position = u_proj * u_view * u_model * vec4(localPos, 1.0);
+```
+
+<Callout type="why">
+Separating the spaces is what makes engines modular: artists work in local space, level designers in
+world space, the camera system owns the view matrix, and lighting is often done in view space because
+the camera-at-origin frame makes the math cheaper. Each team touches one matrix.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Open-world games" icon="🗺️">
+A tree is authored once in local space, then dropped thousands of times across the world with different
+model matrices. The mesh data never changes — only the matrix that lifts it into world space does.
+</ExampleCard>
+
+<ExampleCard domain="First-person shooters" icon="🎯">
+The view matrix <em>is</em> the camera. Mouse-look updates the camera's world transform; the engine
+inverts it to get $V$, and suddenly the entire world is described relative to where you're looking —
+which is why your gun (parented to the camera) appears glued to the screen.
+</ExampleCard>
+
+<ExampleCard domain="Strategy / RTS UI" icon="🧮">
+Click-to-select needs the reverse trip: take the mouse's <em>screen</em> pixel, unproject it back through
+the inverse viewport, inverse projection and inverse view to get a <em>world</em> ray, then test what it
+hits. Picking is the pipeline run backwards.
+</ExampleCard>
+
+<ExampleCard domain="AR / mobile games" icon="📱">
+A creature pinned to your real table is placed in world space from the phone's tracked pose; the camera's
+live position feeds the view matrix; the lens calibration feeds the projection matrix. The same five
+spaces, with the camera driven by the real device.
+</ExampleCard>
+
+<Callout type="note">
+Health bars and damage numbers float above enemies by taking the enemy's <strong>world</strong> position
+all the way to <strong>screen</strong> space, then drawing 2D text there. That "3D world to 2D label"
+trick is just reading off the screen-space coordinate.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In which space does the camera sit exactly at the origin (0, 0, 0)?',
+      options: ['Local space', 'World space', 'View (camera) space', 'Screen space'],
+      answer: 2,
+      explain: 'The view matrix re-expresses the world relative to the camera, placing the camera at the origin of view space.',
+    },
+    {
+      q: 'How is the view matrix V related to the camera’s world transform?',
+      options: [
+        'V equals the camera’s world transform',
+        'V is the inverse of the camera’s world transform',
+        'V is the projection matrix',
+        'V is the identity matrix',
+      ],
+      answer: 1,
+      explain: 'Moving the camera right is equivalent to moving the whole world left, so V = (camera world matrix)⁻¹.',
+    },
+    {
+      q: 'What is the correct order of the MVP product applied to a local vertex?',
+      options: [
+        'M · V · P · p_local',
+        'P · V · M · p_local',
+        'V · M · P · p_local',
+        'P · M · V · p_local',
+      ],
+      answer: 1,
+      explain: 'Read right-to-left: model lifts to world, view to camera space, projection to clip space — so P · V · M · p_local.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A vertex passes through <strong>local → world → view → clip → screen</strong>, one matrix per step.',
+    'The <strong>model</strong> matrix places an object in the world; the <strong>view</strong> matrix is the camera’s inverse; <strong>projection</strong> adds perspective.',
+    'The combined <strong>MVP</strong> product P · V · M is computed for every vertex in the vertex shader.',
+    'After projection, the <strong>perspective divide</strong> and viewport transform land the point on actual pixels.',
+    'Running the pipeline <strong>backwards</strong> (unprojecting) turns a mouse click into a world-space ray for picking.',
+  ]}
+/>
+
+Next up: **quaternions** — a four-number gadget that rotates objects in 3D smoothly, with no gimbal lock
+and clean interpolation.

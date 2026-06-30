@@ -1,0 +1,185 @@
+---
+title: Searching
+track: algorithms
+summary: Finding a needle in a haystack — and why a sorted haystack lets you ignore half of it with every guess.
+difficulty: beginner
+estMinutes: 12
+prereqs:
+  - algorithms/big-o
+leadsTo:
+  - algorithms/sorting
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SearchRaceVisualizer from '../../../components/demos/SearchRaceVisualizer.tsx';
+
+## The hook: guess my number
+
+I'm thinking of a number between 1 and 1,000,000. You have to find it, and after each guess I'll only
+say *"higher"* or *"lower."* Guessing 1, then 2, then 3 could take a million tries. But if you guess
+**500,000** first, one answer throws away half the possibilities. Keep halving and you'll corner my
+number in **at most 20 guesses**.
+
+That gap — a million versus twenty — is the entire reason we sort data. In the last lesson you learned
+to name growth rates; searching is where you first *feel* the difference between $O(n)$ and
+$O(\log n)$.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Linear search** checks items one by one; **binary search** repeatedly jumps to the middle of
+*sorted* data and discards half — turning a million-item search into a couple of dozen steps.
+</Callout>
+
+## Intuition: two ways to find a thing
+
+**Linear search** is the honest brute-force way: start at the front, look at each item, stop when you
+find it. It works on *any* list, sorted or not. Its cost is $O(n)$ — on average you look at half the
+list, and in the worst case all of it.
+
+**Binary search** is the clever way, but it demands a price up front: the data must be **sorted**.
+Once it is, you look at the middle element. Too big? Throw away the right half. Too small? Throw away
+the left half. Each comparison halves what's left, so the cost is $O(\log n)$ — and $\log_2$ of a
+million is about 20.
+
+The trade is the recurring theme of this whole track: **binary search is dramatically faster, but
+only because someone paid to keep the data in order** (the next lesson, sorting).
+
+## Play with it
+
+Pick a target, then press **Race**. Watch linear search trudge left-to-right while binary search pounces
+on the middle and greys out the half it just eliminated. Compare the comparison counters.
+
+<SearchRaceVisualizer client:visible />
+
+<Callout type="tip">
+Set the target to the <strong>last</strong> element and race again. Linear search hits its worst case
+(it scans everything), while binary search barely notices — it still finishes in a handful of steps.
+The bigger the array, the wider that gap.
+</Callout>
+
+## The formal definition
+
+For a sorted array, binary search keeps a search window $[\,lo,\,hi\,]$ and looks at the midpoint:
+
+$$
+mid = \left\lfloor \frac{lo + hi}{2} \right\rfloor.
+$$
+
+Compare the target $t$ with the value at $mid$ and shrink the window:
+
+$$
+\begin{cases}
+\text{found} & \text{if } a[mid] = t,\\[2pt]
+lo \leftarrow mid + 1 & \text{if } a[mid] < t,\\[2pt]
+hi \leftarrow mid - 1 & \text{if } a[mid] > t.
+\end{cases}
+$$
+
+Because the window halves each step, the number of steps to cover $n$ items is the number of times you
+can halve $n$ before reaching 1:
+
+$$
+\text{steps} \approx \log_2 n.
+$$
+
+```js
+function binarySearch(a, t) {
+  let lo = 0, hi = a.length - 1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;        // floor of the midpoint
+    if (a[mid] === t) return mid;      // found it
+    if (a[mid] < t) lo = mid + 1;      // discard the left half
+    else hi = mid - 1;                 // discard the right half
+  }
+  return -1;                           // not present
+}
+```
+
+<Callout type="why">
+That $\log_2 n$ is everywhere in computing: balanced trees, database indexes, and even how a GPU
+binary-searches a sorted list of light probes. Halving is the cheapest way to conquer scale, and it
+all starts here.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Gaming" icon="🏆">
+A leaderboard of a million players is kept **sorted by score**. To show where you rank, the game binary-searches
+your score in about 20 comparisons instead of scanning every entry. Updating one player and re-finding their
+rank stays instant even as the player base grows.
+</ExampleCard>
+
+<ExampleCard domain="Language" icon="📖">
+You look up *"quokka"* in a dictionary by flipping near the middle, seeing you've gone too far, and
+jumping back — binary search by instinct. You'd never read a dictionary front-to-back (linear search)
+because the entries are sorted alphabetically for exactly this reason.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="🚚">
+A delivery manifest sorted by tracking number lets a scanner confirm a parcel in $O(\log n)$ time. On
+an *unsorted* pile, the same lookup is $O(n)$ — the worker checks boxes one by one. The sort is what
+makes the warehouse scale.
+</ExampleCard>
+
+<ExampleCard domain="Video streaming" icon="🎬">
+When you scrub to 1:32:10 in a movie, the player binary-searches a sorted index of keyframe
+timestamps to find the nearest one to jump to. Linear-scanning every frame of a two-hour film would
+make seeking painfully slow.
+</ExampleCard>
+
+<Callout type="warning">
+Binary search only works on <strong>sorted</strong> data. Run it on an unsorted array and it will
+confidently return the wrong answer — no error, just a silent bug. Sortedness is a promise the
+algorithm trusts completely.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the key requirement for binary search to work correctly?',
+      options: [
+        'The array must be very large',
+        'The array must be sorted',
+        'The array must contain only numbers',
+        'The array must have no duplicates',
+      ],
+      answer: 1,
+      explain: 'Binary search relies on order to decide which half to discard. On unsorted data it gives wrong answers.',
+    },
+    {
+      q: 'Roughly how many comparisons does binary search need to find an item among 1,000,000 sorted items (worst case)?',
+      options: ['About 1,000,000', 'About 1,000', 'About 20', 'Exactly 2'],
+      answer: 2,
+      explain: 'log₂(1,000,000) ≈ 20. Each comparison halves the remaining range, so ~20 steps suffice.',
+    },
+    {
+      q: 'In which situation does linear search hit its worst case?',
+      options: [
+        'The target is the first element',
+        'The target is in the middle',
+        'The target is the last element or absent',
+        'The array is already sorted',
+      ],
+      answer: 2,
+      explain: 'Linear search scans from the front, so it does the most work when the target is last or not present at all — O(n).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Linear search</strong> checks items one at a time — O(n) — and works on any list.',
+    '<strong>Binary search</strong> repeatedly halves a <em>sorted</em> range — O(log n) — finding items in tens of steps, not millions.',
+    'The midpoint comparison tells you which half to <strong>throw away</strong> every step.',
+    'Binary search is only correct on <strong>sorted</strong> data — its speed is borrowed from that ordering.',
+    'log₂ of a million is about <strong>20</strong>: halving is the cheapest way to beat scale.',
+  ]}
+/>
+
+Next up: **sorting** — the upfront work that earns you binary search's speed, and a fresh battle
+between $O(n^2)$ and $O(n \log n)$ algorithms.

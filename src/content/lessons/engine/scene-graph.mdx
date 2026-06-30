@@ -1,0 +1,195 @@
+---
+title: Scene Graph & Transforms
+track: engine
+summary: Organize a world as a tree of nodes where each node owns a local transform, and a child's world matrix is its parent's world matrix times its own local one.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - game-math/matrices-transforms
+  - data-structures/trees
+leadsTo:
+  - engine/spatial-partitioning
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SceneGraphArm from '../../../components/demos/SceneGraphArm.tsx';
+
+## The hook: the sword that must follow the hand
+
+Your hero swings a sword. The blade has to ride in the hand, the hand rides on the
+forearm, the forearm swings from the elbow, and the whole arm pivots at the shoulder —
+which itself sits on a body that is running across the map. If you tried to track the
+sword's screen position with one giant equation, every animation frame would be a
+nightmare of bookkeeping. Game engines refuse to do that. Instead they arrange the world
+as a **tree** and let each part describe its motion *relative to its parent*. Move the
+shoulder and the sword comes along for free. That tree is called a **scene graph**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Give every object a **local** transform measured relative to its parent, then a child's
+place in the world is just its parent's world transform **composed with** its own local
+one — so moving a parent automatically carries all of its children.
+</Callout>
+
+## Intuition: a tree of relative motions
+
+You already met two ideas that this lesson simply clicks together. From
+**matrices &amp; transforms** you know that a translate, rotate, or scale can be packed into
+a single matrix, and that applying one transform *after* another is the same as
+**multiplying** their matrices. From **trees** you know how to model "things inside things":
+a node with a parent and some children.
+
+A scene graph is exactly that tree, where every node carries one **local transform** — its
+position, rotation, and scale *as seen by its parent*. The shoulder doesn't need to know
+where it is on the map; it only knows "I am rotated 30 degrees from the body." To find
+where anything truly is, you walk from the root down to the node, multiplying the local
+transforms together as you go. Nothing new — it is trees plus matrix multiplication.
+
+## Play with it
+
+Drag the sliders to set each joint's **local** angle. Watch the difference: turning the
+shoulder swings the entire arm (every descendant inherits the change), while turning the
+wrist nudges only the hand. The readout shows the hand's resulting **world** position and
+angle.
+
+<SceneGraphArm client:visible />
+
+<Callout type="tip">
+Notice the hand's <strong>world</strong> angle is just the sum of the three local angles.
+That sum is what matrix multiplication computes for you automatically — you never add the
+angles by hand, you only ever set local values.
+</Callout>
+
+## The formal definition
+
+Give each node a **local transform** built from the familiar pieces. In 2D homogeneous
+coordinates a rotate-then-translate local matrix looks like this:
+
+$$
+M_{local} =
+\begin{bmatrix}
+\cos\theta & -\sin\theta & t_x \\
+\sin\theta & \cos\theta & t_y \\
+0 & 0 & 1
+\end{bmatrix}.
+$$
+
+A general local transform is the product of translate, rotate, and scale,
+$M_{local} = T \cdot R \cdot S$. The key rule of a scene graph connects a node to its
+parent:
+
+$$
+M_{world} = M_{parent}^{world} \cdot M_{local}.
+$$
+
+The root has no parent, so its world transform is just its own local one. Every other node
+multiplies its parent's already-computed world matrix by its local matrix. Expanding the
+chain for a node $n$ levels deep gives a product running from the root downward:
+
+$$
+M_{world} = M_{0} \cdot M_{1} \cdot M_{2} \cdots M_{n}.
+$$
+
+Because matrix multiplication is **not commutative**, order matters: parent on the left,
+child on the right. You compute it with one pass down the tree, reusing each parent's
+result for its children:
+
+```js
+function computeWorld(node, parentWorld) {
+  node.world = multiply(parentWorld, node.local);
+  for (const child of node.children) {
+    computeWorld(child, node.world);
+  }
+}
+```
+
+<Callout type="why">
+This is why moving a parent is free: you never touch the children's local data, yet their
+world matrices change the next frame because each one is rebuilt from the parent's new
+world matrix. One edit at the top ripples correctly to the whole subtree.
+</Callout>
+
+## The same idea, in four different worlds
+
+The parent-times-local rule is everywhere objects live inside moving objects.
+
+<ExampleCard domain="Astronomy sim" icon="🪐">
+A moon orbits a planet that orbits a sun. The moon's local transform only says "circle my
+planet"; the planet's only says "circle the sun." Multiply up the chain and the moon
+traces its real looping path through space — without anyone ever writing that path down.
+</ExampleCard>
+
+<ExampleCard domain="Puppetry" icon="🎭">
+A marionette is a scene graph you can hold. The control bar is the root; strings lead to
+the head, arms, and legs as children. Tilt the bar (the parent) and every limb swings
+together; twitch a single string and only that one body part moves. Same math, made of
+wood and thread.
+</ExampleCard>
+
+<ExampleCard domain="Construction vehicle" icon="🏗️">
+An excavator's cab rotates on its tracks, the boom pivots on the cab, the stick pivots on
+the boom, and the bucket pivots on the stick. Each operator lever changes one local angle;
+the bucket's world position falls out of the composed transforms down the whole arm.
+</ExampleCard>
+
+<ExampleCard domain="Game UI" icon="🖼️">
+A heads-up display nests panels: a window holds a row, the row holds buttons, a button
+holds its icon and label. Slide the parent window and every nested child slides with it,
+because each child is positioned relative to its parent — a scene graph for 2D interfaces.
+</ExampleCard>
+
+<Callout type="note">
+Different materials, identical math. Whether it is moons, marionettes, or menus, "world
+equals parent times local" is the single rule doing all the work.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In a scene graph, what does a node store directly?',
+      options: [
+        'Its absolute world position only',
+        'Its transform relative to its parent (its local transform)',
+        'The transforms of all its children',
+        'Nothing — positions are global constants',
+      ],
+      answer: 1,
+      explain: 'Each node owns a local transform, measured relative to its parent. World transforms are computed by composing local transforms down the tree.',
+    },
+    {
+      q: 'You rotate a character’s shoulder joint. Which parts move?',
+      options: [
+        'Only the shoulder',
+        'The shoulder and everything below it (forearm, hand, held sword)',
+        'Only the hand at the very end',
+        'The whole skeleton including the head and legs',
+      ],
+      answer: 1,
+      explain: 'Rotating a node changes the world matrices of that node and all of its descendants, because each descendant is built from its parent’s world transform.',
+    },
+    {
+      q: 'A parent has world rotation +20° and a child has local rotation +15° (rotations only). What is the child’s world rotation?',
+      options: ['15°', '20°', '35°', '5°'],
+      answer: 2,
+      explain: 'Composing transforms multiplies the matrices, which for pure 2D rotations adds the angles: 20° + 15° = 35°.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>scene graph</strong> is a tree of nodes, each holding only a <strong>local</strong> transform relative to its parent.',
+    'The core rule is <strong>world = parent_world × local</strong>, applied recursively from the root down.',
+    'Moving a parent automatically carries every descendant, because their world matrices are rebuilt from the parent’s.',
+    'Matrix multiplication is <strong>not commutative</strong> — parent goes on the left, child on the right, so order is the hierarchy.',
+    'It reuses two things you already know: <strong>trees</strong> for structure and <strong>matrix transforms</strong> for motion.',
+  ]}
+/>
+
+Next up: **spatial partitioning** — once your world is a tree of transformed objects, how do
+you quickly find which ones are near each other for collisions and rendering?

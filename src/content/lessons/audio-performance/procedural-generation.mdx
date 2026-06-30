@@ -1,0 +1,166 @@
+---
+title: Procedural Generation
+track: audio-performance
+summary: Turn a single seed into endless worlds — dungeons, terrain and cities — with PRNGs, noise and rules.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - game-math/random-noise
+leadsTo:
+  - audio-performance/optimization-techniques
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SeededDungeonForge from '../../../components/demos/SeededDungeonForge.tsx';
+
+## The hook: a whole galaxy in a few kilobytes
+
+A famous space game ships **18 quintillion** planets, yet the download is tiny. There is no giant file
+of planets anywhere — each world is *computed on demand* from a number. Visit the same coordinates and
+you get the same planet, atom for atom, every time. That magic is **procedural generation**: trading
+storage for computation by turning a tiny **seed** into vast, reproducible content.
+
+<Callout type="intuition" title="The one-sentence idea">
+Feed a deterministic random-number generator one **seed** and apply rules to its output, and you get
+an entire world that is both *varied* and *perfectly reproducible* from that single number.
+</Callout>
+
+## Intuition: controlled randomness
+
+You already met **PRNGs** and **noise** in game math. Procedural generation is what you build on top of
+them. The key word is **deterministic**: a pseudo-random generator is not really random — it is a fixed
+recipe that, from the same seed, always produces the same stream of numbers. That is a feature, not a
+bug:
+
+- **Reproducibility** — the same seed rebuilds the same world, so you can store a sprawling level as
+  one integer.
+- **Variety** — change the seed and you get a completely different, still-coherent world.
+
+There are three classic tools, in rising order of structure:
+
+1. **Raw PRNG** — scatter things: loot, enemy placement, star positions.
+2. **Noise** (value or Perlin) — smooth, natural gradients: terrain height, cave density, cloud cover.
+3. **Grammars and rules** — constrained structure: rooms joined by corridors, buildings, road
+   networks. Pure randomness gives chaos; rules give a place that makes sense.
+
+## Play with it
+
+Switch between a **dungeon** (rooms linked by corridors) and **terrain** (a height map from value
+noise). Drag the **seed** or hit **Reseed** to roll a new world — then return to a seed you liked and
+watch the *exact* same layout reappear.
+
+<SeededDungeonForge client:visible />
+
+<Callout type="tip">
+Land on the same seed twice and you get the identical map. That determinism is the entire trick behind
+"infinite" games: nothing is saved but the seed, and the world is rebuilt from it on demand.
+</Callout>
+
+## The formal definition
+
+A PRNG is a recurrence that maps an internal state $s_n$ to the next state and an output:
+
+$$
+s_{n+1} = f(s_n), \qquad u_n = g(s_{n+1}) \in [0, 1).
+$$
+
+The starting state $s_0$ is the **seed**, so the whole stream $u_0, u_1, u_2, \dots$ is a deterministic
+function of the seed. **Value noise** turns scattered random values on a lattice into a smooth field by
+interpolating between them. For a point with fractional offset $t$ between two lattice values $a$ and
+$b$, a smoothstep blend avoids hard edges:
+
+$$
+\operatorname{smooth}(t) = t^2 (3 - 2t), \qquad h = a + (b - a)\,\operatorname{smooth}(t).
+$$
+
+To place non-overlapping rooms, you sample candidate rectangles and keep one only if it stays clear of
+every accepted room — rejection sampling under a constraint:
+
+```python
+rng = seeded_rng(seed)            # same seed -> same stream
+rooms = []
+for _ in range(attempts):
+    r = random_rect(rng)
+    if all(not overlaps(r, q) for q in rooms):
+        rooms.append(r)           # accept; else reject and retry
+connect_in_order(rooms)           # L-shaped corridors between centres
+```
+
+<Callout type="why">
+Determinism is what makes seeds shareable and multiplayer-safe: if every client runs the same generator
+on the same seed, every machine builds the identical world without sending the world over the network —
+only the seed travels.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Roguelikes" icon="🗝️">
+A roguelike rebuilds its dungeon from a fresh seed every run, so no two descents are alike — yet a
+"daily challenge" hands every player the <strong>same</strong> seed so scores are comparable. One
+integer is both infinite variety and a level playing field.
+</ExampleCard>
+
+<ExampleCard domain="Open-world survival" icon="🌲">
+Survival-craft games generate terrain from layered noise: low-frequency noise carves continents,
+higher-frequency noise adds hills and rivers. Players swap <strong>seed strings</strong> like recipes
+because a single number reproduces a beloved spawn for everyone.
+</ExampleCard>
+
+<ExampleCard domain="Racing & mobile" icon="🏁">
+An endless runner generates the track ahead in chunks as you go, seeded so difficulty ramps smoothly.
+Nothing far behind is kept in memory — it can always be regenerated from its chunk seed, which is
+ideal for a phone's tiny memory budget.
+</ExampleCard>
+
+<ExampleCard domain="City builders" icon="🏙️">
+Procedural cities use a <strong>grammar</strong>: a road splits into smaller roads, blocks fill with
+buildings sized by rules. The grammar guarantees streets actually connect, so the result looks
+designed, not random — structure on top of the noise.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does the same seed always produce the same world?',
+      options: [
+        'The world is secretly saved to disk',
+        'A PRNG is deterministic: the same seed yields the same number stream',
+        'The game downloads it from a server',
+        'It does not — it is different each time',
+      ],
+      answer: 1,
+      explain: 'A pseudo-random generator is a fixed recipe; from an identical seed it produces an identical sequence, so the world rebuilds exactly.',
+    },
+    {
+      q: 'You want smooth, natural-looking terrain height rather than spiky random values. What do you reach for?',
+      options: ['Raw PRNG output per cell', 'Interpolated noise (e.g. value/Perlin)', 'A larger seed', 'More rooms'],
+      answer: 1,
+      explain: 'Noise interpolates between lattice values to produce smooth gradients — exactly what natural terrain needs.',
+    },
+    {
+      q: 'What is the main resource that procedural generation trades away to save storage?',
+      options: ['Network bandwidth', 'Computation (CPU time at runtime)', 'Screen resolution', 'Player skill'],
+      answer: 1,
+      explain: 'Instead of storing content, you recompute it from a seed on demand — spending CPU time to save disk and memory.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Procedural generation trades <strong>storage for computation</strong>: a tiny seed expands into a vast world.',
+    'A PRNG is <strong>deterministic</strong> — the same seed gives the same stream, so worlds are reproducible and shareable.',
+    '<strong>Noise</strong> turns scattered randomness into smooth, natural fields like terrain height.',
+    '<strong>Grammars and rules</strong> add structure so dungeons connect and cities make sense, instead of pure chaos.',
+    'Determinism keeps multiplayer in sync: send the <strong>seed</strong>, not the world.',
+  ]}
+/>
+
+Generating a world is one cost; drawing all of it every frame is another. Next: **optimization
+techniques** that let you render far more for far less.

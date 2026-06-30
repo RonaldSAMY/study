@@ -17,28 +17,67 @@ export interface LessonMeta {
   status: LessonStatus;
 }
 
-// Ordered learning stages — the sidebar, /path and landing page group by these.
-export type Stage =
-  | 'Foundations'
-  | 'Core Math'
-  | 'Machine Learning'
-  | 'Deep Learning'
-  | 'LLMs & Generative AI'
-  | 'Reinforcement Learning';
+// The site hosts multiple courses; each has its own ordered stages.
+export type CourseId = 'ml' | 'gamedev';
 
-export const STAGES: Stage[] = [
-  'Foundations',
-  'Core Math',
-  'Machine Learning',
-  'Deep Learning',
-  'LLMs & Generative AI',
-  'Reinforcement Learning',
+export interface CourseMeta {
+  id: CourseId;
+  title: string;
+  short: string;
+  icon: string;
+  blurb: string;
+  stages: string[];    // ordered stage names (unique across courses)
+}
+
+export const COURSES: CourseMeta[] = [
+  {
+    id: 'ml',
+    title: 'Mathematics for Machine Learning',
+    short: 'ML Maths',
+    icon: '🧮',
+    blurb: 'From algebra to LLMs: every piece of math behind machine learning, deep learning and transformers.',
+    stages: [
+      'Foundations',
+      'Core Math',
+      'Machine Learning',
+      'Deep Learning',
+      'LLMs & Generative AI',
+      'Reinforcement Learning',
+    ],
+  },
+  {
+    id: 'gamedev',
+    title: 'Game Development',
+    short: 'Game Dev',
+    icon: '🎮',
+    blurb: 'From bits and memory to physics, rendering and netcode — how games really work, bottom to top.',
+    stages: [
+      'Computer Foundations',
+      'Programming Foundations',
+      'Game Math',
+      'Game Physics',
+      'Graphics & Rendering',
+      'Engine Architecture',
+      'Game AI',
+      'Networking & Advanced',
+    ],
+  },
 ];
+
+// stage name -> course (stage names are unique across courses)
+const STAGE_TO_COURSE = new Map<string, CourseId>();
+for (const c of COURSES) for (const s of c.stages) STAGE_TO_COURSE.set(s, c.id);
+export function courseOfStage(stage: string): CourseId {
+  return STAGE_TO_COURSE.get(stage) ?? 'ml';
+}
+export function getCourse(id: CourseId): CourseMeta {
+  return COURSES.find((c) => c.id === id)!;
+}
 
 export interface Track {
   id: string;          // also the Tailwind color key
   title: string;
-  stage: Stage;
+  stage: string;       // belongs to a course via STAGE_TO_COURSE
   icon: string;        // emoji glyph used in nav/cards
   blurb: string;
   lessons: LessonMeta[];
@@ -445,6 +484,195 @@ export const TRACKS: Track[] = [
       soon('rlhf', 'RLHF, PPO & DPO', 'Aligning LLMs with human feedback — the math of fine-tuning.'),
     ],
   },
+
+  // ============================================================
+  //  GAME DEVELOPMENT COURSE
+  // ============================================================
+
+  // ---------------- COMPUTER FOUNDATIONS (low-level) ----------------
+  {
+    id: 'binary-data',
+    title: 'Binary & Data Representation',
+    stage: 'Computer Foundations',
+    icon: '🔟',
+    blurb: 'How everything — numbers, text, color — becomes ones and zeros.',
+    lessons: [
+      soon('bits-bytes', 'Bits & Bytes', 'The atom of computing and how bits group into bytes.'),
+      soon('number-systems', 'Number Systems (Binary & Hex)', 'Counting in base 2 and base 16, and why hex is everywhere.'),
+      soon('twos-complement', "Two's Complement", 'How computers store negative integers.'),
+      soon('floating-point', 'Floating-Point Numbers', 'How real numbers are approximated — and why 0.1 + 0.2 ≠ 0.3.'),
+      soon('text-encoding', 'Text Encoding', 'ASCII, Unicode and UTF-8 — turning characters into bytes.'),
+    ],
+  },
+  {
+    id: 'memory-hardware',
+    title: 'Memory & Hardware',
+    stage: 'Computer Foundations',
+    icon: '🧠',
+    blurb: 'How the machine stores data and runs your code — the part most courses skip.',
+    lessons: [
+      soon('how-memory-works', 'How Memory Works', 'RAM, addresses and the giant array that is your computer’s memory.'),
+      soon('pointers-references', 'Pointers & References', 'Variables that hold addresses — the key to real understanding.'),
+      soon('stack-vs-heap', 'Stack vs Heap', 'Two ways memory is organized, and when each is used.'),
+      soon('memory-allocation', 'Memory Allocation', 'How the OS and hardware hand out memory — malloc, free and the allocator.'),
+      soon('cache-hierarchy', 'Cache & the Memory Hierarchy', 'Why nearby data is fast and random access is slow.'),
+      soon('cpu-architecture', 'CPU Architecture', 'Registers, instructions, the clock and the pipeline.'),
+      soon('gpu-architecture', 'GPU Architecture', 'Thousands of cores in parallel — why GPUs render graphics.'),
+      soon('data-oriented-design', 'Data-Oriented Design', 'Laying out data for the cache — the secret of fast games.'),
+    ],
+  },
+
+  // ---------------- PROGRAMMING FOUNDATIONS ----------------
+  {
+    id: 'data-structures',
+    title: 'Data Structures',
+    stage: 'Programming Foundations',
+    icon: '🗂️',
+    blurb: 'The containers that hold your game’s data — and how they use memory.',
+    lessons: [
+      soon('arrays-memory', 'Arrays & Memory Layout', 'Contiguous memory and why arrays are so fast.'),
+      soon('dynamic-arrays', 'Dynamic Arrays', 'Growable lists and the cost of resizing.'),
+      soon('stacks-queues', 'Stacks & Queues', 'Last-in-first-out and first-in-first-out, and where games use them.'),
+      soon('hash-maps', 'Hash Maps', 'Instant lookup by key — hashing and collisions.'),
+      soon('trees', 'Trees', 'Hierarchies, from scene graphs to decision trees.'),
+      soon('graphs', 'Graphs', 'Nodes and edges — the structure behind maps and AI.'),
+    ],
+  },
+  {
+    id: 'algorithms',
+    title: 'Algorithms & Complexity',
+    stage: 'Programming Foundations',
+    icon: '⏱️',
+    blurb: 'Doing things efficiently — and knowing how slow your code will get.',
+    lessons: [
+      soon('big-o', 'Big-O Notation', 'Measuring how runtime grows with input size.'),
+      soon('searching', 'Searching', 'Linear vs binary search — the power of sorted data.'),
+      soon('sorting', 'Sorting', 'Ordering data, from bubble sort to quicksort.'),
+      soon('recursion', 'Recursion', 'Functions that call themselves — and the call stack.'),
+      soon('space-time-tradeoffs', 'Space–Time Tradeoffs', 'Trading memory for speed — caching and lookup tables.'),
+    ],
+  },
+
+  // ---------------- GAME MATH ----------------
+  {
+    id: 'game-math',
+    title: 'Game Math',
+    stage: 'Game Math',
+    icon: '📐',
+    blurb: 'The math that moves, rotates and animates everything on screen.',
+    lessons: [
+      soon('vectors-in-games', 'Vectors in Games', 'Position, velocity and direction — vectors everywhere.'),
+      soon('dot-cross-product', 'Dot & Cross Product', 'Angles, projection and surface normals.'),
+      soon('matrices-transforms', 'Matrices & Transforms', 'Translate, rotate and scale with matrices.'),
+      soon('coordinate-spaces', 'Coordinate Spaces', 'Local, world, view, clip and screen space.'),
+      soon('quaternions', 'Quaternions', 'Smooth 3D rotation without gimbal lock.'),
+      soon('angles-rotation', 'Angles & Rotation', 'Radians, headings and rotating toward a target.'),
+      soon('interpolation-easing', 'Interpolation & Easing', 'Lerp, slerp, Bézier curves and easing for juicy motion.'),
+      soon('random-noise', 'Randomness & Noise', 'PRNGs and Perlin noise for procedural worlds.'),
+    ],
+  },
+
+  // ---------------- GAME PHYSICS ----------------
+  {
+    id: 'game-physics',
+    title: 'Game Physics',
+    stage: 'Game Physics',
+    icon: '🍎',
+    blurb: 'Making things move, fall, bounce and collide believably.',
+    lessons: [
+      soon('kinematics', 'Kinematics', 'Position, velocity and acceleration over time.'),
+      soon('forces-newton', "Forces & Newton's Laws", 'F = ma, gravity, drag and impulses.'),
+      soon('numerical-integration', 'Numerical Integration', 'Euler, semi-implicit and Verlet — stepping physics each frame.'),
+      soon('collision-detection', 'Collision Detection', 'AABBs, circles, SAT, and broad vs narrow phase.'),
+      soon('collision-response', 'Collision Response', 'Impulses, restitution and friction — making things bounce.'),
+      soon('rigid-body-dynamics', 'Rigid-Body Dynamics', 'Rotation, torque and the moment of inertia.'),
+      soon('constraints-joints', 'Constraints & Joints', 'Springs, ropes and ragdolls.'),
+      soon('particles', 'Particle Systems', 'Thousands of tiny bodies — sparks, smoke and fire.'),
+    ],
+  },
+
+  // ---------------- GRAPHICS & RENDERING ----------------
+  {
+    id: 'rendering',
+    title: 'Graphics & Rendering',
+    stage: 'Graphics & Rendering',
+    icon: '🖼️',
+    blurb: 'How a 3D scene becomes the pixels on your screen.',
+    lessons: [
+      soon('rendering-pipeline', 'The Rendering Pipeline', 'From vertices to pixels — the journey of a frame.'),
+      soon('rasterization', 'Rasterization', 'Turning triangles into filled pixels.'),
+      soon('projection-cameras', 'Projection & Cameras', 'Perspective, orthographic and the view frustum.'),
+      soon('shaders', 'Shaders', 'Tiny programs that run per-vertex and per-pixel.'),
+      soon('lighting-pbr', 'Lighting & PBR', 'Diffuse, specular and physically based rendering.'),
+      soon('textures-uv', 'Textures & UV Mapping', 'Wrapping images onto geometry; sampling and mipmaps.'),
+      soon('color-framebuffers', 'Color, Gamma & Framebuffers', 'How color is stored and composited.'),
+      soon('ray-tracing', 'Ray Tracing', 'Following rays of light for realistic images.'),
+      soon('culling-optimization', 'Culling & Optimization', 'Drawing only what you can see, fast.'),
+    ],
+  },
+
+  // ---------------- ENGINE ARCHITECTURE ----------------
+  {
+    id: 'engine',
+    title: 'Engine Architecture',
+    stage: 'Engine Architecture',
+    icon: '⚙️',
+    blurb: 'The systems that tie a game together and keep it running smoothly.',
+    lessons: [
+      soon('game-loop', 'The Game Loop', 'Update and render, fixed timesteps and delta time.'),
+      soon('ecs', 'Entity-Component-System', 'A cache-friendly way to organize game objects.'),
+      soon('scene-graph', 'Scene Graph & Transforms', 'Parenting objects and combining transforms.'),
+      soon('spatial-partitioning', 'Spatial Partitioning', 'Quadtrees, octrees and BVHs for fast queries.'),
+      soon('input-time', 'Input & Time', 'Reading the player and keeping consistent timing.'),
+      soon('asset-pipeline', 'Asset Pipeline & Serialization', 'Loading, saving and packing game data.'),
+      soon('memory-management-games', 'Memory Management for Games', 'Pools and arenas — allocating without stutter.'),
+    ],
+  },
+
+  // ---------------- GAME AI ----------------
+  {
+    id: 'game-ai',
+    title: 'Game AI',
+    stage: 'Game AI',
+    icon: '👾',
+    blurb: 'Making non-player characters move, decide and feel alive.',
+    lessons: [
+      soon('pathfinding-astar', 'Pathfinding (A*)', 'Finding the shortest path with Dijkstra and A*.'),
+      soon('finite-state-machines', 'Finite State Machines', 'Patrol, chase, flee — states and transitions.'),
+      soon('behavior-trees', 'Behavior Trees', 'Composable, scalable decision making.'),
+      soon('steering-boids', 'Steering & Boids', 'Seek, flee and flocking for natural movement.'),
+      soon('utility-ai', 'Utility & Decision AI', 'Scoring options to pick the best action.'),
+    ],
+  },
+
+  // ---------------- NETWORKING & ADVANCED ----------------
+  {
+    id: 'networking',
+    title: 'Networking & Multiplayer',
+    stage: 'Networking & Advanced',
+    icon: '🌐',
+    blurb: 'Letting many players share one world across the internet.',
+    lessons: [
+      soon('networking-basics', 'Networking Basics', 'TCP vs UDP, packets and latency.'),
+      soon('client-server-p2p', 'Client-Server vs P2P', 'Architectures for multiplayer games.'),
+      soon('client-prediction', 'Client Prediction & Reconciliation', 'Hiding latency so controls feel instant.'),
+      soon('lag-compensation', 'Lag Compensation & Interpolation', 'Making other players move smoothly.'),
+      soon('state-synchronization', 'State Synchronization', 'Keeping every machine’s world in agreement.'),
+    ],
+  },
+  {
+    id: 'audio-performance',
+    title: 'Audio & Performance',
+    stage: 'Networking & Advanced',
+    icon: '🔊',
+    blurb: 'Sound, profiling and squeezing every millisecond out of a frame.',
+    lessons: [
+      soon('game-audio', 'Game Audio & DSP', 'Sound waves, mixing and spatial audio.'),
+      soon('performance-profiling', 'Performance & Profiling', 'The frame budget and finding bottlenecks.'),
+      soon('procedural-generation', 'Procedural Generation', 'Building worlds with algorithms.'),
+      soon('optimization-techniques', 'Optimization Techniques', 'Batching, LOD and doing less work.'),
+    ],
+  },
 ];
 
 // ---- Derived helpers -------------------------------------------------
@@ -454,7 +682,8 @@ export interface FlatLesson extends LessonMeta {
   trackId: string;
   trackTitle: string;
   trackIcon: string;
-  stage: Track['stage'];
+  stage: string;
+  course: CourseId;
 }
 
 export const ALL_LESSONS: FlatLesson[] = TRACKS.flatMap((t) =>
@@ -465,8 +694,18 @@ export const ALL_LESSONS: FlatLesson[] = TRACKS.flatMap((t) =>
     trackTitle: t.title,
     trackIcon: t.icon,
     stage: t.stage,
+    course: courseOfStage(t.stage),
   })),
 );
+
+export function courseOfSlug(slug: string): CourseId {
+  return getLessonBySlug(slug)?.course ?? 'ml';
+}
+
+/** Tracks belonging to a course, in curriculum order. */
+export function tracksForCourse(course: CourseId): Track[] {
+  return TRACKS.filter((t) => courseOfStage(t.stage) === course);
+}
 
 export function getLessonBySlug(slug: string): FlatLesson | undefined {
   return ALL_LESSONS.find((l) => l.slug === slug);
@@ -476,13 +715,15 @@ export function getTrack(id: string): Track | undefined {
   return TRACKS.find((t) => t.id === id);
 }
 
-/** Previous / next lesson across the whole linear curriculum. */
+/** Previous / next lesson — scoped to the same course. */
 export function getNeighbors(slug: string): { prev?: FlatLesson; next?: FlatLesson } {
-  const i = ALL_LESSONS.findIndex((l) => l.slug === slug);
-  if (i === -1) return {};
+  const lesson = getLessonBySlug(slug);
+  if (!lesson) return {};
+  const within = ALL_LESSONS.filter((l) => l.course === lesson.course);
+  const i = within.findIndex((l) => l.slug === slug);
   return {
-    prev: i > 0 ? ALL_LESSONS[i - 1] : undefined,
-    next: i < ALL_LESSONS.length - 1 ? ALL_LESSONS[i + 1] : undefined,
+    prev: i > 0 ? within[i - 1] : undefined,
+    next: i < within.length - 1 ? within[i + 1] : undefined,
   };
 }
 

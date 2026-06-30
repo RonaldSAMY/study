@@ -1,0 +1,189 @@
+---
+title: Constraints & Joints
+track: game-physics
+summary: Glue point masses together with distance and spring constraints to build ropes, swinging bridges, flapping flags, and floppy ragdolls.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - game-physics/rigid-body-dynamics
+leadsTo:
+  - game-physics/particles
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import RopeChainLab from '../../../components/demos/RopeChainLab.tsx';
+
+## The hook: the rope that just works
+
+Your hero fires a grappling hook. The rope arcs out, snaps taut, and they swing across the chasm — the line
+bending, whipping, and settling exactly like real rope. You did not animate a single frame of that. You also
+did not solve a scary system of differential equations for a flexible cable. You did something almost
+embarrassingly simple: you took a string of points, let them fall under gravity, and then kept *yanking
+neighbors back to a fixed distance apart* until they gave up and behaved.
+
+That trick — declaring a rule the simulation must obey and then repeatedly forcing it true — is the whole
+idea of **constraints**. Joints, ropes, cloth, and ragdolls are all just clever piles of constraints.
+
+<Callout type="intuition" title="The one-sentence idea">
+A constraint is a geometric promise (these two points stay a fixed distance apart); you enforce it by gently
+shoving the points back onto the promise every frame until the whole assembly is consistent.
+</Callout>
+
+## Intuition: from free particles to chained ones
+
+In rigid-body dynamics you integrated each body independently — gravity in, new position out. **Verlet
+integration** made that especially tidy: instead of storing velocity, you store the *previous* position, and
+velocity is implied by the gap between "where I was" and "where I am." That tiny detail is the secret weapon
+here, because it means you can teleport a point to fix a constraint and its velocity updates *for free*.
+
+Now connect two points with a rule: stay exactly $L$ apart. After integrating gravity they will have drifted
+too close or too far. So you measure the current distance, find the error, and slide both points along the
+line between them until the gap is $L$ again. Do that for every link in a chain and you get a rope — but
+fixing link 3 nudges link 4 out of place, which nudges link 5, and so on. The fix is delightfully blunt:
+just **repeat the whole sweep several times per frame**. More repetitions means a stiffer, more rope-like
+result; fewer means a stretchy, elastic one. This relax-until-consistent loop is the heart of *Position-Based
+Dynamics*, the technique behind most game cloth and rope.
+
+## Play with it
+
+Below is a chain of point masses. The first is pinned to the ceiling; the rest hang under gravity and settle
+into a **catenary** curve. Grab any point and drag it — the chain follows and swings when you let go.
+
+<RopeChainLab client:visible />
+
+<Callout type="tip">
+Crank the stiffness (iteration) slider down to 1 and the rope turns into a stretchy bungee; push it up and
+the links lock into a taut, inextensible cable. You are literally trading CPU cycles for rigidity.
+</Callout>
+
+## The formal definition
+
+A point mass under **Verlet integration** advances using only its current and previous positions:
+
+$$
+\mathbf{x}_{n+1} = 2\,\mathbf{x}_n - \mathbf{x}_{n-1} + \mathbf{a}\,\Delta t^2,
+$$
+
+where the implied velocity is $\mathbf{v}_n \approx (\mathbf{x}_n - \mathbf{x}_{n-1})/\Delta t$.
+
+A **distance constraint** between points $\mathbf{p}_i$ and $\mathbf{p}_j$ with rest length $L$ asks the
+scalar function $C$ to vanish:
+
+$$
+C(\mathbf{p}_i, \mathbf{p}_j) = \lVert \mathbf{p}_i - \mathbf{p}_j \rVert - L = 0.
+$$
+
+If the current separation is $d = \lVert \mathbf{p}_i - \mathbf{p}_j \rVert$, you split the error and move
+each free point along the connecting direction $\hat{\mathbf{n}} = (\mathbf{p}_i - \mathbf{p}_j)/d$:
+
+$$
+\mathbf{p}_i \mathrel{-}= \tfrac{1}{2}(d - L)\,\hat{\mathbf{n}}, \qquad
+\mathbf{p}_j \mathrel{+}= \tfrac{1}{2}(d - L)\,\hat{\mathbf{n}}.
+$$
+
+A pinned point takes zero share, so its neighbor absorbs the full correction. A softer alternative is a
+**spring** (Hooke's law), pulling with force $\mathbf{F} = -k\,(d - L)\,\hat{\mathbf{n}}$ instead of snapping
+the distance exactly.
+
+```js
+// one Verlet step, then relax the constraints a few times
+const vx = p.x - p.px;                 // implicit velocity
+p.px = p.x; p.x += vx + gravity * dt * dt;
+for (let k = 0; k < iters; k++)        // more iters -> stiffer
+  for (const c of links) project(c);   // pull each pair to rest length
+```
+
+<Callout type="why">
+Treating joints as constraints instead of forces is what makes them stable. Stiff springs explode under large
+time steps, but position projection can never overshoot — it only ever moves points *toward* the answer, so
+the simulation stays calm even at 60 frames per second with chunky steps.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Ragdoll characters" icon="🦴">
+When an enemy is defeated, its skeleton becomes a graph of point masses joined by distance constraints (bone
+lengths) plus angle limits (so elbows do not bend backward). Gravity plus relaxation gives that signature
+flailing, tumbling collapse down the stairs — no keyframes required.
+</ExampleCard>
+
+<ExampleCard domain="Rope bridges" icon="🌉">
+A wobbly plank bridge is two pinned ropes with planks slung between them. As the player runs across, each
+footstep displaces a node; the constraints propagate the sag and bounce down the span, and the bridge keeps
+trying to snap back to its rest shape.
+</ExampleCard>
+
+<ExampleCard domain="Cloth flags and banners" icon="🚩">
+A flag is a grid of points with distance constraints to neighbors (structural) and diagonals (shear). Pin one
+edge to the pole, push the rest with a wind force, and relax: the fabric ripples and folds. Game cloth is
+quite literally a 2D mesh of the same links you just dragged.
+</ExampleCard>
+
+<ExampleCard domain="Grappling-hook swing" icon="🕸️">
+Spider-Man-style traversal is a single distance constraint between the player and an anchor point on a
+building. While airborne, gravity accelerates the player and the rope constraint converts that fall into a
+smooth pendulum arc — release at the right moment to launch.
+</ExampleCard>
+
+<Callout type="note">
+Real engines stack constraint <strong>types</strong>: distance for length, angle for joint limits, and contact
+for collisions. Solving them together in the same relaxation loop is exactly how PhysX and Box2D build
+believable mechanisms from simple parts.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does increasing the number of constraint iterations per frame make a rope stiffer?',
+      options: [
+        'It adds more gravity to each point',
+        'Each sweep removes more of the residual stretch, so the links converge closer to their exact rest length',
+        'It increases the mass of every point',
+        'It disables Verlet integration',
+      ],
+      answer: 1,
+      explain: 'Fixing one link disturbs its neighbors; repeating the sweep drives the leftover error toward zero, approaching an inextensible (stiff) rope.',
+    },
+    {
+      q: 'What makes Verlet integration so convenient for constraint solving?',
+      options: [
+        'It stores acceleration explicitly',
+        'Velocity is implied by the gap between current and previous positions, so moving a point to satisfy a constraint updates its velocity automatically',
+        'It never needs a time step',
+        'It only works for rigid bodies',
+      ],
+      answer: 1,
+      explain: 'Because velocity is encoded as (current - previous) position, teleporting a point to fix a constraint changes its implied velocity for free.',
+    },
+    {
+      q: 'Two free, equal-mass beads sit 12 units apart but their constraint rest length is 10. After one projection, how far does each bead move along the connecting line?',
+      options: [
+        '0 units',
+        '1 unit each',
+        '2 units each',
+        '12 units each',
+      ],
+      answer: 1,
+      explain: 'The error is d - L = 2, split equally as (1/2)(d - L) = 1 unit per bead, so they end up 10 apart.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>constraint</strong> is a geometric promise like a fixed distance; you enforce it by projecting points back onto it each frame.',
+    '<strong>Verlet integration</strong> stores the previous position, so fixing a constraint updates velocity for free and stays stable.',
+    'A <strong>distance constraint</strong> splits the error (d - L) between its two free points; a pinned point forces its neighbor to absorb all of it.',
+    'Repeating the relaxation sweep more times yields a stiffer rope; fewer sweeps yield a stretchy, elastic one.',
+    'Ropes, chains, cloth, bridges, grappling hooks, and ragdolls are all just networks of these simple links.',
+  ]}
+/>
+
+Next we cut the links entirely: instead of points bound to neighbors, we spawn thousands of *independent*
+short-lived points to make sparks, smoke, and fire — welcome to **particle systems**.

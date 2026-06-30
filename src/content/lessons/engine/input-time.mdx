@@ -1,0 +1,202 @@
+---
+title: Input & Time
+track: engine
+summary: Why games read the player once per frame, how polling differs from events, and how a small input buffer turns "almost on time" into "on time."
+difficulty: beginner
+estMinutes: 12
+prereqs:
+  - engine/game-loop
+leadsTo:
+  - engine/asset-pipeline
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import InputBufferSampler from '../../../components/demos/InputBufferSampler.tsx';
+
+## The hook: "I pressed jump RIGHT on time!"
+
+You are one pixel from the ledge. You stab the jump button the instant your feet touch the
+ground — and your character walks calmly off the edge into the void. You *know* you pressed it.
+The replay agrees you pressed it. So why did the game ignore you?
+
+It didn't ignore you. The game simply wasn't *looking* at the exact microsecond your thumb moved.
+A game reads the controller at fixed moments — once per frame — and your press happened in the gap
+between two of those moments. The fix that every good game ships is tiny and beautiful: remember the
+press for a few frames so "almost on time" becomes "on time."
+
+<Callout type="intuition" title="The one-sentence idea">
+A game samples your input **once per frame**, so a press lands on the *next* frame after you make
+it — and an **input buffer** remembers that press for a few frames so it still counts when the moment
+to use it finally arrives.
+</Callout>
+
+## Intuition: input is just one more step in the loop
+
+In **the game loop** you saw the heartbeat: every frame the engine does *update*, then *render*,
+over and over. Reading the player is not some separate magic — it is the very first thing *update*
+does. Each turn of the loop the engine asks the hardware, "what is held down right now?", acts on the
+answer, then draws the result.
+
+That has a consequence people miss: between two frames, the game is effectively blind. Your keypress
+might physically happen at 8.3 ms into a 16.7 ms frame, but the engine won't *see* it until it
+reaches the next "read input" step. So input is always quantized to frame boundaries — it snaps to
+the grid of frames, just like the fixed timestep snapped your physics in the previous lesson.
+
+A buffer is the gentle fix. Instead of throwing a press away the instant the current frame can't use
+it, the engine keeps it on a sticky note for a few frames. When a usable moment shows up — you land,
+the attack recovers, the menu opens — the press is still there, waiting.
+
+## Play with it
+
+The strip below is a row of frames ticking left to right. Tap **Press (Jump)** (or click the panel,
+then hit Space / J). Watch your press get *captured* immediately but only *consumed* on the next
+frame sample. The emerald cells are **landing windows** — the only frames where a jump can fire.
+Drag the **buffer window** to 0 and try to land a jump exactly on a green cell; then raise it and
+feel how forgiving the game becomes.
+
+<InputBufferSampler client:visible />
+
+<Callout type="tip">
+Set the buffer to 0 and you will rack up ✕ "wasted" presses — fired one frame too early, gone. Nudge
+it up to 3 or 4 and those same early presses turn into ★ jumps. That single slider is the difference
+between a game that feels broken and one that feels tight.
+</Callout>
+
+## The formal definition
+
+There are two ways to get input from the player:
+
+- **Event-driven**: the operating system hands you a message the moment something happens
+  ("key A went down at time $t$"). Events are precise but arrive *whenever* — possibly several, or
+  none, between two frames.
+- **Polling**: once per frame the game asks "what is the state right now?" and reads it. Simple and
+  predictable, but it only looks at discrete instants.
+
+Most engines do both: events are collected as they arrive, then the game *polls* the accumulated
+state at the start of each frame. If frames run at a rate of $\text{fps}$ frames per second, the time
+between samples is
+
+$$
+\Delta t = \frac{1}{\text{fps}}.
+$$
+
+At 60 fps that is about $16.7$ ms. A press can sit unseen for up to one whole $\Delta t$ before the
+next sample notices it.
+
+An **input buffer** is a tiny queue that remembers a press for a window of $N$ frames. In seconds
+that window is
+
+$$
+w = \frac{N}{\text{fps}}.
+$$
+
+A press made at frame $f_{\text{press}}$ is still valid at an action frame $f$ as long as it falls
+inside the window:
+
+$$
+f_{\text{press}} \in [\, f - N,\ f \,].
+$$
+
+The mirror image is **coyote time**: for a few frames *after* you leave a ledge, the game still lets
+you jump as if you were grounded — forgiveness applied to the *late* side instead of the early side.
+
+A per-frame poll plus buffer check is just a few lines:
+
+```js
+// runs once every frame, inside update()
+if (input.pressed("jump")) buffer = N;   // remember the press for N frames
+if (canAct && buffer > 0) {              // a usable moment arrived
+  doJump();
+  buffer = 0;                            // consume it
+}
+buffer = Math.max(0, buffer - 1);        // age the buffer each frame
+```
+
+## The same idea, four different worlds
+
+Sampling a continuous world at discrete moments — and adding a grace window so near-misses still
+count — shows up far beyond a jump button.
+
+<ExampleCard domain="Fighting games" icon="🥊">
+A combo only links if your next attack arrives during a short **cancel window**. Press too early and
+nothing happens — except buffered inputs *do* fire on the first valid frame. Pros literally pre-press
+the next move so the engine executes it the instant the window opens. That is the input buffer doing
+competitive work.
+</ExampleCard>
+
+<ExampleCard domain="Photography" icon="📷">
+A camera shutter samples a moving scene at a single instant. A propeller spinning between exposures
+gets frozen mid-blur, and fast subjects can fall *between* frames of a video entirely. Same lesson:
+a continuous world read at discrete moments. Burst mode is the buffer — capture a spread of frames so
+the perfect instant is somewhere in the set.
+</ExampleCard>
+
+<ExampleCard domain="Civic deadlines" icon="🗳️">
+A mail-in ballot must arrive by a cutoff, but many places accept ballots **postmarked** by election
+day even if they land a few days later. The postmark is your press; the grace period is the buffer
+window $N$. Arrive inside the window and your input still counts — exactly the jump-buffer rule in
+civic clothing.
+</ExampleCard>
+
+<ExampleCard domain="Rhythm & mobile games" icon="🎵">
+A rhythm tap is judged against a **hit window** of a few milliseconds around the beat. Touchscreen
+games widen that window on purpose, because a finger on glass is laggier and less precise than a
+button. Tighten the window for "Perfect", widen it for "Good" — you are literally tuning $w = N/\text{fps}$.
+</ExampleCard>
+
+<Callout type="note">
+Notice the spread: a 60 fps platformer, a fighting-game cancel, a postal deadline measured in days.
+The units change wildly, but the structure is identical — discrete samples plus a tolerance window.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why might a game miss a button press even though the player definitely pressed the button?',
+      options: [
+        'The controller battery was low',
+        'Input is sampled once per frame, so a press between samples is only seen on the next frame',
+        'Games ignore presses on purpose to add difficulty',
+        'Polling is slower than the speed of light',
+      ],
+      answer: 1,
+      explain: 'The game polls input at frame boundaries. A press that happens between two samples is not seen until the next frame reads the input state.',
+    },
+    {
+      q: 'A game runs at 60 fps with an input buffer of N = 6 frames. About how long does a press stay "live"?',
+      options: ['6 ms', '60 ms', '100 ms', '360 ms'],
+      answer: 1,
+      explain: 'w = N / fps = 6 / 60 = 0.1 s = 100 ms. (Each frame is about 16.7 ms, and 6 of them is roughly 100 ms.)',
+    },
+    {
+      q: 'What is the difference between an input buffer and coyote time?',
+      options: [
+        'They are two names for the exact same thing',
+        'A buffer forgives presses made a bit too early; coyote time forgives jumps made a bit too late',
+        'A buffer only works on touchscreens',
+        'Coyote time speeds up the frame rate',
+      ],
+      answer: 1,
+      explain: 'A buffer remembers an early press until a valid moment arrives; coyote time keeps you "grounded" for a few frames after leaving a ledge, forgiving a late press.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A game reads the player <strong>once per frame</strong> inside the loop, so input snaps to frame boundaries.',
+    '<strong>Events</strong> are precise but arrive whenever; <strong>polling</strong> reads the state at fixed frame samples — most engines combine both.',
+    'A press can wait up to one sample period <strong>Δt = 1/fps</strong> before the game even sees it.',
+    'An <strong>input buffer</strong> remembers a press for a window <strong>w = N/fps</strong>, so "almost on time" still counts.',
+    '<strong>Coyote time</strong> is the same forgiveness applied to late inputs — both make controls feel tight and fair.',
+  ]}
+/>
+
+Next up: the **asset pipeline** — once you can read the player and keep time, you need to load,
+pack, and save all the art, audio, and data your game runs on.

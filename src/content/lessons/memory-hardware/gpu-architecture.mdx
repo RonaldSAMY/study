@@ -1,0 +1,185 @@
+---
+title: GPU Architecture
+track: memory-hardware
+summary: Thousands of cores in parallel — why GPUs render graphics.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - memory-hardware/cpu-architecture
+leadsTo:
+  - memory-hardware/data-oriented-design
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CpuGpuRaceDemo from '../../../components/demos/CpuGpuRaceDemo.tsx';
+
+## The hook: a million pixels, sixty times a second
+
+Your monitor has roughly two million pixels. To run a game at 60 frames per second, the machine must
+decide the color of every one of those pixels, two million times, sixty times each second — over a
+hundred million pixel calculations per second, just for the picture. A CPU with its handful of cores
+would choke. Yet your graphics card does it without breaking a sweat. The trick is not a *faster*
+processor — it is a processor built from **thousands of slower ones**, all working at the same time.
+
+<Callout type="intuition" title="The one-sentence idea">
+A CPU is a few brilliant workers who finish one hard task quickly; a GPU is an army of simple workers
+who each do the same easy task on a different piece of data, all at once.
+</Callout>
+
+## Intuition: latency machines vs throughput machines
+
+In the CPU lesson you met cores with deep pipelines, branch prediction, and big caches — heroic
+engineering aimed at finishing **one** chain of instructions as fast as possible. That is a
+**latency** machine: it minimizes the time to the next answer, which is perfect for branchy, serial
+logic like game rules or parsing.
+
+A GPU optimizes for something different: **throughput**, the total work finished per second. It spends
+its transistor budget not on a few clever cores but on *thousands* of plain ones. Each is slower and
+dumber than a CPU core, but there are so many of them that the total output is enormous — as long as
+the work splits into many independent pieces.
+
+The key mechanism is **SIMT** (Single Instruction, Multiple Threads), a cousin of SIMD. The hardware
+groups threads into a **warp** (NVIDIA) or **wavefront** (AMD) of typically 32 threads that march in
+**lockstep**: every thread runs the *same* instruction at the *same* time, just on its *own* data.
+Shading pixels is the dream workload — each pixel's color is computed independently, so a warp can
+color 32 pixels with one stream of instructions. Graphics is **embarrassingly parallel**, and that is
+exactly what a GPU eats for breakfast.
+
+## Play with it
+
+Press **Run** and watch the same grid of pixels get "shaded" by a CPU and a GPU. Slide the grid bigger
+and drop the CPU to a single core to make the gap obvious — then notice how the GPU still finishes in a
+handful of ticks.
+
+<CpuGpuRaceDemo client:visible />
+
+<Callout type="tip">
+Add CPU cores and the CPU bar speeds up a little; grow the grid and the GPU barely notices. More
+parallel work makes the throughput machine look better, not worse — the opposite of serial code.
+</Callout>
+
+## The formal definition
+
+Let a job consist of $N$ independent items (pixels, vertices, particles). Suppose each item costs $w$
+units of work. A machine with $P$ parallel lanes, each retiring one item per tick, needs
+
+$$
+T = \left\lceil \frac{N}{P} \right\rceil \cdot w \ \text{ticks.}
+$$
+
+A CPU has small $P$ (a few cores, each maybe handling a SIMD width of 4–8), so $T$ grows almost
+linearly with $N$. A GPU has huge $P$ (thousands of lanes), so $\lceil N / P \rceil$ stays tiny even
+for millions of items. The **speedup** of GPU over CPU is roughly
+
+$$
+\text{speedup} \approx \frac{P_{\text{gpu}}}{P_{\text{cpu}}},
+$$
+
+provided the items really are independent. Conceptually, every lane runs the *same* tiny program — a
+**kernel** — on its own pixel:
+
+```c
+// Runs once per pixel; thousands of copies execute in lockstep.
+void shade(int x, int y, RGB* out) {
+    float light = max(0.0f, dot(normal(x, y), sun_dir));
+    out[y * WIDTH + x] = base_color(x, y) * light; // this pixel only
+}
+```
+
+There is one catch the formula hides: **branch divergence**. When threads in the same warp take
+different paths of an `if`, the hardware must run *both* paths and mask off the lanes that should not
+participate — so a warp that disagrees does the work of both branches serially. Uniform work keeps a
+warp fast; divergent work slows it toward CPU-like behavior.
+
+<Callout type="why">
+This is why graphics, physics simulation, and neural-network math all run on GPUs: they are oceans of
+identical, independent operations. The same SIMT hardware that shades pixels also multiplies the giant
+matrices inside a deep-learning model — same idea, different data.
+</Callout>
+
+## The same idea, four different worlds
+
+The CPU-vs-GPU split — one strong generalist versus many synchronized specialists — shows up far from
+silicon.
+
+<ExampleCard domain="Retail checkout" icon="🛒">
+A store with one lightning-fast express clerk can ring up a single customer in seconds, but a holiday
+crowd still snakes out the door. Open twenty ordinary lanes instead and the crowd clears fast, even
+though each clerk is slower. That is throughput beating latency — the GPU's whole bet.
+</ExampleCard>
+
+<ExampleCard domain="House painting" icon="🎨">
+Hand one expert a wall and they finish it beautifully, room by room. Hand a crew of twenty rollers
+*one identical instruction* — "roll upward, then reload" — and they coat every wall at once. Same
+action, different walls: that is SIMD in overalls.
+</ExampleCard>
+
+<ExampleCard domain="Agriculture" icon="🌾">
+A combine harvester is a latency machine for one row. A harvest crew of fifty, each assigned a
+separate row and all swinging on the same beat, clears the field in a single pass. Independent rows
+make the work embarrassingly parallel.
+</ExampleCard>
+
+<ExampleCard domain="Postal logistics" icon="📬">
+A mail-sorting facility runs hundreds of parallel sorting arms, each grabbing the *next* letter and
+routing it by zip code with the same fixed motion. Letters do not depend on each other, so adding more
+sorters directly multiplies throughput — until two letters need different handling (divergence) and a
+lane stalls.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a GPU optimize for, compared with a CPU?',
+      options: [
+        'Lowest latency on a single serial task',
+        'Highest total throughput across many independent items',
+        'Smallest possible chip area',
+        'Running the most different programs at once',
+      ],
+      answer: 1,
+      explain: 'A CPU is a latency machine (finish one task fast); a GPU is a throughput machine (finish a huge number of independent items per second).',
+    },
+    {
+      q: 'A job has 8192 independent pixels. A CPU has 8 lanes; a GPU has 2048 lanes, each retiring one pixel per tick. Roughly how many ticks does each take?',
+      options: [
+        'CPU 8 ticks, GPU 2048 ticks',
+        'CPU 1024 ticks, GPU 4 ticks',
+        'CPU 8192 ticks, GPU 8192 ticks',
+        'CPU 4 ticks, GPU 1024 ticks',
+      ],
+      answer: 1,
+      explain: 'Ticks = ceil(N / P). CPU: 8192 / 8 = 1024. GPU: 8192 / 2048 = 4. That ~256× gap is the lane-count ratio.',
+    },
+    {
+      q: 'Why does branch divergence inside a warp hurt GPU performance?',
+      options: [
+        'It uses more memory bandwidth',
+        'The warp must execute both branch paths and mask out the inactive lanes, serializing the work',
+        'It turns off branch prediction',
+        'It forces the GPU to fall back to the CPU',
+      ],
+      answer: 1,
+      explain: 'Threads in a warp run in lockstep. If they disagree on an if, the hardware runs both paths with lanes masked, so a divergent warp does the work of both branches.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>CPU</strong> spends transistors on a few powerful, latency-optimized cores; a <strong>GPU</strong> spends them on thousands of simple, throughput-optimized cores.',
+    '<strong>SIMT</strong> groups threads into a <strong>warp/wavefront</strong> (~32 threads) that run the <strong>same instruction on different data</strong> in lockstep.',
+    'Rendering is <strong>embarrassingly parallel</strong> — every pixel is independent — so a tiny per-pixel <strong>kernel</strong> maps perfectly onto the GPU.',
+    'Speedup is roughly the <strong>ratio of parallel lanes</strong>, but only when the items are truly independent.',
+    '<strong>Branch divergence</strong> within a warp forces both paths to run, dragging parallel hardware back toward serial speed.',
+  ]}
+/>
+
+Next up: **data-oriented design** — how laying out your data for the cache keeps all those hungry cores
+fed, and why the order of your bytes is the secret of fast games.

@@ -1,0 +1,198 @@
+---
+title: Entity-Component-System
+track: engine
+summary: Model game objects as plain-data components packed into contiguous arrays, then run systems that sweep those arrays — a data-oriented design that keeps the CPU cache fed and scales to thousands of entities.
+difficulty: advanced
+estMinutes: 15
+prereqs:
+  - memory-hardware/data-oriented-design
+  - data-structures/arrays-memory
+leadsTo:
+  - engine/scene-graph
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import EcsComponentTable from '../../../components/demos/EcsComponentTable.tsx';
+
+## The hook: when `Enemy extends Character extends GameObject` collapses
+
+Every engine starts the same innocent way. You write a `GameObject`. Then a `Character` that extends it.
+Then a `FlyingEnemy` that extends `Enemy` that extends `Character`. Six months later you need a *crate that
+can also take damage*, and there is no clean place to put it: damage lives three classes up, but crates
+aren't characters. The inheritance tree has become a tangle where every new combination of behaviors demands
+a new class.
+
+There is a second, quieter disaster. Each of those objects is a separate blob on the heap, scattered wherever
+the allocator happened to put it. Your update loop walks a list of pointers, and to read one object's velocity
+the CPU must jump to a random address, drag in a whole cache line, use eight bytes of it, and throw the rest
+away. With ten thousand entities that is ten thousand cache misses per frame — the loop is **memory-bound**,
+sitting idle while it waits for RAM.
+
+**Entity-Component-System (ECS)** throws out the inheritance tree *and* the scattered layout at the same time.
+
+<Callout type="intuition" title="The one-sentence idea">
+An **entity** is just an id; a **component** is a plain bag of data attached to that id; a **system** is a
+function that loops over one tightly-packed array of components — so behavior is *composed* instead of
+*inherited*, and the loop reads memory in a straight line.
+</Callout>
+
+## Intuition: a spreadsheet your CPU loves
+
+You already met **data-oriented design** — arranging data by how the loop will *read* it, not by how an object
+"feels" — and you saw in **arrays & memory layout** why a contiguous array is so fast: the CPU loads a whole
+**cache line** (typically 64 bytes) at once, so the *next* element you want is usually already sitting in cache.
+ECS is those two ideas applied to game objects.
+
+Picture a spreadsheet. Each **row** is an entity (a rocket, an enemy, a crate). Each **column** is a component
+type (Position, Velocity, Health, Sprite). A cell is filled only if that entity has that component — the crate
+has Position and Sprite but no Velocity, so its Velocity cell is simply empty.
+
+The trick is in how the columns are stored. Instead of keeping each row together as one object, the engine
+stores each **column as its own contiguous array**. A MovementSystem then needs only two columns — Position and
+Velocity — and walks them side by side, in order, touching nothing else. That straight-line sweep is exactly the
+cache-friendly access pattern the hardware was built for.
+
+## Play with it
+
+Below, entities are rows and components are columns. Press **Run MovementSystem** and watch it sweep down the
+Position + Velocity rows, advancing each position by its velocity. The strip underneath shows the *same* data as
+the engine actually stores it: contiguous `Position[]` and `Velocity[]` arrays the system marches through in
+order. Click any cell to add or remove a component from an entity.
+
+<EcsComponentTable client:visible />
+
+<Callout type="tip">
+Remove **Velocity** from an entity, then re-run. The system just *skips* it — that entity is no longer part of
+the Position+Velocity **archetype**, so it never even enters the loop. No type checks, no inheritance, no
+pointer chasing: membership in the loop is decided purely by which components an entity owns.
+</Callout>
+
+## The formal definition
+
+Strip away the jargon and ECS is three plain pieces.
+
+**Entities** are nothing but identifiers — think of the set $E = \{0, 1, 2, \dots, n-1\}$. An entity carries no
+data and no methods; it is just a handle.
+
+**Components** are plain-old-data structs, one value per entity that owns it. A component type $C$ is a partial
+map from entities to data,
+
+$$
+C : E \rightharpoonup D_C,
+$$
+
+defined only on the entities that *have* that component. An **archetype** is the set of entities sharing the
+same combination of component types, e.g. $A = \{\, e \in E : e \text{ has both Position and Velocity}\,\}$.
+
+**Systems** are functions that run over an archetype. A MovementSystem is a map applied to every entity in $A$:
+
+$$
+\text{step}(e) : \mathbf{p}_e \mapsto \mathbf{p}_e + \Delta t \,\mathbf{v}_e, \qquad e \in A.
+$$
+
+The performance payoff is a *layout* choice. The naive **array of structs** (AoS) interleaves every field of
+every object, $[\,(p_0, v_0, h_0, s_0), (p_1, v_1, h_1, s_1), \dots\,]$, so reading only positions still drags
+velocities, health, and sprites through cache. ECS prefers **struct of arrays** (SoA): one packed array per
+component, $[\,p_0, p_1, p_2, \dots\,]$ and $[\,v_0, v_1, v_2, \dots\,]$. Now a sweep that needs only $\mathbf p$
+and $\mathbf v$ reads two dense streams and wastes nothing.
+
+```js
+// MovementSystem: one tight loop over two contiguous arrays (SoA)
+function movementSystem(position, velocity, dt) {
+  for (let i = 0; i < position.length; i++) {
+    position[i].x += velocity[i].x * dt;
+    position[i].y += velocity[i].y * dt;
+  }
+}
+```
+
+<Callout type="why">
+A 64-byte cache line holds 8 packed `float`-pairs. With SoA, one memory load serves the next several
+iterations, so the loop runs at the speed of arithmetic instead of the speed of RAM. That is the whole reason
+open-world and bullet-hell engines reach for ECS.
+</Callout>
+
+## The same idea, across very different worlds
+
+Composition-over-inheritance plus columnar, cache-friendly data is not unique to games — it is everywhere people
+process many similar things fast.
+
+<ExampleCard domain="Databases" icon="🗄️">
+A **columnar analytics database** (think the format behind big data warehouses) stores each column separately on
+disk, exactly like SoA. A query that sums one column streams just that column and ignores the rest — the same win
+as a system reading only Position. Rows are entities, columns are components: an ECS *is* an in-memory column
+store you scan every frame. Mirrors an open-world game tracking tens of thousands of entities at once.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+A warehouse **picking line** doesn't send one worker to fully assemble each order by wandering the whole
+building. It batches by location: a worker walks one aisle and grabs every item that lives there, in order.
+That contiguous, single-pass walk is a system sweeping one component array — far fewer "cache misses" (trips
+across the warehouse) than visiting one full order at a time. The bullet-hell answer to spawning 5,000 bullets
+a second.
+</ExampleCard>
+
+<ExampleCard domain="Biology" icon="🧬">
+A cell isn't a deep class hierarchy; it's an id with a *set of traits* switched on by which genes it expresses.
+A liver cell and a neuron share the same genome but compose different active components, and the same enzyme
+(a "system") acts on every cell carrying its substrate. Behavior is composed from present components, never
+inherited from a rigid "type" — precisely the ECS philosophy.
+</ExampleCard>
+
+<ExampleCard domain="Music" icon="🎼">
+A conductor cues the orchestra by **section**, not by player: "strings, now." Every violinist shares the
+component "is a string player" and responds to the one instruction at once. Sections are archetypes, the cue is
+a system over them, and an individual musician is just an id that happens to hold certain components. The exact
+batching a mobile game needs to update thousands of entities within a tight frame budget.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In ECS, what is an entity?',
+      options: [
+        'A class with virtual methods that components inherit from',
+        'Just an identifier; behavior and data come from the components attached to it',
+        'A contiguous array of all component data for one object',
+        'The function that updates the game each frame',
+      ],
+      answer: 1,
+      explain: 'An entity is only an id. Data lives in components and behavior lives in systems, so objects are composed rather than built by inheritance.',
+    },
+    {
+      q: 'Why does a MovementSystem run faster over a struct-of-arrays (SoA) layout than an array-of-structs (AoS) layout?',
+      options: [
+        'SoA uses less total memory than AoS',
+        'SoA avoids using the cache entirely',
+        'SoA packs the needed Position and Velocity values contiguously, so each cache line is fully used instead of dragging unused fields',
+        'AoS cannot store floating-point numbers',
+      ],
+      answer: 2,
+      explain: 'AoS interleaves every field, so reading only position still loads velocity, health, and sprite. SoA keeps each component in its own dense array, so a sweep reads only what it needs.',
+    },
+    {
+      q: 'A cache line is 64 bytes and a packed position is 8 bytes (two 4-byte floats). Iterating a contiguous Position array, how many positions does one cache-line load bring in?',
+      options: ['1', '4', '8', '64'],
+      answer: 2,
+      explain: '64 ÷ 8 = 8 positions per cache line, so one memory load feeds the next eight iterations — the core reason SoA loops are fast.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>ECS</strong> replaces deep inheritance with composition: entities are ids, components are plain data, systems are functions over component arrays.',
+    'An <strong>archetype</strong> is the set of entities sharing a component combination; a system runs only over the archetype it needs, so membership is data-driven with no type checks.',
+    'Storing each component as its own contiguous array (<strong>struct of arrays</strong>) lets a system stream exactly the data it touches.',
+    'A 64-byte <strong>cache line</strong> holds several packed components, so one memory load serves many loop iterations — the loop runs at arithmetic speed, not RAM speed.',
+    'This data-oriented layout is what lets engines update <strong>thousands of entities per frame</strong>, from open-world worlds to bullet-hell and mobile games.',
+  ]}
+/>
+
+Next up: **scene graph & transforms** — once entities carry Position, how do we parent one to another and combine their transforms so a turret moves with its tank?

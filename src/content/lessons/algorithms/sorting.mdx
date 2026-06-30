@@ -1,0 +1,185 @@
+---
+title: Sorting
+track: algorithms
+summary: Putting data in order — and why the gap between O(n²) and O(n log n) sorts decides whether your frame ships on time.
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - algorithms/searching
+leadsTo:
+  - algorithms/recursion
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import SortingBarsVisualizer from '../../../components/demos/SortingBarsVisualizer.tsx';
+
+## The hook: ordering a thousand sprites, sixty times a second
+
+To draw a 2D scene correctly, the renderer must paint sprites **back to front**, so closer things
+cover farther ones. That means sorting every sprite by depth — *every frame*. With a clumsy sort, a
+thousand sprites can cost a million comparisons per frame and torch your budget. With a good one, it's
+a few thousand. Same result, wildly different cost.
+
+Sorting also pays the bill for the last lesson: binary search only works because *someone sorted the
+data first*. So how much does that "first" actually cost?
+
+<Callout type="intuition" title="The one-sentence idea">
+Some sorts compare nearly **every pair** of items ($O(n^2)$); the clever ones **divide the problem in
+half** again and again ($O(n \log n)$) — and that single difference is the whole game at scale.
+</Callout>
+
+## Intuition: two families of sorts
+
+**The quadratic family — bubble & insertion sort.** These work the way a person tidies a hand of
+cards: compare neighbors, swap when they're out of order, repeat. Simple and fine for tiny lists, but
+they do work proportional to $n^2$. Double the items, quadruple the work.
+
+- *Bubble sort* repeatedly walks the list, swapping adjacent out-of-order pairs until nothing moves.
+- *Insertion sort* grows a sorted region one item at a time, sliding each new item back to its spot.
+
+**The linearithmic family — quicksort & mergesort.** These use **divide and conquer**: split the
+problem into halves, sort each half, and combine. Halving is where the $\log n$ comes from (just like
+binary search), giving $O(n \log n)$.
+
+- *Mergesort* splits in half, sorts each half, then **merges** two sorted lists into one.
+- *Quicksort* picks a **pivot**, partitions items into "smaller" and "bigger," then sorts each side.
+
+<Callout type="note">
+You'll meet divide and conquer properly in the next lesson, <em>recursion</em>. Quicksort and
+mergesort are recursion's most famous success story — they literally call themselves on smaller halves.
+</Callout>
+
+## Play with it
+
+Pick an algorithm and press **Sort**. The bars rearrange and the **comparison counter** ticks up. The
+same shuffled bars are used for every algorithm, so the final counts are a fair fight. Watch how
+bubble and insertion rack up comparisons while quicksort and mergesort finish with far fewer.
+
+<SortingBarsVisualizer client:visible />
+
+<Callout type="tip">
+Run <strong>Bubble</strong>, note the comparison count, then run <strong>Mergesort</strong> on a fresh
+shuffle. Mergesort's count is a fraction of bubble's — and that fraction shrinks even further as the
+array grows. That's $O(n \log n)$ pulling away from $O(n^2)$.
+</Callout>
+
+## The formal definition
+
+Most sorts here are **comparison sorts**: they only ever ask *"is $a$ before $b$?"* The quadratic
+sorts make about
+
+$$
+\frac{n(n-1)}{2} = O(n^2)
+$$
+
+comparisons in the worst case. Divide-and-conquer sorts obey a **recurrence** — the cost of sorting
+$n$ items is two half-sized sorts plus a linear merge or partition:
+
+$$
+T(n) = 2\,T\!\left(\tfrac{n}{2}\right) + O(n) \;=\; O(n \log n).
+$$
+
+There is a famous floor here: *any* comparison sort needs at least $O(n \log n)$ comparisons in the
+worst case, so mergesort and friends are essentially **optimal**.
+
+```js
+function quicksort(a, lo = 0, hi = a.length - 1) {
+  if (lo >= hi) return;                 // base case: 0 or 1 element
+  const pivot = a[hi];
+  let i = lo;
+  for (let j = lo; j < hi; j++)         // partition around the pivot
+    if (a[j] < pivot) [a[i], a[j]] = [a[j], a[i++]];
+  [a[i], a[hi]] = [a[hi], a[i]];        // place the pivot
+  quicksort(a, lo, i - 1);              // sort the smaller side
+  quicksort(a, i + 1, hi);             // sort the bigger side
+}
+```
+
+<Callout type="why">
+The same $T(n) = 2T(n/2) + O(n)$ recurrence governs the Fast Fourier Transform and many ML routines.
+Recognizing "divide in half, do linear work, recombine" instantly tells you the cost is
+$O(n \log n)$ — no profiler required.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Graphics" icon="🖼️">
+A 2D renderer sorts sprites by depth each frame so nearer ones draw on top (the "painter's algorithm").
+With thousands of sprites at 60fps, an $O(n^2)$ sort would blow the frame budget — engines use
+$O(n \log n)$ sorts, or bucket sprites into a few depth layers to make it nearly $O(n)$.
+</ExampleCard>
+
+<ExampleCard domain="Sports" icon="🥇">
+A marathon's results page ranks tens of thousands of runners by finish time. Sorting once is
+$O(n \log n)$; after that, *any* runner's placement is a binary search away. The whole standings page
+is built on one good sort.
+</ExampleCard>
+
+<ExampleCard domain="E-commerce" icon="🛒">
+"Sort by price: low to high" reorders an entire catalog on demand. Shops keep results in sorted order
+so filtering and paging stay fast — re-sorting naively on every click would make a big catalog feel
+sluggish.
+</ExampleCard>
+
+<ExampleCard domain="Music" icon="🎵">
+Building a "recently added" or "by duration" playlist view is a sort over your library. Streaming apps
+sort once and cache the order, so scrolling stays smooth even with tens of thousands of tracks.
+</ExampleCard>
+
+<Callout type="warning">
+Quicksort is usually fastest in practice but has an $O(n^2)$ <em>worst case</em> if pivots are chosen
+badly (e.g. always picking the largest element on already-sorted data). Mergesort guarantees
+$O(n \log n)$ every time — which is why language libraries often use a hybrid.
+</Callout>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why are quicksort and mergesort faster than bubble sort on large inputs?',
+      options: [
+        'They use less memory',
+        'They divide the problem in half repeatedly, giving O(n log n) instead of O(n²)',
+        'They never compare elements',
+        'They only work on numbers',
+      ],
+      answer: 1,
+      explain: 'Divide-and-conquer halving introduces a log n factor, so the cost is O(n log n) versus the O(n²) of the simple sorts.',
+    },
+    {
+      q: 'A bubble sort makes about how many comparisons to sort n items in the worst case?',
+      options: ['About n', 'About log n', 'About n²/2', 'Exactly n'],
+      answer: 2,
+      explain: 'Bubble sort compares roughly every pair: n(n-1)/2 ≈ n²/2 comparisons, which is O(n²).',
+    },
+    {
+      q: 'Which statement about quicksort is true?',
+      options: [
+        'It always runs in O(n log n)',
+        'It is usually fast but can degrade to O(n²) with bad pivots',
+        'It requires the data to already be sorted',
+        'It cannot sort more than 100 items',
+      ],
+      answer: 1,
+      explain: 'Quicksort averages O(n log n) and is very fast in practice, but poor pivot choices can push it to O(n²).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Bubble and insertion sort</strong> compare neighbors and cost O(n²) — fine for tiny lists, painful at scale.',
+    '<strong>Quicksort and mergesort</strong> use divide and conquer for O(n log n) — the practical standard.',
+    'The recurrence <strong>T(n) = 2T(n/2) + O(n)</strong> is the signature of an O(n log n) algorithm.',
+    'No comparison sort can beat <strong>O(n log n)</strong> in the worst case — mergesort hits that floor.',
+    'Sorting is the upfront cost that <strong>earns binary search its speed</strong> — and it happens every frame in many games.',
+  ]}
+/>
+
+Next up: **recursion** — the "call itself on a smaller piece" idea that makes quicksort and mergesort
+tick, and the call stack that powers it.

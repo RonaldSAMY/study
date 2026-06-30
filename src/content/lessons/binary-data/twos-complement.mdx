@@ -1,0 +1,171 @@
+---
+title: Two's Complement
+track: binary-data
+summary: How computers store negative integers with the same bits — plus overflow, wraparound, and the negation trick.
+difficulty: intermediate
+estMinutes: 14
+prereqs:
+  - binary-data/number-systems
+leadsTo:
+  - binary-data/floating-point
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import TwosComplementFlipper from '../../../components/demos/TwosComplementFlipper.tsx';
+
+## The hook: the score that went negative
+
+A famous arcade bug: reach level 256 in *Pac-Man* and the screen corrupts into garbage. A different
+classic: a game where doing too much damage makes an enemy's health rocket from 0 up to 65,000. Both come
+from the same place — a number ran past the edge of its bits and **wrapped around**. To understand
+wraparound, and to store anything that can go negative (a score penalty, a downhill velocity, a
+temperature), we need a way to put a minus sign into pure bits. That way is **two's complement**.
+
+<Callout type="intuition" title="The one-sentence idea">
+**Two's complement** stores negatives by making the top bit count as a *negative* place value, so the
+same 8 bits now span −128 to +127 — and ordinary binary addition just works.
+
+</Callout>
+
+## Intuition: make the biggest bit negative
+
+In an unsigned byte, the leftmost bit is worth +128. The whole trick of two's complement is breathtakingly
+simple: **flip that top bit's sign**. Now the leftmost bit is worth **−128**, while every other bit stays
+positive (64, 32, ... 1).
+
+That one change does everything:
+
+- If the top bit is **0**, the number looks normal and positive (0 to 127).
+- If the top bit is **1**, you start at −128 and add back the smaller positive bits. So `11111111` is
+  $-128 + 127 = -1$, and `10000000` is exactly $-128$.
+
+The leftmost bit is therefore called the **sign bit**: 0 means non-negative, 1 means negative. And the
+beautiful payoff is that you don't need special "subtraction circuitry" — adding the bit patterns of
+5 and −5 naturally rolls over to 0.
+
+To **negate** a number there's a famous recipe: **invert every bit, then add 1**. Flip 5 (`00000101`)
+to get `11111010`, add 1 to get `11111011`, which reads as −5. Try it and it always works.
+
+## Play with it
+
+Flip the bits and watch the **signed value**. The red sign bit on the left is worth −128. Then hit
+**Negate** to see the "invert and add 1" trick turn any number into its opposite.
+
+<TwosComplementFlipper client:visible />
+
+<Callout type="tip">
+Set the value to <strong>127</strong> (all bits on except the sign bit), then flip the bit worth 1 to add
+one more. Instead of 128, it <em>wraps</em> all the way down to <strong>−128</strong>. That sudden jump
+from the largest positive to the smallest negative is <strong>overflow</strong> — the source of the
+arcade bugs in the hook.
+</Callout>
+
+## The formal definition
+
+For an $n$-bit two's-complement integer with bits $b_{n-1} \dots b_0$, the value is the same place-value
+sum as before, except the **top bit carries a negative weight**:
+
+$$
+\text{value} = -b_{n-1}\,2^{\,n-1} + \sum_{i=0}^{n-2} b_i\, 2^{\,i}.
+$$
+
+For $n = 8$ this gives the range:
+
+$$
+-2^{7} \le x \le 2^{7} - 1 \quad\Longleftrightarrow\quad -128 \le x \le 127.
+$$
+
+Negation is "invert and add one," which is the same as subtracting from $2^n$:
+
+$$
+-x \equiv (\lnot x) + 1 \pmod{2^{n}}.
+$$
+
+Because everything is done $\bmod\ 2^n$, going above the maximum **wraps** back to the minimum — that is
+**overflow**:
+
+```c
+int8_t h = 127;   // largest signed byte
+h = h + 1;        // not 128 — wraps to -128
+uint8_t u = 0;
+u = u - 1;        // unsigned wraps the other way: 255
+```
+
+<Callout type="why">
+Almost every integer in a game — health, ammo, score deltas, grid coordinates — is a fixed-width two's
+complement number. Knowing the −128..127 (or −2,147,483,648..2,147,483,647 for 32-bit) limits tells you
+exactly when a value will silently wrap and corrupt your state.
+</Callout>
+
+## The same idea, four different worlds
+
+<ExampleCard domain="Game health & damage" icon="❤️">
+Store health in a signed byte and a 200-damage hit on a 100-HP boss gives −100 — correctly "dead." But
+use an <em>unsigned</em> byte and 0 − 1 wraps to 255: the dying boss heals to full. Choosing signed vs
+unsigned is a real design decision with real bugs attached.
+</ExampleCard>
+
+<ExampleCard domain="Elevators & basements" icon="🛗">
+A building's floor display is a tiny signed counter: floor 1, 0 (ground), then −1, −2 for the parking
+levels. The minus sign isn't a special case — it's the same number line extended below zero, exactly like
+the sign bit extending a byte below zero.
+</ExampleCard>
+
+<ExampleCard domain="Thermostats" icon="🌡️">
+A thermostat reading −5 °C and +20 °C uses one signed integer for both. Two's complement lets a single
+sensor value cross zero smoothly — subtract 6 from −5 and you get −11 with no special handling, because
+the arithmetic wraps consistently around the number circle.
+</ExampleCard>
+
+<ExampleCard domain="Odometers / counters" icon="🚗">
+An old mechanical odometer at 999999 rolls over to 000000 — finite digits wrapping around. Two's
+complement is the binary version: a fixed number of bits forms a closed loop, so "one past the top"
+lands back at the bottom. Overflow is just the odometer rolling over.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In an 8-bit two’s-complement number, what is the leftmost (sign) bit worth?',
+      options: ['+128', '−128', '+255', '−1'],
+      answer: 1,
+      explain: 'Two’s complement gives the top bit a negative weight of −128; all other bits stay positive.',
+    },
+    {
+      q: 'Negate the byte for 6 using "invert all bits, then add 1". 6 is 00000110. What do you get?',
+      options: ['11111010 (−6)', '11111001 (−7)', '00000111 (7)', '10000110 (−6)'],
+      answer: 0,
+      explain: 'Invert 00000110 → 11111001, then add 1 → 11111010, which reads as −6.',
+    },
+    {
+      q: 'A signed 8-bit value is 127 and you add 1. What happens?',
+      options: [
+        'It becomes 128',
+        'It stays at 127 (clamped)',
+        'It overflows and wraps to −128',
+        'It errors out',
+      ],
+      answer: 2,
+      explain: '127 is the maximum signed byte; adding 1 overflows and wraps around to the minimum, −128.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Two’s complement</strong> stores signed integers by making the top (sign) bit a <strong>negative</strong> place value.',
+    'An 8-bit signed integer spans <strong>−128 to +127</strong>; the sign bit is 1 for negatives, 0 otherwise.',
+    'To negate a number, <strong>invert every bit and add 1</strong> — equivalent to subtracting from 2<sup>n</sup>.',
+    'Ordinary binary addition "just works" for signed numbers — no separate subtraction hardware needed.',
+    'Going past the top value <strong>wraps around</strong> to the bottom: this is <strong>overflow</strong>, the cause of many classic bugs.',
+  ]}
+/>
+
+Next up: **floating-point numbers** — integers can't hold 3.14 or 0.5. Next you'll see how computers
+squeeze real numbers into bits, and why 0.1 + 0.2 famously isn't quite 0.3.

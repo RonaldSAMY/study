@@ -1,0 +1,132 @@
+---
+title: The Rendering Pipeline
+track: rendering
+summary: From vertices to pixels — the journey every frame takes through the GPU.
+difficulty: intermediate
+estMinutes: 13
+prereqs:
+  - game-math/coordinate-spaces
+leadsTo:
+  - rendering/rasterization
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import PipelineStageWalkthrough from '../../../components/demos/PipelineStageWalkthrough.tsx';
+
+## The hook: sixty times a second, a tiny factory
+
+Right now your game is rendering at 60 frames per second. That means sixty times every second, the GPU takes a pile of raw 3D points — the corners of every character, wall, and tree — and turns them into the exact grid of colored pixels glowing on your screen. It is an assembly line: points go in one end, a finished image comes out the other, and each station along the way does one well-defined job. That assembly line is the **rendering pipeline**, and understanding its stages is the map for everything else in this track.
+
+<Callout type="intuition" title="The one-sentence idea">
+The **rendering pipeline** is a fixed sequence of stages that transforms 3D **vertices** into 2D **pixels** — transform, clip, rasterize, shade, output — repeated for every frame.
+</Callout>
+
+## Intuition: the journey of a single triangle
+
+In the previous lesson you followed a point as it moved through **coordinate spaces** — from **local** space, to **world** space, to **view** space, to **clip** space, and finally to **screen** space. The rendering pipeline is what *performs* that journey, and it does much more than move points around.
+
+Almost everything you see is built from **triangles** (three vertices each), because a triangle is the simplest flat shape and the GPU is brutally fast at handling billions of them. So follow one triangle from start to finish:
+
+1. **Vertex input** — the GPU is handed three corner points plus their data (position, color, texture coordinates).
+2. **Vertex transform** — each point is multiplied through the model, view, and projection matrices, ending up in clip space.
+3. **Clipping** — anything outside the camera's view box is trimmed away so the GPU never wastes effort on it.
+4. **Rasterization** — the triangle is sampled against the pixel grid, producing **fragments** (candidate pixels).
+5. **Fragment shading** — a tiny program runs for each fragment to decide its color.
+6. **Output** — surviving fragments are written into the **framebuffer**, the image that gets shown.
+
+## Play with it
+
+Step one triangle through the whole pipeline. Press **Next stage** (or tap the canvas) and watch the same triangle change representation at each station — from loose dots, to a transformed shape, to clipped, to a coarse grid of pixels, to shaded color, to the final image.
+
+<PipelineStageWalkthrough client:visible />
+
+<Callout type="tip">
+Notice the big shift at the rasterization stage: before it, everything is smooth geometry (points and edges); after it, everything is discrete pixels. That single boundary is where "math about shapes" becomes "an actual image."
+</Callout>
+
+## The formal definition
+
+The pipeline is a function composition. A vertex's position $\mathbf{p}_{\text{local}}$ becomes a clip-space position through the **Model-View-Projection** chain:
+
+$$
+\mathbf{p}_{\text{clip}} = M_{\text{proj}}\, M_{\text{view}}\, M_{\text{model}}\, \mathbf{p}_{\text{local}}.
+$$
+
+Each matrix handles one leg of the journey: $M_{\text{model}}$ places the object in the world, $M_{\text{view}}$ moves the world in front of the camera, and $M_{\text{proj}}$ squashes the 3D view into a clip cube. In a vertex shader this is almost literally one line:
+
+```glsl
+// runs once per vertex
+gl_Position = projection * view * model * vec4(localPos, 1.0);
+```
+
+After clipping, the hardware divides by the $w$ component (the **perspective divide**) and maps the result to pixel coordinates, where rasterization and shading take over.
+
+<Callout type="why">
+Knowing the stage order tells you *where a bug lives*. Geometry in the wrong place is a transform problem; jagged or missing pixels is a rasterization problem; wrong colors is a shading problem. The pipeline is your debugging map.
+</Callout>
+
+## The same idea, across very different games
+
+Every game ships the same pipeline, but each one stresses a different stage.
+
+<ExampleCard domain="Open-world" icon="🌄">
+A vast open-world game feeds **millions of vertices** per frame for distant terrain and foliage. To survive, it leans on early pipeline stages: cull whole objects before the vertex stage, and swap in lower-detail meshes far away so fewer vertices ever enter the transform step.
+</ExampleCard>
+
+<ExampleCard domain="Mobile performance" icon="📱">
+On a phone, the **fragment shading** stage is usually the bottleneck because the screen has many pixels and the chip is power-limited. Mobile engines fight overdraw — the same pixel being shaded several times — so that each fragment runs through the shader as few times as possible.
+</ExampleCard>
+
+<ExampleCard domain="Virtual reality" icon="🥽">
+A VR headset runs the entire pipeline **twice per frame**, once per eye, at very high refresh rates. The clipping and projection stages differ slightly between eyes, and missing the frame budget causes nausea — so the pipeline's timing is non-negotiable.
+</ExampleCard>
+
+<ExampleCard domain="Real-time strategy" icon="♟️">
+An RTS draws hundreds of identical units, so it uses **instancing**: one mesh enters the vertex stage once, and the GPU stamps it out many times with different model matrices. The pipeline runs per instance, but the geometry only travels down it conceptually once.
+</ExampleCard>
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the correct order of these pipeline stages?',
+      options: [
+        'Rasterization, vertex transform, fragment shading, output',
+        'Vertex transform, clipping, rasterization, fragment shading, output',
+        'Fragment shading, rasterization, clipping, vertex transform',
+        'Clipping, output, vertex transform, rasterization',
+      ],
+      answer: 1,
+      explain: 'Vertices are transformed, then clipped, then rasterized into fragments, then shaded, then written out to the framebuffer.',
+    },
+    {
+      q: 'At which stage does smooth geometry first become discrete pixels (fragments)?',
+      options: ['Vertex transform', 'Clipping', 'Rasterization', 'Output'],
+      answer: 2,
+      explain: 'Rasterization samples the triangle against the pixel grid, turning continuous shapes into discrete fragments.',
+    },
+    {
+      q: 'A vertex shader runs gl_Position = projection * view * model * pos. Which space is the result in?',
+      options: ['Local space', 'World space', 'View space', 'Clip space'],
+      answer: 3,
+      explain: 'Applying all three matrices (model, then view, then projection) lands the position in clip space, ready for the perspective divide.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>rendering pipeline</strong> turns 3D vertices into 2D pixels through a fixed sequence of stages, every frame.',
+    'The order is <strong>vertex transform → clipping → rasterization → fragment shading → output</strong>.',
+    'Geometry is moved through coordinate spaces by the <strong>Model-View-Projection</strong> matrix chain.',
+    '<strong>Rasterization</strong> is the boundary where continuous shapes become discrete pixels (fragments).',
+    'Knowing which stage does what turns rendering bugs into a quick <strong>process of elimination</strong>.',
+  ]}
+/>
+
+Next up: **rasterization** — a close look at the stage where triangles actually become filled pixels, using edge functions and barycentric coordinates.

@@ -1,58 +1,72 @@
 ---
 import Layout from '../components/Layout.astro';
-import { TRACKS, ALL_LESSONS, TOTAL_COUNT } from '../data/curriculum';
+import { ALL_LESSONS, TOTAL_COUNT, COURSES, tracksForCourse } from '../data/curriculum';
 import { getReadySlugs } from '../lib/lessons';
 import { url } from '../lib/url';
 
 const readySet = await getReadySlugs();
 const READY_COUNT = readySet.size;
 
-// Curated showcase lessons (the most interactive demos) for "Start here".
+// Per-course stats + a "start here" link.
+const courseCards = COURSES.map((c) => {
+  const tracks = tracksForCourse(c.id);
+  const slugs = tracks.flatMap((t) => t.lessons.map((l) => `${t.id}/${l.id}`));
+  const ready = slugs.filter((s) => readySet.has(s)).length;
+  const firstTrack = tracks[0];
+  const start = firstTrack ? `${firstTrack.id}/${firstTrack.lessons[0].id}` : '';
+  return { ...c, trackCount: tracks.length, lessonCount: slugs.length, ready, start };
+});
+
+// Curated showcase lessons (the most interactive demos).
 const FEATURED = [
   'linear-algebra/vectors',
   'calculus-1/derivative',
-  'probability/random-variables',
+  'transformers/attention',
   'trigonometry/unit-circle',
 ];
 const flagships = FEATURED
   .map((slug) => ALL_LESSONS.find((l) => l.slug === slug))
   .filter((l): l is NonNullable<typeof l> => Boolean(l) && readySet.has(l!.slug));
-import { STAGES } from '../data/curriculum';
-const stageGroups = STAGES
-  .map((label) => ({ label, tracks: TRACKS.filter((t) => t.stage === label) }))
-  .filter((g) => g.tracks.length > 0);
 ---
 
 <Layout>
   <!-- Hero -->
   <section class="animate-fade-up py-6 text-center sm:py-10">
     <p class="mb-4 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-1.5 text-sm font-semibold text-muted">
-      🚀 From absolute beginner → machine-learning ready
+      🎓 Two interactive courses · from first principles to the frontier
     </p>
     <h1 class="mx-auto max-w-3xl text-4xl font-extrabold leading-tight tracking-tight sm:text-5xl md:text-6xl">
-      The <span class="text-brand">maths behind machine learning</span>, finally made intuitive
+      Learn the <span class="text-brand">hard things</span>, finally made intuitive
     </h1>
     <p class="mx-auto mt-5 max-w-2xl text-lg text-muted">
-      A complete, interactive course — algebra, geometry, trigonometry, calculus, linear algebra,
-      probability and statistics. Every idea is built on the last, explained with simple animations,
-      hands-on demos and fresh real-world examples each time.
+      Pick a path below. Every idea is built on the last and explained with plain language, simple
+      animations, hands-on interactive demos and fresh real-world examples each time.
     </p>
-    <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
-      <a href={url('/linear-algebra/vectors')} class="rounded-xl bg-brand px-6 py-3.5 font-semibold text-white shadow-lg transition hover:brightness-110">
-        Start with Vectors →
+    <p class="mt-5 text-sm text-muted">{READY_COUNT} interactive lessons live · {TOTAL_COUNT} mapped across both courses</p>
+  </section>
+
+  <!-- Course chooser -->
+  <section class="mt-6 grid gap-5 md:grid-cols-2">
+    {courseCards.map((c) => (
+      <a href={c.start ? url(`/${c.start}`) : url('/path')} class="group flex flex-col rounded-2xl border border-border bg-surface p-7 transition hover:-translate-y-0.5 hover:border-brand hover:shadow-lg">
+        <div class="text-5xl">{c.icon}</div>
+        <h2 class="mt-4 text-2xl font-extrabold group-hover:text-brand">{c.title}</h2>
+        <p class="mt-2 flex-1 text-muted">{c.blurb}</p>
+        <div class="mt-4 flex flex-wrap gap-2 text-xs font-semibold">
+          <span class="rounded-full bg-surface-2 px-2.5 py-1 text-muted">{c.trackCount} tracks</span>
+          <span class="rounded-full bg-surface-2 px-2.5 py-1 text-muted">{c.lessonCount} lessons</span>
+          <span class="rounded-full bg-calculus/15 px-2.5 py-1 text-calculus">{c.ready} ready</span>
+        </div>
+        <span class="mt-5 inline-block font-semibold text-brand">Start learning →</span>
       </a>
-      <a href={url('/path')} class="rounded-xl border border-border bg-surface px-6 py-3.5 font-semibold transition hover:border-brand">
-        See the full path
-      </a>
-    </div>
-    <p class="mt-5 text-sm text-muted">{READY_COUNT} interactive lessons ready · {TOTAL_COUNT} mapped across {TRACKS.length} tracks</p>
+    ))}
   </section>
 
   <!-- What makes it different -->
-  <section class="mt-12 grid gap-4 sm:grid-cols-3">
+  <section class="mt-14 grid gap-4 sm:grid-cols-3">
     {[
       { icon: '🧠', t: 'Intuition first', d: 'Understand the idea before any formula. Pictures and plain language lead every lesson.' },
-      { icon: '🎮', t: 'Learn by doing', d: 'Drag, slide and simulate. Interactive demos turn abstract math into something you can feel.' },
+      { icon: '🎮', t: 'Learn by doing', d: 'Drag, slide and simulate. Interactive demos turn abstract ideas into something you can feel.' },
       { icon: '🌍', t: 'Always a new example', d: 'Each concept is shown through several different real-world stories — never the same one twice.' },
     ].map((f) => (
       <div class="rounded-2xl border border-border bg-surface p-6">
@@ -66,7 +80,7 @@ const stageGroups = STAGES
   <!-- Flagship lessons -->
   <section class="mt-14">
     <h2 class="text-2xl font-extrabold">Start here — fully interactive lessons</h2>
-    <p class="mt-1 text-muted">Polished, end-to-end examples of how every topic will be taught.</p>
+    <p class="mt-1 text-muted">Polished, end-to-end examples of how every topic is taught.</p>
     <div class="mt-5 grid gap-4 sm:grid-cols-2">
       {flagships.map((l) => (
         <a href={url(`/${l.slug}`)} class="group rounded-2xl border border-border bg-surface p-5 transition hover:-translate-y-0.5 hover:border-brand hover:shadow-lg">
@@ -82,38 +96,9 @@ const stageGroups = STAGES
     </div>
   </section>
 
-  <!-- The learning path overview -->
-  <section class="mt-14">
-    <h2 class="text-2xl font-extrabold">The learning journey</h2>
-    <p class="mt-1 text-muted">From the basics all the way to building LLMs — one connected path.</p>
-
-    {stageGroups.map((group) => (
-      <div class="mt-6">
-        <p class="mb-3 text-xs font-bold uppercase tracking-wider text-muted">{group.label}</p>
-        <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {group.tracks.map((t) => {
-            const ready = t.lessons.filter((l) => readySet.has(`${t.id}/${l.id}`)).length;
-            const first = t.lessons[0];
-            return (
-              <a href={url(`/${t.id}/${first.id}`)} class="group rounded-xl border border-border bg-surface p-4 transition hover:border-brand">
-                <div class="flex items-center justify-between">
-                  <span class="text-2xl">{t.icon}</span>
-                  <span class="text-xs text-muted">{t.lessons.length} lessons</span>
-                </div>
-                <h3 class="mt-2 font-bold group-hover:text-brand">{t.title}</h3>
-                <p class="mt-1 text-sm text-muted">{t.blurb}</p>
-                {ready > 0 && <span class="mt-2 inline-block rounded bg-calculus/15 px-2 py-0.5 text-xs font-semibold text-calculus">{ready} ready</span>}
-              </a>
-            );
-          })}
-        </div>
-      </div>
-    ))}
-  </section>
-
   <section class="mt-16 rounded-2xl border border-brand/30 bg-brand-soft p-8 text-center">
-    <h2 class="text-2xl font-extrabold text-brand">Ready to build your foundation?</h2>
-    <p class="mx-auto mt-2 max-w-xl text-muted">No prior maths confidence required. Start at the very beginning and let each lesson carry you to the next.</p>
-    <a href={url('/path')} class="mt-6 inline-block rounded-xl bg-brand px-6 py-3.5 font-semibold text-white shadow-lg transition hover:brightness-110">Open the learning path →</a>
+    <h2 class="text-2xl font-extrabold text-brand">See everything at a glance</h2>
+    <p class="mx-auto mt-2 max-w-xl text-muted">Browse the full curriculum of both courses — every stage, track and lesson in order.</p>
+    <a href={url('/path')} class="mt-6 inline-block rounded-xl bg-brand px-6 py-3.5 font-semibold text-white shadow-lg transition hover:brightness-110">Open the learning paths →</a>
   </section>
 </Layout>
