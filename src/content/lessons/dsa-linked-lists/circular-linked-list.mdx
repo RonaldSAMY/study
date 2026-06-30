@@ -1,0 +1,298 @@
+---
+title: Circular Linked Lists
+track: dsa-linked-lists
+summary: "Point the tail back at the head so the list has no end: a ring you can loop forever, powering round-robin schedulers and the Josephus problem."
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - dsa-linked-lists/doubly-linked-list
+leadsTo:
+  - dsa-stacks/stack-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import LLCircularJosephus from '../../../components/demos/LLCircularJosephus.tsx';
+
+## The hook: a playlist that never ends
+
+You hit "repeat all" on a playlist, the last song finishes, and instead of stopping it rolls straight
+back to the first. There is no end of the list — the last node simply points back to the first. That is
+a **circular linked list**: a normal chain whose `tail.next` is the `head` rather than `null`. From any
+node you can keep walking and you will visit every node forever, looping around again and again. It is
+the natural shape for anything that takes **turns in a cycle** — players in a board game, processes
+sharing a CPU, or the seats in the gruesome counting game we will solve below.
+
+<Callout type="intuition" title="The one-sentence idea">
+A circular linked list is a singly (or doubly) linked list whose last node points back to the first, so
+the chain has no <code>null</code> end — you can traverse it endlessly in a loop.
+</Callout>
+
+## Intuition: close the loop
+
+Take an ordinary singly linked list `A → B → C` and make one change: instead of `C.next = null`, set
+`C.next = A`. Now the structure is a ring. The list still keeps a `head` (a starting point) and usually a
+`tail`, but the defining feature is that **walking `next` never hits `null`** — after the tail you are
+back at the head.
+
+Two consequences fall out immediately. First, **insertion at both ends is O(1)** when you keep a `tail`
+pointer: to append, you splice a node between `tail` and `head` and move `tail` forward — no walk needed.
+Second, **traversal needs a stop condition you choose yourself**. A plain `while (current !== null)` loop
+would spin forever, so instead you loop a fixed number of times (`length`) or until you return to the
+node you started from.
+
+The price is care. Every algorithm must guard against the infinite loop, and an empty list is a special
+case (there is no node to point back to). Get those right and the ring is a beautifully simple structure.
+
+## Play with it
+
+Switch to **Ring walk** and press Play: the `current` pointer steps around and, at the tail, **wraps
+straight back to the head** along the amber `tail → head` link — the loop has no end. Then switch to
+**Josephus**: `n` people stand in a circle and every `k`-th one is eliminated until a single survivor
+remains. Change `n` and `k` and watch the ring shrink, re-linking itself around each removed person.
+
+<LLCircularJosephus client:visible />
+
+<Callout type="tip">
+Watch the <strong>amber arrow</strong> — it is the <code>tail.next = head</code> link that closes the
+ring. In Josephus, notice the ring keeps <em>re-closing</em> after each elimination: removing a node is
+just pointing its predecessor's <code>next</code> past it, exactly like a normal singly linked list.
+</Callout>
+
+## How it works
+
+To **append** to a circular list that keeps a `tail`, you never traverse — you splice between tail and
+head in three writes:
+
+```
+before:  head → A → B → (tail)C → [back to head]
+step 1:  newNode.next = head      // new node closes the ring to the front
+step 2:  tail.next = newNode      // old tail points to the new node
+step 3:  tail = newNode           // the new node is the tail
+after:   head → A → B → C → (tail)D → [back to head]
+```
+
+To **traverse safely**, loop exactly `length` times (or stop when you come back to `head`) so you never
+spin forever:
+
+<CodeRunner
+  client:visible
+  code={`function build(arr) {
+  let head = null, tail = null, length = 0;
+  for (const v of arr) {
+    const node = { value: v, next: null };
+    if (!head) { head = node; tail = node; node.next = node; }   // ring of one
+    else { node.next = head; tail.next = node; tail = node; }    // splice at end
+    length++;
+  }
+  return { head, tail, length };
+}
+
+// Visit every node exactly once, then stop — no infinite loop.
+function toArray(list) {
+  const out = [];
+  let cur = list.head;
+  for (let i = 0; i < list.length; i++) { out.push(cur.value); cur = cur.next; }
+  return out;
+}
+
+// Proof it is circular: after the tail we are back at the head.
+function wrapsAround(list) {
+  return list.tail.next === list.head;
+}
+
+// Josephus: every k-th person leaves until one remains (1-indexed survivor).
+function josephus(n, k) {
+  const list = build(Array.from({ length: n }, (_, i) => i + 1));
+  let prev = list.tail, cur = list.head, remaining = n;
+  while (remaining > 1) {
+    for (let i = 1; i < k; i++) { prev = cur; cur = cur.next; }  // count k-1 hops
+    prev.next = cur.next;                                         // splice out cur
+    cur = cur.next;                                               // resume after it
+    remaining--;
+  }
+  return cur.value;
+}`}
+  tests={[
+    { expr: 'toArray(build([10, 20, 30]))', label: 'walk the ring once' },
+    { expr: 'wrapsAround(build([10, 20, 30]))', label: 'tail.next === head?' },
+    { expr: 'josephus(7, 3)', label: 'survivor of n=7, k=3' },
+  ]}
+/>
+
+The Josephus call returns `4`: with 7 people counting off by 3, person 4 is the last one standing — the
+very result the demo animates.
+
+## The real implementation
+
+From the course's circular linked list — the O(1) end inserts that splice the ring closed, plus the
+`rotate` that advances the start by moving `head` and `tail` forward together:
+
+```ts
+// /dsa/05-linked-list/circular-linked-list.ts
+interface CircularNode<T> { value: T; next: CircularNode<T>; }
+
+class CircularLinkedList<T> {
+    head: CircularNode<T> | null = null;
+    tail: CircularNode<T> | null = null;
+    length: number = 0;
+
+    // O(1) — splice a node between tail and head, then move tail
+    insertLast(value: T): this {
+        const newNode = { value } as CircularNode<T>;
+        if (!this.head) {
+            newNode.next = newNode;          // a ring of one points to itself
+            this.head = newNode;
+            this.tail = newNode;
+        } else {
+            newNode.next = this.head;        // close the ring to the front
+            this.tail!.next = newNode;       // old tail -> new node
+            this.tail = newNode;             // new node is the tail
+        }
+        this.length++;
+        return this;
+    }
+
+    // O(k) — rotate the ring by advancing the start k positions
+    rotate(k: number): this {
+        if (!this.head || this.length <= 1 || k === 0) return this;
+        k = ((k % this.length) + this.length) % this.length;
+        for (let i = 0; i < k; i++) {
+            this.tail = this.head;
+            this.head = this.head!.next;
+        }
+        return this;
+    }
+}
+```
+
+Run the full file: `npx tsx 05-linked-list/circular-linked-list.ts`. The same file also ships a
+`josephus(n, k)` solver and a `roundRobinScheduler` built on `rotate`.
+
+<Callout type="why">
+Because the ring has no start or end, <code>rotate</code> is just relabelling which node you call the
+head — no data moves. That is why a circular list is the perfect queue for a <strong>round-robin
+scheduler</strong>: each tick, <code>rotate(1)</code> hands the CPU to the next process in O(1), and
+after the last one it naturally returns to the first.
+</Callout>
+
+## Complexity
+
+You keep the linked list's cheap ends and pay only in the care your traversals need:
+
+$$
+T_{\text{insertFirst}} = T_{\text{insertLast}} = O(1), \qquad T_{\text{search}} = O(n), \qquad S = O(n).
+$$
+
+| Operation | Cost | Note |
+|-----------|------|------|
+| Insert first / last | $O(1)$ | with a `tail` pointer, no walk |
+| Delete first | $O(1)$ | re-point `tail.next` to the new head |
+| Search / access by index | $O(n)$ | must walk the ring |
+| Rotate by $k$ | $O(k)$ | move `head`/`tail` forward $k$ times |
+| Josephus ($n$ people, step $k$) | $O(n \cdot k)$ | $n-1$ eliminations, each $k$ hops |
+
+The danger is never the cost — it is the **infinite loop**. A traversal that forgets to stop after
+`length` nodes (or to check for `head` again) runs forever.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Operating systems" icon="🖥️">
+A round-robin CPU scheduler keeps ready processes in a circular list. Each time slice, the scheduler runs
+the head process, then rotates to the next; after the last process it loops back to the first, giving
+everyone a fair turn forever.
+</ExampleCard>
+
+<ExampleCard domain="Board games" icon="🎲">
+Turn order in Monopoly or Uno is a ring of players. After the last player, play returns to the first.
+"Reverse" simply means following <code>prev</code> instead of <code>next</code> in a doubly circular
+list.
+</ExampleCard>
+
+<ExampleCard domain="Audio & streaming" icon="🔁">
+"Repeat all" on a music player is a circular playlist: the final track's <code>next</code> is the first
+track, so playback loops without ever hitting an end.
+</ExampleCard>
+
+<ExampleCard domain="History" icon="⚔️">
+The Josephus problem comes from the legend of Flavius Josephus and 40 soldiers in a circle, each killing
+the next until one survives. Modelling the circle as a ring and splicing out every $k$-th node solves it
+directly.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The infinite loop.** Never write `while (current !== null)` on a circular list — there is no
+  `null`. Loop `length` times, or stop when you return to the node you started from.
+- **The empty-list special case.** The first inserted node must point to **itself** (`node.next =
+  node`); forgetting this leaves a dangling `next` and breaks the ring.
+- **Keep `tail` in sync.** O(1) end-insertion relies on `tail`. If you delete the tail or head, re-point
+  `tail.next` to the new head so the ring stays closed.
+- **Interview cue:** "round-robin", "take turns in a cycle", or "every k-th element is removed" points
+  straight at a circular linked list. For Josephus, mention that a circular list gives the intuitive
+  $O(n \cdot k)$ simulation, while a math recurrence can do it in $O(n)$.
+
+## Practice
+
+1. **Easy:** Given `A → B → C` as a ring, write the single pointer change that turns the plain list
+   `C.next = null` into a circular one.
+2. **Easy:** Write `toArray` for a circular list that stops after exactly `length` nodes.
+3. **Medium:** Implement `deleteFirst` that keeps the ring closed by updating `tail.next`.
+4. **Medium:** Implement `rotate(k)` by advancing `head` and `tail` forward `k` times.
+5. **Hard:** Solve the Josephus problem two ways — simulate it with a circular list in $O(n \cdot k)$,
+   then with the recurrence $J(1)=0,\ J(m)=(J(m-1)+k)\bmod m$ in $O(n)$ — and check they agree.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What single property makes a linked list circular?',
+      options: [
+        'Every node has a prev pointer',
+        'The tail node points back to the head instead of to null',
+        'The nodes are stored in an array',
+        'The list is kept sorted',
+      ],
+      answer: 1,
+      explain: 'A circular list sets tail.next = head, so walking next never reaches null — the chain has no end.',
+    },
+    {
+      q: 'Why must you be careful when traversing a circular linked list?',
+      options: [
+        'Access is O(1) so it finishes too fast',
+        'There is no null terminator, so a naive loop runs forever',
+        'It cannot store more than length nodes',
+        'Insertion is O(n)',
+      ],
+      answer: 1,
+      explain: 'With no null end, you must stop after length nodes (or when you return to the start) to avoid an infinite loop.',
+    },
+    {
+      q: 'Which problem is the circular linked list a natural fit for?',
+      options: [
+        'Binary search on sorted data',
+        'Round-robin scheduling where turns cycle endlessly',
+        'Finding the shortest path in a graph',
+        'Hashing keys into buckets',
+      ],
+      answer: 1,
+      explain: 'Cyclic turn-taking — CPU scheduling, board-game turns, repeat-all playlists — maps directly onto a ring whose tail loops to the head.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A circular linked list sets <strong>tail.next = head</strong>, so the chain has <strong>no null end</strong> and loops forever.',
+    'With a <code>tail</code> pointer, insert at <strong>both ends is O(1)</strong>; search and access stay O(n).',
+    'Traverse by looping <strong>exactly length times</strong> (or until you return to the start) — never test for null.',
+    'The first node in an empty list must point to <strong>itself</strong>; keep <code>tail</code> in sync on every delete.',
+    'Rings power <strong>round-robin schedulers, turn order, repeat-all playlists, and the Josephus problem</strong>.',
+  ]}
+/>
+
+Next up: **Stacks** — the last-in, first-out structure behind undo buttons, the call stack, and
+expression parsing.
