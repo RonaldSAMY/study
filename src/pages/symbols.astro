@@ -1,0 +1,99 @@
+---
+import Layout from '../components/Layout.astro';
+import { SYMBOL_GROUPS, ABBREVIATIONS } from '../data/symbols';
+import katex from 'katex';
+
+const render = (tex: string) =>
+  katex.renderToString(tex, { throwOnError: false, displayMode: false });
+
+const totalSymbols = SYMBOL_GROUPS.reduce((n, g) => n + g.symbols.length, 0);
+---
+
+<Layout title="Symbols & Notation · LearnLab" description="A clear reference for the mathematical symbols and notation used across the courses — every symbol explained in plain language.">
+  <header class="animate-fade-up">
+    <h1 class="text-3xl font-extrabold sm:text-4xl">🔣 Symbols &amp; Notation</h1>
+    <p class="mt-3 max-w-2xl text-lg text-muted">
+      A plain-language key to the {totalSymbols} mathematical symbols used throughout the courses —
+      the "Table of Symbols" from <em>Mathematics for Machine Learning</em>, explained clearly.
+      Formulas stop being scary once you can read the alphabet.
+    </p>
+
+    <div class="relative mt-6 max-w-md">
+      <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+      <input
+        id="symbol-filter"
+        type="search"
+        placeholder="Filter symbols… (e.g. gradient, norm, expectation)"
+        aria-label="Filter symbols"
+        class="w-full rounded-xl border border-border bg-surface-2 py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-brand focus:bg-surface"
+      />
+    </div>
+  </header>
+
+  {SYMBOL_GROUPS.map((group) => (
+    <section class="mt-10 symbol-group">
+      <div class="mb-4 flex items-center gap-3">
+        <h2 class="text-2xl font-extrabold">{group.title}</h2>
+        <span class="h-px flex-1 bg-border"></span>
+      </div>
+      <p class="mb-4 text-muted">{group.blurb}</p>
+
+      <div class="grid gap-3 sm:grid-cols-2">
+        {group.symbols.map((s) => (
+          <div
+            class="symbol-row flex items-start gap-4 rounded-xl border border-border bg-surface p-4"
+            data-search={`${s.name} ${s.meaning}`.toLowerCase()}
+          >
+            <div class="grid min-w-[4.5rem] shrink-0 place-items-center rounded-lg bg-surface-2 px-3 py-2 text-lg" set:html={render(s.tex)} />
+            <div class="min-w-0">
+              <p class="font-bold">{s.name}</p>
+              <p class="mt-0.5 text-sm text-muted">{s.meaning}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  ))}
+
+  <section class="mt-12 symbol-group">
+    <div class="mb-4 flex items-center gap-3">
+      <h2 class="text-2xl font-extrabold">Abbreviations &amp; acronyms</h2>
+      <span class="h-px flex-1 bg-border"></span>
+    </div>
+    <div class="grid gap-2 sm:grid-cols-2">
+      {ABBREVIATIONS.map((a) => (
+        <div class="symbol-row flex items-baseline gap-3 rounded-lg border border-border bg-surface px-4 py-2.5" data-search={`${a.short} ${a.full}`.toLowerCase()}>
+          <span class="min-w-[3.5rem] font-mono font-bold text-brand">{a.short}</span>
+          <span class="text-sm text-muted">{a.full}</span>
+        </div>
+      ))}
+    </div>
+  </section>
+
+  <p id="symbol-empty" class="mt-10 hidden text-center text-muted">No symbols match your filter.</p>
+
+  <script is:inline>
+    (() => {
+      const input = document.getElementById('symbol-filter');
+      const rows = Array.from(document.querySelectorAll('.symbol-row'));
+      const groups = Array.from(document.querySelectorAll('.symbol-group'));
+      const empty = document.getElementById('symbol-empty');
+      if (!input) return;
+      input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        let anyVisible = false;
+        rows.forEach((r) => {
+          const hit = !q || (r.getAttribute('data-search') || '').includes(q);
+          r.classList.toggle('hidden', !hit);
+          if (hit) anyVisible = true;
+        });
+        // Hide a group whose rows are all filtered out.
+        groups.forEach((g) => {
+          const visible = g.querySelectorAll('.symbol-row:not(.hidden)').length;
+          g.classList.toggle('hidden', visible === 0);
+        });
+        empty?.classList.toggle('hidden', anyVisible);
+      });
+    })();
+  </script>
+</Layout>
