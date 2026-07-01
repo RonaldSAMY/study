@@ -1,0 +1,264 @@
+---
+title: Meet in the Middle
+track: dsa-misc-algorithms
+summary: "Meet in the middle: split an exponential search into two halves, enumerate each, and combine them by sorted lookup to turn 2^n into 2^(n/2)."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-misc-algorithms/mos-algorithm
+leadsTo:
+  - dsa-misc-algorithms/coordinate-compression
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MiscMeetMiddle from '../../../components/demos/MiscMeetMiddle.tsx';
+
+## The hook: two square roots beat one giant
+
+You have 40 items and want to know whether some subset sums to a target. There are $2^{40} \approx 10^{12}$
+subsets — too many to enumerate in a lifetime of a contest. But $2^{20} \approx 10^6$ is instant. **Meet in
+the middle** splits the 40 items into two halves of 20, enumerates all $2^{20}$ subset sums of *each* half
+(cheap), and then asks the combining question: for each left sum $s$, is there a right sum equal to
+$\text{target} - s$? A sorted list plus binary search answers that fast. Two manageable halves, joined in
+the middle, defeat one impossible whole.
+
+<Callout type="intuition" title="The one-sentence idea">
+Split the input in half, enumerate every possibility of each half separately ($2^{n/2}$ instead of $2^n$),
+then combine the two lists with a sorted lookup so each left answer finds its matching right answer quickly.
+</Callout>
+
+## Intuition: why halving the exponent is enormous
+
+An exhaustive search over $n$ binary choices is $2^n$. The key observation is that $2^n = 2^{n/2}\cdot 2^{n/2}$
+— but if the two halves are *independent*, you never need the product. Enumerate the left half's $2^{n/2}$
+outcomes and the right half's $2^{n/2}$ outcomes *separately* (a sum, not a product), then combine.
+
+Combining is the crux. Any full solution picks some subset from the left and some from the right. If a full
+solution must total `target`, and the left part contributes $s$, the right part must contribute exactly
+$\text{target} - s$. So: sort the right sums once, and for each of the $2^{n/2}$ left sums, binary-search the
+complement. The cost becomes
+
+$$
+\underbrace{2^{n/2}}_{\text{enumerate}} + \underbrace{2^{n/2}\log 2^{n/2}}_{\text{sort + search}} = O\!\left(2^{n/2}\cdot n\right),
+$$
+
+which for $n = 40$ is millions, not trillions. You have taken the square root of the search space. The same
+"pick a partner from the other list" pattern also handles *closest* sum (search for the nearest value) and
+*count* (multiply matching multiplicities).
+
+## Play with it
+
+Set a small array and a target. The demo splits it, enumerates the left subset sums and the right subset
+sums, sorts the right list, then — for each left sum — computes the needed complement and **binary-searches
+the right list** for it. A match lights up both partners.
+
+<MiscMeetMiddle client:visible />
+
+<Callout type="tip">
+Count the entries in each column: with $n$ items each side lists only $2^{n/2}$ sums, and their *sum*
+(one column plus the other) is tiny next to the $2^{n}$ subsets of the whole array. That gap is the algorithm.
+</Callout>
+
+## How it works
+
+For `[3, 1, 4, 1, 5, 9]` and target `15`, split into `[3, 1, 4]` and `[1, 5, 9]`:
+
+```
+left subset sums:  0, 3, 1, 4, 4, 7, 5, 8
+right subset sums: 0, 1, 5, 9, 6, 10, 14, 15   → sorted: 0,1,5,6,9,10,14,15
+
+for each left sum s, look for (15 - s) in the right list:
+  s = 4  → need 11  (absent)
+  s = 5  → need 10  ✓ found  → subset {4,1} + {1,9} = 15
+```
+
+One sorted list and a binary search per left sum — no nested loop over all pairs.
+
+<CodeRunner
+  client:visible
+  code={`// Meet in the middle: does any subset sum to target?
+function subsetSum(arr, target) {
+  const mid = arr.length >> 1;
+  const sums = half => {
+    const out = [];
+    for (let mask = 0; mask < (1 << half.length); mask++) {
+      let s = 0;
+      for (let i = 0; i < half.length; i++) if (mask & (1 << i)) s += half[i];
+      out.push(s);
+    }
+    return out;
+  };
+  const left = sums(arr.slice(0, mid));
+  const right = sums(arr.slice(mid)).sort((a, b) => a - b);
+  for (const s of left) {
+    let lo = 0, hi = right.length - 1, need = target - s;
+    while (lo <= hi) {
+      const m = (lo + hi) >> 1;
+      if (right[m] === need) return true;
+      if (right[m] < need) lo = m + 1; else hi = m - 1;
+    }
+  }
+  return false;
+}
+
+// 4Sum II: count tuples (a,b,c,d), one from each array, with a+b+c+d = 0
+function fourSumCount(A, B, C, D) {
+  const ab = new Map();
+  for (const a of A) for (const b of B) ab.set(a + b, (ab.get(a + b) || 0) + 1);
+  let count = 0;
+  for (const c of C) for (const d of D) count += ab.get(-(c + d)) || 0;
+  return count;
+}`}
+  tests={[
+    { expr: 'subsetSum([3,1,4,1,5,9], 15)', label: 'subset sums to 15?' },
+    { expr: 'subsetSum([1,2,3,4,5,6,7,8,9,10], 100)', label: 'sums to 100?' },
+    { expr: 'fourSumCount([1,2],[-2,-1],[-1,2],[0,2])', label: 'LC454 count' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the subset-sum decision plus the *closest-sum* variant, which binary-searches for
+the nearest complement instead of an exact one:
+
+```ts
+// /dsa/25-misc-algorithms/meet-in-middle.ts
+function generateSubsetSums(arr: number[]): number[] {
+    const n = arr.length;
+    const sums: number[] = [];
+    for (let mask = 0; mask < (1 << n); mask++) {
+        let sum = 0;
+        for (let i = 0; i < n; i++) if (mask & (1 << i)) sum += arr[i];
+        sums.push(sum);
+    }
+    return sums;
+}
+
+function closestSubsetSumMITM(arr: number[], target: number): { sum: number; diff: number } {
+    const mid = Math.floor(arr.length / 2);
+    const leftSums = generateSubsetSums(arr.slice(0, mid));
+    const rightSums = generateSubsetSums(arr.slice(mid));
+    rightSums.sort((a, b) => a - b);
+
+    let closest = Infinity, bestSum = 0;
+    for (const leftSum of leftSums) {
+        const needed = target - leftSum;
+        let lo = 0, hi = rightSums.length - 1;          // binary search nearest
+        while (lo <= hi) {
+            const m = Math.floor((lo + hi) / 2);
+            const total = leftSum + rightSums[m];
+            const diff = Math.abs(total - target);
+            if (diff < closest) { closest = diff; bestSum = total; }
+            if (rightSums[m] < needed) lo = m + 1; else hi = m - 1;
+        }
+        if (lo < rightSums.length) {                     // check the boundary neighbour
+            const total = leftSum + rightSums[lo];
+            const diff = Math.abs(total - target);
+            if (diff < closest) { closest = diff; bestSum = total; }
+        }
+    }
+    return { sum: bestSum, diff: closest };
+}
+```
+
+The file also solves *4Sum II*, *Split Array With Same Average*, *Minimize Partition Difference*, and even
+**baby-step giant-step** discrete log — the same split-and-combine in modular arithmetic. Run the full file:
+`npx tsx 25-misc-algorithms/meet-in-middle.ts`.
+
+## Complexity
+
+Halving the exponent is the whole payoff; the extra $\log$ from sorting/searching is a factor of $n$:
+
+$$
+O(2^n) \;\longrightarrow\; O\!\left(2^{n/2}\cdot n\right), \qquad \text{space } O\!\left(2^{n/2}\right).
+$$
+
+| $n$ | Brute force $2^n$ | Meet in the middle $\approx 2^{n/2}n$ |
+|-----|-------------------|----------------------------------------|
+| 20 | $10^6$ | $10^4$ |
+| 30 | $10^9$ | $5\times 10^5$ |
+| 40 | $10^{12}$ | $2\times 10^7$ |
+| 50 | $10^{15}$ | $8\times 10^8$ |
+
+The sweet spot is $n \le 40$ or so: big enough that $2^n$ is hopeless, small enough that $2^{n/2}$ fits in
+memory and time.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cryptography" icon="🔐">
+The classic meet-in-the-middle *attack* on double encryption tries all keys for the first cipher and all
+keys for the second, meeting on the intermediate text — breaking a 2×56-bit scheme with roughly $2^{57}$
+work instead of $2^{112}$. Same split, same sorted-lookup join.
+</ExampleCard>
+
+<ExampleCard domain="Puzzle solving" icon="🧩">
+God's-number searches for a Rubik's cube explore moves from the solved state and from the scrambled state
+until the two frontiers meet in the middle, halving the depth each side must reach.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💹">
+Choosing a subset of trades whose net exposure is as close as possible to a hedge target: split the
+candidate trades, enumerate each half's exposures, and binary-search for the complementary exposure.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Memory is the real ceiling.** You store $2^{n/2}$ sums. At $n = 50$ that is $2^{25} \approx 33$M
+  numbers — often the limiting factor before time is.
+- **Halves must be independent.** The technique needs the combine step to depend only on each half's summary
+  (its sum, its exposure). If the result depends on interleaving order, you cannot split cleanly.
+- **Exact vs. closest search.** For an exact target, binary-search for equality; for the closest sum, search
+  for the insertion point and check *both* neighbours — forgetting the neighbour misses the true nearest.
+- **Track sizes/masks when needed.** "Same average" and "minimum partition difference" also require the
+  subset *size*, so store `{sum, size}` (or the mask) rather than a bare sum.
+- **Interview cue:** a subset/combination problem with $n$ around 30–45 and no polynomial DP (targets or
+  values too large to index) is the meet-in-the-middle tell. Say "split, enumerate halves, join sorted."
+
+## Practice
+
+1. **Easy:** How many subset sums does each half produce for $n = 8$? For the whole array?
+2. **Easy:** For `[2, 4, 6, 8]` and target `10`, list the two halves' subset sums and find a match.
+3. **Medium:** Modify the decision version to *count* subsets summing to the target using a frequency map.
+4. **Medium:** Adapt it to find the subset sum **closest** to a target without exceeding it.
+5. **Hard:** Solve *Minimize Partition Difference* by grouping subset sums by size $k$ and binary-searching per size.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Meet in the middle reduces an exhaustive subset search from what to what?',
+      options: ['O(n^2) to O(n log n)', 'O(2^n) to O(2^(n/2) · n)', 'O(n!) to O(2^n)', 'O(2^n) to O(n)'],
+      answer: 1,
+      explain: 'Each half enumerates 2^(n/2) possibilities and they are combined with a sort + binary search, giving O(2^(n/2) · n) — the square root of the original space.',
+    },
+    {
+      q: 'When combining, if the left subset contributes sum s and the target is T, what do you search for in the right list?',
+      options: ['s', 'T', 'T − s', 'T + s'],
+      answer: 2,
+      explain: 'A full solution splits as left + right = T, so given left = s the right part must equal T − s. Binary-search the sorted right sums for that complement.',
+    },
+    {
+      q: 'What most often limits meet in the middle as n grows past ~45?',
+      options: ['CPU cache misses', 'Storing 2^(n/2) values exhausts memory', 'Floating point error', 'The sort becomes unstable'],
+      answer: 1,
+      explain: 'You must materialize 2^(n/2) subset sums; the memory to hold both lists usually caps the technique before running time does.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Split the input in half and enumerate each half\'s <strong>2^(n/2)</strong> possibilities <strong>separately</strong>, not their product.',
+    'Combine by fixing the left contribution and searching the sorted right list for the <strong>complement (target − left)</strong>.',
+    'This takes an exhaustive search from <strong>O(2^n) down to O(2^(n/2) · n)</strong> — the square root of the space.',
+    'It fits when <strong>n ≈ 30–45</strong> and no polynomial DP applies; <strong>memory for 2^(n/2) values</strong> is the usual limit.',
+    'The same split-and-join powers <strong>double-encryption attacks, bidirectional search, and baby-step giant-step</strong> discrete log.',
+  ]}
+/>
+
+Next up: **Coordinate Compression** — a humble but essential trick that shrinks huge, sparse values down to
+tiny ranks so array-indexed structures suddenly fit.

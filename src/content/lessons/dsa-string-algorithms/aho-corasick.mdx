@@ -1,0 +1,236 @@
+---
+title: Aho-Corasick
+track: dsa-string-algorithms
+summary: "Build one automaton from a whole dictionary: a trie of patterns wired with failure links matches thousands of keywords in a single pass over the text."
+difficulty: advanced
+estMinutes: 19
+prereqs:
+  - dsa-string-algorithms/manacher
+  - dsa-strings/pattern-matching-kmp
+leadsTo:
+  - dsa-string-algorithms/suffix-array
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SAlgAhoCorasick from '../../../components/demos/SAlgAhoCorasick.tsx';
+
+## The hook: match a whole dictionary in one sweep
+
+Single-pattern search is solved many times over. But real systems ask a harder question: *does this text contain any of these ten thousand keywords?* — spam terms, virus signatures, banned words, gene motifs. Running one search per pattern costs $O(k \cdot n)$ and re-reads the text $k$ times. Aho-Corasick reads the text **once**, in $O(n + z)$ where $z$ is the number of matches, no matter how many patterns you loaded. It does this by fusing all patterns into a single automaton and giving it a KMP-style "where do I fall back to?" wire at every node.
+
+<Callout type="intuition" title="The one-sentence idea">
+Store all patterns in a trie, then add a failure link at each node pointing to the longest proper suffix that is also a node — so one mismatch reroutes the automaton instead of restarting the scan.
+</Callout>
+
+## Intuition
+
+You already know **KMP**: precompute, for a single pattern, a failure function that says "after a mismatch, resume here" so the text pointer never backs up. Aho-Corasick is KMP generalized from one string to a *set* of strings, with a trie as the backbone.
+
+Two structures make it work:
+
+1. **The trie (goto).** Insert every pattern; shared prefixes share a path. Following a character from a node walks deeper into the trie. This is the "what patterns start like what I have read" structure.
+2. **Failure links (fallback).** For a node spelling out string $u$, its failure link points to the node spelling the **longest proper suffix of $u$ that is also present in the trie**. When the current character has no child, we hop along failure links — exactly KMP's fallback, but across all patterns at once. Because a suffix can *end* a shorter pattern, we also chain **output links** so that arriving at "she" also reports the embedded "he".
+
+Build the links with a breadth-first pass (a node's failure link depends only on shallower nodes), then scan the text feeding one character at a time.
+
+## Play with it
+
+Edit the dictionary and the text. Solid edges are the trie; dashed indigo arrows are failure links; an emerald ring marks a node where a pattern ends. Step the text through and watch the active node walk down on a match and hop along a failure link on a miss — never rewinding the text.
+
+<SAlgAhoCorasick client:visible />
+
+<Callout type="tip">
+Load patterns <code>he, she, his, hers</code> and text <code>ushers</code>. When the automaton reaches "she" it also reports "he" via the output link — one position, two matches, still one pass.
+</Callout>
+
+## How it works
+
+Patterns `["he", "she", "his", "hers"]` build this trie; failure links point to the longest suffix that is also a prefix of some pattern:
+
+```
+root ─h─> he ─r─> her ─s─> hers
+   │   └─i─> hi ─s─> his
+   └─s─> sh ─e─> she
+fail("she") → "he"   (suffix "he" is a trie path)
+fail("her") → root   (no proper suffix is a node)
+```
+
+Scanning `"ushers"`: `u`(root) → `s` → `sh` → `she` (report **she**, follow output → report **he**) → `sher`? no child → fail to `her` via `hers` path → report **hers** at the end. All in one left-to-right sweep:
+
+<CodeRunner
+  client:visible
+  code={`function ahoCorasick(patterns, text) {
+  // trie nodes: {children, fail, out}
+  const nodes = [{ children: {}, fail: 0, out: [] }];
+  for (const pat of patterns) {
+    let cur = 0;
+    for (const ch of pat) {
+      if (!(ch in nodes[cur].children)) {
+        nodes.push({ children: {}, fail: 0, out: [] });
+        nodes[cur].children[ch] = nodes.length - 1;
+      }
+      cur = nodes[cur].children[ch];
+    }
+    nodes[cur].out.push(pat);
+  }
+  const queue = [];
+  for (const ch in nodes[0].children) { nodes[nodes[0].children[ch]].fail = 0; queue.push(nodes[0].children[ch]); }
+  while (queue.length) {
+    const u = queue.shift();
+    for (const ch in nodes[u].children) {
+      const c = nodes[u].children[ch];
+      let f = nodes[u].fail;
+      while (f !== 0 && !(ch in nodes[f].children)) f = nodes[f].fail;
+      nodes[c].fail = (ch in nodes[f].children && nodes[f].children[ch] !== c) ? nodes[f].children[ch] : 0;
+      queue.push(c);
+    }
+  }
+  const hits = [];
+  let state = 0;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    while (state !== 0 && !(ch in nodes[state].children)) state = nodes[state].fail;
+    if (ch in nodes[state].children) state = nodes[state].children[ch];
+    for (let t = state; t !== 0; t = nodes[t].fail)
+      for (const pat of nodes[t].out) hits.push([i - pat.length + 1, pat]);
+  }
+  return hits;
+}`}
+  tests={[
+    { expr: 'JSON.stringify(ahoCorasick(["he","she","his","hers"], "ushers"))', label: 'matches in ushers' },
+    { expr: 'JSON.stringify(ahoCorasick(["a","ab","abc"], "abcabc"))', label: 'nested patterns' },
+    { expr: 'JSON.stringify(ahoCorasick(["bad"], "a bad bad day"))', label: 'repeated keyword' },
+  ]}
+/>
+
+## The real implementation
+
+The course file stores nodes in a flat array and BFS-builds both failure and output links; the search follows failure links on a miss and walks output links to collect every match ending at the current position:
+
+```ts
+// /dsa/18-string-algorithms/aho-corasick.ts
+search(text: string): Array<[number, number]> {
+  const results: Array<[number, number]> = [];
+  let state = 0;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    // follow failure links until a child matches or we hit the root
+    while (state !== 0 && !this.nodes[state].children.has(char)) {
+      state = this.nodes[state].failureLink;
+    }
+    if (this.nodes[state].children.has(char)) {
+      state = this.nodes[state].children.get(char)!;
+    }
+    // collect every pattern that ends here, via output links
+    let temp = state;
+    while (temp !== -1 && temp !== 0) {
+      for (const patternIndex of this.nodes[temp].output) {
+        const patternLen = this.patterns[patternIndex].length;
+        results.push([i - patternLen + 1, patternIndex]);
+      }
+      temp = this.nodes[temp].outputLink;
+    }
+  }
+  return results;
+}
+```
+
+Run the full file: `npx tsx 18-string-algorithms/aho-corasick.ts`.
+
+## Complexity
+
+Building the automaton is linear in the total pattern length $m$; scanning is linear in the text plus the number of reported matches $z$. Crucially, adding more patterns does **not** add passes over the text:
+
+$$
+T_{\text{build}} = O(m), \qquad T_{\text{search}} = O(n + z), \qquad S = O(m \cdot |\Sigma|).
+$$
+
+| Approach | Time to search $k$ patterns | Passes over text |
+|----------|------------------------------|------------------|
+| KMP / Boyer-Moore, once per pattern | $O(k \cdot n)$ | $k$ |
+| Rabin-Karp with a hash set (equal lengths) | $O(n + km)$ | 1 |
+| **Aho-Corasick** | $O(n + m + z)$ | 1 |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Antivirus & malware scanning" icon="🦠">
+Scanners like ClamAV match files against enormous signature databases. A single Aho-Corasick automaton lets the engine stream a file past tens of thousands of byte-signatures at once, flagging every hit without re-reading the file per signature.
+</ExampleCard>
+
+<ExampleCard domain="Content moderation" icon="🚫">
+Chat and comment platforms screen messages against evolving lists of banned or sensitive terms. Because the automaton reports *all* keyword hits (including ones embedded in longer matches) in one pass, moderation stays real-time even as the wordlist grows.
+</ExampleCard>
+
+<ExampleCard domain="Bioinformatics" icon="🧬">
+Searching a genome for a panel of gene motifs or primer sequences is inherently multi-pattern. Aho-Corasick scans the sequence once for the whole panel, and its failure links neatly capture motifs that are suffixes of one another.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Chase output links, not just failure links.** A match can be a *suffix* of the current node's string (arriving at "she" hides "he"). If you only report the node you land on, you miss embedded patterns.
+- **Build order matters.** Failure links must be computed in BFS (increasing depth) order, because a node's link depends on shallower nodes being finished first.
+- **Duplicate or overlapping patterns.** Deduplicate, and decide up front whether you report *all* overlapping matches or only the longest — the two policies give different answers for "she"/"he".
+- **Interview cue:** "match many keywords / a dictionary in one pass" is the tell. Say "trie plus KMP-style failure links" and mention the $O(n + m + z)$ bound; contrast with per-pattern search's $O(kn)$.
+
+## Practice
+
+1. **Easy:** Draw the trie for `["ab", "bc", "bca"]` and mark which nodes are pattern ends.
+2. **Easy:** Give the failure link of the node spelling `"bc"` in that trie and justify it.
+3. **Medium:** Count total keyword occurrences in a text for a list of patterns using one automaton.
+4. **Medium:** Add output links so that reaching a node reports every pattern that is a suffix of its string.
+5. **Hard:** Implement LeetCode 1032 ("Stream of Characters"): answer, per streamed character, whether any dictionary word just ended.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a failure link in Aho-Corasick point to?',
+      options: [
+        'The root, always',
+        'The node spelling the longest proper suffix of the current string that is also in the trie',
+        'The next sibling node',
+        'The deepest node in the trie',
+      ],
+      answer: 1,
+      explain: 'It generalizes KMP\'s failure function: on a mismatch, jump to the longest suffix that is still a valid trie path.',
+    },
+    {
+      q: 'Why can Aho-Corasick search any number of patterns in a single pass?',
+      options: [
+        'It hashes every window',
+        'All patterns live in one automaton, and the text pointer never backs up',
+        'It sorts the patterns first',
+        'It only works for one pattern',
+      ],
+      answer: 1,
+      explain: 'The merged trie plus failure links means one left-to-right scan handles the whole dictionary at once.',
+    },
+    {
+      q: 'Failure links must be built in which order?',
+      options: [
+        'Depth-first from a leaf',
+        'Breadth-first by increasing depth, since a link depends on shallower nodes',
+        'Random order',
+        'Alphabetical by character',
+      ],
+      answer: 1,
+      explain: 'A node\'s failure link is computed from its parent\'s link, so shallower nodes must be finalized first — hence BFS.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Aho-Corasick fuses a whole dictionary into <strong>one trie</strong> and scans the text once.',
+    '<strong>Failure links</strong> are KMP\'s fallback generalized to many patterns: longest suffix that is still a trie node.',
+    '<strong>Output links</strong> report patterns that are suffixes of the current match (so "she" also yields "he").',
+    'Build in <strong>BFS order</strong> — O(m) — then search in <strong>O(n + z)</strong>, independent of pattern count.',
+    'It powers <strong>antivirus, content moderation, and multi-motif genomics</strong> — anywhere a dictionary meets a stream.',
+  ]}
+/>
+
+Next up: **Suffix Arrays** — sort every suffix of a string once, and a whole family of substring queries collapses into a binary search.

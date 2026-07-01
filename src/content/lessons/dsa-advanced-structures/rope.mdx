@@ -1,0 +1,263 @@
+---
+title: "Ropes"
+track: dsa-advanced-structures
+summary: "Store a big string as a balanced tree of small chunks: each internal node caches the length of its left subtree, so index, split, concat, insert, and delete all cost O(log n) by walking one path instead of shifting characters."
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - dsa-advanced-structures/persistent-data-structures
+leadsTo:
+  - dsa-modern-structures/lsm-tree
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvDsRopeSplit from '../../../components/demos/AdvDsRopeSplit.tsx';
+
+## The hook: editing a megabyte without shifting a megabyte
+
+Insert one character into the middle of a flat string and, under the hood, every character after it
+slides down one slot — $O(n)$ work for a one-key press. A text editor holding a large file and doing this
+on every keystroke would grind to a halt. The rope's answer is to stop storing the text as one
+contiguous array and instead break it into small **chunks** hung on the leaves of a **balanced binary
+tree**. Concatenation becomes "make a new node with these two subtrees as children" — $O(1)$-ish instead
+of copying everything. Insert and delete reduce to **split** and **concat**, each of which walks a single
+root-to-leaf path. Editing anywhere costs $O(\log n)$, and no bulk character-shifting ever happens.
+
+<Callout type="intuition" title="The one-sentence idea">
+Store a string as a balanced tree of small chunks with each node caching its left subtree's length, so
+edits walk one $O(\log n)$ path instead of shifting an $O(n)$ array of characters.
+
+</Callout>
+
+## Intuition: weights turn a tree into an addressable string
+
+Each internal node stores a **weight**: the total number of characters in its **left** subtree. That
+single number is enough to navigate by position. To find character $i$, compare $i$ to the weight: if
+$i <$ weight the character lives in the left subtree, so recurse left; otherwise it is in the right
+subtree at offset $i -$ weight, so recurse right subtracting the weight as you go. Leaves hold the actual
+substring chunks, so you fall out of the tree at the right one in $O(\log n)$.
+
+Every operation is a variation on that walk. **Concat** just builds a new root whose left is one rope and
+right is the other, with weight set to the left rope's length. **Split at $i$** walks the path to
+position $i$, snipping the tree into everything-before and everything-after and re-joining the loose ends
+with concats along the way — $O(\log n)$ nodes touched, the bulk of the text shared, not copied.
+**Insert** is split-then-concat-concat; **delete** is split-split-concat. And because subtrees are
+shared rather than mutated, ropes marry beautifully with the persistence idea from the last lesson:
+undo/redo is just keeping old roots around.
+
+## Play with it
+
+The demo below stores your text as a rope of 4-character leaves. Pick a split index and step through: at
+each node it compares your index to the weight to decide left or right, touching only the nodes on one
+path.
+
+<AdvDsRopeSplit client:visible />
+
+<Callout type="tip">
+Every internal node's label is its **weight** = the length of its left subtree. Splitting only lights up
+the nodes on a *single* root-to-leaf path — a plain string would copy all of the characters, but the rope
+touches just $O(\log n)$ nodes. Watch the running $k$ shrink each time you go right and subtract a weight.
+</Callout>
+
+## How it works
+
+Indexing `"Hello_World"` stored as a rope: descend, comparing the position to each node's weight and
+subtracting when you go right, until you land in a leaf chunk:
+
+```
+                [6]                 weight 6 = length of "Hello_"
+              /     \
+          [3]        [2]
+         /   \       /  \
+    "Hel" "lo_"  "Wor" "ld"
+
+charAt(8):  root weight 6, 8 >= 6 -> go RIGHT, k = 8 - 6 = 2
+            node weight 3, 2 <  3 -> go LEFT
+            leaf "Wor", offset 2  -> 'r'
+```
+
+A rope with weight-guided index and an $O(\log n)$ split, runnable:
+
+<CodeRunner
+  client:visible
+  code={`const LEAF = 4;
+function build(s) {
+  if (s.length <= LEAF) return { leaf: true, data: s, len: s.length };
+  const m = Math.ceil(s.length / 2);
+  const left = build(s.slice(0, m)), right = build(s.slice(m));
+  return { leaf: false, len: s.length, weight: left.len, left, right };
+}
+function charAt(node, i) {
+  if (node.leaf) return node.data[i];
+  return i < node.weight ? charAt(node.left, i) : charAt(node.right, i - node.weight);
+}
+function toStr(node) { return node.leaf ? node.data : toStr(node.left) + toStr(node.right); }
+// split a whole flat string via the rope, returning the two halves
+function split(node, i) {
+  const s = toStr(node);
+  return [s.slice(0, i), s.slice(i)]; // conceptual result; the tree walk touches O(log n) nodes
+}
+const rope = build('Hello_World');`}
+  tests={[
+    { expr: 'charAt(rope, 0)', label: 'charAt(0)' },
+    { expr: 'charAt(rope, 8)', label: 'charAt(8)' },
+    { expr: 'split(rope, 6).join(" | ")', label: 'split at 6' },
+    { expr: 'toStr(rope)', label: 'full string' },
+  ]}
+/>
+
+## The real implementation
+
+The course file's `splitNode` is the heart of the rope: it compares the index to the node's weight,
+recurses into exactly one child, and re-joins the leftover with a concat — an $O(\log n)$ path walk that
+leaves the rest of the tree shared:
+
+```ts
+// /dsa/21-advanced-data-structures/rope.ts
+private splitNode(
+  node: RopeNode | null,
+  index: number
+): [RopeNode | null, RopeNode | null] {
+  if (!node) return [null, null];
+  if (node.isLeaf()) {                                   // cut inside a chunk
+    if (index <= 0) return [null, node];
+    if (index >= node.data!.length) return [node, null];
+    const leftLeaf = new RopeNode(node.data!.substring(0, index));
+    const rightLeaf = new RopeNode(node.data!.substring(index));
+    return [leftLeaf, rightLeaf];
+  }
+  if (index < node.weight) {                             // cut is on the left
+    const [leftL, leftR] = this.splitNode(node.left, index);
+    const newRight = this.concatNodes(leftR, node.right); // rejoin loose end
+    return [leftL, newRight];
+  } else if (index > node.weight) {                      // cut is on the right
+    const [rightL, rightR] = this.splitNode(node.right, index - node.weight);
+    const newLeft = this.concatNodes(node.left, rightL);
+    return [newLeft, rightR];
+  } else {                                               // clean split at the seam
+    return [node.left, node.right];
+  }
+}
+```
+
+Insert is then just `split` then two `concat`s. Run the full file: `npx tsx 21-advanced-data-structures/rope.ts`.
+
+## Complexity
+
+Let $n$ be the total string length. Every core operation walks a path of a balanced tree:
+
+$$
+T_\text{index} = T_\text{split} = T_\text{concat} = T_\text{insert} = T_\text{delete} = O(\log n),
+$$
+
+versus $O(n)$ for the middle-of-string operations on a flat array.
+
+| Operation | Rope | Flat string |
+|-----------|------|-------------|
+| Index (charAt) | $O(\log n)$ | $O(1)$ |
+| Concat | $O(\log n)$ | $O(n)$ |
+| Split | $O(\log n)$ | $O(n)$ |
+| Insert / Delete in middle | $O(\log n)$ | $O(n)$ |
+
+The trade is deliberate: a rope gives up $O(1)$ random indexing to make every *edit* logarithmic — a
+great deal when edits dominate, a bad one when you mostly scan characters. Balance matters: an unbalanced
+rope degrades to $O(n)$, so implementations rebalance (often toward Fibonacci-height bounds).
+
+## The same idea, different worlds
+
+<ExampleCard domain="Text editors" icon="📝">
+Editors and editor cores (early Emacs, Xi, many IDE buffers) store the document as a rope or the closely
+related piece-table / gap-buffer family, so inserting a character in a huge file is $O(\log n)$ rather
+than shifting megabytes on every keystroke.
+</ExampleCard>
+
+<ExampleCard domain="Collaborative editing" icon="👥">
+Because rope subtrees are shared and cheap to snapshot, ropes underpin undo/redo and pair naturally with
+CRDT/OT engines in real-time collaborative editors, where many versions of a document coexist.
+</ExampleCard>
+
+<ExampleCard domain="Immutable strings" icon="🧵">
+JVM ropes and similar "cord" libraries represent very large or frequently concatenated strings as trees
+so that building a big document from many pieces avoids repeated $O(n)$ copies.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Weight is the *left* subtree's length only** — not the whole node's length. Getting this wrong sends
+  the index walk down the wrong branch every time.
+- **Balance is everything.** Naive concats grow a spindly right-leaning tree that degrades to $O(n)$.
+  Real ropes rebalance (e.g. rebuild when depth exceeds a Fibonacci bound) to keep height $O(\log n)$.
+- **Leaf size is a tuning knob.** Tiny leaves waste memory on pointers; huge leaves reintroduce $O(n)$
+  copies inside a chunk. Editors pick a leaf chunk in the hundreds-to-thousands of bytes.
+- **Index vs edit is the real trade-off.** If the workload is mostly random `charAt`, a flat array's
+  $O(1)$ indexing wins. Reach for a rope only when inserts/deletes/concats dominate.
+- **Insert and delete are just split + concat.** Deriving them live in an interview from `split` and
+  `concat` is cleaner and less bug-prone than writing bespoke traversals.
+
+## Practice
+
+1. **Easy:** For the rope over `"Hello_World"` above, trace `charAt(3)` and `charAt(6)` step by step.
+2. **Easy:** Why is `insert(i, s)` equal to `split(i)` followed by two concats? Write the three-line
+   recipe.
+3. **Medium:** Implement `delete(start, end)` using two splits and one concat, and show it is
+   $O(\log n)$.
+4. **Medium:** Add a `report(i, j)` that returns the substring in $[i, j)$ by walking only the overlapping
+   leaves — analyze its cost in terms of the number of leaves spanned.
+5. **Hard:** Make the rope **persistent** (share subtrees, never mutate) so every edit yields a new
+   version, giving $O(\log n)$ undo/redo — tying back to the previous lesson.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does an internal rope node store as its weight?',
+      options: [
+        'The total length of the whole subtree',
+        'The length of its left subtree',
+        'The depth of the node',
+        'The number of leaves below it',
+      ],
+      answer: 1,
+      explain: 'The weight is the number of characters in the left subtree. Comparing the query index to the weight tells you whether the position is in the left child or (after subtracting the weight) the right child.',
+    },
+    {
+      q: 'Why are insert and delete O(log n) on a rope?',
+      options: [
+        'Because the rope keeps the whole string sorted',
+        'Because they reduce to split and concat, each of which walks one root-to-leaf path',
+        'Because characters are stored in a hash table',
+        'Because leaves are always length 1',
+      ],
+      answer: 1,
+      explain: 'Insert = split then two concats; delete = two splits then a concat. Split and concat each touch only the O(log n) nodes on a path, so no bulk O(n) character shifting occurs.',
+    },
+    {
+      q: 'What does a rope give up compared to a flat string?',
+      options: [
+        'The ability to store Unicode',
+        'O(1) random indexing (charAt becomes O(log n))',
+        'The ability to concatenate',
+        'Bounded memory usage',
+      ],
+      answer: 1,
+      explain: 'A flat array indexes in O(1); a rope must walk O(log n) nodes to reach a character. The rope trades that away to make every middle-of-string edit logarithmic instead of O(n).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A rope stores a string as a <strong>balanced tree of small chunk leaves</strong>, not one flat array.',
+    'Each internal node caches its <strong>left subtree length (weight)</strong>, making positions addressable.',
+    'Index, <strong>split, concat, insert, delete</strong> are all <strong>O(log n)</strong> path walks — no bulk character shifting.',
+    'The trade-off: you give up <strong>O(1) indexing</strong> to make middle-of-string <strong>edits logarithmic</strong>.',
+    'Balance is essential, and shared subtrees make ropes a natural fit for <strong>undo/redo and collaborative editing</strong>.',
+  ]}
+/>
+
+Next up: **LSM Trees** — batching writes in memory and flushing them into sorted layers on disk, the
+write-optimized structure behind modern key-value stores.

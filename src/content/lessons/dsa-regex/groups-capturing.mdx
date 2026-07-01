@@ -1,0 +1,241 @@
+---
+title: Groups & Backreferences
+track: dsa-regex
+summary: "Parentheses do three jobs: group tokens so a quantifier applies to all of them, capture the matched text for extraction, and enable backreferences that force later text to equal an earlier capture."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-regex/quantifiers
+leadsTo:
+  - dsa-regex/lookarounds
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import RgxGroupCapture from '../../../components/demos/RgxGroupCapture.tsx';
+
+## The hook: remember what you matched
+
+Matching is nice, but usually you want the *pieces*: the year, month, and day out of `2024-01-15`; the
+area code out of a phone number; every repeated word in an essay. Parentheses turn a flat pattern into a
+structured one. They **group** tokens so a quantifier or alternation covers the whole bundle, they
+**capture** the slice of text each group matched so you can pull it out, and — the real party trick — they
+let a **backreference** demand that some later text be *identical* to an earlier capture. That last power
+is something plain pattern matching literally cannot express.
+
+<Callout type="intuition" title="The one-sentence idea">
+Parentheses group and capture a sub-match; a backreference like `\1` then reuses that captured text as a
+token, forcing a later part of the string to repeat it exactly.
+</Callout>
+
+## Intuition
+
+Three related jobs:
+
+- **Grouping.** `(ab)+` repeats the whole `ab`, matching `ababab`. Without the parentheses, `ab+` would
+  repeat only the `b`.
+- **Capturing.** Each `( … )` records what it matched. After matching `(\d{4})-(\d{2})-(\d{2})`, group 1
+  is the year, group 2 the month, group 3 the day. Prefer **named** groups `(?<year>\d{4})` for
+  readability, and use **non-capturing** `(?: … )` when you only need grouping and want to skip the
+  bookkeeping.
+- **Alternation.** The `|` inside a group is "or": `(cat|dog|bird)` matches any one of them.
+
+A **backreference** points back at a capture. `\1` means "the exact text group 1 captured." So
+`(\w+)\s+\1` matches a doubled word like `the the`, because after capturing `the` the engine insists the
+next word be `the` again. Named form: `\k<word>`. This is genuinely more powerful than the earlier
+tokens — it depends on the *input*, not just on the pattern.
+
+## Play with it
+
+Type `(\w+) \1` against `the the cat` and step through: watch group 1 capture `the` (its own colour), then
+the backreference `\1` demand that same text after the space. Try alternation too, like `(a|b)(c|d)` — each
+group captures which branch it took.
+
+<RgxGroupCapture client:visible />
+
+<Callout type="tip">
+Load `(\w)(\w)\2\1` on `abba`. Group 1 grabs `a`, group 2 grabs `b`, then `\2` must be `b` and `\1` must be
+`a` — a four-character palindrome, matched purely with captures. Change the text to `abca` and watch the
+backreference fail.
+</Callout>
+
+## How it works
+
+Dry-run `(\w+) \1` on `"the the"`:
+
+```
+(\w+)  greedily captures "the"      → group 1 = "the"
+' '    matches the space
+\1     must equal "the": text ahead is "the" ✓  → match "the the"
+```
+
+Captured groups appear in the result array (`m[1]`, `m[2]`, …) or in `m.groups` for named groups. In a
+replacement string you refer to them as `$1` or `$<name>`. Run these:
+
+<CodeRunner
+  client:visible
+  code={`// Named captures pull structured data out of a string.
+function parseDate(s) {
+  const m = s.match(/^(?<y>\\d{4})-(?<mo>\\d{2})-(?<d>\\d{2})$/);
+  return m ? m.groups : null;
+}
+
+// A backreference finds doubled words.
+function doubledWords(text) {
+  const re = /\\b(\\w+)\\s+\\1\\b/g;
+  return Array.from(text.matchAll(re), m => m[1]);
+}
+
+// Groups in a replacement: swap "Last, First" to "First Last".
+function swapName(name) {
+  return name.replace(/(\\w+),\\s*(\\w+)/, '$2 $1');
+}`}
+  tests={[
+    { expr: `parseDate('2024-01-15')`, label: 'parse date' },
+    { expr: `doubledWords('the the cat sat sat')`, label: 'doubled words' },
+    { expr: `swapName('Doe, John')`, label: 'swap name' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — named captures for parsing, non-capturing groups for efficiency, and
+backreferences for structure the engine must verify against the input:
+
+```ts
+// /dsa/26-regular-expressions/groups-capturing.ts
+function parseDateNamed(dateStr: string) {
+    const re = /^(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})$/;
+    const m = dateStr.match(re);
+    return m?.groups ? { ...m.groups } : null;   // {year, month, day}
+}
+
+// Non-capturing (?:…) groups the protocol without capturing it.
+function extractDomain(url: string): string | null {
+    const m = url.match(/^(?:https?:\/\/)?([^\/]+)/);
+    return m ? m[1] : null;
+}
+
+// Backreference \1 requires a repeated word.
+function findRepeatedWords(text: string): string[] {
+    return Array.from(text.matchAll(/\b(\w+)\s+\1\b/g), m => m[1]);
+}
+
+// Groups drive replacement with $1, $2:
+function redactCard(text: string): string {
+    return text.replace(/\b(\d{4})\s?(\d{4})\s?(\d{4})\s?(\d{4})\b/g,
+                         "****-****-****-$4");
+}
+```
+
+Run the full file: `npx tsx 26-regular-expressions/groups-capturing.ts`.
+
+## Complexity
+
+Capturing adds a little bookkeeping per group but keeps the scan linear for well-formed patterns.
+Backreferences are the subtle case: verifying `\1` costs up to the length of the captured text, and a
+backreference inside a quantifier can trigger extra backtracking.
+
+$$
+T(n) = O(n \cdot m), \qquad S = O(g),
+$$
+
+where $g$ is the number of capture groups (the state the engine must remember). Note a theoretical
+milestone: a regex *with backreferences* is strictly more powerful than a classic regular language — the
+tidy automaton of the final lesson cannot express `\1`, which is exactly why backreferenced patterns fall
+back on backtracking.
+
+| Construct | Captures? | Use it for |
+|-----------|-----------|------------|
+| `( … )` | yes (numbered) | extraction, backreferences |
+| `(?<name> … )` | yes (named) | readable extraction |
+| `(?: … )` | no | grouping only, a hair faster |
+| `\1`, `\k<name>` | — | force a repeat of an earlier capture |
+
+## The same idea, different worlds
+
+<ExampleCard domain="DevOps log parsing" icon="🪵">
+A single named-group pattern turns an Apache line into fields:
+<code>(?&lt;ip&gt;[\d.]+) … "(?&lt;method&gt;\w+) (?&lt;path&gt;\S+)"</code>. One match yields
+<code>m.groups.ip</code>, <code>m.groups.path</code> and more — no manual splitting.
+</ExampleCard>
+
+<ExampleCard domain="Molecular biology" icon="🧬">
+Restriction enzymes cut at reverse-complement palindromes. Detecting a simple mirrored motif uses
+backreferences — <code>(\w)(\w)\2\1</code> is the four-base palindrome idea — so the pattern checks a
+*relationship* between bases, not just their identity.
+</ExampleCard>
+
+<ExampleCard domain="Copy editing" icon="✍️">
+"The the most common typo" is a doubled word, and <code>\b(\w+)\s+\1\b</code> catches it in any manuscript.
+Grammar tools ship this exact backreference to flag accidental repeats an eye glides past.
+</ExampleCard>
+
+<ExampleCard domain="Design tokens" icon="🎨">
+A CSS colour parser captures channels: `rgb\((\d{1,3}),\s*(\d{1,3}),\s*(\d{1,3})\)` hands back
+red, green and blue as groups 1–3, ready to convert to hex in one pass.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Group numbers count opening parentheses, left to right.** Nested groups shift the numbering, so
+  `((a)(b))` makes group 1 the whole `ab`, group 2 `a`, group 3 `b`. Named groups sidestep the confusion.
+- **`$1` in the replacement, `\1` in the pattern.** Mixing them up is a classic bug: the backreference
+  inside the pattern uses a backslash; the reference in the replacement string uses a dollar sign.
+- **Non-capturing groups are not just cosmetic.** Every capturing group is extra state. In a hot loop,
+  switching `( … )` you never read to `(?: … )` trims work and keeps your group numbers stable.
+- **Backreferences defeat linear-time engines.** Tools built on automata (RE2, Go's `regexp`) refuse
+  backreferences on purpose, because supporting them reintroduces backtracking and its worst cases.
+- **Interview cue:** "find the duplicated / mirrored / repeated part" screams backreference. Mention that
+  it makes the pattern non-regular in the formal sense — interviewers love that connection.
+
+## Practice
+
+1. **Easy:** What is the difference between `(ab)+` and `ab+`?
+2. **Easy:** Write a named-group pattern that captures hours and minutes from `14:30`.
+3. **Medium:** Use a backreference to match a string that starts and ends with the same single character,
+   like `xhellox` or `-y-`.
+4. **Medium:** Convert `(\d{4})-(\d{2})-(\d{2})` (US-style ISO) into `$3/$2/$1` day/month/year with a
+   single `replace`.
+5. **Hard:** Explain why `(\w+)\s+\1` cannot be expressed by a finite automaton, and what that implies for
+   its worst-case running time compared with a backreference-free pattern.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the backreference \\1 match in the pattern (\\w+)\\s+\\1 ?',
+      options: ['Any word character', 'The literal characters backslash-one', 'The exact text that group 1 captured', 'The first character of the string'],
+      answer: 2,
+      explain: 'A backreference matches the same text a previous group captured, so (\\w+)\\s+\\1 requires the second word to equal the first — a doubled word.',
+    },
+    {
+      q: 'Which group construct captures nothing and is used purely for grouping?',
+      options: ['( … )', '(?<name> … )', '(?: … )', '[ … ]'],
+      answer: 2,
+      explain: '(?: … ) groups tokens without creating a capture, saving bookkeeping and keeping later group numbers stable.',
+    },
+    {
+      q: 'In a replacement string, how do you refer to the text captured by the second group?',
+      options: ['\\2', '$2', '#2', 'group(2)'],
+      answer: 1,
+      explain: 'Replacement strings use $1, $2, … (or $<name>). The backslash form \\2 is for backreferences INSIDE the pattern.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Parentheses <strong>group</strong> tokens (so quantifiers and <code>|</code> apply to the bundle) and <strong>capture</strong> the matched text.',
+    'Use <strong>named groups</strong> <code>(?&lt;name&gt; … )</code> for readable extraction and <strong>non-capturing</strong> <code>(?: … )</code> when you only need grouping.',
+    'A <strong>backreference</strong> <code>\\1</code> or <code>\\k&lt;name&gt;</code> forces later text to equal an earlier capture — great for doubled words and palindromes.',
+    'In patterns backreferences use <code>\\1</code>; in replacement strings captures are <code>$1</code>.',
+    'Backreferences make a pattern <strong>non-regular</strong>, so linear-time automaton engines reject them and backtracking engines can be slow.',
+  ]}
+/>
+
+Next up: **Lookaheads & Lookbehinds** — zero-width assertions that peek forward or backward to check a
+condition without consuming any characters.

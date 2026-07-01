@@ -1,0 +1,258 @@
+---
+title: How a Regex Engine Works
+track: dsa-regex
+summary: "Under the punctuation is a state machine: compile a pattern into an NFA, simulate it over the input as a set of active states, and see exactly why backtracking engines blow up on patterns like (a+)+."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-regex/lookarounds
+leadsTo:
+  - dsa-misc-algorithms/quickselect
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import RgxNfaEngine from '../../../components/demos/RgxNfaEngine.tsx';
+
+## The hook: the machine behind the pattern
+
+You have been driving the engine; now open the hood. A regular expression is not run character-by-character
+by ad-hoc rules — it is first **compiled into a graph of states**, a *nondeterministic finite automaton*
+(NFA), and then that automaton is *simulated* over the input. Understanding this graph explains two things
+at once: why a clean engine can match in guaranteed linear-ish time, and why the everyday backtracking
+engine in most languages can grind to a halt for seconds on a 30-character string. The difference between
+"fast forever" and "denial-of-service" is a choice about how you walk this graph.
+
+<Callout type="intuition" title="The one-sentence idea">
+A pattern compiles to an NFA — a graph of states joined by character edges and free epsilon edges — and
+matching is just tracking the *set* of states you could be in as you read the input one character at a time.
+</Callout>
+
+## Intuition
+
+**Thompson's construction** builds the NFA piece by piece. Each fragment has one entry and one exit state:
+
+- a literal `a` is two states joined by an edge labelled `a`;
+- **concatenation** `ab` wires the exit of `a` to the entry of `b` with a free **epsilon** (ε) edge;
+- **alternation** `a|b` adds a fork state with ε-edges into both branches and a join state after;
+- **star** `a*` wraps a fragment with ε-edges that let you skip it or loop back through it.
+
+"Nondeterministic" means that from one state, an input character (or an ε-edge) might lead to *several*
+states. Rather than guess and backtrack, the linear-time simulation keeps a **set** of all states you could
+currently be in. Read a character: from every active state, follow matching character edges, then take the
+**ε-closure** (everything reachable through free edges). The pattern matches if an *accept* state is in the
+set once the input is consumed. Because the set never has more than $m$ states and you take one step per
+input character, the whole thing is $O(n \cdot m)$ — no backtracking, ever.
+
+Here is the crux: the NFA *is a graph*, and this simulation is breadth-first exploration of it. Everything
+you learned about graph traversal applies directly — states are nodes, transitions are edges, ε-closure is
+reachability.
+
+## Play with it
+
+Part A builds the NFA from a small pattern (`(a|b)*c` by default) and animates the **active set** of states
+sweeping across the input — watch several states light up at once, the hallmark of nondeterminism. Part B
+pits a backtracking matcher against the automaton on the notorious `(a+)+`: drag the slider and watch the
+backtracking step count explode while the NFA count crawls up linearly.
+
+<RgxNfaEngine client:visible />
+
+<Callout type="tip">
+In Part A, step through `(a|b)*c` on `abbac` and notice how after each letter several states are active
+together — the machine is exploring all possibilities in parallel. In Part B, push the slider past ~20:
+the backtracking counter hits millions while the NFA stays in the dozens. That gap is a real security bug.
+</Callout>
+
+## How it works
+
+Simulating `(a|b)*c` over `"ac"` as a set of states:
+
+```
+start:      ε-closure of the start  → { s0, a-branch, b-branch, exit, c-in }
+read 'a':   follow 'a' edges, ε-close → back to the loop states + c-in
+read 'c':   follow 'c' edge          → { accept }
+end:        accept ∈ active set       → MATCH
+```
+
+A **backtracking** engine instead tries one path at a time and rewinds on failure. On `(a+)+` with a string
+of `a`s then a non-`a`, it explores every way to split the `a`s between the inner and outer `+`, which is
+exponentially many. The NFA simulation cannot do this — it has no notion of "trying a path," only "the set
+of reachable states." Compare the two engines directly:
+
+<CodeRunner
+  client:visible
+  code={`// A minimal NFA simulator (Thompson): match a*b* style patterns
+// as a SET of states, one pass, no backtracking.
+function simulate(edges, start, accept, text) {
+  // edges[state] = { eps:[...states], on:{char:state} }
+  const closure = (set) => {
+    const seen = new Set(set), stack = [...set];
+    while (stack.length) {
+      const s = stack.pop();
+      for (const e of edges[s].eps) if (!seen.has(e)) { seen.add(e); stack.push(e); }
+    }
+    return seen;
+  };
+  let cur = closure([start]);
+  for (const ch of text) {
+    const next = new Set();
+    for (const s of cur) { const to = edges[s].on[ch]; if (to !== undefined) next.add(to); }
+    cur = closure([...next]);
+  }
+  return cur.has(accept);
+}
+
+// NFA for /a*b/ :  0 --a--> 0 (loop), 0 --b--> 1 (accept)
+const edges = { 0: { eps: [], on: { a: 0, b: 1 } }, 1: { eps: [], on: {} } };`}
+  tests={[
+    { expr: `simulate(edges, 0, 1, 'aaab')`, label: 'a*b on "aaab"' },
+    { expr: `simulate(edges, 0, 1, 'b')`, label: 'a*b on "b"' },
+    { expr: `simulate(edges, 0, 1, 'aa')`, label: 'a*b on "aa" (no b)' },
+  ]}
+/>
+
+## The real implementation
+
+The performance file spells out exactly which patterns detonate and how to defuse them — the practical
+face of "backtracking versus automaton":
+
+```ts
+// /dsa/26-regular-expressions/regex-performance.ts
+// ⚠️ Catastrophic backtracking: nested quantifiers over the same class.
+//    /(a+)+$/, /(a*)*$/, /(a|a)*$/  → O(2^n) on non-matching input.
+
+// A crude static check for the dangerous shape:
+function isPotentiallyDangerous(pattern: string): boolean {
+    const nestedQuantifiers = /(\+|\*|\{\d+,\}){2,}/;
+    if (nestedQuantifiers.test(pattern)) return true;
+    const groupQuantifier = /\([^)]*(\+|\*)\)(\+|\*)/;
+    return groupQuantifier.test(pattern);
+}
+
+// The fix is almost always a NEGATED CLASS (no overlap = no backtracking):
+const slowHTML = /<.*?>/g;      // backtracks
+const fastHTML = /<[^>]*>/g;    // linear, atomic in effect
+
+// ...and bounding quantifiers, anchoring, and preferring string methods.
+```
+
+Run the full file: `npx tsx 26-regular-expressions/regex-performance.ts`.
+
+## Complexity
+
+The whole lesson is a complexity story. The NFA simulation carries at most $m$ states and advances once per
+character, so it is linear in both; a backtracking engine can revisit the same positions exponentially often:
+
+$$
+T_\text{NFA}(n, m) = O(n \cdot m), \qquad T_\text{backtracking}^\text{worst}(n) = O(2^{\,n}).
+$$
+
+| Engine | Method | Worst case | Backreferences? |
+|--------|--------|-----------|-----------------|
+| NFA simulation (Thompson) | set of states, ε-closure | $O(n \cdot m)$ | no |
+| DFA (subset construction) | one state per step | $O(n)$ match, $O(2^m)$ build | no |
+| Backtracking (PCRE, JS) | try-and-rewind | $O(2^{\,n})$ | yes |
+
+DFA-based tools like **RE2** and Go's `regexp` guarantee linear time by refusing backreferences and
+lookarounds — a deliberate trade of expressive power for safety.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Compilers" icon="⚙️">
+Every lexer is an NFA/DFA over regular expressions: keywords, numbers, and identifiers are token patterns,
+and tools like `lex`/`flex` compile them into a single state machine that tokenises source in one linear
+pass — the same construction you just watched animate.
+</ExampleCard>
+
+<ExampleCard domain="Network security" icon="🛰️">
+Intrusion-detection systems (Snort, Suricata) scan every packet against thousands of signatures. They lean
+on automaton engines precisely because a backtracking pattern in a rule could be weaponised — a crafted
+payload triggering catastrophic backtracking would take the sensor offline.
+</ExampleCard>
+
+<ExampleCard domain="Web platform safety" icon="🐌">
+"ReDoS" outages are real: a single user-supplied string against a vulnerable `(a+)+`-style validator has
+frozen production services for seconds per request. Cloudflare's 2019 global outage was, at its root, one
+catastrophic-backtracking regex.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **NFA vs DFA vs backtracking are different machines.** An NFA tracks a set of states (linear to
+  simulate); a DFA precomputes one state per input (linear to run, possibly exponential to build);
+  backtracking explores paths and can blow up. Know which one your language ships.
+- **Nested quantifiers are the classic ReDoS.** `(a+)+`, `(.*)*`, `(a|a)*` — any repetition of something
+  itself repeatable, matched against input that *almost* matches. The demo makes the explosion visible.
+- **You cannot build an NFA for backreferences.** `\1` is not a regular language, so linear-time engines
+  drop it. If you need backreferences *and* safety, validate length/shape first, or switch algorithms.
+- **The cure is structural, not cosmetic.** Replace overlapping alternation with a negated class, anchor
+  the pattern, bound the quantifiers, and reach for a linear engine (RE2) on untrusted input.
+- **Interview cue:** "make this regex safe / why is it slow?" wants the words *catastrophic backtracking*,
+  *NFA*, and *negated class*. Sketch the state graph and you have demonstrated real depth.
+
+## Practice
+
+1. **Easy:** Draw the Thompson NFA for `ab` (two literals concatenated). How many states and ε-edges?
+2. **Easy:** In the set-simulation, what does the ε-closure step do, and why is it needed after every
+   character?
+3. **Medium:** Explain, in graph terms, why the NFA simulation never needs to backtrack.
+4. **Medium:** Rewrite the dangerous `(.*)*` and the greedy `<.*?>` into linear-time equivalents, and say
+   why each fix removes the blow-up.
+5. **Hard:** A DFA runs in $O(n)$ but can need $O(2^m)$ states to build. Sketch a family of patterns whose
+   DFA size explodes, and explain why an NFA simulation avoids paying that cost up front.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How does a linear-time NFA simulation avoid backtracking?',
+      options: [
+        'It guesses the right path first',
+        'It tracks the whole SET of states it could be in and advances all of them at once',
+        'It converts backreferences to loops',
+        'It only matches anchored patterns',
+      ],
+      answer: 1,
+      explain: 'By keeping the set of all reachable states and stepping them together (with ε-closure), it explores every possibility in parallel — no path to rewind.',
+    },
+    {
+      q: 'Why does /(a+)+$/ blow up on a long run of "a" followed by "!"?',
+      options: [
+        'The string is too long to fit in memory',
+        'The engine tries exponentially many ways to split the a’s between the nested quantifiers',
+        'The dollar anchor is invalid',
+        'It creates too many capture groups',
+      ],
+      answer: 1,
+      explain: 'Nested quantifiers let a backtracking engine partition the a’s exponentially many ways; each fails on the "!", so it tries them all.',
+    },
+    {
+      q: 'Why do RE2 and Go’s regexp reject backreferences?',
+      options: [
+        'They are hard to type',
+        'Backreferences make a pattern non-regular, so a linear-time automaton cannot represent them',
+        'They are deprecated syntax',
+        'They only work in Python',
+      ],
+      answer: 1,
+      explain: 'A pattern with backreferences is no longer a regular language; supporting it requires backtracking, which forfeits the linear-time guarantee these engines promise.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A regex compiles (via <strong>Thompson’s construction</strong>) into an <strong>NFA</strong>: states joined by character edges and free ε-edges — a graph.',
+    'Linear-time matching tracks the <strong>set of active states</strong>, stepping them together with <strong>ε-closure</strong>; it is breadth-first graph traversal.',
+    'The NFA simulation is <strong>O(n·m)</strong> with no backtracking; a backtracking engine can hit <strong>O(2ⁿ)</strong> — catastrophic backtracking / ReDoS.',
+    'Nested quantifiers like <code>(a+)+</code> are the classic blow-up; the fix is a <strong>negated class</strong>, bounds, and anchoring.',
+    '<strong>Backreferences and lookarounds are non-regular</strong>, so automaton engines (RE2, Go) omit them to guarantee linear time.',
+  ]}
+/>
+
+This closes the Regular Expressions track: you can read a pattern, predict what the engine does, and spot
+the ones that bite. Next comes **Quickselect** — leaving pattern matching for the array-partitioning trick
+that finds the k-th smallest element in linear average time.

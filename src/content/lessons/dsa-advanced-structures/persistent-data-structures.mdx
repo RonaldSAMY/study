@@ -1,0 +1,264 @@
+---
+title: "Persistent Data Structures"
+track: dsa-advanced-structures
+summary: "Keep every past version of a structure alive: update by copying only the root-to-leaf path and sharing every untouched subtree, so an update costs O(log n) time and O(log n) extra space."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-advanced-structures/suffix-tree
+leadsTo:
+  - dsa-advanced-structures/rope
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvDsPersistentTree from '../../../components/demos/AdvDsPersistentTree.tsx';
+
+## The hook: an undo button that costs almost nothing
+
+You want unlimited undo, time-travel queries, or a lock-free snapshot readers can trust — in short, you
+want every past version of a structure to stay accessible forever. The brute-force answer is to copy the
+whole thing on every edit: $O(n)$ time and space per update, which collapses under a million edits. But
+look at what one update actually *changes* in a balanced tree: a single leaf, and the handful of nodes
+on the path from the root down to it. Everything hanging off to the side is **identical** to the
+previous version. So don't copy it — **share** it. Copy only the $O(\log n)$ nodes on the path, point
+their off-path children at the *old* subtrees, and you have a brand-new root for the new version while
+the old root still describes the old version, intact.
+
+<Callout type="intuition" title="The one-sentence idea">
+To edit a tree without destroying its past, copy only the root-to-leaf path you touch and let the new
+nodes point back into the unchanged old subtrees — $O(\log n)$ new nodes buy a whole new version.
+
+</Callout>
+
+## Intuition: path copying, structural sharing
+
+Call this **path copying**. An update at some leaf proceeds top-down: to make a new version's root you
+must make a new root node, because its child on the path changed. That new root keeps one pointer aimed
+at the *old, shared* subtree (the side you did not descend into) and one pointer aimed at a freshly
+copied child on the path. Recurse: each node on the path is copied, keeps its off-path child shared, and
+re-copies its on-path child — until you reach the leaf, which you copy and overwrite with the new value.
+
+The result is two roots that coexist. The old root reaches the old data; the new root reaches the new
+value through freshly minted nodes but reuses every untouched subtree by pointer. Because a balanced tree
+is $O(\log n)$ deep, each version costs $O(\log n)$ new nodes — so $m$ updates use $O(n + m \log n)$ total
+space, not $O(nm)$. Crucially this demands **immutability**: shared nodes must never be mutated in place,
+or you would silently corrupt every version that points at them.
+
+## Play with it
+
+The demo starts from Version 0 (a balanced tree over eight leaves). Update one leaf and watch Version 1
+appear as an emerald path: copied nodes on the root-to-leaf route, dashed edges pointing back into the
+grey subtrees that both versions share.
+
+<AdvDsPersistentTree client:visible />
+
+<Callout type="tip">
+Count the emerald nodes: updating any leaf of an 8-leaf tree copies exactly $\log_2 8 + 1 = 4$ nodes.
+The dashed emerald edges are the trick — they reach into Version 0's grey subtrees, which are reused
+untouched. Version 0 is never modified, so it is still fully queryable.
+</Callout>
+
+## How it works
+
+Updating index 2 of `[1, 2, 3, 4, 5]` in a persistent segment tree copies the root, one child, and the
+target leaf; the sibling subtree is shared by pointer:
+
+```
+version 0 (sums):            update index 2 -> 10, build version 1
+        [15]                         [22]  <- new root
+       /    \                       /    \
+    [6]      [9]                 [13]     [9]      <- [9] SHARED with v0
+   /   \    /   \               /   \      |
+ [3]   [3] [4] [5]            [3]  [10]  (old [9] subtree, untouched)
+                              |     |
+                          [3](shared) [10] new leaf
+
+only 3 new nodes; v0's root [15] still answers the old sums
+```
+
+A persistent (immutable) update that returns a new root while leaving the old one alone:
+
+<CodeRunner
+  client:visible
+  code={`// immutable node: never mutate, always build fresh on the path
+function build(arr, l, r) {
+  if (l === r) return { sum: arr[l], left: null, right: null };
+  const m = (l + r) >> 1;
+  const left = build(arr, l, m), right = build(arr, m + 1, r);
+  return { sum: left.sum + right.sum, left, right };
+}
+function update(node, l, r, i, val) {
+  if (l === r) return { sum: val, left: null, right: null };  // new leaf
+  const m = (l + r) >> 1;
+  if (i <= m) {
+    const nl = update(node.left, l, m, i, val);               // copy left path
+    return { sum: nl.sum + node.right.sum, left: nl, right: node.right }; // SHARE right
+  } else {
+    const nr = update(node.right, m + 1, r, i, val);
+    return { sum: node.left.sum + nr.sum, left: node.left, right: nr };   // SHARE left
+  }
+}
+function query(node, l, r, ql, qr) {
+  if (!node || qr < l || r < ql) return 0;
+  if (ql <= l && r <= qr) return node.sum;
+  const m = (l + r) >> 1;
+  return query(node.left, l, m, ql, qr) + query(node.right, m + 1, r, ql, qr);
+}
+const arr = [1, 2, 3, 4, 5];
+const v0 = build(arr, 0, 4);
+const v1 = update(v0, 0, 4, 2, 10);  // index 2: 3 -> 10, new version`}
+  tests={[
+    { expr: 'query(v0, 0, 4, 0, 4)', label: 'v0 total (unchanged)' },
+    { expr: 'query(v1, 0, 4, 0, 4)', label: 'v1 total (3 -> 10)' },
+    { expr: 'v0.right === v1.right', label: 'right subtree shared?' },
+    { expr: 'query(v0, 0, 4, 2, 2) + "/" + query(v1, 0, 4, 2, 2)', label: 'index 2 in v0 / v1' },
+  ]}
+/>
+
+## The real implementation
+
+The course file's persistent segment tree never touches an existing node: `updateNode` returns a **new**
+node on the path and hands the off-path child straight through, so old roots stay valid forever:
+
+```ts
+// /dsa/21-advanced-data-structures/persistent-data-structures.ts
+private updateNode(
+  node: PersistentSegmentNode,
+  l: number, r: number,
+  index: number, value: number
+): PersistentSegmentNode {
+  if (l === r) {
+    return new PersistentSegmentNode(value);                 // fresh leaf
+  }
+  const mid = Math.floor((l + r) / 2);
+  if (index <= mid) {
+    const newLeft = this.updateNode(node.left!, l, mid, index, value);
+    return new PersistentSegmentNode(newLeft.sum + node.right!.sum, newLeft, node.right); // share right
+  } else {
+    const newRight = this.updateNode(node.right!, mid + 1, r, index, value);
+    return new PersistentSegmentNode(node.left!.sum + newRight.sum, node.left, newRight); // share left
+  }
+}
+```
+
+Each call to `update` pushes a new root onto `roots`, so `query(version, ...)` can read any past snapshot.
+Run the full file: `npx tsx 21-advanced-data-structures/persistent-data-structures.ts`.
+
+## Complexity
+
+Let $n$ be the number of elements and $m$ the number of updates. One update rebuilds one root-to-leaf
+path and shares the rest:
+
+$$
+T_\text{update} = O(\log n), \qquad S_\text{update} = O(\log n), \qquad S_\text{total} = O(n + m \log n).
+$$
+
+| Strategy | Update time | Extra space / update | Old versions? |
+|----------|-------------|----------------------|---------------|
+| Copy-everything | $O(n)$ | $O(n)$ | yes (wasteful) |
+| Mutate in place | $O(\log n)$ | $O(1)$ | **no** |
+| **Path copying** | $O(\log n)$ | $O(\log n)$ | **yes** |
+
+Path copying is the sweet spot: full persistence at only a logarithmic overhead per edit, because every
+new version reuses almost the entire previous one.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Functional programming" icon="λ">
+Immutable maps and vectors in Clojure, Scala, and Haskell are persistent HAMTs / RRB-trees under the
+hood. `assoc` returns a new collection that shares all untouched branches with the old one — which is why
+"copying" an immutable map is cheap and old references stay valid.
+</ExampleCard>
+
+<ExampleCard domain="Version control" icon="🌱">
+Git's object store is persistence made literal: a commit is a new root tree, but unchanged directories
+point at the *same* tree objects as the parent commit. That structural sharing is why a commit stores a
+diff-sized amount of data yet snapshots the whole repository.
+</ExampleCard>
+
+<ExampleCard domain="Databases" icon="🗄️">
+MVCC engines and copy-on-write B-trees (LMDB, CouchDB) write a new root page per transaction while
+sharing untouched pages, giving readers a consistent snapshot with no locks — long-running reads simply
+hold an old root.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Immutability is non-negotiable.** The instant you mutate a shared node in place, every version
+  pointing at it changes underneath you. Persistent updates must *only ever* allocate new nodes.
+- **Copy the path, share the rest.** The common bug is copying too much (whole subtrees) or too little
+  (mutating an on-path node's shared sibling). Copy exactly the nodes on the root-to-leaf route.
+- **Keep the roots.** Persistence is only useful if you retain a handle to each version's root — store
+  them in an array or map, keyed by version number or timestamp.
+- **Partial vs full persistence.** Partial persistence lets you *read* any version but *update* only the
+  latest; full persistence lets you branch off any version. Path copying gives full persistence for free.
+- **Garbage collection matters.** A version becomes collectable only when no root can still reach its
+  nodes; in reference-counted or manual settings, dropping a root must not free shared nodes.
+
+## Practice
+
+1. **Easy:** In an 8-leaf balanced tree, how many nodes does a single leaf update copy? Why is it
+   $\log_2 n + 1$?
+2. **Easy:** Explain in one sentence why mutating a shared node in place breaks every earlier version.
+3. **Medium:** Extend the persistent segment tree so each `update` also returns the number of newly
+   allocated nodes; verify it is $\lceil \log_2 n \rceil + 1$.
+4. **Medium:** Use a persistent segment tree of prefix versions to answer *k*-th smallest in a range
+   $[l, r]$ (the classic "persistent segment tree on values" trick).
+5. **Hard:** Implement a **fully** persistent balanced BST (persistent treap or persistent red-black
+   tree) supporting insert and delete on any version.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does path copying copy when updating one leaf of a balanced tree?',
+      options: [
+        'The entire tree',
+        'Only the leaf',
+        'Only the nodes on the root-to-leaf path',
+        'A random logarithmic sample of nodes',
+      ],
+      answer: 2,
+      explain: 'Exactly the O(log n) nodes from the root down to the changed leaf are copied. Their off-path children are shared pointers into the previous version, which stays intact.',
+    },
+    {
+      q: 'Why must a persistent structure never mutate a node in place?',
+      options: [
+        'Because mutation is slower than allocation',
+        'Because shared nodes belong to earlier versions too, which would be corrupted',
+        'Because it would break the balance invariant',
+        'Because leaves cannot be modified',
+      ],
+      answer: 1,
+      explain: 'Old versions reach the new value only through shared, unchanged nodes. Mutating one of those nodes in place changes what every version pointing at it sees, destroying persistence.',
+    },
+    {
+      q: 'What is the total space for n initial elements and m path-copying updates?',
+      options: [
+        'O(n * m)',
+        'O(n + m log n)',
+        'O(m)',
+        'O(n log n)',
+      ],
+      answer: 1,
+      explain: 'The initial tree is O(n); each update adds O(log n) new nodes and shares the rest, so m updates add O(m log n), giving O(n + m log n) total.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Persistence keeps <strong>every past version</strong> queryable after each update.',
+    '<strong>Path copying</strong> copies only the root-to-leaf path and <strong>shares</strong> all untouched subtrees.',
+    'An update is <strong>O(log n)</strong> time and <strong>O(log n)</strong> extra space; m updates cost <strong>O(n + m log n)</strong>.',
+    '<strong>Immutability is mandatory</strong> — mutating a shared node corrupts earlier versions.',
+    'It powers immutable collections, Git, MVCC databases, and time-travel / undo everywhere.',
+  ]}
+/>
+
+Next up: **Ropes** — a balanced tree of string chunks where insert, delete, and split cost $O(\log n)$
+by touching one path instead of shifting a whole array of characters.

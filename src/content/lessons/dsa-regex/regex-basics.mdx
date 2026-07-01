@@ -1,0 +1,236 @@
+---
+title: Regex Fundamentals
+track: dsa-regex
+summary: "The pattern language, from the ground up: literal characters, the dot wildcard, and the match engine that slides a pattern across your text."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-string-algorithms/suffix-array
+leadsTo:
+  - dsa-regex/character-classes
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import RgxLiteralWalk from '../../../components/demos/RgxLiteralWalk.tsx';
+
+## The hook: a needle that describes itself
+
+Find every phone number in a 10,000-line log. Pull the price out of `"Total: 29.99 USD"`. Check that a
+signup field actually looks like an email. You could write a bespoke loop for each — or you could hand the
+computer a tiny *description* of what you are looking for and let a single, battle-tested engine do the
+scanning. That description language is the **regular expression**, and underneath the cryptic punctuation
+it is just a pattern that an engine drags across your text, one position at a time.
+
+<Callout type="intuition" title="The one-sentence idea">
+A regex is a pattern of tokens; the engine tries to line those tokens up against the text starting at
+each position, and reports the first place where every token matches in a row.
+</Callout>
+
+## Intuition
+
+Most characters in a pattern are **literal** — they match themselves. The pattern `cat` matches the three
+letters c, a, t in that order. The magic starts with **metacharacters**, characters that mean something
+other than themselves. The first one to meet is the **dot** `.`, which matches *any single character*
+except a newline. So `a.c` matches `abc`, `a1c`, or `a c`, but not `ac` (there is nothing for the dot to
+match) and not `abbc` (the dot matches exactly one character, not two).
+
+The engine's core loop is simple. Anchor an attempt at position 0 and try to match every token left to
+right. If a token fails, the whole attempt fails, so slide the start one place right and try again. Keep
+sliding until something matches or you run off the end. Everything else in regex — classes, quantifiers,
+groups — is more expressive *tokens*, but this slide-and-compare skeleton never changes.
+
+You already know this shape from string search: the suffix array you built lets you binary-search for an
+exact substring. A regex generalises "exact substring" to "any string matching this pattern," at the cost
+of a smarter matcher.
+
+## Play with it
+
+Type a pattern using literals and the dot, give it a test string, and step the engine. Watch the current
+token light up against the character under the cursor: emerald when it matches, red when it fails and the
+whole attempt slides right.
+
+<RgxLiteralWalk client:visible />
+
+<Callout type="tip">
+Try `a.c` against `a-c abc`. The first attempt at position 0 fails on the second token, and the engine
+patiently slides right until the dot finally has a character to eat. Then swap in `...` (three dots) —
+it matches *any* three characters, the simplest "match something" pattern there is.
+</Callout>
+
+## How it works
+
+Dry-run `a.c` against `"xabc"`:
+
+```
+start at 0:  'a' vs 'x'  ✗  → slide
+start at 1:  'a' vs 'a'  ✓
+             '.' vs 'b'  ✓  (dot accepts anything)
+             'c' vs 'c'  ✓  → match at [1, 4) = "abc"
+```
+
+In JavaScript the engine is exposed through the `RegExp` object. `test()` returns a boolean, `match()`
+returns the matched text (all of them with the `g` flag), and `exec()` hands back the match plus its
+index. Run these:
+
+<CodeRunner
+  client:visible
+  code={`// Most characters are literal; the dot matches any one char.
+function firstMatch(pattern, text) {
+  const m = text.match(new RegExp(pattern));
+  return m ? { match: m[0], index: m.index } : null;
+}
+
+// The 'g' (global) flag returns every match, not just the first.
+function allMatches(pattern, text) {
+  return text.match(new RegExp(pattern, 'g')) || [];
+}
+
+// test() is a quick yes/no.
+function looksLikeCode(text) {
+  return /a.c/.test(text);   // a, any char, c
+}`}
+  tests={[
+    { expr: `firstMatch('a.c', 'xx abc yy')`, label: 'a.c in "xx abc yy"' },
+    { expr: `allMatches('a.c', 'abc a1c axc')`, label: 'every a.c' },
+    { expr: `looksLikeCode('the arc lamp')`, label: 'a.c present?' },
+    { expr: `firstMatch('...', 'hi!')`, label: 'three dots' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — creating patterns, the three test methods, and a couple of real
+validators built from nothing but literals, the dot, and anchors:
+
+```ts
+// /dsa/26-regular-expressions/regex-basics.ts
+// Two ways to build a regex: a literal, or the constructor (for dynamic patterns).
+const literal = /hello/gi;
+const dynamic = new RegExp("hello", "gi");
+
+// Escape user input before dropping it into a pattern.
+function escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Three ways to ask "does it match?"
+const hasDigit = /\d/;
+hasDigit.test("abc123");            // true  → boolean
+"abc123def456".match(/\d+/g);       // ["123","456"] → all matches
+/\d+/.exec("abc123def");            // ["123", index: 3, ...] → match + position
+
+// Real validators from basic pieces:
+function isValidUsername(u: string): boolean {
+    return /^[a-zA-Z]\w{2,15}$/.test(u); // starts with a letter, 3–16 chars
+}
+function extractDomain(email: string): string | null {
+    const m = email.match(/@([^@]+)$/);
+    return m ? m[1] : null;
+}
+```
+
+Run the full file: `npx tsx 26-regular-expressions/regex-basics.ts`.
+
+## Complexity
+
+A well-behaved pattern is scanned in time proportional to the text. The engine may try each of the
+$n$ start positions and, at each, compare up to $m$ pattern tokens:
+
+$$
+T(n, m) = O(n \cdot m), \qquad S = O(1).
+$$
+
+Production engines (and the automaton you will build in the last lesson of this track) push the typical
+cost down to $O(n \cdot m)$ *guaranteed*, never worse. Poorly written patterns with nested repetition can
+explode to exponential time — a trap called catastrophic backtracking that gets its own lesson.
+
+| Operation | Returns | Time |
+|-----------|---------|------|
+| `test()` | boolean | $O(n \cdot m)$ |
+| `match()` (no `g`) | first match | $O(n \cdot m)$ |
+| `match(/…/g)` | all matches | $O(n \cdot m)$ |
+| `exec()` | match + index | $O(n \cdot m)$ |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Text editors" icon="📝">
+Every "Find" box you have ever used is a regex engine in disguise. Toggle "regex" mode in your editor and
+`colou.r` will find both <code>colour</code> and <code>coloor</code> — the dot standing in for the one
+letter that varies.
+</ExampleCard>
+
+<ExampleCard domain="Bioinformatics" icon="🧬">
+A DNA restriction site is a short literal motif in a sequence of A/C/G/T. Searching a genome for
+<code>GAATTC</code> (the EcoRI site) is exactly the slide-and-compare loop above, run over millions of
+bases.
+</ExampleCard>
+
+<ExampleCard domain="Spam filtering" icon="📧">
+A first-pass spam rule is often just a literal pattern: does the subject line match <code>fr.e</code>
+(catching "free", "fr3e", "fr e")? The dot quietly absorbs the character the spammer swapped in to dodge a
+plain string match.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The dot is not a literal dot.** `3.14` as a *pattern* matches `3x14` too, because `.` is a wildcard.
+  To match a real period, escape it: `3\.14`.
+- **Metacharacters need escaping.** The set `. ^ $ * + ? ( ) [ ] { } | \` all mean something special.
+  Building a pattern from user input? Escape it first, or an innocent `.` in their text becomes a wildcard.
+- **Prefer string methods for trivial checks.** `text.includes("cat")` beats `/cat/.test(text)` — it is
+  faster and clearer. Reach for regex when the *shape* varies, not for a fixed substring.
+- **Interview cue:** if a question says "matching a pattern" or "extract all the …", regex is usually the
+  intended tool. Say out loud how the engine slides across the text — interviewers want to hear that you
+  know it is not magic.
+
+## Practice
+
+1. **Easy:** Write a pattern that matches any single character between two literal `x`s (like `xay`, `x7y`).
+2. **Easy:** What does `..` match, and why does it fail on a one-character string?
+3. **Medium:** Explain why `/a.c/` matches `"a.c"`, `"abc"`, *and* `"a c"`, but the pattern `/a\.c/` only
+   matches `"a.c"`.
+4. **Medium:** Using only literals and the dot, write a pattern that matches a US-style time like `1:23`
+   or `9:07` (one digit, colon, two of anything). Then note why "of anything" is too loose.
+5. **Hard:** The engine slides start positions left to right. On the text `"aaab"` and pattern `a.b`,
+   how many start positions are tried before it matches, and which one succeeds?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the pattern /a.c/ match?',
+      options: ['Only the literal string "a.c"', 'An "a", then any single character, then a "c"', '"a", zero or more of anything, then "c"', 'Any string containing a, b, and c'],
+      answer: 1,
+      explain: 'The dot is a wildcard for exactly one character (except newline), so a.c matches abc, a1c, a c — but not ac or abbc.',
+    },
+    {
+      q: 'The engine tries to match at position 0 and the second token fails. What does it do next?',
+      options: ['Gives up and returns no match', 'Slides the start to position 1 and tries again', 'Skips to the end of the string', 'Removes the failing token'],
+      answer: 1,
+      explain: 'A failed attempt slides the starting position one place right and retries, until a match is found or the text runs out.',
+    },
+    {
+      q: 'Which is the better way to check for the fixed substring "error" in a log line?',
+      options: ['/error/.test(line)', 'line.includes("error")', 'new RegExp("error").exec(line)', 'line.match(/error/g)'],
+      answer: 1,
+      explain: 'For a fixed substring, String.includes is faster and clearer. Regex earns its keep when the pattern varies.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A regex is a <strong>pattern of tokens</strong>; the engine slides it across the text and matches left to right at each start position.',
+    'Most characters are <strong>literal</strong>; the <strong>dot</strong> <code>.</code> matches any single character except a newline.',
+    'JavaScript exposes matching through <code>test()</code> (boolean), <code>match()</code> (text), and <code>exec()</code> (match + index); the <code>g</code> flag finds all.',
+    'Escape special characters (<code>. ^ $ * + ? ( ) [ ] { } | \\</code>) to match them literally — and always escape user input.',
+    'Typical matching is <strong>O(n·m)</strong>; use string methods for fixed substrings and regex when the shape varies.',
+  ]}
+/>
+
+Next up: **Character Classes & Anchors** — sets like `[a-z]`, shorthands like `\d`, and the positions
+`^` and `$` that pin a match to the start or end of the line.

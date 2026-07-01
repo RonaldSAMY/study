@@ -1,0 +1,204 @@
+---
+title: Boyer-Moore
+track: dsa-string-algorithms
+summary: "Match from the right and skip: a mismatch tells you how far to leap the pattern forward, so long searches read only a fraction of the text."
+difficulty: intermediate
+estMinutes: 17
+prereqs:
+  - dsa-string-algorithms/rabin-karp
+leadsTo:
+  - dsa-string-algorithms/manacher
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SAlgBoyerMoore from '../../../components/demos/SAlgBoyerMoore.tsx';
+
+## The hook: the fastest search reads the least
+
+Every algorithm so far touches essentially every character of the text at least once. Boyer-Moore breaks that ceiling: on typical text it reads *fewer* characters than the text contains, running in **sublinear** time. The idea is almost cheeky — align the pattern, but compare **right to left**, and when a mismatch happens, use the offending character to jump the pattern forward by many positions at once, skipping over regions that cannot possibly match. This is the algorithm inside `grep`, inside your editor's find box, inside intrusion-detection scanners.
+
+<Callout type="intuition" title="The one-sentence idea">
+Compare the pattern to the text from its last character backward; on a mismatch, slide the pattern forward so the mismatched text character lines up with its rightmost copy in the pattern — often a jump of many positions.
+</Callout>
+
+## Intuition
+
+KMP and the Z-algorithm scan left to right and shift by *one* on the worst mismatch. Boyer-Moore flips the direction and asks a sharper question. Suppose the pattern's last character lands on a text character that **does not appear in the pattern at all**. Then no alignment overlapping that character can match, so we can leap the *entire pattern length* forward in a single step. That is the **bad-character rule**: on a mismatch at pattern position $j$ against text character $c$, shift so the rightmost occurrence of $c$ in the pattern aligns under position $j$. If $c$ is absent, shift past it entirely.
+
+There is a second, complementary heuristic, the **good-suffix rule**: when the *tail* of the pattern matched before the mismatch, reuse that matched suffix the way KMP reuses a matched prefix — jump to the next place that suffix (or a prefix of it) reappears. Full Boyer-Moore takes the **larger** of the two shifts, guaranteeing progress while skipping aggressively. Bigger alphabets and longer patterns mean bigger skips, which is why it shines on natural-language text.
+
+## Play with it
+
+The pattern sits under the text and matches from the right. Emerald cells are the matched tail; the red cell is the bad character that breaks the match. Read the caption to see *why* the jump is the size it is — then notice how many alignments got skipped entirely.
+
+<SAlgBoyerMoore client:visible />
+
+<Callout type="tip">
+Search a long run like <code>aaaaaaaaab</code> for the pattern <code>b</code>: the last character mismatches on <code>a</code>, which is absent from the pattern, so Boyer-Moore leaps a full pattern width each time and barely glances at the text.
+</Callout>
+
+## How it works
+
+Align `pattern = "GCAGAGAG"` under `text = "GCATCGCAGAGAGTATACAGT"` at shift 0 and match from the right:
+
+```
+GCATCGCAGAGAGTATACAGT
+GCAGAGAG
+       ^ compare right-to-left: 'G'='G','A'='A','G'='G','A'='A', then 'C' vs 'A' mismatch
+mismatch char 'T'? no — mismatch at j=4, text char 'C'; 'C' last appears in pattern at index 1
+→ shift so that copy lines up: jump forward, re-align, repeat
+```
+
+Each mismatch consults the bad-character table (the rightmost index of each character) and slides. Here is the bad-character version returning every match position:
+
+<CodeRunner
+  client:visible
+  code={`function boyerMoore(text, pattern) {
+  const n = text.length, m = pattern.length;
+  if (m === 0 || m > n) return [];
+  const last = new Map();                 // rightmost index of each char
+  for (let i = 0; i < m; i++) last.set(pattern[i], i);
+  const hits = [];
+  let shift = 0;
+  while (shift <= n - m) {
+    let j = m - 1;
+    while (j >= 0 && pattern[j] === text[shift + j]) j--;   // match from the right
+    if (j < 0) {                          // full match
+      hits.push(shift);
+      shift += 1;
+    } else {
+      const c = text[shift + j];
+      const lastPos = last.has(c) ? last.get(c) : -1;
+      shift += Math.max(1, j - lastPos);  // bad-character jump
+    }
+  }
+  return hits;
+}`}
+  tests={[
+    { expr: 'JSON.stringify(boyerMoore("HERE IS A SIMPLE EXAMPLE", "EXAMPLE"))', label: 'EXAMPLE' },
+    { expr: 'JSON.stringify(boyerMoore("AABAACAADAABAAABAA", "AABA"))', label: 'AABA positions' },
+    { expr: 'JSON.stringify(boyerMoore("aaaaaaaaab", "b"))', label: 'single char at the end' },
+  ]}
+/>
+
+## The real implementation
+
+The course file combines both heuristics — bad character *and* good suffix — taking the maximum shift for the strongest skip:
+
+```ts
+// /dsa/18-string-algorithms/boyer-moore.ts
+export function boyerMooreSearch(text: string, pattern: string): number[] {
+  const n = text.length, m = pattern.length;
+  const result: number[] = [];
+  if (m === 0 || m > n) return result;
+
+  const badChar = buildBadCharTable(pattern);      // char → rightmost index
+  const goodSuffix = buildGoodSuffixTable(pattern); // suffix-based shifts
+
+  let shift = 0;
+  while (shift <= n - m) {
+    let j = m - 1;
+    while (j >= 0 && pattern[j] === text[shift + j]) j--;   // right-to-left
+    if (j < 0) {
+      result.push(shift);
+      shift += goodSuffix[0];
+    } else {
+      const bcShift = badChar.has(text[shift + j])
+        ? j - badChar.get(text[shift + j])!
+        : j + 1;
+      shift += Math.max(goodSuffix[j + 1], bcShift);         // best of the two
+    }
+  }
+  return result;
+}
+```
+
+Run the full file: `npx tsx 18-string-algorithms/boyer-moore.ts`.
+
+## Complexity
+
+On large alphabets the average is famously sublinear — roughly $O(n/m)$ — because most alignments end on the first (rightmost) comparison and jump far. A naive bad-character-only version can still hit $O(nm)$ on adversarial input; adding the good-suffix rule (with the Galil optimization) restores an $O(n)$ worst case:
+
+$$
+T_{\text{best/avg}}(n, m) = O\!\left(\tfrac{n}{m}\right), \qquad T_{\text{worst}}(n, m) = O(nm)\ \text{(}\,O(n)\text{ with good-suffix + Galil)}, \qquad S = O(m + |\Sigma|).
+$$
+
+| Approach | Best/Average | Worst | Extra space |
+|----------|--------------|-------|-------------|
+| KMP | $O(n)$ | $O(n)$ | $O(m)$ |
+| Boyer-Moore (bad char) | $O(n/m)$ | $O(nm)$ | $O(|\Sigma|)$ |
+| Boyer-Moore (both rules) | $O(n/m)$ | $O(n)$ | $O(m + |\Sigma|)$ |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Word processors" icon="🖊️">
+The "Find" and "Replace" features in editors and word processors search long documents against short queries over a huge alphabet — ideal Boyer-Moore territory. Right-to-left matching lets the cursor skip whole words the query cannot begin, so highlighting stays instant even in a novel-length file.
+</ExampleCard>
+
+<ExampleCard domain="Network security" icon="🛡️">
+Intrusion-detection systems like Snort scan packet payloads for signatures of known attacks. Boyer-Moore's skips let a sensor keep up with line-rate traffic, discarding the overwhelming majority of benign bytes without inspecting each one.
+</ExampleCard>
+
+<ExampleCard domain="Retail logistics" icon="📦">
+Scanning a warehouse manifest for a specific SKU code — a long, high-alphabet token — benefits from the same trick: a single mismatched character at the tail rules out an alignment and shifts the search past a whole block of unrelated codes.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The jump can be non-positive.** When the bad character sits to the *right* of the mismatch in the pattern, `j - last[c]` is negative; always take `max(1, …)` or you loop forever.
+- **Small alphabets blunt the skips.** On DNA (4 letters) collisions are common and shifts stay short; KMP or Boyer-Moore-Horspool may be a better fit than the full machinery.
+- **Bad-character alone is not worst-case safe.** Without the good-suffix rule you can be dragged to $O(nm)$; know that the good-suffix table (plus Galil) is what buys the $O(n)$ guarantee.
+- **Interview cue:** if asked for a *practical* fast search over text, describe the two heuristics and "take the larger shift". Contrast with KMP's guaranteed-linear-but-never-sublinear behavior.
+
+## Practice
+
+1. **Easy:** Build the bad-character table for `"NEEDLE"`. Where does each letter's rightmost occurrence sit?
+2. **Easy:** Trace the shifts searching `"b"` in `"aaaab"`. How many characters are ever compared?
+3. **Medium:** Implement Boyer-Moore-Horspool (a simplified single-table variant) and compare its shifts to the bad-character rule.
+4. **Medium:** Construct a text and pattern that force the bad-character-only version toward $O(nm)$.
+5. **Hard:** Add the good-suffix rule and verify your search stays fast on the input from (4).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In which direction does Boyer-Moore compare the pattern to the text?',
+      options: ['Left to right', 'Right to left', 'Both ends toward the middle', 'Random order'],
+      answer: 1,
+      explain: 'Matching from the last character backward is what lets a single mismatch justify a large forward jump.',
+    },
+    {
+      q: 'If the mismatched text character does not occur in the pattern at all, the bad-character rule shifts the pattern by…',
+      options: ['One position', 'Half the pattern length', 'Enough to move entirely past that character', 'It cannot shift'],
+      answer: 2,
+      explain: 'No alignment overlapping an absent character can match, so the pattern jumps past it — up to a full pattern width.',
+    },
+    {
+      q: 'Why does full Boyer-Moore take the maximum of the bad-character and good-suffix shifts?',
+      options: [
+        'To match Rabin-Karp exactly',
+        'The larger shift is still safe and skips more text, while never missing a match',
+        'To keep the shift equal to one',
+        'Because the tables are the same',
+      ],
+      answer: 1,
+      explain: 'Both rules produce safe shifts; taking the larger skips the most text without ever jumping past a real occurrence.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Boyer-Moore matches <strong>right to left</strong>, turning a single mismatch into a big forward jump.',
+    'The <strong>bad-character rule</strong> aligns the mismatched text character with its rightmost copy in the pattern.',
+    'The <strong>good-suffix rule</strong> reuses an already-matched tail, KMP-style; the search takes the <strong>larger</strong> shift.',
+    'Average time is <strong>sublinear O(n/m)</strong> on big alphabets; good-suffix + Galil give an <strong>O(n)</strong> worst case.',
+    'It powers <strong>grep, editor find, and IDS scanners</strong> — small alphabets (DNA) blunt its advantage.',
+  ]}
+/>
+
+Next up: **Manacher's Algorithm** — the same "reuse what you already know via a mirror" trick, aimed at finding the longest palindrome in linear time.

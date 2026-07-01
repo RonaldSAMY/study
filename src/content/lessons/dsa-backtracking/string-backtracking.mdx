@@ -1,0 +1,310 @@
+---
+title: String Backtracking
+track: dsa-backtracking
+summary: "Cutting a string is a series of choices: pick the next piece, keep going only if it is valid, and undo the cut when the tail fails — the choose/explore/undo engine, now slicing text."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-backtracking/n-queens-sudoku
+leadsTo:
+  - dsa-dp-optimization/dp-on-trees
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BtPalindromePartition from '../../../components/demos/BtPalindromePartition.tsx';
+
+## The hook: where do the scissors go?
+
+You have the string `"aab"` and a rule: every piece you cut must be a palindrome. Where do you place the
+scissors? After the first `a`? After `aa`? After the whole thing? Each cut is a **choice**, and once you have
+made it you face a smaller version of the exact same question on the leftover tail. That recursive shape —
+choose a prefix, recurse on the rest — is string backtracking.
+
+The board is gone, but the engine from N-Queens is untouched: **choose** the next piece, **explore** the
+remaining suffix, and **undo** the cut when that path dead-ends. The constraints just moved from "no two
+queens attack" to "this substring is a palindrome" or "this segment is a valid IP octet". The frontier is
+always a single index: where does the next piece start?
+
+<Callout type="intuition" title="The one-sentence idea">
+To split a string under a rule, try every prefix as the next piece; when a prefix is <strong>valid</strong>,
+recurse on the remaining suffix, then pop the piece and slide the cut one character further.
+</Callout>
+
+## Intuition: one cursor, every prefix
+
+Fix a `start` index — everything before it is already committed to pieces. Now let `end` sweep from `start`
+forward. Each `end` defines a candidate piece `s[start..end]`. If that piece satisfies the rule, push it and
+recurse with the cursor moved to `end + 1`; otherwise skip it. When `start` reaches the end of the string,
+every character has been consumed by valid pieces — record the partition.
+
+This is the same forward-only cursor you saw in combinations, but the "elements" are now *substrings of
+increasing length* rather than array indices. Two decisions define any string-backtracking problem:
+
+- **The validity test.** Palindrome? A number in $[0, 255]$? A word in the dictionary? That predicate is the
+  only pruning you get — a stronger test cuts more branches.
+- **The stop condition.** Usually "cursor reached the end", sometimes with an extra count (an IP address needs
+  exactly 4 pieces).
+
+Everything else is the unchanging choose/recurse/undo loop.
+
+## Play with it
+
+Type a short string and watch the partition tree grow. Each node is a candidate piece; the indigo root-to-node
+path is the partition built so far. A piece that is **not** a palindrome is pruned in red before its subtree
+is ever explored, and a path that consumes the whole string turns emerald.
+
+<BtPalindromePartition client:visible />
+
+<Callout type="tip">
+Try <code>noon</code>: the single-letter cuts always work, but watch <code>noon</code> itself and <code>oo</code>
+get accepted as multi-character palindromes, branching the tree. Then try <code>abc</code> — no piece longer
+than one character survives, so the only partition is every letter on its own.
+</Callout>
+
+## How it works
+
+The palindrome-partition template — one cursor, every prefix, validity gate before the recursion:
+
+```ts
+function partition(s) {
+  const result = [];
+  const isPal = (l, r) => { while (l < r) { if (s[l++] !== s[r--]) return false; } return true; };
+  function backtrack(start, current) {
+    if (start === s.length) { result.push([...current]); return; }  // whole string consumed
+    for (let end = start; end < s.length; end++) {
+      if (!isPal(start, end)) continue;          // prune: not a palindrome
+      current.push(s.slice(start, end + 1));      // choose the piece
+      backtrack(end + 1, current);                // explore the suffix
+      current.pop();                              // undo the cut
+    }
+  }
+  backtrack(0, []);
+  return result;
+}
+```
+
+**Dry run** of `partition("aab")`:
+
+```
+start 0: "a" ✓ → start 1: "a" ✓ → start 2: "b" ✓ → ["a","a","b"] ✓
+                  start 1: "ab" ✗ (not a palindrome) → skip
+         "aa" ✓ → start 2: "b" ✓ → ["aa","b"] ✓
+         "aab" ✗ (not a palindrome) → skip
+```
+
+Two partitions: `["a","a","b"]` and `["aa","b"]`. Run it, alongside Restore IP Addresses — a different
+validity test, identical engine:
+
+<CodeRunner
+  client:visible
+  code={`function partition(s) {
+  const result = [];
+  const isPal = (l, r) => { while (l < r) { if (s[l++] !== s[r--]) return false; } return true; };
+  function backtrack(start, current) {
+    if (start === s.length) { result.push([...current]); return; }
+    for (let end = start; end < s.length; end++) {
+      if (!isPal(start, end)) continue;
+      current.push(s.slice(start, end + 1));
+      backtrack(end + 1, current);
+      current.pop();
+    }
+  }
+  backtrack(0, []);
+  return result;
+}
+
+// Same choose/explore/undo, new validity test + a "must be 4 pieces" stop
+function restoreIp(s) {
+  const result = [];
+  const valid = (seg) =>
+    seg.length >= 1 && seg.length <= 3 &&
+    (seg.length === 1 || seg[0] !== '0') && Number(seg) <= 255;
+  function backtrack(start, parts) {
+    if (parts.length === 4) { if (start === s.length) result.push(parts.join('.')); return; }
+    for (let len = 1; len <= 3 && start + len <= s.length; len++) {
+      const seg = s.slice(start, start + len);
+      if (!valid(seg)) continue;
+      parts.push(seg);
+      backtrack(start + len, parts);
+      parts.pop();
+    }
+  }
+  backtrack(0, []);
+  return result;
+}`}
+  tests={[
+    { expr: 'JSON.stringify(partition("aab"))', label: 'palindrome partitions of "aab"' },
+    { expr: 'partition("aabb").length', label: 'number of partitions of "aabb"' },
+    { expr: 'JSON.stringify(restoreIp("25525511135"))', label: 'valid IPs from digits' },
+    { expr: 'restoreIp("0000").length', label: 'number of IPs from "0000"' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses the same template; the only difference from the demo is that the validity check is a
+tight two-pointer palindrome test that avoids allocating substrings until a piece is actually taken:
+
+```ts
+// /dsa/15-backtracking/string-backtracking.ts
+function partition(s: string): string[][] {
+    const result: string[][] = [];
+
+    function isPalindrome(str: string, left: number, right: number): boolean {
+        while (left < right) {
+            if (str[left++] !== str[right--]) return false;
+        }
+        return true;
+    }
+
+    function backtrack(start: number, current: string[]): void {
+        if (start === s.length) {
+            result.push([...current]);
+            return;
+        }
+
+        for (let end = start; end < s.length; end++) {
+            if (isPalindrome(s, start, end)) {
+                current.push(s.substring(start, end + 1));   // choose
+                backtrack(end + 1, current);                 // explore
+                current.pop();                               // undo
+            }
+        }
+    }
+
+    backtrack(0, []);
+    return result;
+}
+```
+
+When the same string is partitioned repeatedly, the file also ships `partitionOptimized`, which precomputes a
+`dp[i][j] = "is s[i..j] a palindrome"` table so each check becomes $O(1)$ — a first taste of the
+memoization that the DP track builds on:
+
+```ts
+// /dsa/15-backtracking/string-backtracking.ts
+for (let i = n - 1; i >= 0; i--) {
+    for (let j = i; j < n; j++) {
+        if (s[i] === s[j] && (j - i <= 2 || dp[i + 1][j - 1])) {
+            dp[i][j] = true;                 // s[i..j] palindromic
+        }
+    }
+}
+```
+
+Run the full file: `npx tsx 15-backtracking/string-backtracking.ts`.
+
+## Complexity
+
+A length-$n$ string has $n - 1$ gaps, each either cut or not, so there are up to $2^{\,n-1}$ ways to split it.
+Palindrome partitioning may generate all of them in the worst case (think `"aaaa"`), and copying each partition
+of up to $n$ pieces adds a factor of $n$:
+
+$$
+T_{\text{partition}}(n) = O\!\left(n \cdot 2^{\,n}\right), \qquad \text{gaps} = n - 1 \Rightarrow 2^{\,n-1}\ \text{splits}.
+$$
+
+| Problem | Splits explored | Validity test | Time | Space |
+|---------|-----------------|---------------|------|-------|
+| Palindrome partition | up to $2^{\,n-1}$ | palindrome, $O(n)$ | $O(n \cdot 2^{n})$ | $O(n)$ |
+| Palindrome partition (DP table) | up to $2^{\,n-1}$ | table lookup, $O(1)$ | $O(n \cdot 2^{n})$ | $O(n^{2})$ |
+| Restore IP addresses | $\le 3^{4}$ | octet in $[0,255]$ | $O(1)$ | $O(1)$ |
+
+Restore IP is bounded: exactly 4 pieces of length 1–3 cap the tree at $3^4 = 81$ leaves, which is why its cost
+is effectively constant regardless of a longer-looking input.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Networking" icon="🌐">
+Parsing <code>"25525511135"</code> into a dotted IPv4 address is string backtracking: try 1-, 2-, and 3-digit
+octets, keep only those in 0–255 with no leading zero, and require exactly four pieces to cover the string.
+</ExampleCard>
+
+<ExampleCard domain="Natural language" icon="🈶">
+Segmenting text with no spaces — Chinese sentences, or a run-on <code>"catsanddog"</code> — is Word Break:
+cut prefixes that appear in a dictionary and recurse on the rest, producing every sentence that tiles the
+string with real words.
+</ExampleCard>
+
+<ExampleCard domain="Bioinformatics" icon="🧬">
+Splitting a DNA read into recognized motifs or restriction sites is the same partition: sweep a cursor, accept
+a segment only if it matches a known pattern, and backtrack when the remaining sequence cannot be tiled.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Off-by-one on the slice.** The piece is `s.slice(start, end + 1)` (inclusive `end`) and the recursion moves
+  to `end + 1`. Drop the `+ 1` and you either lose a character or loop forever.
+- **Testing validity after recursing.** Gate the piece *before* you descend — that skip is your only pruning.
+  Recursing first and validating later explores dead branches needlessly.
+- **Forgetting the pop.** `current.push` must be mirrored by `current.pop` after the recursive call, exactly as
+  queens were removed on backtrack; otherwise pieces leak into sibling paths.
+- **Leading zeros / bounds in IP.** `"010"` and `"256"` are invalid octets — a subtle validity bug that passes
+  small tests and fails the tricky ones.
+- **Interview cue:** "partition the string so that…", "all valid ways to split", "segment into dictionary
+  words", "restore/format this string" all signal a cursor-and-prefix backtracking solution.
+
+## Practice
+
+1. **Easy:** By hand, list every palindrome partition of `"aba"` and confirm the engine agrees.
+2. **Easy:** Change the validity test to "length exactly 2" and enumerate all ways to cut a string into pairs.
+3. **Medium:** Restore IP Addresses (LeetCode 93): return every valid dotted address from a digit string.
+4. **Medium:** Palindrome Partitioning (LeetCode 131): return all palindromic partitions — the template above.
+5. **Hard:** Word Break II (LeetCode 140): return every sentence formed from dictionary words, adding
+   memoization on the start index to avoid re-solving suffixes.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the partition template, what does the inner loop variable end represent?',
+      options: [
+        'The number of pieces so far',
+        'The last index (inclusive) of the candidate next piece s[start..end]',
+        'The length of the whole string',
+        'A random cut point',
+      ],
+      answer: 1,
+      explain: 'For a fixed start, end sweeps forward so s[start..end] is every possible next piece; a valid one is chosen and the cursor moves to end + 1.',
+    },
+    {
+      q: 'What single thing changes between palindrome partitioning and Restore IP Addresses?',
+      options: [
+        'The recursion is replaced by a loop',
+        'The validity predicate (and IP adds a "exactly 4 pieces" stop) — the choose/explore/undo engine is identical',
+        'IP addresses do not use backtracking',
+        'Palindromes require sorting first',
+      ],
+      answer: 1,
+      explain: 'Both are one-cursor prefix backtracking; only the validity test (palindrome vs. octet 0–255) and stop condition differ.',
+    },
+    {
+      q: 'Why is Restore IP Addresses effectively O(1) while palindrome partitioning is exponential?',
+      options: [
+        'IP parsing skips the recursion',
+        'IP requires exactly 4 pieces of length 1–3, capping the tree at 3^4 = 81, while a partition can cut every one of n − 1 gaps',
+        'Palindromes are always longer',
+        'They have the same complexity',
+      ],
+      answer: 1,
+      explain: 'Fixing 4 segments of bounded length bounds the whole search, whereas a general partition explores up to 2^(n−1) ways to place cuts.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'String backtracking is the same <strong>choose / explore / undo</strong> engine, cutting a string into valid pieces.',
+    'Fix a <strong>start cursor</strong>, let end sweep forward, and take the prefix s[start..end] when it passes the validity test.',
+    'The problem is defined by two things: the <strong>validity predicate</strong> and the <strong>stop condition</strong>.',
+    'The predicate is your only pruning — a palindrome check, an octet range, a dictionary lookup — so gate <strong>before</strong> recursing.',
+    'A length-n string has n − 1 gaps, so up to <strong>2^(n−1)</strong> splits; bounding pieces (as IP does) tames the tree.',
+  ]}
+/>
+
+Next up: **DP on Trees** — when overlapping subproblems make raw backtracking too slow, memoizing on the
+cursor (as the palindrome DP table hinted) turns exponential recursion into polynomial dynamic programming.

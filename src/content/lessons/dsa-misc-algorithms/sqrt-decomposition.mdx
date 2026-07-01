@@ -1,0 +1,258 @@
+---
+title: Square-Root Decomposition
+track: dsa-misc-algorithms
+summary: "Square-root decomposition: split an array into √n blocks so any range query costs O(√n) with almost no code."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-misc-algorithms/quickselect
+leadsTo:
+  - dsa-misc-algorithms/mos-algorithm
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MiscSqrtBlocks from '../../../components/demos/MiscSqrtBlocks.tsx';
+
+## The hook: pre-sum the neighbourhood, not every house
+
+You run a delivery network and constantly ask "what is the total demand between stop $L$ and stop $R$?"
+Adding up every stop in the range is $O(n)$ per question, and there are thousands of questions. A full
+segment tree gives $O(\log n)$ but is fiddly to write under time pressure. **Square-root decomposition** is
+the pragmatic middle: chop the road into $\sqrt{n}$ chunks, keep a running total for each chunk, and then
+any range is "a few loose stops on each edge, plus a handful of whole chunks jumped over instantly."
+
+<Callout type="intuition" title="The one-sentence idea">
+Group the array into blocks of size about $\sqrt{n}$ and precompute each block's answer, so a range query
+touches at most two partial blocks element-by-element and the middle blocks in one step each — $O(\sqrt{n})$ total.
+</Callout>
+
+## Intuition: why √n is the sweet spot
+
+Suppose you split $n$ elements into blocks of size $b$. A range $[L, R]$ then decomposes into three parts:
+
+1. a **partial left edge** — up to $b$ loose elements you sum by hand;
+2. a run of **whole blocks** in the middle — each contributes its precomputed answer in $O(1)$;
+3. a **partial right edge** — again up to $b$ loose elements.
+
+The edges cost $O(b)$; the whole blocks number at most $n/b$, so they cost $O(n/b)$. Total work is
+$O(b + n/b)$. Calculus (or just trying values) says this is smallest when the two terms balance, at
+$b = \sqrt{n}$, giving $O(\sqrt{n})$. That is the entire idea: **balance the cost of the edges against the
+cost of the blocks.**
+
+It is slower than a segment tree's $O(\log n)$, but it is short, general, and handles weird queries
+(mode, count-less-than, frequency) that do not fit a clean tree — which is exactly why competitive
+programmers keep it in their back pocket.
+
+## Play with it
+
+Set a query $[L, R]$ and step through. The array is drawn as $\sqrt{n}$ blocks, each labelled with its
+sum. Watch the loose edge elements light up one at a time, then the **whole middle blocks get added in a
+single jump each**, and the running total climb to the answer.
+
+<MiscSqrtBlocks client:visible />
+
+<Callout type="tip">
+Make the range span several whole blocks and count the steps: the middle blocks each cost one step no
+matter how big they are. Now shrink the range inside a single block — it falls back to a plain scan, which
+is fine because a single block is only $\sqrt{n}$ long.
+</Callout>
+
+## How it works
+
+For `[3,1,4,1,5,9,2,6,5,3,5,8,9,7,9,3]` ($n = 16$, block size $4$) the block sums are
+`[9, 22, 21, 28]`. To answer `sum[2, 10]`:
+
+```
+blocks:  [3 1 4 1] [5 9 2 6] [5 3 5 8] [9 7 9 3]
+                ↑ L=2                ↑ R=10
+left edge (2..3): 4 + 1            = 5
+whole block 1:    22 (in one step) = 22
+right edge (8..10): 5 + 3 + 5      = 13
+total = 5 + 22 + 13 = 40
+```
+
+Only two edge scans and one block lookup — not nine additions.
+
+<CodeRunner
+  client:visible
+  code={`// Range-sum with sqrt decomposition. Build once, then query in O(sqrt(n)).
+function makeSqrtSum(arr) {
+  const bs = Math.max(1, Math.floor(Math.sqrt(arr.length)));
+  const blockSum = [];
+  for (let i = 0; i < arr.length; i++) {
+    const b = Math.floor(i / bs);
+    blockSum[b] = (blockSum[b] || 0) + arr[i];
+  }
+  function query(L, R) {
+    let sum = 0;
+    const lb = Math.floor(L / bs), rb = Math.floor(R / bs);
+    if (lb === rb) { for (let i = L; i <= R; i++) sum += arr[i]; return sum; }
+    for (let i = L; i < (lb + 1) * bs; i++) sum += arr[i];   // left edge
+    for (let b = lb + 1; b < rb; b++) sum += blockSum[b];    // whole blocks
+    for (let i = rb * bs; i <= R; i++) sum += arr[i];        // right edge
+    return sum;
+  }
+  function update(i, val) { blockSum[Math.floor(i / bs)] += val - arr[i]; arr[i] = val; }
+  return { query, update };
+}
+
+const ds = makeSqrtSum([3,1,4,1,5,9,2,6,5,3,5,8,9,7,9,3]);`}
+  tests={[
+    { expr: 'ds.query(2, 10)', label: 'sum[2,10]' },
+    { expr: 'ds.query(0, 3)', label: 'sum[0,3] (one block)' },
+    { expr: 'ds.query(0, 15)', label: 'sum of all' },
+    { expr: '(ds.update(4, 100), ds.query(2, 10))', label: 'after arr[4]=100' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the range-sum class with an $O(1)$ point update, plus the count-with-sorted-blocks
+variant that answers "how many elements $\le x$ in $[L,R]$":
+
+```ts
+// /dsa/25-misc-algorithms/sqrt-decomposition.ts
+class SqrtSum {
+    private arr: number[];
+    private blockSize: number;
+    private blockSums: number[];
+
+    constructor(arr: number[]) {
+        this.arr = [...arr];
+        this.blockSize = Math.max(1, Math.floor(Math.sqrt(arr.length)));
+        this.blockSums = [];
+        this.build();
+    }
+    private build(): void {
+        const numBlocks = Math.ceil(this.arr.length / this.blockSize);
+        this.blockSums = Array(numBlocks).fill(0);
+        for (let i = 0; i < this.arr.length; i++)
+            this.blockSums[Math.floor(i / this.blockSize)] += this.arr[i];
+    }
+    update(index: number, value: number): void {
+        const b = Math.floor(index / this.blockSize);
+        this.blockSums[b] += value - this.arr[index];   // O(1): patch one block
+        this.arr[index] = value;
+    }
+    query(left: number, right: number): number {
+        let sum = 0;
+        const lb = Math.floor(left / this.blockSize);
+        const rb = Math.floor(right / this.blockSize);
+        if (lb === rb) { for (let i = left; i <= right; i++) sum += this.arr[i]; return sum; }
+        for (let i = left; i < (lb + 1) * this.blockSize; i++) sum += this.arr[i];
+        for (let b = lb + 1; b < rb; b++) sum += this.blockSums[b];
+        for (let i = rb * this.blockSize; i <= right; i++) sum += this.arr[i];
+        return sum;
+    }
+}
+```
+
+The same file also builds `SqrtMinMax`, lazy `SqrtRangeUpdate`, and `SqrtCount` (sorted blocks +
+binary search). Run the full file: `npx tsx 25-misc-algorithms/sqrt-decomposition.ts`.
+
+## Complexity
+
+With block size $b$, the cost of one query is edges plus blocks:
+
+$$
+T(b) = O\!\left(b + \frac{n}{b}\right), \qquad \text{minimized at } b = \sqrt{n} \;\Rightarrow\; O(\sqrt{n}).
+$$
+
+| Operation | This structure | Segment tree / BIT |
+|-----------|----------------|--------------------|
+| Build | $O(n)$ | $O(n)$ |
+| Range query | $O(\sqrt{n})$ | $O(\log n)$ |
+| Point update | $O(1)$–$O(\sqrt{n})$ | $O(\log n)$ |
+| Space | $O(\sqrt{n})$ | $O(n)$ |
+
+For $n = 10^6$, $\sqrt{n} = 1000$ versus $\log_2 n \approx 20$ — the tree is faster, but the block method is
+a few lines and bends to almost any query.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Climate science" icon="🌡️">
+A weather archive stores hourly temperatures. To answer "average temperature from this hour to that hour"
+you keep a per-day (≈ block) total and only touch the loose hours at each end — the same edge-plus-block split.
+</ExampleCard>
+
+<ExampleCard domain="Audio editing" icon="🎧">
+Waveform editors precompute min/max peaks per chunk of samples so they can draw any zoom level fast. A
+selection's peak is the loose samples at the edges plus the precomputed peaks of the whole chunks between.
+</ExampleCard>
+
+<ExampleCard domain="Library archives" icon="📚">
+Shelves are grouped into bays with a posted count per bay. "How many books between shelf 214 and 903?" is
+answered by counting the two partial bays by hand and reading the bay totals for everything in between.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Same-block queries must fall back to a scan.** When $L$ and $R$ live in one block there are no whole
+  blocks to jump — loop directly. Forgetting this branch double-counts or misses elements.
+- **Ragged last block.** With $n$ not a perfect square, the final block is short. Always clamp the block
+  end to $n-1$; a naive `start + b - 1` can read past the array.
+- **Rebuild vs. patch on update.** Sum patches a block in $O(1)$; min/max needs an $O(\sqrt{n})$ block
+  rebuild because you cannot "subtract" a minimum. Know which your operation allows.
+- **Range updates want lazy tags.** To add a value to a whole range, store a per-block "pending add" and
+  push it down only when you touch that block's individual elements.
+- **Interview cue:** "range queries, updates allowed, but the operation is unusual (mode, k-th, count-less-than)"
+  — reach for blocks first; they are quicker to code correctly than a custom segment tree.
+
+## Practice
+
+1. **Easy:** For $n = 100$, what block size minimizes $b + n/b$, and what is that minimum?
+2. **Easy:** Given block sums `[9, 22, 21, 28]` (block size 4), answer `sum[4, 7]` with one lookup.
+3. **Medium:** Add a `queryMin(L, R)` method; explain why a point update now costs $O(\sqrt{n})$, not $O(1)$.
+4. **Medium:** Implement a lazy `rangeAdd(L, R, v)` using a per-block pending-add array.
+5. **Hard:** Support "count elements $\le x$ in $[L,R]$" by keeping each block sorted and binary-searching the whole blocks.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Splitting n elements into blocks of size b, one range query costs O(b + n/b). Which b minimizes it?',
+      options: ['b = 1', 'b = log n', 'b = √n', 'b = n'],
+      answer: 2,
+      explain: 'The edge cost O(b) and the whole-block cost O(n/b) balance at b = √n, giving the O(√n) query.',
+    },
+    {
+      q: 'When L and R fall in the SAME block, the query should:',
+      options: [
+        'Use the block sum for that block',
+        'Loop over the elements from L to R directly',
+        'Return 0',
+        'Split into two blocks anyway',
+      ],
+      answer: 1,
+      explain: 'There are no fully-covered blocks inside a single block, so you scan the elements directly — still cheap because a block holds only √n elements.',
+    },
+    {
+      q: 'Why can a point update be O(1) for range-sum but O(√n) for range-min?',
+      options: [
+        'Min queries are always slower',
+        'A sum block is patched by adding the delta; a min block may need a full rescan since you cannot subtract a minimum',
+        'Range-min cannot use blocks',
+        'Updates are never allowed with blocks',
+      ],
+      answer: 1,
+      explain: 'Sum lets you adjust the block total by the change in O(1). For min/max there is no inverse, so if the changed element was the block extreme you must rebuild that block in O(√n).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Group the array into blocks of size <strong>√n</strong> and precompute each block\'s answer.',
+    'A range query is <strong>two partial edges + whole blocks jumped in O(1) each</strong>, giving <strong>O(√n)</strong>.',
+    'The block size <strong>b = √n</strong> minimizes the edge-vs-block trade-off O(b + n/b).',
+    'Sum updates patch a block in <strong>O(1)</strong>; min/max updates may need an <strong>O(√n) block rebuild</strong>.',
+    'It is slower than a segment tree but <strong>short and flexible</strong> — ideal for unusual range queries under time pressure.',
+  ]}
+/>
+
+Next up: **Mo's Algorithm** — reuse this block idea in a sneakier way, reordering a whole batch of offline
+range queries so a single window can slide between them cheaply.

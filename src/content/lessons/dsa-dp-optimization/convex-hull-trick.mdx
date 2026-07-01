@@ -1,0 +1,284 @@
+---
+title: Convex Hull Trick
+track: dsa-dp-optimization
+summary: "Convex Hull Trick: when a DP transition is a minimum over lines m·x + c, keep only their lower envelope and answer each query in O(1) or O(log n) instead of scanning every candidate."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-dp-optimization/divide-conquer-dp
+leadsTo:
+  - dsa-dp-optimization/sos-dp
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpOptConvexHull from '../../../components/demos/DpOptConvexHull.tsx';
+
+## The hook: a DP transition that is secretly a bundle of lines
+
+Many DP recurrences have the shape $dp[i] = \min_{j<i}\bigl(m_j\, x_i + c_j\bigr)$, where each earlier
+state $j$ contributes a **line** $y = m_j x + c_j$ and the query point $x_i$ depends only on $i$.
+Written naively you scan all $j$ for every $i$: $O(n^2)$. But look at what you are really asking — for
+a given $x$, *which line is lowest?* Most lines are never the lowest at any $x$; they sit strictly above
+their neighbors everywhere. Throw those away and the survivors form a **lower envelope** — a convex,
+piecewise-linear staircase of slopes. Query it and you get the answer in constant or logarithmic time.
+
+<Callout type="intuition" title="The one-sentence idea">
+A $\min$ of straight lines is a convex piecewise-linear curve; keep only the lines that touch that
+lower envelope and each query is a single lookup instead of a full scan.
+</Callout>
+
+## Intuition: only the lower envelope survives
+
+Sort the candidate lines by slope. Sweep left to right in $x$. The lowest line is always the steepest
+that hasn't yet been overtaken; as $x$ grows, the winner switches to progressively flatter lines. A line
+earns a place on the envelope only if there is *some* interval of $x$ where it beats both neighbors. The
+test is purely geometric: line $b$ is useless if the intersection of its neighbors $a$ and $c$ already
+lies to the left of where $a$ meets $b$ — then $b$ is dominated before it ever wins.
+
+$$
+\text{drop } b \iff \frac{c_c - c_a}{m_a - m_c} \;\le\; \frac{c_b - c_a}{m_a - m_b}.
+$$
+
+Cross-multiplying avoids division (and floating point): $b$ is bad when
+$(c_c - c_a)(m_a - m_b) \le (c_b - c_a)(m_a - m_c)$. Maintain the hull in a deque: adding a line pops
+dominated lines off the back; if queries also arrive in increasing $x$, a front pointer only ever moves
+forward. Both amortize to $O(1)$, so the whole DP runs in $O(n)$.
+
+## Play with it
+
+The visualizer adds lines one at a time in order of **decreasing slope**. Each faint grey line is a
+candidate $m x + c$; the indigo lines are the current hull; a line that a newcomer makes redundant
+flashes red and is popped. The emerald curve is the lower envelope — the actual DP value $\min_j(m_j x + c_j)$
+at every $x$. Drag the query slider to see which line wins at a given $x$.
+
+<DpOptConvexHull client:visible />
+
+<Callout type="tip">
+Watch a line get popped: it happens the instant a steeper-then-flatter pair brackets it from below. The
+popped line is not wrong — it is simply never the minimum at *any* $x$, so keeping it would only slow
+queries down.
+</Callout>
+
+## How it works
+
+Take the **Covered Walkway** problem: cover sorted points on a line with roofs, each roof costing
+$C + (\text{right} - \text{left})^2$. The DP is
+$dp[i+1] = \min_{j\le i}\bigl(dp[j] + (x_i - x_j)^2\bigr) + C$. Expanding the square,
+
+$$
+dp[i+1] = \min_{j}\Bigl(\underbrace{-2x_j}_{m_j}\,x_i + \underbrace{dp[j] + x_j^2}_{c_j}\Bigr) + x_i^2 + C,
+$$
+
+so each $j$ is a line with slope $-2x_j$ (decreasing as points sort ascending) queried at $x = x_i$.
+
+```
+addLine(m, c):  push line, popping any back line the newcomer dominates
+queryMin(x):    binary-search the hull for the lowest line at x
+dp[i+1] = queryMin(x_i) + x_i² + C
+```
+
+<CodeRunner
+  client:visible
+  code={`// Covered Walkway: roofs cost C + (right - left)^2; minimize total.
+function coveredWalkway(rawPoints, C) {
+  const points = [...rawPoints].sort((a, b) => a - b);
+  const n = points.length;
+  const dp = new Array(n + 1).fill(Infinity);
+  dp[0] = 0;
+
+  const lines = [];                                   // lower hull of { m, c }
+  const val = (l, x) => l.m * x + l.c;
+  const bad = (a, b, c) =>                             // is b dominated by a and c?
+    (c.c - a.c) * (a.m - b.m) <= (b.c - a.c) * (a.m - c.m);
+
+  const addLine = (m, c) => {
+    const nl = { m, c };
+    while (lines.length >= 2 && bad(lines[lines.length - 2], lines[lines.length - 1], nl)) lines.pop();
+    lines.push(nl);
+  };
+  const queryMin = (x) => {                            // binary search on the envelope
+    let lo = 0, hi = lines.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (val(lines[mid], x) > val(lines[mid + 1], x)) lo = mid + 1; else hi = mid;
+    }
+    return val(lines[lo], x);
+  };
+
+  for (let i = 0; i < n; i++) {
+    addLine(-2 * points[i], dp[i] + points[i] * points[i]);   // slopes arrive decreasing
+    dp[i + 1] = queryMin(points[i]) + points[i] * points[i] + C;
+  }
+  return dp[n];
+}`}
+  tests={[
+    { expr: 'coveredWalkway([1,5,10,15,20,25], 10)', label: '6 points, C=10' },
+    { expr: 'coveredWalkway([1,2,3], 100)', label: 'C dominates → one roof' },
+    { expr: 'coveredWalkway([7,3,1,9], 0)', label: 'C=0 → a roof per point' },
+  ]}
+/>
+
+## The real implementation
+
+The reusable deque hull from the course file — decreasing slopes in, increasing queries out, each
+amortized $O(1)$:
+
+```ts
+// /dsa/24-dp-optimization/convex-hull-trick.ts
+class ConvexHullTrickMin {
+  private lines: Line[] = [];
+  private front = 0;
+
+  // b is dominated if intersection(a,c) <= intersection(a,b). Cross-multiplied.
+  private bad(a: Line, b: Line, c: Line): boolean {
+    return (c.c - a.c) * (a.m - b.m) <= (b.c - a.c) * (a.m - c.m);
+  }
+
+  addLine(m: number, c: number): void {              // slopes must decrease
+    const line: Line = { m, c };
+    while (this.lines.length >= 2 &&
+           this.bad(this.lines[this.lines.length - 2], this.lines[this.lines.length - 1], line)) {
+      this.lines.pop();
+    }
+    this.lines.push(line);
+  }
+
+  queryMin(x: number): number {                      // x must increase
+    if (this.lines.length === 0) return Infinity;
+    while (this.front + 1 < this.lines.length &&
+           lineValue(this.lines[this.front], x) >= lineValue(this.lines[this.front + 1], x)) {
+      this.front++;
+    }
+    return lineValue(this.lines[this.front], x);
+  }
+}
+```
+
+When slopes or queries arrive in *arbitrary* order, swap the deque for a **Li Chao Tree** (also in the
+file), which inserts and queries any line in $O(\log n)$.
+
+Run the full file: `npx tsx 24-dp-optimization/convex-hull-trick.ts`.
+
+## Complexity
+
+Let $n$ be the number of DP states and $R$ the coordinate range for a Li Chao Tree:
+
+$$
+T_{\text{monotone}} = O(n), \qquad T_{\text{sorted queries}} = O(n \log n), \qquad S = O(n).
+$$
+
+| Approach | Time | Requires |
+|----------|------|----------|
+| Naive DP | $O(n^2)$ | nothing |
+| **CHT, monotone slopes + queries** | $O(n)$ | slopes and $x$ both sorted |
+| **CHT, binary search** | $O(n \log n)$ | slopes sorted, any $x$ |
+| Li Chao Tree | $O(n \log R)$ | nothing (arbitrary order) |
+
+For $n = 10^5$ the naive transition is ~$10^{10}$ line evaluations; the monotone hull does ~$10^5$ — five
+orders of magnitude, the difference between minutes and milliseconds.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+Lot-sizing / production planning: the cost of serving demand from an earlier production run is linear in
+the current period index, so optimal batch decisions are a $\min$ over lines — CHT turns an $O(T^2)$
+schedule into $O(T)$.
+</ExampleCard>
+
+<ExampleCard domain="Machine learning" icon="🤖">
+Isotonic-style and piecewise-linear fits, and the "buy low / sell high" value functions in some RL
+policies, reduce to querying a lower envelope of linear pieces — the same convex-hull maintenance.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🦾">
+Kinetic collision prediction (LeetCode's *Car Fleet II*) uses a monotonic stack of position-vs-time
+lines; whether a fast car ever catches a slow one is exactly an envelope-of-lines question.
+</ExampleCard>
+
+<ExampleCard domain="Computational geometry" icon="📐">
+The lower envelope of a set of lines is the dual of a convex hull of points — the "trick" is literally
+building half a convex hull, which is why the technique carries the name.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Match the query monotonicity to the structure.** The $O(1)$ front-pointer version is only correct
+  when queries $x_i$ are non-decreasing. If they aren't, use `queryMinAny` (binary search) or a Li Chao
+  Tree — the pointer version silently returns wrong answers otherwise.
+- **Add lines in the required slope order.** For minimum queries the deque expects *decreasing* slopes;
+  feeding them in the wrong order corrupts the hull. Sort first, or use Li Chao.
+- **Cross-multiply, don't divide.** Computing intersection $x$-coordinates with floating point invites
+  precision bugs; the integer `bad(a,b,c)` predicate keeps everything exact.
+- **Watch the sign for maximum queries.** Maximizing needs the *upper* envelope: increasing slopes and a
+  flipped comparison (`ConvexHullTrickMax` in the file).
+- **Interview cue:** "$dp[i] = \min_j (dp[j] + \text{something}(i)\cdot\text{something}(j))$, and the
+  cross term factors as slope·query" ⇒ expand the square/product, read off $m_j$ and $c_j$, reach for CHT.
+
+## Practice
+
+1. **Easy:** Given lines $\{(m,c)\} = \{(2,3),(1,5),(0,8)\}$, hand-compute the lower envelope value at
+   $x = 0, 2, 5$ and name the winning line each time.
+2. **Easy:** Show that the line $y = 3x + 1$ is dominated (never minimal) given $y = 5x + 0$ and
+   $y = 1x + 3$, using the `bad` predicate.
+3. **Medium:** Reformulate the frog-jump DP $dp[i] = \min_{j<i}\bigl(dp[j] + (h_i - h_j)^2\bigr) + C$ into
+   slope–intercept form and identify $m_j, c_j$.
+4. **Medium:** LeetCode 1478 *(Allocate Mailboxes)* or the classic APIO *Commando* — cast the transition
+   as a line query and pick min vs max hull.
+5. **Hard:** Implement a Li Chao Tree and use it where slopes arrive out of order, then benchmark it
+   against the deque hull on $n = 10^6$ sorted inputs.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'The Convex Hull Trick optimizes DP transitions of which form?',
+      options: [
+        'dp[i] = min over j of (m_j · x_i + c_j)',
+        'dp[i][j] = dp[i-1][k] + cost(k, j)',
+        'dp[mask] += dp[mask ^ (1<<i)]',
+        'dp[i] = dp[i-1] + dp[i-2]',
+      ],
+      answer: 0,
+      explain: 'Each earlier state contributes a line m_j·x + c_j and the query point x_i depends only on i — a min over lines.',
+    },
+    {
+      q: 'Why can some candidate lines be discarded entirely from the hull?',
+      options: [
+        'They have negative slope',
+        'They are never the minimum at any x — dominated everywhere',
+        'They were added last',
+        'They intersect the y-axis below zero',
+      ],
+      answer: 1,
+      explain: 'A line lies on the lower envelope only if some interval of x makes it beat both neighbors; otherwise it is dominated and useless.',
+    },
+    {
+      q: 'With decreasing slopes AND increasing query x, one full DP costs:',
+      options: [
+        'O(n^2)',
+        'O(n log n)',
+        'O(n)',
+        'O(2^n)',
+      ],
+      answer: 2,
+      explain: 'Both the back-popping on insert and the forward-moving front pointer on query amortize to O(1), so n transitions cost O(n).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'CHT speeds up <strong>dp[i] = min over j of (m_j·x_i + c_j)</strong> by keeping only the lower envelope of lines.',
+    'A line survives only if it is <strong>minimal on some interval</strong>; the integer <strong>bad(a,b,c)</strong> predicate pops dominated lines without floating point.',
+    'Monotone slopes and monotone queries give <strong>O(1) amortized</strong> per step ⇒ O(n) total; sorted slopes with arbitrary x give O(log n) via binary search.',
+    'For lines and queries in <strong>arbitrary order</strong>, use a <strong>Li Chao Tree</strong> at O(log R) each.',
+    'The recipe: expand the squared/product cost, read off slope m_j and intercept c_j, then choose the min (lower) or max (upper) hull.',
+  ]}
+/>
+
+Next up: **Sum-over-Subsets DP** — a different flavor of speed-up, folding an $O(3^n)$ subset sum down to
+$O(n\,2^n)$ one bit at a time.

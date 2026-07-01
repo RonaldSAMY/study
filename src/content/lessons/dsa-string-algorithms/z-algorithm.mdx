@@ -1,0 +1,213 @@
+---
+title: The Z-Algorithm
+track: dsa-string-algorithms
+summary: "One linear pass builds the Z-array: for every position, how far the string re-matches its own prefix — and pattern matching falls right out."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-modern-structures/locality-sensitive-hashing
+  - dsa-strings/pattern-matching-kmp
+leadsTo:
+  - dsa-string-algorithms/rabin-karp
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SAlgZArray from '../../../components/demos/SAlgZArray.tsx';
+
+## The hook: how much of me looks like my own beginning?
+
+Slide along a string and, at every spot, ask one question: *starting here, how many characters match the very start of the string?* That single number, computed for every position, is the **Z-array**. It sounds modest, but it quietly answers "where does this pattern occur?", "does this string repeat?", and "what is its shortest period?" — all in time proportional to the length of the input, with no hashing and no backtracking.
+
+The naive way re-compares from scratch at every position and costs $O(n^2)$. The Z-algorithm gets it in $O(n)$ by never re-examining a character it has already confirmed — it remembers one clever interval and reuses it.
+
+<Callout type="intuition" title="The one-sentence idea">
+Keep the rightmost stretch you already know matches the prefix (the "Z-box"); when a new position falls inside it, copy the answer from its mirror instead of comparing characters again.
+</Callout>
+
+## Intuition
+
+You already met **KMP**, which pre-processes a pattern into a failure function that says "after a mismatch, where do I resume?". The Z-algorithm attacks the same problem from a friendlier angle. Instead of "where do I resume after failing", it directly reports "how much matches the prefix starting here". That quantity, $Z[i]$, is often easier to reason about.
+
+Here is the trick that makes it linear. Suppose we have already discovered a substring $s[L\dots R]$ that equals a prefix of $s$ — call it the **Z-box**, and keep the one with the largest $R$. Now we want $Z[i]$ for some $i$ inside that box. Because $s[L\dots R]$ *is* a prefix, the character at $i$ has a **mirror** at position $i - L$ near the front of the string, and we already computed $Z[i-L]$. If that mirrored value fits comfortably inside the box, we simply copy it — zero comparisons. Only when the mirror runs into the box's edge do we resume comparing characters, and every such comparison pushes $R$ forward. Since $R$ only ever increases, the total work is $O(n)$.
+
+## Play with it
+
+Type a string and step through the construction. Watch the indigo Z-box: while $i$ stays inside it the algorithm reuses the mirror (no character comparisons), and only when it reaches the right edge does it expand and slide the box forward.
+
+<SAlgZArray client:visible />
+
+<Callout type="tip">
+Try a string built from a repeated block, like <code>abcabcabc</code>. The Z-box grows huge and most positions get their answer for free — that visual "coasting" is exactly why the algorithm is linear.
+</Callout>
+
+## How it works
+
+Take `s = "aabaaab"`. We scan `i = 1..6`, keeping the Z-box `[L, R]`:
+
+```
+i=1: 'a' matches prefix 'a', then 'a' vs 'b' stop → Z[1]=1, box [1,1]
+i=2: 'b' vs 'a' stop                             → Z[2]=0
+i=3: 'aa' matches 'aa', 'a' vs 'b'? → Z[3]=2, box [3,4]
+i=4: inside box, mirror Z[1]=1 fits             → Z[4]=1  (copied, no compares)
+i=5: 'a' vs 'a', 'a' vs 'a', 'b' vs 'b' … → Z[5]=2, box [5,6]
+i=6: 'b' vs 'a' stop                             → Z[6]=0
+```
+
+For **pattern matching**, glue the pattern, a separator that appears nowhere, and the text into one string: `pattern + "$" + text`. Any position where $Z[i]$ equals the pattern length is a full occurrence. Run it:
+
+<CodeRunner
+  client:visible
+  code={`// Build the Z-array in one linear pass.
+function buildZ(s) {
+  const n = s.length;
+  const z = new Array(n).fill(0);
+  let L = 0, R = 0;
+  for (let i = 1; i < n; i++) {
+    if (i <= R) z[i] = Math.min(R - i + 1, z[i - L]);
+    while (i + z[i] < n && s[z[i]] === s[i + z[i]]) z[i]++;
+    if (i + z[i] - 1 > R) { L = i; R = i + z[i] - 1; }
+  }
+  return z;
+}
+
+// Find every occurrence of pattern in text via Z on pattern + "$" + text.
+function zSearch(text, pattern) {
+  const combined = pattern + "$" + text;
+  const z = buildZ(combined);
+  const m = pattern.length, hits = [];
+  for (let i = m + 1; i < combined.length; i++)
+    if (z[i] === m) hits.push(i - m - 1);
+  return hits;
+}`}
+  tests={[
+    { expr: 'buildZ("aabaaab").join(",")', label: 'Z-array of "aabaaab"' },
+    { expr: 'JSON.stringify(zSearch("AABAACAADAABAAABAA", "AABA"))', label: 'match positions of AABA' },
+    { expr: 'JSON.stringify(zSearch("abababab", "abab"))', label: 'overlapping matches' },
+  ]}
+/>
+
+## The real implementation
+
+The course file keeps $L$ and $R$ explicit and branches on "inside vs outside the box", which mirrors the intuition closely:
+
+```ts
+// /dsa/18-string-algorithms/z-algorithm.ts
+export function buildZArray(s: string): number[] {
+  const n = s.length;
+  const z: number[] = new Array(n).fill(0);
+  if (n === 0) return z;
+
+  let L = 0, R = 0;                       // Z-box boundaries
+  for (let i = 1; i < n; i++) {
+    if (i > R) {                          // outside the box: from scratch
+      L = R = i;
+      while (R < n && s[R - L] === s[R]) R++;
+      z[i] = R - L; R--;
+    } else {                              // inside the box
+      const k = i - L;                    // mirror position in the prefix
+      if (z[k] < R - i + 1) z[i] = z[k];  // mirror fits → copy, no compares
+      else {                              // mirror hits the edge → extend
+        L = i;
+        while (R < n && s[R - L] === s[R]) R++;
+        z[i] = R - L; R--;
+      }
+    }
+  }
+  return z;
+}
+```
+
+Run the full file: `npx tsx 18-string-algorithms/z-algorithm.ts`.
+
+## Complexity
+
+The right boundary $R$ is monotonic — it only moves rightward across the whole run — and each character comparison either fails once or advances $R$. So the comparisons sum to $O(n)$:
+
+$$
+T_{\text{build}}(n) = O(n), \qquad T_{\text{search}}(n, m) = O(n + m), \qquad S(n) = O(n).
+$$
+
+| Task | Time | Space |
+|------|------|-------|
+| Naive prefix matching | $O(n^2)$ | $O(1)$ |
+| Build Z-array | $O(n)$ | $O(n)$ |
+| Pattern search (pattern + `$` + text) | $O(n + m)$ | $O(n + m)$ |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Genomics" icon="🧬">
+Tandem repeats — short motifs copied back-to-back, like <code>GATAGATAGATA</code> — flag genetic disorders and drive DNA fingerprinting. Running the Z-array over a region instantly reveals how far each position re-matches the start of a candidate motif, exposing the repeat's period.
+</ExampleCard>
+
+<ExampleCard domain="Music production" icon="🎧">
+A looped sample is a string whose shortest period you want to know. Because a period $p$ exists exactly when $Z[i] + i = n$ for some $i$, one Z pass tells a DAW the tightest loop length — so it can trim a bar to its true repeating unit without guesswork.
+</ExampleCard>
+
+<ExampleCard domain="Text editors" icon="⌨️">
+Autocomplete and "find next" need every place the typed prefix reappears. Concatenating the query with the document and scanning for full-length Z values surfaces those hits in a single linear sweep, keeping the cursor responsive on large files.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Pick a separator that truly cannot occur.** If `$` appears in the text, a spurious $Z[i] = m$ can slip through. Use a sentinel outside both alphabets (or check bounds explicitly).
+- **$Z[0]$ is a special case.** By convention it is $0$ (or "the whole string"); never let the loop start at $0$, or the mirror logic breaks.
+- **Copy versus extend is the whole game.** Inside the box, copy only when `z[k] < R - i + 1`; otherwise you *must* keep comparing from `R + 1`. Getting that inequality wrong silently returns short answers.
+- **Interview cue:** periods, "is this a rotation/repeat", and "longest prefix that is also a suffix" all reduce to the identity $Z[i] + i = n$. Say that out loud and you have the solution skeleton.
+
+## Practice
+
+1. **Easy:** Compute the Z-array of `"aaaaa"` by hand. What pattern do you notice, and why?
+2. **Easy:** Use `zSearch` to count occurrences of `"aa"` in `"aaaa"`. Explain the overlaps.
+3. **Medium:** Given a string, find its shortest period using the rule $Z[i] + i = n$.
+4. **Medium:** Decide whether one string is a rotation of another using a single Z-array (hint: double one string).
+5. **Hard:** Return the longest prefix of `s` that is also a proper suffix (LeetCode 1392, "Longest Happy Prefix") using only the Z-array.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does Z[i] measure?',
+      options: [
+        'The number of distinct characters before index i',
+        'The length of the longest substring starting at i that matches a prefix of the string',
+        'The index where the pattern first mismatches',
+        'The hash of the substring ending at i',
+      ],
+      answer: 1,
+      explain: 'Z[i] is exactly the longest match between the suffix starting at i and the whole-string prefix.',
+    },
+    {
+      q: 'Why is building the Z-array O(n) rather than O(n^2)?',
+      options: [
+        'It uses a hash table',
+        'The right boundary R only increases, so total comparisons are bounded by n',
+        'It sorts the characters first',
+        'It skips every other position',
+      ],
+      answer: 1,
+      explain: 'Each successful comparison pushes R rightward, and R never retreats, so comparisons across the whole run sum to O(n).',
+    },
+    {
+      q: 'To find a pattern P in text T with the Z-algorithm, you build the Z-array of…',
+      options: ['T only', 'P + T', 'P + "$" + T where $ occurs in neither', 'T + P with no separator'],
+      answer: 2,
+      explain: 'The separator prevents a match from straddling the boundary; positions with Z[i] = |P| mark occurrences.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Z[i]</strong> = how far the suffix at i re-matches the string\'s own prefix.',
+    'The <strong>Z-box [L, R]</strong> caches the rightmost known prefix match; positions inside it copy from their mirror for free.',
+    'Because <strong>R never decreases</strong>, the whole build is <strong>O(n)</strong> time, O(n) space.',
+    'Pattern matching = build Z of <strong>pattern + separator + text</strong> and look for Z[i] equal to the pattern length.',
+    'The identity <strong>Z[i] + i = n</strong> unlocks periods, repeats, and prefix–suffix problems.',
+  ]}
+/>
+
+Next up: **Rabin-Karp & Rolling Hashes** — trading exact comparison for a hash that slides across the text in constant time per step.

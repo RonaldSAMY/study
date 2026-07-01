@@ -1,0 +1,239 @@
+---
+title: Lookaheads & Lookbehinds
+track: dsa-regex
+summary: "Zero-width assertions that peek without consuming: positive and negative lookahead and lookbehind let a pattern check what surrounds a position while the cursor stays exactly where it is."
+difficulty: advanced
+estMinutes: 16
+prereqs:
+  - dsa-regex/groups-capturing
+leadsTo:
+  - dsa-regex/regex-engine
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import RgxLookaround from '../../../components/demos/RgxLookaround.tsx';
+
+## The hook: check the neighbours, take nothing
+
+You want the number *before* `px` but not the `px` itself. You want the digits *after* a dollar sign but
+not the sign. You want a password that *contains* an uppercase letter, a digit, and a symbol — without
+saying anything about their order. All three need the same trick: a way to *assert a condition about the
+surrounding text without consuming it*. That is a **lookaround** — a zero-width assertion that peeks ahead
+or behind, returns yes or no, and leaves the cursor untouched.
+
+<Callout type="intuition" title="The one-sentence idea">
+A lookaround is a sub-pattern in `(?= )`, `(?! )`, `(?<= )` or `(?<! )` that must (or must not) match at
+the current position but consumes no characters — it tests the neighbourhood and moves on.
+</Callout>
+
+## Intuition
+
+There are four, split by direction and polarity:
+
+- `(?=…)` **positive lookahead** — succeeds if the sub-pattern matches *starting here*.
+- `(?!…)` **negative lookahead** — succeeds if it does *not*.
+- `(?<=…)` **positive lookbehind** — succeeds if the sub-pattern matches *ending here* (just behind).
+- `(?<!…)` **negative lookbehind** — succeeds if it does not.
+
+The defining property is **zero width**. After a lookaround the cursor has not moved, so whatever it peeked
+at is *not* part of the match. `\d+(?=px)` matches the digits in `10px` and returns `10`, not `10px` — the
+`px` was inspected but left on the table. Lookbehind is the mirror image: `(?<=\$)\d+` grabs `100` from
+`$100` without swallowing the sign.
+
+Because they consume nothing, lookarounds compose beautifully. Password rules stack several independent
+lookaheads at the very start of the pattern: `(?=.*[a-z])(?=.*\d)` each rewinds to the same spot and checks
+one requirement, so together they mean "all of these are true, in any order."
+
+## Play with it
+
+Try `\d+(?=px)` on `10px 20em 30px`. The amber window shows the lookahead *peeking* at `px`; notice the
+committed match (emerald) never includes those letters. Then try a lookbehind like `(?<=\$)\d+`, or a
+negative lookahead like `\b(?!admin)\w+`.
+
+<RgxLookaround client:visible />
+
+<Callout type="tip">
+Load `\d+(?!px)` (negative lookahead) on `10px 20em`. The digits before `px` are rejected; the engine
+keeps looking until it finds digits *not* followed by `px`. The peeked characters glow amber but stay
+outside the match — that is "zero width" made visible.
+</Callout>
+
+## How it works
+
+Dry-run `\d+(?=px)` on `"10px"`:
+
+```
+\d+     greedily matches "10"  (cursor now at index 2)
+(?=px)  peek: do "px" match starting at 2? yes ✓
+        cursor stays at 2 — "px" is NOT consumed
+result  match = "10"  at [0, 2)
+```
+
+For a lookbehind the engine checks whether the sub-pattern matches text *ending* exactly at the current
+position. Run a few, including a stacked-lookahead password check:
+
+<CodeRunner
+  client:visible
+  code={`// Lookahead: number followed by a unit, unit excluded.
+function pixels(text) {
+  return text.match(/\\d+(?=px)/g) || [];
+}
+
+// Lookbehind: digits after a dollar sign, sign excluded.
+function dollars(text) {
+  return text.match(/(?<=\\$)\\d+/g) || [];
+}
+
+// Stacked lookaheads: all rules, any order, none consumed.
+function strongPassword(pw) {
+  return /^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&]).{8,}$/.test(pw);
+}
+
+// Negative lookahead: words that are not "admin".
+function notAdmin(text) {
+  return text.match(/\\b(?!admin\\b)\\w+/g) || [];
+}`}
+  tests={[
+    { expr: `pixels('4px 8em 16px')`, label: 'numbers before px' },
+    { expr: `dollars('$100 and €50')`, label: 'digits after $' },
+    { expr: `strongPassword('Str0ng!pw')`, label: 'strong password?' },
+    { expr: `notAdmin('admin bob eve')`, label: 'words except admin' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — extraction with lookaround and the classic stacked-lookahead password validator:
+
+```ts
+// /dsa/26-regular-expressions/lookarounds.ts
+function extractNumberWithUnit(text: string, unit: string): string | null {
+    const m = text.match(new RegExp(`\\d+(?=${unit})`)); // number, unit excluded
+    return m ? m[0] : null;
+}
+function extractPriceInDollars(text: string): string | null {
+    const m = text.match(/(?<=\$)\d+(?:\.\d{2})?/);      // digits after $
+    return m ? m[0] : null;
+}
+
+// Each lookahead checks one rule; none consume, so order is free.
+const strongPasswordRegex =
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+
+// Negative lookahead rejects reserved names.
+function isValidUsername(username: string): boolean {
+    return /^(?!admin|root|system)[a-z][a-z0-9_]{2,15}$/i.test(username);
+}
+```
+
+Run the full file: `npx tsx 26-regular-expressions/lookarounds.ts`.
+
+## Complexity
+
+A lookaround runs its own little match at the current position, so its cost is the cost of that
+sub-pattern — but since it consumes nothing, a careless lookaround inside a loop can repeat work. For
+simple assertions the overall scan stays linear:
+
+$$
+T(n) = O(n \cdot m), \qquad S = O(1).
+$$
+
+Stacked lookaheads that each start with `.*` re-scan the string once per rule, so $k$ rules cost about
+$O(k \cdot n)$ — usually fine, but worth knowing when a validator feels slow.
+
+| Assertion | Succeeds when | Consumes |
+|-----------|---------------|----------|
+| `(?=…)` | pattern matches ahead | nothing |
+| `(?!…)` | pattern does *not* match ahead | nothing |
+| `(?<=…)` | pattern matches just behind | nothing |
+| `(?<!…)` | pattern does *not* match behind | nothing |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Finance" icon="💵">
+Pulling amounts from statements uses a lookbehind for the currency marker:
+`(?<=\$)\d+(?:\.\d{2})?` returns `29.99` from a "Total" line while leaving the currency symbol behind, so
+the captured value parses straight to a number.
+</ExampleCard>
+
+<ExampleCard domain="Account security" icon="🛡️">
+Password policies are pure stacked lookahead:
+`(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])`. Each zero-width check enforces one requirement
+independently of the others, which is why the rules can appear in any order in the input.
+</ExampleCard>
+
+<ExampleCard domain="Number formatting" icon="🔢">
+Inserting thousands separators uses a lookahead that counts groups of three digits:
+`\d(?=(\d{3})+$)` matches each position followed by a multiple of three digits, so a single
+`replace` turns `1234567` into `1,234,567`.
+</ExampleCard>
+
+<ExampleCard domain="Data privacy" icon="🔒">
+Redaction keeps a hint while hiding the rest: a negative lookahead like `\d(?!\d{0,3}$)` masks
+every digit of a card *except* the last four, so logs can show a suffix for support without leaking the
+number.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Lookarounds match a position, not text.** They never appear in the captured result. If you find
+  yourself wanting the peeked text *in* the match, you wanted a normal group, not a lookaround.
+- **Lookbehind support was historically spotty.** Modern JavaScript (ES2018+) supports it, but older
+  runtimes and some other tools do not. Check your target before relying on `(?<=…)`.
+- **Negative lookahead is "unless."** `q(?!u)` matches a `q` *not* followed by `u`. Reading it as "q then
+  not-u" is wrong — nothing after the `q` is consumed; it is a veto, not a token.
+- **Stacked lookaheads with `.*` re-scan.** Fine for short inputs, but for very long strings prefer a
+  single pass or bounded lookaheads to avoid $O(k \cdot n)$ work.
+- **Interview cue:** "match X but only when preceded/followed by Y — and don't include Y" is the textbook
+  lookaround prompt. Emphasise the words "zero width" and you have signalled you understand the mechanism.
+
+## Practice
+
+1. **Easy:** Write a lookahead pattern that matches a number only when it is followed by `kg`.
+2. **Easy:** What is the difference between `q(?=u)` and `qu`? Which one includes the `u` in the match?
+3. **Medium:** Use a negative lookbehind to match a number that is *not* preceded by a dollar sign.
+4. **Medium:** Explain how the four stacked lookaheads in the password regex can all succeed even though
+   the letters, digit, and symbol appear in different orders.
+5. **Hard:** Using a lookahead, write a pattern that inserts a comma before every group of three digits in
+   a plain integer (so `1000000` becomes `1,000,000`).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does \\d+(?=px) match in the string "16px"?',
+      options: ['"16px"', '"16"', '"px"', 'Nothing'],
+      answer: 1,
+      explain: 'The positive lookahead confirms "px" follows but consumes nothing, so only the digits "16" are part of the match.',
+    },
+    {
+      q: 'What makes a lookaround "zero-width"?',
+      options: ['It matches empty strings only', 'It never appears in a group', 'It asserts a condition but consumes no characters, leaving the cursor in place', 'It runs in zero time'],
+      answer: 2,
+      explain: 'Zero-width means the assertion tests the surrounding text without advancing the cursor, so the peeked characters are not consumed.',
+    },
+    {
+      q: 'How do stacked lookaheads like (?=.*[a-z])(?=.*\\d) at the start of a pattern behave?',
+      options: ['They match letters then digits in that order', 'Each rewinds to the same position and checks one condition independently', 'They consume the whole string', 'Only the first one is evaluated'],
+      answer: 1,
+      explain: 'Because each lookahead is zero-width, they all test from the same position, enforcing several conditions in any order.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Lookarounds are <strong>zero-width assertions</strong>: they test the neighbourhood and consume nothing.',
+    'Four kinds: positive <code>(?=…)</code> / negative <code>(?!…)</code> lookahead, positive <code>(?&lt;=…)</code> / negative <code>(?&lt;!…)</code> lookbehind.',
+    'The peeked text is <strong>never part of the match</strong> — use them to match X only when surrounded by Y, without capturing Y.',
+    '<strong>Stacked lookaheads</strong> enforce several independent rules in any order — the standard password-policy trick.',
+    'Simple assertions keep matching <strong>linear</strong>; many <code>.*</code>-prefixed lookaheads re-scan and cost about O(k·n).',
+  ]}
+/>
+
+Next up: **How a Regex Engine Works** — compiling a pattern into a state machine (an NFA), simulating it
+without backtracking, and seeing exactly where catastrophic backtracking comes from.

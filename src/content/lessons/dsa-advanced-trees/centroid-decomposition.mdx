@@ -1,0 +1,275 @@
+---
+title: Centroid Decomposition
+track: dsa-advanced-trees
+summary: "Recursively remove the node that halves the tree: the resulting helper tree is only O(log n) deep, so every path passes through a shallow ladder of centroids."
+difficulty: advanced
+estMinutes: 22
+prereqs:
+  - dsa-advanced-trees/heavy-light-decomposition
+leadsTo:
+  - dsa-advanced-structures/skip-list
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvTreeCentroid from '../../../components/demos/AdvTreeCentroid.tsx';
+
+## The hook: divide-and-conquer, but for trees
+
+Merge sort is fast because it splits an array in half, and half again, until the pieces are trivial —
+$\log n$ levels deep. Can we do the same to a tree? The obstacle is that trees have no natural "middle".
+Chop at the root and one side might hold almost everything. The fix is the **centroid**: the one node
+whose removal breaks the tree into pieces that are *each* at most half the size. Delete it, recurse into
+every leftover piece, and record which centroid governed which piece. The bookkeeping forms a new
+**centroid tree** that is provably only $O(\log n)$ deep — and because any path in the original tree passes
+through the centroid of the smallest piece that contains both its endpoints, hard questions like "how many
+pairs of nodes are exactly distance $k$ apart?" become tractable.
+
+<Callout type="intuition" title="The one-sentence idea">
+Repeatedly remove the centroid — the node whose deletion leaves every remaining piece at most half the
+size — and recurse into each piece; the centroids stack into a helper tree of height $O(\log n)$ through
+which every original path is forced to pass.
+
+</Callout>
+
+## Intuition: every cut at least halves the piece
+
+A centroid of a tree of $s$ nodes is a vertex whose removal leaves each connected fragment with at most
+$s/2$ nodes. Every tree has at least one (and never more than two). Finding it is a two-line idea: compute
+subtree sizes from an arbitrary entry point, then walk *toward* any child whose subtree exceeds $s/2$. You
+can only take that step while a piece is still too big, so you halt exactly at the balancing node — the
+centroid.
+
+Now recurse. Remove the centroid, and each fragment is a smaller tree with its own centroid; make those
+the centroid's children in the helper tree. Because every descent into a fragment at least halves the node
+count, the recursion bottoms out after $O(\log n)$ levels, so the **centroid tree has height $O(\log n)$**.
+The payoff is a decomposition invariant: for any two original nodes $u$ and $v$, their path in the tree
+passes through their **lowest common centroid** — the deepest centroid whose piece contained both. That
+lets path problems be answered by only considering, for each node, its $O(\log n)$ centroid ancestors
+instead of all $O(n)$ possible meeting points.
+
+## Play with it
+
+Each step highlights the current component, rings its chosen centroid in orange, then removes it and colours
+it by its level in the centroid tree (indigo = level 0). Watch the pieces shrink by at least half every
+time a centroid is pulled out.
+
+<AdvTreeCentroid client:visible />
+
+<Callout type="tip">
+Track the sizes: the very first centroid splits nine nodes so no leftover piece exceeds four, and each
+subsequent centroid governs a piece at most half the previous one. That halving is exactly why the deepest
+centroid sits only a few levels down — $O(\log n)$, not $O(n)$.
+</Callout>
+
+## How it works
+
+One recursive routine does the whole build — size, centroid, remove, recurse:
+
+```
+1. calcSize(entry): DFS the current (not-yet-removed) piece to get subtree sizes; let total = its size.
+2. findCentroid: from entry, step into any child whose subtree > total/2; stop where no such child exists.
+3. Mark the centroid removed, record its depth in the centroid tree.
+4. For each still-present neighbour, recurse; the centroid it returns becomes a child in the centroid tree.
+```
+
+<CodeRunner
+  client:visible
+  code={`// Centroid decomposition of the demo tree (plain JS)
+const EDGES = [[0,1],[0,2],[0,3],[1,4],[1,5],[3,6],[4,7],[4,8]];
+const N = 9;
+const adj = Array.from({ length: N }, () => []);
+for (const [a, b] of EDGES) { adj[a].push(b); adj[b].push(a); }
+
+const removed = Array(N).fill(false);
+const size = Array(N).fill(0);
+const cparent = Array(N).fill(-1);   // parent in the centroid tree
+const cdepth = Array(N).fill(0);     // level in the centroid tree
+
+function calcSize(v, p) {
+  size[v] = 1;
+  for (const u of adj[v]) if (u !== p && !removed[u]) size[v] += calcSize(u, v);
+  return size[v];
+}
+function findCentroid(v, p, total) {
+  // Walk toward any part still larger than half — stop at the balancing node.
+  for (const u of adj[v]) if (u !== p && !removed[u] && size[u] > total / 2) return findCentroid(u, v, total);
+  return v;
+}
+function build(entry, depth) {
+  const total = calcSize(entry, -1);
+  const c = findCentroid(entry, -1, total);
+  removed[c] = true; cdepth[c] = depth;
+  for (const u of adj[c]) if (!removed[u]) {
+    const child = build(u, depth + 1);
+    cparent[child] = c;
+  }
+  return c;
+}
+const root = build(0, 0);            // centroid of the whole tree`}
+  tests={[
+    { expr: 'root', label: 'centroid of the whole tree' },
+    { expr: 'Math.max(...cdepth)', label: 'height of the centroid tree' },
+    { expr: 'cparent.join(",")', label: 'centroid parent of each node 0..8' },
+  ]}
+/>
+
+## The real implementation
+
+The course file wraps this into a reusable class plus path-counting applications (paths of length $k$,
+pairs within distance $k$, closest coloured node). Here is the recursive build together with the centroid
+finder that anchors all of it:
+
+```ts
+// /dsa/20-advanced-trees/centroid-decomposition.ts
+private findCentroid(v: number, parent: number, treeSize: number): number {
+  for (const u of this.adj[v]) {
+    if (u !== parent && !this.removed[u]) {
+      if (this.subtreeSize[u] > treeSize / 2) {
+        return this.findCentroid(u, v, treeSize);
+      }
+    }
+  }
+  return v;
+}
+
+private build(v: number, depth: number): number {
+  const treeSize = this.calcSize(v, -1);
+  const centroid = this.findCentroid(v, -1, treeSize);
+
+  this.removed[centroid] = true;
+  this.centroidDepth[centroid] = depth;
+
+  for (const u of this.adj[centroid]) {
+    if (!this.removed[u]) {
+      const childCentroid = this.build(u, depth + 1);
+      this.centroidParent[childCentroid] = centroid;
+    }
+  }
+
+  return centroid;
+}
+```
+
+Run the full file: `npx tsx 20-advanced-trees/centroid-decomposition.ts`.
+
+## Complexity
+
+Each of the $O(\log n)$ levels of the centroid tree touches every node at most once during its size and
+distance DFS, so the total build work sums to $O(n \log n)$. Any node has only $O(\log n)$ centroid
+ancestors, which bounds per-node query work:
+
+$$
+\text{build} = O(n \log n), \qquad \text{centroid-tree height} = O(\log n), \qquad \text{path count} = O(n \log n).
+$$
+
+| Operation | Cost | Why |
+|-----------|------|-----|
+| Build centroid tree | $O(n \log n)$ | $O(\log n)$ levels, $O(n)$ work per level |
+| Centroid ancestors of a node | $O(\log n)$ | the tree is $O(\log n)$ deep |
+| Count paths with a property | $O(n \log n)$ | combine contributions at every centroid |
+| Update at a node (distance oracle) | $O(\log n)$ | touch its $\log n$ ancestors |
+
+Compared with heavy-light decomposition, centroid decomposition is not about *updatable path sums* — it
+shines at **counting or aggregating over all paths**, where forcing every path through a shallow ladder of
+centroids is exactly the leverage you need.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Content delivery" icon="📡">
+Placing caches or routers on a tree-shaped network and answering "nearest server to this client, as nodes
+come online" uses the closest-coloured-node trick: store distances at a node's $O(\log n)$ centroid
+ancestors and query them in $O(\log n)$.
+</ExampleCard>
+
+<ExampleCard domain="Competitive programming" icon="🧮">
+Classics like "count pairs of nodes at distance $\le k$" or "paths summing to a target" are textbook
+centroid-decomposition problems — process paths through each centroid with a frequency map, then recurse
+into the halves.
+</ExampleCard>
+
+<ExampleCard domain="Cheminformatics" icon="⚗️">
+Tree-like molecular scaffolds are compared by counting substructure paths; decomposing at centroids bounds
+the recursion depth so large libraries of molecules can be fingerprinted in $O(n \log n)$ rather than
+$O(n^2)$.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Recomputing sizes on the full tree.** After removing centroids, `calcSize` must respect the `removed`
+  flags and only traverse the current piece — otherwise sizes (and the centroid) are wrong.
+- **Double-counting paths within one branch.** When counting paths through a centroid, you must subtract
+  the pairs whose two endpoints fall in the *same* child subtree, or those get counted as if they crossed
+  the centroid.
+- **Assuming a unique centroid.** A tree can have two adjacent centroids (on an even path); either works,
+  but your code should not crash expecting exactly one.
+- **Reaching for it when HLD fits better.** Centroid decomposition is for path *counting/aggregation*, not
+  mutable path sums. If you need "add $x$ to every node on a path," that is heavy-light's job.
+- **Interview cue:** "Count all node pairs at distance exactly $k$ in a tree?" → "Centroid decomposition:
+  every such path crosses some centroid, so count per centroid and recurse — $O(n \log n)$."
+
+## Practice
+
+1. **Easy:** Run the demo build. Which node is the centroid of the whole tree, and how deep is the centroid
+   tree?
+2. **Easy:** Why does every tree have at least one centroid?
+3. **Medium:** Explain why a node has only $O(\log n)$ ancestors in the centroid tree.
+4. **Medium:** When counting paths of length $k$ through a centroid, why must you subtract same-subtree
+   pairs?
+5. **Hard:** Sketch a distance oracle: at each node store its distance to each of its $O(\log n)$ centroid
+   ancestors, then answer "distance between $u$ and $v$" by scanning their shared centroid ancestors.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What defines the centroid of a tree of s nodes?',
+      options: [
+        'The node with the most children',
+        'The node whose removal leaves every piece with at most s/2 nodes',
+        'The deepest leaf',
+        'The root of the tree',
+      ],
+      answer: 1,
+      explain: 'The centroid is the balancing node: deleting it splits the tree into fragments each of size at most s/2. Every tree has one or two.',
+    },
+    {
+      q: 'Why is the centroid tree only O(log n) deep?',
+      options: [
+        'Because the original tree is balanced',
+        'Because each recursion works on a piece at most half the previous size',
+        'Because centroids are always leaves',
+        'Because we sort nodes by depth first',
+      ],
+      answer: 1,
+      explain: 'Removing a centroid halves the piece, and halving n can happen at most log n times, so the recursion — and the centroid tree — is O(log n) deep.',
+    },
+    {
+      q: 'What kind of problem is centroid decomposition best suited to?',
+      options: [
+        'Updatable path sums between two nodes',
+        'Counting or aggregating over all paths in a tree',
+        'Range queries on a flat array',
+        'Balancing a binary search tree',
+      ],
+      answer: 1,
+      explain: 'Because every path passes through some centroid, path-counting and distance-aggregation problems decompose cleanly; mutable path sums are better served by heavy-light decomposition.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>centroid</strong> is the node whose removal leaves every piece at most <strong>half</strong> the size — every tree has one or two.',
+    'Recursively removing centroids builds a <strong>centroid tree of height O(log n)</strong>.',
+    'Every original path passes through the <strong>lowest common centroid</strong> of its endpoints.',
+    'Building costs <strong>O(n log n)</strong>; each node has only <strong>O(log n)</strong> centroid ancestors.',
+    'It is the go-to for <strong>path counting and distance aggregation</strong>, not updatable path sums.',
+  ]}
+/>
+
+Next up: **Skip Lists** — we leave trees behind for a probabilistic linked structure that stacks express
+lanes over a sorted list to reach $O(\log n)$ search with almost no rebalancing code.

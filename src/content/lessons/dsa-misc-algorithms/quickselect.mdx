@@ -1,0 +1,266 @@
+---
+title: Quickselect
+track: dsa-misc-algorithms
+summary: "Quickselect: partition around a pivot but recurse into only one side, finding the k-th smallest element in linear time on average."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-regex/regex-engine
+  - dsa-sorting/quick-sort
+leadsTo:
+  - dsa-misc-algorithms/sqrt-decomposition
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MiscQuickselect from '../../../components/demos/MiscQuickselect.tsx';
+
+## The hook: the median without sorting
+
+You have a million exam scores and you want the median — the value with half the scores below it.
+Sorting the whole list costs $O(n \log n)$, but you do not actually care about the order of the other
+999,999 numbers. You only want the one that sits at position $n/2$. **Quickselect** is quicksort with a
+shortcut: it partitions around a pivot exactly like quicksort, but then throws away the half that cannot
+contain your target and recurses into the other. On average that halving makes the whole search *linear*.
+
+<Callout type="intuition" title="The one-sentence idea">
+Partition the array around a pivot; the pivot lands in its final sorted position, so a single comparison
+tells you whether the k-th element is the pivot, to its left, or to its right — then recurse into just
+that one side.
+</Callout>
+
+## Intuition: quicksort that only chases one child
+
+You already met **partitioning** in Quicksort: pick a pivot, and rearrange so everything smaller sits to
+its left and everything larger to its right. The magic side effect is that the pivot ends up at the index
+it would occupy in the fully sorted array — call it $p$.
+
+Quicksort then recurses into *both* sides. Quickselect asks a sharper question: "I want the element at
+rank $k$." After partitioning:
+
+- if $p = k$, the pivot *is* the answer — stop;
+- if $k < p$, the answer is somewhere to the left, so recurse left and ignore the right entirely;
+- if $k > p$, recurse right.
+
+Discarding one side each time is the whole trick. Quicksort does work on both halves and pays
+$O(n \log n)$; Quickselect follows a single chain of shrinking sub-arrays whose sizes fall roughly by half,
+so the total work is $n + n/2 + n/4 + \dots \approx 2n$ — linear.
+
+## Play with it
+
+Set the array and the rank $k$ (0-indexed), then step through. Watch each partition sweep values below
+the pivot to the left, drop the pivot into its final slot, and then **dim the side that gets discarded**.
+The active window keeps shrinking toward the single element at rank $k$.
+
+<MiscQuickselect client:visible />
+
+<Callout type="tip">
+Try $k = 0$ (the minimum) or $k = n-1$ (the maximum), then a middle $k$ for the median. Notice the answer
+appears long before the array is anywhere near sorted — most elements never get touched again.
+</Callout>
+
+## How it works
+
+Take `[7, 2, 1, 6, 8, 5, 3, 4]` and ask for `k = 3` (the 4th smallest). Using the rightmost element as the
+pivot and Lomuto partitioning:
+
+```
+[7, 2, 1, 6, 8, 5, 3, 4]   pivot = 4
+ → sweep values < 4 to the left
+[2, 1, 3 | 4 | 8, 5, 7, 6]  pivot lands at index 3
+ p = 3 == k  → answer is 4
+```
+
+Here the very first partition put the pivot at index 3, which equals $k$, so we finished in one round. Had
+$p$ been 5, we would have kept only `[.. index 0..4]` and partitioned again; had it been 1, we would have
+kept the right part. Each round the live window shrinks.
+
+<CodeRunner
+  client:visible
+  code={`// Iterative Quickselect (Lomuto partition). Returns the k-th smallest, 0-indexed.
+function quickselect(arr, k) {
+  const a = arr.slice();          // don't clobber the caller's array
+  let left = 0, right = a.length - 1;
+  while (left < right) {
+    const pivot = a[right];
+    let i = left;
+    for (let j = left; j < right; j++) {
+      if (a[j] < pivot) { [a[i], a[j]] = [a[j], a[i]]; i++; }
+    }
+    [a[i], a[right]] = [a[right], a[i]];  // pivot to its final slot i
+    if (i === k) return a[k];
+    else if (i < k) left = i + 1;         // answer is on the right
+    else right = i - 1;                   // answer is on the left
+  }
+  return a[left];
+}
+
+// k-th largest = (n - k)-th smallest
+function kthLargest(nums, k) { return quickselect(nums, nums.length - k); }`}
+  tests={[
+    { expr: 'quickselect([7,2,1,6,8,5,3,4], 3)', label: '4th smallest' },
+    { expr: 'quickselect([7,2,1,6,8,5,3,4], 0)', label: 'minimum' },
+    { expr: 'kthLargest([3,2,1,5,6,4], 2)', label: 'LC215: 2nd largest' },
+    { expr: 'kthLargest([3,2,3,1,2,4,5,5,6], 4)', label: 'LC215: 4th largest' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the iterative Lomuto version plus the randomized pivot that dodges the worst case:
+
+```ts
+// /dsa/25-misc-algorithms/quickselect.ts
+function lomutoPartition<T>(arr: T[], left: number, right: number,
+    compare: (a: T, b: T) => number): number {
+    const pivot = arr[right];
+    let i = left;
+    for (let j = left; j < right; j++) {
+        if (compare(arr[j], pivot) < 0) {
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+            i++;
+        }
+    }
+    [arr[i], arr[right]] = [arr[right], arr[i]];
+    return i;
+}
+
+function quickselect<T>(arr: T[], k: number,
+    compare: (a: T, b: T) => number = (a, b) => (a as number) - (b as number)): T {
+    let left = 0, right = arr.length - 1;
+    while (left < right) {
+        const pivotIndex = lomutoPartition(arr, left, right, compare);
+        if (pivotIndex === k) return arr[k];
+        else if (pivotIndex < k) left = pivotIndex + 1;  // recurse right
+        else right = pivotIndex - 1;                      // recurse left
+    }
+    return arr[left];
+}
+
+// Randomized pivot → expected O(n) even on sorted input
+function randomizedPartition<T>(arr: T[], left: number, right: number,
+    compare: (a: T, b: T) => number): number {
+    const r = left + Math.floor(Math.random() * (right - left + 1));
+    [arr[r], arr[right]] = [arr[right], arr[r]];
+    return lomutoPartition(arr, left, right, compare);
+}
+```
+
+The same file builds `kSmallest`, `findMedian`, and the LeetCode solutions for *Kth Largest Element*,
+*K Closest Points*, and *Top K Frequent* on top of this core. Run the full file:
+`npx tsx 25-misc-algorithms/quickselect.ts`.
+
+## Complexity
+
+Each partition is linear, and on average the surviving window halves, giving a geometric series that sums
+to a constant times $n$:
+
+$$
+n + \frac{n}{2} + \frac{n}{4} + \cdots \approx 2n = O(n).
+$$
+
+The worst case appears when the pivot is always the largest or smallest element (e.g. an already-sorted
+array with rightmost-pivot), so the window shrinks by just one each round:
+
+$$
+n + (n-1) + \cdots + 1 = O(n^2).
+$$
+
+| Approach | Time (avg) | Time (worst) | Space |
+|----------|-----------|--------------|-------|
+| Sort, then index | $O(n \log n)$ | $O(n \log n)$ | $O(1)$–$O(n)$ |
+| Heap of size $k$ | $O(n \log k)$ | $O(n \log k)$ | $O(k)$ |
+| **Quickselect (randomized)** | $O(n)$ | $O(n^2)$ | $O(1)$ |
+| Median-of-medians | $O(n)$ | $O(n)$ | $O(\log n)$ |
+
+Randomizing the pivot makes the worst case astronomically unlikely; **median-of-medians** picks a provably
+good pivot for a guaranteed $O(n)$ at the cost of a bigger constant.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Medicine" icon="🧬">
+A lab flags a patient's result only if it lands in the top or bottom 5% of a reference cohort. Finding the
+95th-percentile threshold is a rank query — quickselect pulls it out in one linear pass, no full sort of
+the cohort needed.
+</ExampleCard>
+
+<ExampleCard domain="Photography" icon="📷">
+Auto-contrast tools clip the darkest and brightest 1% of pixels before stretching the histogram. That
+"1% brightness" cutoff is the k-th order statistic over millions of pixels — exactly a quickselect.
+</ExampleCard>
+
+<ExampleCard domain="E-commerce" icon="🛒">
+"Show me the 10 cheapest matching listings" does not need the other 40,000 sorted. Partition until the
+10th-smallest price is placed; everything to its left is your unordered top-10, found in linear time.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="🏅">
+Seeding a tournament by the median race time of each athlete over a season: one median per athlete, each a
+quickselect over that athlete's times — far cheaper than sorting every athlete's full history.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **It mutates and does not sort.** Quickselect rearranges the array and leaves it only *partially* ordered
+  around the pivot. Copy first if the caller needs the original, and never assume the output array is sorted.
+- **Off-by-one on $k$.** The classic bug: "k-th largest" is the $(n-k)$-th *smallest* in 0-indexed terms.
+  Decide up front whether $k$ is 1-indexed or 0-indexed and convert once.
+- **Sorted input is the trap.** With a fixed rightmost pivot, a sorted or reverse-sorted array degrades to
+  $O(n^2)$. Randomize the pivot (or use median-of-medians) in any adversarial setting.
+- **Many queries, one array?** If you will ask for many different ranks on the *same* array, sort once for
+  $O(n \log n)$ and answer each in $O(1)$ — quickselect wins only for a few queries.
+- **Interview cue:** "k-th smallest / largest / top-k / median in better than sorting" almost always wants
+  quickselect or a size-$k$ heap. Say "partition and discard one side" and mention randomized pivots.
+
+## Practice
+
+1. **Easy:** By hand, run one Lomuto partition of `[5, 2, 8, 1, 9]` with pivot `9`. Where does the pivot land?
+2. **Easy:** Convert "find the 3rd largest of 10 numbers" into a 0-indexed smallest-rank query.
+3. **Medium:** Implement `findKthLargest` (LeetCode 215) using quickselect and test it on `[3,2,3,1,2,4,5,5,6], k=4`.
+4. **Medium:** Return the $k$ smallest elements (any order) by partitioning to rank $k-1$ and slicing.
+5. **Hard:** Sketch why median-of-medians guarantees $O(n)$: each pivot discards at least ~30% of elements.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'After one partition places the pivot at index p, and you want rank k with k < p, what do you do next?',
+      options: ['Recurse into both halves', 'Recurse only into the left part [left, p-1]', 'Recurse only into the right part [p+1, right]', 'Return arr[p]'],
+      answer: 1,
+      explain: 'The pivot is in its final sorted spot p. Since k < p, the k-th smallest must lie to the left, so you discard the right and recurse left only.',
+    },
+    {
+      q: 'Why is Quickselect O(n) on average but Quicksort O(n log n)?',
+      options: [
+        'Quickselect uses a faster partition',
+        'Quickselect recurses into only one side, so the work forms a geometric series summing to ~2n',
+        'Quickselect never partitions',
+        'Quicksort copies the array each call',
+      ],
+      answer: 1,
+      explain: 'Both partition in linear time, but Quicksort processes both halves (n log n) while Quickselect follows one shrinking side: n + n/2 + n/4 + ... ≈ 2n.',
+    },
+    {
+      q: 'Which input makes fixed-rightmost-pivot Quickselect degrade to O(n^2)?',
+      options: ['A random permutation', 'An already-sorted array', 'An array of all equal values handled with three-way partition', 'A very short array'],
+      answer: 1,
+      explain: 'On sorted input the rightmost pivot is always the max, so the window shrinks by one each round — the O(n^2) worst case. Randomizing the pivot fixes it.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Quickselect finds the <strong>k-th smallest</strong> element by partitioning like quicksort but recursing into <strong>only one side</strong>.',
+    'After a partition the pivot sits at its <strong>final sorted index p</strong>; comparing p to k picks the side (or ends the search).',
+    'Average time is <strong>O(n)</strong> from the halving series; the worst case is <strong>O(n²)</strong> on adversarial input.',
+    '<strong>Randomize the pivot</strong> to make the worst case negligible; <strong>median-of-medians</strong> guarantees O(n) with a larger constant.',
+    'Use it for <strong>order statistics</strong> (median, percentiles, top-k); prefer a full sort when you need many rank queries on one array.',
+  ]}
+/>
+
+Next up: **Square-Root Decomposition** — a completely different bargain, splitting an array into $\sqrt{n}$
+blocks so range queries cost $O(\sqrt{n})$ with almost no machinery.

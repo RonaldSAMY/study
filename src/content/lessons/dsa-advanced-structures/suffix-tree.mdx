@@ -1,0 +1,266 @@
+---
+title: "Suffix Trees & Arrays"
+track: dsa-advanced-structures
+summary: "Index every suffix of a string once, then answer substring queries fast: a suffix tree is a compressed trie of all suffixes; a suffix array is the same suffixes sorted, searched by binary search."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-advanced-structures/sparse-table
+leadsTo:
+  - dsa-advanced-structures/persistent-data-structures
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvDsSuffixArray from '../../../components/demos/AdvDsSuffixArray.tsx';
+
+## The hook: search a book once you have built its index
+
+Naively, finding a pattern of length $m$ inside a text of length $n$ costs $O(n)$ per query — fine once,
+ruinous when you ask thousands of questions about the *same* fixed text (a genome, a log file, a
+codebase). The fix mirrors the back of a textbook: build the index **once**, then every lookup is
+cheap. The magic observation is that any substring of a text is a **prefix of some suffix**. So if you
+organise *all* the suffixes cleverly — as a compressed trie (a **suffix tree**) or as a sorted list (a
+**suffix array**) — asking "does pattern $p$ occur, and where?" becomes a walk down a tree or a binary
+search, in $O(m)$ or $O(m \log n)$ instead of $O(nm)$.
+
+<Callout type="intuition" title="The one-sentence idea">
+Every substring is the prefix of a suffix, so indexing all $n$ suffixes — as a tree or a sorted array —
+turns substring search into prefix matching instead of a full scan.
+
+</Callout>
+
+## Intuition: two shapes of the same index
+
+Append a unique terminator `$` (smaller than every real character) so no suffix is a prefix of another,
+then take all $n+1$ suffixes of `"banana$"`: `banana$, anana$, nana$, ana$, na$, a$, $`.
+
+**Suffix tree.** Merge shared prefixes into a trie and compress each non-branching chain into a single
+edge labelled by a substring. Now every root-to-leaf path spells one suffix, and every internal branch
+marks a place where two suffixes diverge. Searching for $p$ means matching its characters down edges; if
+you consume all of $p$, the leaves below you are exactly its occurrences. With Ukkonen's algorithm the
+whole tree builds in $O(n)$ time and $O(n)$ space.
+
+**Suffix array.** Skip the pointers and just sort the suffixes. The array stores their *starting
+indices* in sorted order: for `banana$` that is `[6, 5, 3, 1, 0, 4, 2]`. Because the suffixes are
+sorted, every suffix that starts with $p$ sits in one **contiguous block**, which a binary search pins
+down in $O(m \log n)$. Same information, a fraction of the memory — which is why suffix arrays win in
+practice.
+
+## Play with it
+
+The demo below builds a suffix array by dropping each suffix into sorted order, then runs a binary
+search for your pattern. Watch the occurrences light up as one solid block.
+
+<AdvDsSuffixArray client:visible />
+
+<Callout type="tip">
+Every occurrence of the pattern is a *single contiguous emerald block* — that is the whole point of
+sorting the suffixes. Try `banana` with pattern `a`: three matches, all adjacent. Try `na`: two adjacent
+rows. A pattern that is not present leaves the block empty.
+</Callout>
+
+## How it works
+
+For `text = "banana$"`, sorting the suffixes and reading off their start indices:
+
+```
+rank  start  suffix
+ 0      6     $
+ 1      5     a$
+ 2      3     ana$
+ 3      1     anana$
+ 4      0     banana$
+ 5      4     na$
+ 6      2     nana$
+
+suffix array = [6, 5, 3, 1, 0, 4, 2]
+
+search "ana":  binary-search for the first suffix >= "ana"
+  -> lands at rank 2 ("ana$"); ranks 2 and 3 both start with "ana"
+  -> occurrences at text indices {3, 1}  (a contiguous block)
+```
+
+A compact suffix array plus binary-search lookup, runnable:
+
+<CodeRunner
+  client:visible
+  code={`function buildSuffixArray(text) {
+  const t = text + '$';
+  const idx = [];
+  for (let i = 0; i < t.length; i++) idx.push(i);
+  idx.sort((a, b) => (t.slice(a) < t.slice(b) ? -1 : 1)); // O(n^2 log n) but clear
+  return { t, sa: idx };
+}
+function search(sa, p) {
+  const { t, sa: arr } = sa;
+  // lower bound: first suffix not smaller than p
+  let lo = 0, hi = arr.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (t.slice(arr[mid]) < p) lo = mid + 1; else hi = mid;
+  }
+  const out = [];
+  for (let k = lo; k < arr.length && t.slice(arr[k]).startsWith(p); k++) out.push(arr[k]);
+  return out.sort((a, b) => a - b);
+}
+const sa = buildSuffixArray('banana');`}
+  tests={[
+    { expr: 'sa.sa.join(",")', label: 'suffix array of "banana$"' },
+    { expr: 'search(sa, "ana").join(",")', label: 'occurrences of "ana"' },
+    { expr: 'search(sa, "na").join(",")', label: 'occurrences of "na"' },
+    { expr: 'search(sa, "xyz").length', label: 'occurrences of "xyz"' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds a true suffix *tree* with Ukkonen's linear-time algorithm; searching walks the
+pattern down compressed edges and, once the pattern is exhausted, collects every leaf's `suffixIndex`:
+
+```ts
+// /dsa/21-advanced-data-structures/suffix-tree.ts
+search(pattern: string): number[] {
+  const results: number[] = [];
+  let node = this.root;
+  let i = 0;
+  while (i < pattern.length) {
+    const char = pattern[i];
+    if (!node.children.has(char)) return results;         // no edge -> not present
+    const child = node.children.get(char)!;
+    const edgeLabel = this.text.substring(child.start, child.end.value);
+    let j = 0;
+    while (i < pattern.length && j < edgeLabel.length) {
+      if (pattern[i] !== edgeLabel[j]) return results;     // mismatch on the edge
+      i++; j++;
+    }
+    if (i === pattern.length) {                            // pattern consumed
+      this.collectLeafIndices(child, results);             // every leaf below = one occurrence
+      return results;
+    }
+    node = child;
+  }
+  return results;
+}
+```
+
+Run the full file: `npx tsx 21-advanced-data-structures/suffix-tree.ts`.
+
+## Complexity
+
+Let $n$ be the text length and $m$ the pattern length. Ukkonen builds the tree in linear time; the array
+sorts $n$ suffixes (an $O(n)$ DC3/SA-IS algorithm exists, or $O(n \log n)$ with prefix doubling):
+
+$$
+T_\text{build tree} = O(n), \qquad T_\text{search tree} = O(m + k), \qquad T_\text{search array} = O(m \log n),
+$$
+
+where $k$ is the number of occurrences reported.
+
+| Structure | Build | Search | Space (constant) |
+|-----------|-------|--------|------------------|
+| Naive scan | $O(1)$ | $O(nm)$ | tiny |
+| **Suffix tree** | $O(n)$ | $O(m + k)$ | large ($\approx 20 n$ bytes) |
+| **Suffix array** | $O(n)$ | $O(m \log n)$ | small ($\approx 4 n$ bytes) |
+
+A suffix array is the pragmatic default: nearly the power of a suffix tree at a fraction of the memory,
+and an auxiliary **LCP array** recovers most tree operations.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Bioinformatics" icon="🧬">
+Genome aligners (BWA, Bowtie) index a reference genome once with an FM-index built on the suffix array of
+the whole chromosome, then map millions of short DNA reads against it — turning "where does this read
+occur?" into a handful of array probes per read.
+</ExampleCard>
+
+<ExampleCard domain="Data compression" icon="🗜️">
+The Burrows–Wheeler Transform at the heart of bzip2 is literally the last column of the sorted-suffix
+matrix — i.e. it is read straight off the suffix array. Sorting suffixes clusters similar contexts, which
+is exactly what makes the transformed text so compressible.
+</ExampleCard>
+
+<ExampleCard domain="Plagiarism & search" icon="🔎">
+Full-text search engines and plagiarism detectors build a generalized suffix structure over many
+documents so that the longest shared passage between any two texts falls out as the deepest common
+internal node.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Always append a unique terminator.** Without a sentinel `$` smaller than every character, one suffix
+  can be a prefix of another and some suffixes never get their own leaf — corrupting occurrence counts.
+- **Tree vs array is a memory decision.** A suffix tree gives $O(m + k)$ search but its per-node pointers
+  cost $10$–$20$ bytes per character; a suffix array is $\approx 4n$ bytes and only slightly slower.
+- **Suffix array plus LCP.** Longest-repeated-substring and longest-common-substring queries want the
+  **LCP array** (longest common prefix of adjacent suffixes) alongside the suffix array — that is the
+  array-world stand-in for "deepest internal node."
+- **Do not build for a single query.** For one pattern in one text, KMP or Rabin–Karp is $O(n + m)$ with
+  no preprocessing. Indexing pays off only when you query the same text many times.
+
+## Practice
+
+1. **Easy:** Write out all suffixes of `"mississippi$"` and give the suffix array (the sorted start
+   indices).
+2. **Easy:** Why must the terminator `$` sort *before* every real character? What breaks if it does not?
+3. **Medium:** Given a suffix array, find the number of occurrences of a pattern with **two** binary
+   searches (lower and upper bound) instead of a linear scan of the matching block.
+4. **Medium:** Using the LCP array, find the longest repeated substring of a text in $O(n)$ after the
+   suffix array is built.
+5. **Hard:** Build a *generalized* suffix array over two strings (join with a second unique separator)
+   and read off their longest common substring.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does indexing all suffixes let you find any substring?',
+      options: [
+        'Because every substring is a suffix of the text',
+        'Because every substring is a prefix of some suffix',
+        'Because suffixes are all the same length',
+        'Because sorting removes duplicate substrings',
+      ],
+      answer: 1,
+      explain: 'A substring starting at position i of some length is exactly a prefix of the suffix that begins at i. Indexing all suffixes therefore indexes all substrings, and matching a pattern becomes prefix matching.',
+    },
+    {
+      q: 'In a suffix array, how do all occurrences of a pattern appear?',
+      options: [
+        'Scattered arbitrarily across the array',
+        'As a single contiguous block of sorted suffixes',
+        'Only ever as a single entry',
+        'At both ends of the array',
+      ],
+      answer: 1,
+      explain: 'Because the suffixes are sorted, all suffixes sharing the prefix p are adjacent. A binary search finds the start of that block, and its entries are exactly the occurrence positions.',
+    },
+    {
+      q: 'What is the main reason suffix arrays are preferred over suffix trees in practice?',
+      options: [
+        'They answer queries in O(1)',
+        'They support updates to the text',
+        'They use far less memory for nearly the same power',
+        'They avoid needing a terminator character',
+      ],
+      answer: 2,
+      explain: 'A suffix tree needs many pointers per character (10-20 bytes/char); a suffix array is about 4n bytes. With an LCP array it recovers most tree queries, so it wins on memory with only a small speed cost.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Any substring is the <strong>prefix of a suffix</strong>, so indexing all suffixes indexes all substrings.',
+    'A <strong>suffix tree</strong> is a compressed trie of suffixes; searching is a walk giving <strong>O(m + k)</strong>.',
+    'A <strong>suffix array</strong> is the suffixes sorted by start index; a binary search gives <strong>O(m log n)</strong>.',
+    'All occurrences of a pattern form <strong>one contiguous block</strong> of the suffix array.',
+    'Both build in <strong>O(n)</strong>; the array wins on memory (~4n bytes) and pairs with an <strong>LCP array</strong> for tree-like power.',
+  ]}
+/>
+
+Next up: **Persistent Data Structures** — updating a tree while keeping every past version alive, by
+copying only the root-to-leaf path and sharing everything else.

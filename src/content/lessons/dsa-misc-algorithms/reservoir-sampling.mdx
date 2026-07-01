@@ -1,0 +1,274 @@
+---
+title: Reservoir Sampling
+track: dsa-misc-algorithms
+summary: "Reservoir sampling: keep a fair random sample of k items from a stream of unknown length in one pass and O(k) memory, by replacing with probability k/i."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-misc-algorithms/coordinate-compression
+leadsTo:
+  - dsa-number-theory/modular-arithmetic
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MiscReservoirSampling from '../../../components/demos/MiscReservoirSampling.tsx';
+
+## The hook: a fair draw from a river you can't hold
+
+A firehose of log lines streams past — billions of them, far more than fit in memory, and you do not know
+how many there will be. You want a *uniform* random sample of, say, 100 of them, and you get exactly one
+look at each line as it flies by. You cannot store them all and pick at the end. **Reservoir sampling**
+solves this beautifully: keep a small reservoir of $k$ items, and for each new arrival decide on the spot
+whether it bumps out one of the current keepers — with a probability tuned so that, no matter when the
+stream stops, every item seen so far has the same chance $k/n$ of being in your sample.
+
+<Callout type="intuition" title="The one-sentence idea">
+Keep the first $k$ items; then for the $i$-th item ($i > k$) replace a random reservoir slot with
+probability $k/i$ — this exactly balances the books so every one of the $n$ items ends up equally likely.
+
+</Callout>
+
+## Intuition: the shrinking probability that keeps things fair
+
+Start by filling the reservoir with the first $k$ items — with fewer than $k$ seen, everyone is obviously
+in. Now item $i$ (1-indexed, $i > k$) arrives. Give it a chance $k/i$ of entering: draw a random slot
+$j \in \{0, 1, \dots, i-1\}$; if $j < k$, item $i$ takes over reservoir slot $j$, otherwise it is dropped.
+
+Why $k/i$? Two things must stay balanced as $i$ grows:
+
+- **A newcomer's fair share.** When $i$ items have been seen, each *should* have probability $k/i$ of being
+  held. Item $i$ enters with exactly that chance — correct by construction.
+- **An old item's survival.** An item already in the reservoir survives step $i$ unless it is the unlucky
+  slot chosen, i.e. with probability $1 - \tfrac{k}{i}\cdot\tfrac{1}{k} = 1 - \tfrac{1}{i} = \tfrac{i-1}{i}$.
+
+Multiply an early item's survival across all later steps and the telescoping product collapses:
+
+$$
+P(\text{item survives to } n) = \frac{k}{i}\cdot\frac{i}{i+1}\cdot\frac{i+1}{i+2}\cdots\frac{n-1}{n} = \frac{k}{n}.
+$$
+
+Every numerator cancels the previous denominator, leaving $k/n$ — the same for every item, exactly as a
+uniform sample demands. And it took one pass and only $k$ slots.
+
+## Play with it
+
+Set a stream and a reservoir size $k$. The first $k$ items drop straight in; after that each arrival draws
+$j$ and is **kept** (green, overwriting slot $j$) with probability $k/i$ or **dropped** (red). Step through
+and watch the running keep-probability shrink as the stream grows.
+
+<MiscReservoirSampling client:visible />
+
+<Callout type="tip">
+Press Load again to re-roll the randomness and run it once more. Any single run looks arbitrary, but over
+many runs each item lands in the reservoir about $k/n$ of the time — that is the guarantee, not any one outcome.
+</Callout>
+
+## How it works
+
+Stream `[10, 20, 30, 40, 50]`, reservoir size $k = 2$:
+
+```
+i=1: 10 → fill      reservoir = [10, _]
+i=2: 20 → fill      reservoir = [10, 20]
+i=3: 30 → keep-prob 2/3: draw j in {0,1,2}; if j=1<2 → [10, 30]
+i=4: 40 → keep-prob 2/4: draw j in {0..3}; if j=3≥2 → drop, [10, 30]
+i=5: 50 → keep-prob 2/5: draw j in {0..4}; if j=0<2 → [50, 30]
+```
+
+Each survivor of the final reservoir had probability $2/5$ of being there — a fair sample, one pass, two slots.
+
+<CodeRunner
+  client:visible
+  code={`// Uniform sample of k items from a stream of unknown length, one pass, O(k) memory.
+function reservoirSample(stream, k) {
+  const reservoir = [];
+  let i = 0;
+  for (const item of stream) {
+    if (i < k) {
+      reservoir.push(item);                 // fill phase
+    } else {
+      const j = Math.floor(Math.random() * (i + 1));   // j in [0, i]
+      if (j < k) reservoir[j] = item;       // replace with probability k/(i+1)
+    }
+    i++;
+  }
+  return reservoir;
+}
+
+// k = 1 special case: pick ONE item uniformly (great for linked lists, LC 382).
+function randomOne(stream) {
+  let chosen = null, count = 0;
+  for (const item of stream) {
+    count++;
+    if (Math.random() < 1 / count) chosen = item;   // keep the i-th with prob 1/i
+  }
+  return chosen;
+}
+
+// Deterministic demo: how often does each item survive over many trials?
+function frequencies(stream, k, trials) {
+  const hits = new Map();
+  for (let t = 0; t < trials; t++)
+    for (const x of reservoirSample(stream, k)) hits.set(x, (hits.get(x) || 0) + 1);
+  return [...hits.entries()].map(([v, c]) => [v, +(c / trials).toFixed(2)]);
+}`}
+  tests={[
+    { expr: 'reservoirSample([1,2,3,4,5], 5)', label: 'k = n keeps all' },
+    { expr: 'reservoirSample([1,2,3,4,5], 3).length', label: 'sample size' },
+    { expr: 'frequencies([1,2,3,4,5], 2, 20000)', label: '≈ k/n = 0.4 each' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the streaming sampler class (`add` items one at a time), plus **Algorithm L**, which
+skips ahead over the items it can prove will be rejected for a big speedup on huge streams:
+
+```ts
+// /dsa/25-misc-algorithms/reservoir-sampling.ts
+class ReservoirSampler<T> {
+    private reservoir: T[] = [];
+    private count = 0;
+    constructor(private k: number) {}
+
+    add(item: T): void {
+        if (this.count < this.k) {
+            this.reservoir.push(item);                       // fill phase
+        } else {
+            const j = Math.floor(Math.random() * (this.count + 1));
+            if (j < this.k) this.reservoir[j] = item;        // replace with prob k/(count+1)
+        }
+        this.count++;
+    }
+    getSample(): T[] { return [...this.reservoir]; }
+}
+
+// Algorithm L: skip the doomed items instead of rolling a die for each one.
+function algorithmL<T>(stream: T[], k: number): T[] {
+    if (stream.length <= k) return [...stream];
+    const reservoir = stream.slice(0, k);
+    let W = Math.exp(Math.log(Math.random()) / k);
+    let i = k;
+    while (i < stream.length) {
+        i += Math.floor(Math.log(Math.random()) / Math.log(1 - W)) + 1;  // jump ahead
+        if (i < stream.length) {
+            reservoir[Math.floor(Math.random() * k)] = stream[i];
+            W *= Math.exp(Math.log(Math.random()) / k);
+        }
+    }
+    return reservoir;
+}
+```
+
+The file also builds **weighted** reservoir sampling (the A-Res key trick), distributed merging, and the
+LeetCode solutions for *Linked List Random Node*, *Random Pick Index*, and *Shuffle an Array*. Run the full
+file: `npx tsx 25-misc-algorithms/reservoir-sampling.ts`.
+
+## Complexity
+
+One pass, a fixed-size reservoir, and a constant-work decision per item:
+
+$$
+\text{time } O(n), \qquad \text{space } O(k), \qquad P(\text{item in sample}) = \frac{k}{n}.
+$$
+
+| Method | Passes | Memory | Needs $n$ up front? |
+|--------|--------|--------|---------------------|
+| Store all, then shuffle-pick | 1 (but stores all) | $O(n)$ | no |
+| Random indices | needs random access | $O(k)$ | yes |
+| **Reservoir sampling** | 1 | $O(k)$ | **no** |
+| Algorithm L | 1 | $O(k)$ | no ($O(k\log\tfrac{n}{k})$ RNG calls) |
+
+The headline is the $O(k)$ memory with no advance knowledge of $n$ — the only option when the stream is
+unbounded or too large to store.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Site reliability" icon="🛰️">
+Distributed tracing samples a fraction of requests to keep storage sane. A reservoir per service holds a
+uniform sample of traces from an endless request stream without ever buffering the whole firehose.
+</ExampleCard>
+
+<ExampleCard domain="Wildlife ecology" icon="🦉">
+A camera trap records animals for months; researchers want a fair sample of $k$ sightings for manual
+labelling but cannot review every clip. A reservoir keeps each sighting with equal probability as the feed rolls on.
+</ExampleCard>
+
+<ExampleCard domain="A/B testing" icon="🧪">
+To eyeball a uniform slice of live events without a database query, a lightweight service keeps a reservoir
+of $k$ recent-but-fair samples in memory, each event equally likely regardless of traffic spikes.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Use the right denominator.** For the $i$-th item (1-indexed) the replacement probability is $k/i$; with
+  0-indexed loops that is `Math.random() * (i + 1)`. An off-by-one here quietly biases toward early or late items.
+- **The reservoir isn't shuffled.** Reservoir sampling gives a uniform *set*, but the slot positions are not
+  a uniform *ordering*. If you need a random permutation, shuffle the reservoir afterward.
+- **Weighted sampling needs a different trick.** Plain reservoir sampling is uniform. For weights, use the
+  A-Res key $u^{1/w}$ and keep the $k$ largest keys — do not just scale $k/i$.
+- **Randomness quality matters.** For security-sensitive sampling, `Math.random` is not enough; use a CSPRNG.
+  For huge streams, **Algorithm L** slashes the number of RNG calls.
+- **Interview cue:** "one pass, unknown or unbounded length, uniform sample, limited memory" is the reservoir
+  sign. For $k = 1$ (random node in a list) say "keep the $i$-th with probability $1/i$."
+
+## Practice
+
+1. **Easy:** With $k = 1$, what is the probability the 4th item replaces the current pick when it arrives?
+2. **Easy:** For a stream of length 10 and $k = 3$, what is each item's final probability of being sampled?
+3. **Medium:** Implement *Linked List Random Node* (LeetCode 382) with $k = 1$ reservoir sampling.
+4. **Medium:** Show the telescoping product that proves an early item's survival probability is $k/n$.
+5. **Hard:** Implement weighted reservoir sampling with the A-Res key $u^{1/w}$ and argue why it is correct.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'When the i-th item (1-indexed, i > k) arrives, with what probability should it enter the reservoir?',
+      options: ['1/2', 'k/n', 'k/i', '1/i'],
+      answer: 2,
+      explain: 'It enters with probability k/i, which is exactly the fair share each of the i items seen so far should have — this keeps the sample uniform at every prefix.',
+    },
+    {
+      q: 'Why does every item end up with probability k/n of being in the final reservoir?',
+      options: [
+        'Because k = n always',
+        'The per-step survival probabilities telescope: (k/i)(i/(i+1))…((n-1)/n) = k/n',
+        'Because Math.random is uniform',
+        'Because the reservoir is sorted',
+      ],
+      answer: 1,
+      explain: 'Each later step preserves an item with probability (i-1)/i (or admits it with k/i), and the product collapses so every numerator cancels, leaving k/n.',
+    },
+    {
+      q: 'What is the key advantage of reservoir sampling over "store everything, then pick"?',
+      options: [
+        'It is exact rather than random',
+        'It uses O(k) memory and one pass, without knowing the stream length n in advance',
+        'It sorts the stream',
+        'It works only on small arrays',
+      ],
+      answer: 1,
+      explain: 'It keeps just k items and needs a single pass, so it handles unbounded or too-large-to-store streams with no advance knowledge of n.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Reservoir sampling draws a <strong>uniform sample of k items</strong> from a stream in <strong>one pass and O(k) memory</strong>.',
+    'Fill the first k, then admit the i-th item with probability <strong>k/i</strong>, replacing a random slot.',
+    'A <strong>telescoping product</strong> proves every item ends up in the sample with probability exactly <strong>k/n</strong>.',
+    'It needs <strong>no advance knowledge of n</strong> — ideal for unbounded or too-large-to-store streams.',
+    'Variants extend it: <strong>k = 1</strong> for a single random pick, <strong>A-Res</strong> for weights, and <strong>Algorithm L</strong> for speed.',
+  ]}
+/>
+
+That closes the miscellaneous-algorithms track: six tools — quickselect, √-decomposition, Mo's, meet in the
+middle, coordinate compression, and reservoir sampling — that each buy a big speedup with a single sharp idea.
+Next you head into **Number Theory**, starting with **Modular Arithmetic** — the clock math behind hashing,
+cryptography, and half of competitive programming.

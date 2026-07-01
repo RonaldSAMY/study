@@ -1,0 +1,210 @@
+---
+title: Manacher’s Algorithm
+track: dsa-string-algorithms
+summary: "Grow palindromes around every center in one linear sweep, reusing a mirror inside the current palindrome to skip work you have already done."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-string-algorithms/boyer-moore
+leadsTo:
+  - dsa-string-algorithms/aho-corasick
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SAlgManacher from '../../../components/demos/SAlgManacher.tsx';
+
+## The hook: every palindrome, in one pass
+
+"Find the longest palindromic substring" is a classic that most people solve by expanding around each center — try each of the $2n-1$ centers, grow outward while characters mirror, and keep the best. That is $O(n^2)$. Manacher's algorithm gets the same answer in $O(n)$ by noticing that palindromes overlap in a structured way: if you already know a big palindrome, positions inside it have a **mirror twin** whose radius you can reuse, saving almost all the re-comparison.
+
+It is the palindrome cousin of the Z-algorithm's Z-box and Boyer-Moore's reuse: keep the rightmost thing you know, exploit its symmetry.
+
+<Callout type="intuition" title="The one-sentence idea">
+Keep the rightmost palindrome you have found; for a new center inside it, start its radius from the mirror center's radius (clamped to the boundary) and only expand past what you already know.
+</Callout>
+
+## Intuition
+
+Two annoyances make palindromes fiddly: **odd vs even length** (`aba` has a center character; `abba` has a center *gap*), and **re-checking**. Manacher removes the first by a preprocessing trick — insert a separator `#` between every character and at the ends:
+
+$$
+\texttt{abba} \;\longrightarrow\; \texttt{\#a\#b\#b\#a\#}
+$$
+
+Now *every* palindrome has odd length, so a single uniform routine handles both cases. Define $P[i]$ as the palindrome **radius** centered at position $i$ of the transformed string.
+
+For the second annoyance, keep the palindrome with the rightmost boundary $R$ and its center $C$. When examining a new center $i < R$, its mirror is $i' = 2C - i$. Since the big palindrome is symmetric, $P[i]$ starts out equal to $P[i']$ — unless that would poke past $R$, in which case we clamp to $R - i$ and expand carefully from there. Every expansion step that does real work pushes $R$ rightward, and $R$ never retreats, so the whole sweep is $O(n)$.
+
+## Play with it
+
+Step through the sweep on the transformed string. Sky is the current center, emerald is its palindrome span, and indigo marks the mirror it copied from. Watch how positions well inside the current palindrome get their radius almost for free.
+
+<SAlgManacher client:visible />
+
+<Callout type="tip">
+Feed it <code>abacaba</code>. Around the middle the palindrome spans the whole string, so later centers copy generous radii from their mirrors and barely expand — that is the linear-time behavior made visible.
+</Callout>
+
+## How it works
+
+On `s = "abacaba"`, transform to `#a#b#a#c#a#b#a#`. The center at the middle `c` grows to cover everything; positions to its right then mirror positions to its left:
+
+```
+transform: # a # b # a # c # a # b # a #
+P (radius): 0 1 0 3 0 1 0 7 0 1 0 3 0 1 0
+                               ^ center of "abacaba", radius 7
+```
+
+The longest palindrome is read off the maximum radius: max $P[i] = 7$ recovers `abacaba`. The original substring length equals $P[i]$, and it starts at $\lfloor (i - P[i]) / 2 \rfloor$ in the source. Here it is computing the longest palindrome directly:
+
+<CodeRunner
+  client:visible
+  code={`function longestPalindrome(s) {
+  if (s.length < 2) return s;
+  const t = "#" + s.split("").join("#") + "#";
+  const n = t.length;
+  const p = new Array(n).fill(0);
+  let C = 0, R = 0;
+  for (let i = 0; i < n; i++) {
+    if (i < R) p[i] = Math.min(R - i, p[2 * C - i]);   // reuse the mirror
+    while (i - 1 - p[i] >= 0 && i + 1 + p[i] < n &&
+           t[i + 1 + p[i]] === t[i - 1 - p[i]]) p[i]++; // expand
+    if (i + p[i] > R) { C = i; R = i + p[i]; }          // move the boundary
+  }
+  let best = 0, center = 0;
+  for (let i = 0; i < n; i++) if (p[i] > best) { best = p[i]; center = i; }
+  const start = (center - best) / 2;
+  return s.slice(start, start + best);
+}`}
+  tests={[
+    { expr: 'longestPalindrome("babad")', label: 'longest in babad' },
+    { expr: 'longestPalindrome("cbbd")', label: 'longest in cbbd' },
+    { expr: 'longestPalindrome("forgeeksskeegfor")', label: 'longest in forgeeksskeegfor' },
+  ]}
+/>
+
+## The real implementation
+
+The course file separates the transform and the radius sweep, using boundary markers `^` and `$` so the expansion loop needs no explicit bounds check:
+
+```ts
+// /dsa/18-string-algorithms/manacher.ts
+export function buildPArray(s: string): number[] {   // s is the transformed string
+  const n = s.length;
+  const p: number[] = new Array(n).fill(0);
+  let C = 0, R = 0;                                   // center & right edge
+
+  for (let i = 1; i < n - 1; i++) {
+    const mirror = 2 * C - i;
+    if (i < R) p[i] = Math.min(R - i, p[mirror]);     // copy from the mirror
+    while (s[i + 1 + p[i]] === s[i - 1 - p[i]]) p[i]++; // expand outward
+    if (i + p[i] > R) { C = i; R = i + p[i]; }         // update rightmost
+  }
+  return p;
+}
+```
+
+Run the full file: `npx tsx 18-string-algorithms/manacher.ts`.
+
+## Complexity
+
+The transform is linear, and although the inner `while` looks quadratic, the same monotone-boundary argument as the Z-algorithm applies: $R$ only advances, and each advance is one comparison, so all expansions together cost $O(n)$:
+
+$$
+T(n) = O(n), \qquad S(n) = O(n).
+$$
+
+| Approach | Time | Space |
+|----------|------|-------|
+| Brute force (check every substring) | $O(n^3)$ | $O(1)$ |
+| Expand around center | $O(n^2)$ | $O(1)$ |
+| Dynamic programming | $O(n^2)$ | $O(n^2)$ |
+| **Manacher** | $O(n)$ | $O(n)$ |
+
+<Callout type="why">
+The radius array does more than find the longest palindrome: summing $\lfloor (P[i]+1)/2 \rfloor$ counts *all* palindromic substrings, and the array answers "is s[l..r] a palindrome?" in $O(1)$ — the kind of preprocessing that turns palindrome-heavy problems from painful to trivial.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Molecular biology" icon="🧫">
+Restriction enzymes cut DNA at reverse-complement palindromes such as <code>GAATTC</code> — read the same on the opposite strand. Scanning a genome for the longest or all palindromic sites uses exactly this radius sweep, so labs can predict where an enzyme will cleave.
+</ExampleCard>
+
+<ExampleCard domain="Linguistics & wordplay" icon="🔤">
+Palindrome hunters and constrained-writing tools search text for the longest symmetric run — "a man a plan a canal panama" once spaces are stripped. Linear detection lets an interactive editor flag palindromic spans as you type.
+</ExampleCard>
+
+<ExampleCard domain="Data integrity" icon="🧮">
+Some error-detecting and compression schemes look for symmetric or mirrored runs in a byte stream. Locating the largest such region quickly helps a codec decide where a reflective encoding pays off, without an $O(n^2)$ scan of every candidate center.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting the transform.** Without the `#` separators you need two passes (odd and even centers) and the mirror bookkeeping gets messy. The separators make everything odd-length and uniform.
+- **Clamping to the boundary.** Inside the current palindrome you must take `min(R - i, P[mirror])`. Copying `P[mirror]` unclamped can claim a radius that pokes past what you have verified.
+- **Index conversion.** Mapping the transformed center/radius back to original indices trips people up: the original length equals $P[i]$ and starts at $\lfloor (i - P[i])/2 \rfloor$. Sentinels (`^`, `$`) avoid bounds checks but shift the arithmetic — be consistent.
+- **Interview cue:** if the interviewer only needs *a* longest palindrome and $n$ is small, expand-around-center is fine and far less error-prone. Reach for Manacher when they demand linear time or ask you to *count* palindromes.
+
+## Practice
+
+1. **Easy:** Transform `"aba"` and `"abba"` with `#` separators and give the length of each transformed string.
+2. **Easy:** By hand, fill the radius array for `"aaa"` (transformed) and read off the longest palindrome.
+3. **Medium:** Count all palindromic substrings of a string using the radius array (LeetCode 647).
+4. **Medium:** Explain, using the monotone boundary $R$, why the inner expansion loop is amortized $O(1)$.
+5. **Hard:** Use Manacher to build an $O(1)$ "is s[l..r] a palindrome?" query after $O(n)$ preprocessing.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why insert "#" between characters before running Manacher?',
+      options: [
+        'To make the string longer for hashing',
+        'So every palindrome has odd length and one routine handles odd and even cases',
+        'To mark word boundaries',
+        'To speed up sorting',
+      ],
+      answer: 1,
+      explain: 'The separators turn even-length palindromes into odd-length ones centered on a "#", unifying the two cases.',
+    },
+    {
+      q: 'For a new center i inside the current palindrome [C, R], the initial radius P[i] is…',
+      options: [
+        'Always 0',
+        'P[mirror] where mirror = 2C - i, clamped to R - i',
+        'R - C',
+        'The pattern length',
+      ],
+      answer: 1,
+      explain: 'Symmetry lets P[i] inherit its mirror\'s radius, but never beyond the verified boundary, so we clamp to R - i.',
+    },
+    {
+      q: 'What guarantees Manacher runs in O(n)?',
+      options: [
+        'It uses a hash table',
+        'The right boundary R only increases, so total expansion work is bounded by n',
+        'It never expands any palindrome',
+        'It sorts the centers first',
+      ],
+      answer: 1,
+      explain: 'Every real expansion pushes R rightward, and R never retreats, so the expansions sum to O(n) — the same argument as the Z-box.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Insert <strong>#</strong> separators so every palindrome is odd-length and one routine covers all cases.',
+    '<strong>P[i]</strong> is the palindrome radius at i; the maximum gives the longest palindromic substring.',
+    'Inside the current palindrome, reuse the <strong>mirror</strong>: P[i] = min(R - i, P[2C - i]).',
+    'Because the boundary <strong>R only advances</strong>, the whole sweep is <strong>O(n)</strong> time and space.',
+    'The radius array also <strong>counts all palindromes</strong> and answers palindrome queries in O(1).',
+  ]}
+/>
+
+Next up: **Aho-Corasick** — take the "reuse a failure link" idea from KMP and build an automaton that matches *many* patterns at once.

@@ -1,0 +1,266 @@
+---
+title: Sum-over-Subsets DP
+track: dsa-dp-optimization
+summary: "Sum-over-Subsets DP: fold f over all subsets of every mask one bit at a time, turning a brute-force O(3^n) subset sum into a clean O(n·2^n) sweep."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-dp-optimization/convex-hull-trick
+leadsTo:
+  - dsa-advanced-algorithms/fenwick-tree
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpOptSos from '../../../components/demos/DpOptSos.tsx';
+
+## The hook: sum a function over every subset of every mask
+
+You have a value $f(s)$ for each of the $2^n$ bitmasks, and you want, for **every** mask $m$, the total
+$F(m) = \sum_{s \subseteq m} f(s)$ — the sum of $f$ over all subsets of $m$. The obvious method
+enumerates each mask's subsets directly; summed over all masks that is $\sum_m 2^{\text{popcount}(m)} = 3^n$
+work, because each bit is independently in the mask, in the subset, or in neither. For $n = 20$ that is
+~$3.5$ billion operations. Sum-over-Subsets DP does the same job in $O(n\,2^n)$ — about $20$ million — by
+adding one bit dimension at a time, reusing partial sums instead of recomputing them.
+
+<Callout type="intuition" title="The one-sentence idea">
+Build the subset sum one bit at a time: after processing bit $i$, every mask has already absorbed the
+contribution of dropping bit $i$, so $n$ sweeps leave each mask holding the sum over all its subsets.
+</Callout>
+
+## Intuition: a prefix sum, but over the subset lattice
+
+An ordinary prefix sum makes each cell absorb the one to its left in a single pass. SOS does the same on
+the $n$-dimensional hypercube of masks: process the bits as $n$ independent "axes." On pass $i$, every
+mask that *has* bit $i$ adds in the value of the same mask with bit $i$ **cleared**:
+
+$$
+dp[m] \mathrel{+}= dp[\,m \oplus 2^{i}\,] \quad\text{for every } m \text{ with bit } i \text{ set.}
+$$
+
+Why this is exactly right: think of a subset $s \subseteq m$. The bits where $s$ and $m$ *differ* are
+exactly the bits $m$ has that $s$ dropped. Each pass $i$ "forgives" one such bit — pass $i$ lets a mask
+inherit everything reachable by turning bit $i$ off. After all $n$ passes, any subset of $m$ is reachable
+by turning off some subset of $m$'s bits in the order the passes ran, so $dp[m]$ equals $\sum_{s\subseteq m} f(s)$.
+The order of the passes doesn't matter because the axes are independent — just like a 2-D prefix sum
+gives the same answer whether you sweep rows-then-columns or columns-then-rows.
+
+This is the identical machinery you met in
+[bitmask DP](dsa-bit-manipulation/bitmask-dp): masks as states, transitions that flip a single bit — SOS
+just aggregates over the whole subset lattice at once instead of tracking one optimal path.
+
+## Play with it
+
+Each row is a mask (shown in binary); the number on the right is its running $dp$ value. The demo sweeps
+bit by bit: the indigo row is the mask being updated, the sky row is its source — the same mask with the
+active (underlined) bit cleared. Step through and watch a single mask soak up its subsets pass by pass.
+
+<DpOptSos client:visible />
+
+<Callout type="tip">
+Notice the update is always $dp[m] \mathrel{+}= dp[m \text{ with one bit off}]$ — never a fresh subset
+enumeration. That single-bit reuse is the whole trick: $n$ cheap passes replace one expensive
+per-mask enumeration.
+</Callout>
+
+## How it works
+
+Take $f = [1, 2, 4, 8, 16, 32, 64, 128]$ indexed by 3-bit masks. Then $F(110_2)$ should sum $f$ over
+subsets $\{000, 010, 100, 110\}$ = $1 + 4 + 16 + 64 = 85$, and $F(111_2)$ over all eight = $255$. The
+sweep below reproduces both — then a brute-force check confirms every mask.
+
+```
+sosDP(f, n):
+  dp = copy(f)
+  for i in 0..n-1:                 # one axis per bit
+    for mask in 0..2^n-1:
+      if mask has bit i:
+        dp[mask] += dp[mask ^ (1<<i)]
+  return dp
+```
+
+<CodeRunner
+  client:visible
+  code={`// Sum over subsets: F[m] = sum of f[s] for every s subset of m.
+function sosDP(f) {
+  const size = f.length;                     // must be a power of two
+  const n = Math.round(Math.log2(size));
+  const dp = [...f];
+  for (let i = 0; i < n; i++) {              // one pass per bit
+    for (let mask = 0; mask < size; mask++) {
+      if (mask & (1 << i)) {                 // mask has bit i
+        dp[mask] += dp[mask ^ (1 << i)];     // absorb the subset lacking bit i
+      }
+    }
+  }
+  return dp;
+}
+
+// Brute force over all subsets, to prove SOS agrees.
+function brute(f) {
+  const size = f.length;
+  const out = new Array(size).fill(0);
+  for (let m = 0; m < size; m++)
+    for (let s = 0; s < size; s++)
+      if ((s & m) === s) out[m] += f[s];     // s is a subset of m
+  return out;
+}
+
+const f = [1, 2, 4, 8, 16, 32, 64, 128];`}
+  tests={[
+    { expr: 'sosDP(f)', label: 'F over every 3-bit mask' },
+    { expr: 'sosDP(f)[6]', label: 'F[110] = 1+4+16+64' },
+    { expr: 'JSON.stringify(sosDP(f)) === JSON.stringify(brute(f))', label: 'matches brute force' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — the core forward transform, plus the superset variant that sweeps masks
+in reverse and adds bit $i$ instead of clearing it:
+
+```ts
+// /dsa/24-dp-optimization/sos-dp.ts
+function sosDP(f: number[], n: number): number[] {
+  const dp = [...f];
+  for (let i = 0; i < n; i++) {
+    for (let mask = 0; mask < (1 << n); mask++) {
+      if (mask & (1 << i)) {
+        dp[mask] += dp[mask ^ (1 << i)];        // sum over SUBSETS
+      }
+    }
+  }
+  return dp;
+}
+
+function supersetSOS(f: number[], n: number): number[] {
+  const dp = [...f];
+  for (let i = 0; i < n; i++) {
+    for (let mask = (1 << n) - 1; mask >= 0; mask--) {
+      if (!(mask & (1 << i))) {
+        dp[mask] += dp[mask | (1 << i)];        // sum over SUPERSETS
+      }
+    }
+  }
+  return dp;
+}
+```
+
+Swapping `+=` for `Math.min`/`Math.max`/`|=` gives min/max/OR over subsets for free — the file ships all
+of them, plus subset-sum convolution built from `n + 1` SOS passes.
+
+Run the full file: `npx tsx 24-dp-optimization/sos-dp.ts`.
+
+## Complexity
+
+Two nested loops — $n$ bit-passes over $2^n$ masks:
+
+$$
+T = O(n\,2^n), \qquad S = O(2^n).
+$$
+
+| Approach | Time | Notes |
+|----------|------|-------|
+| Enumerate each mask's subsets | $O(3^n)$ | $\sum_m 2^{\text{popcount}(m)} = 3^n$ |
+| **Sum-over-Subsets DP** | $O(n\,2^n)$ | one pass per bit |
+
+The ratio $3^n / (n\,2^n) = (1.5)^n / n$ blows up fast: at $n = 20$ that is roughly $3.5\times10^9$ versus
+$2\times10^7$ — a ~170× speed-up, and it only widens with $n$. SOS stays practical to about $n = 20\text{–}22$
+before $2^n$ memory itself becomes the wall.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Combinatorics" icon="🔢">
+Counting pairs $(i,j)$ with $a_i \mathbin{\&} a_j = 0$: build a frequency array over bitmasks, run SOS,
+and each element looks up how many others fit inside its complement — an $O(3^n)$ double loop becomes
+$O(n\,2^n)$.
+</ExampleCard>
+
+<ExampleCard domain="Number theory" icon="🧮">
+LeetCode 1994 *(Number of Good Subsets)* keeps a DP over a 10-bit "square-free prime" mask; subset-style
+aggregation over prime signatures is the SOS pattern applied to factorizations.
+</ExampleCard>
+
+<ExampleCard domain="Signal processing" icon="📶">
+SOS is precisely the fast **zeta transform** over the subset lattice; its inverse is the Möbius
+transform. Together they power fast subset (OR) convolution — the boolean-algebra cousin of the FFT.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Loop order matters.** The bit loop must be *outer* and the mask loop *inner*. Swapping them
+  double-counts subsets and yields garbage — a classic off-by-structure bug.
+- **Forward vs reverse for subsets vs supersets.** Subset sums clear a bit and sweep any order; superset
+  sums add a bit and must sweep masks in *descending* order. Mixing them silently corrupts results.
+- **Mind overflow.** With $2^n$ terms summed, values grow fast — reach for BigInt or a modulus
+  (`sosDPBigInt` in the file) when totals can exceed 2^53.
+- **Zeta then Möbius round-trips.** Applying SOS and then its inverse (subtract instead of add, same loop
+  shape) must return the original $f$ — a cheap unit test that catches sign and order mistakes.
+- **Interview cue:** "for each mask, aggregate something over all its subsets/supersets," or "count pairs
+  by AND/OR value" ⇒ SOS DP, $O(n\,2^n)$.
+
+## Practice
+
+1. **Easy:** For $f = [3, 1, 4, 1]$ (2-bit masks), compute $F(m)$ for all four masks by hand and confirm
+   $F(11_2) = 9$.
+2. **Easy:** Explain in one sentence why the naive subset enumeration costs $3^n$, not $2^n \cdot 2^n$.
+3. **Medium:** Modify `sosDP` to compute the **maximum** of $f$ over subsets, and separately the count of
+   nonzero subsets.
+4. **Medium:** Implement the inverse (Möbius) transform and verify `mobius(sos(f)) === f` on random input.
+5. **Hard:** Solve LeetCode 1178 *(Number of Valid Words for Each Puzzle)* using a frequency-mask SOS,
+   and benchmark it against the per-puzzle subset enumeration.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does Sum-over-Subsets DP compute for each mask m?',
+      options: [
+        'The single largest f(s) among subsets of m',
+        'F(m) = sum of f(s) over all subsets s of m',
+        'The number of set bits in m',
+        'f(m) minus f(m-1)',
+      ],
+      answer: 1,
+      explain: 'By definition F(m) aggregates f over every subset s ⊆ m; SOS fills all 2^n such sums efficiently.',
+    },
+    {
+      q: 'The core update on the pass for bit i is:',
+      options: [
+        'dp[mask] += dp[mask | (1<<i)] for masks lacking bit i',
+        'dp[mask] += dp[mask ^ (1<<i)] for masks having bit i',
+        'dp[mask] = f[mask] for all mask',
+        'dp[mask] *= 2 for masks having bit i',
+      ],
+      answer: 1,
+      explain: 'Each mask that has bit i absorbs the value of the same mask with bit i cleared — that folds in subsets missing bit i.',
+    },
+    {
+      q: 'SOS DP improves the naive subset-enumeration cost from what to what?',
+      options: [
+        'O(2^n) to O(n)',
+        'O(n!) to O(2^n)',
+        'O(3^n) to O(n·2^n)',
+        'O(n^2) to O(n log n)',
+      ],
+      answer: 2,
+      explain: 'Enumerating each mask’s subsets totals 3^n; SOS does n passes over 2^n masks for O(n·2^n).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'SOS DP computes <strong>F(m) = sum of f over all subsets of m</strong> for every mask at once.',
+    'It is a <strong>prefix sum on the subset lattice</strong>: n passes, one per bit, each doing dp[mask] += dp[mask with that bit cleared].',
+    'This replaces the naive <strong>O(3^n)</strong> subset enumeration with <strong>O(n·2^n)</strong> time and O(2^n) space.',
+    'Keep the <strong>bit loop outer</strong>, mask loop inner; sweep ascending for subsets, descending for supersets.',
+    'It is the <strong>fast zeta transform</strong>; its inverse is the Möbius transform, and together they give fast subset convolution.',
+  ]}
+/>
+
+Next up: **Fenwick Tree** — leaving the subset lattice for a different aggregation trick, prefix sums over
+an array with $O(\log n)$ updates and queries.

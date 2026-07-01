@@ -1,0 +1,232 @@
+---
+title: Character Classes & Anchors
+track: dsa-regex
+summary: "Match a whole set with one token: bracket classes, ranges, the \\d/\\w/\\s shorthands, negation, and the zero-width anchors that pin a match to an edge."
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - dsa-regex/regex-basics
+leadsTo:
+  - dsa-regex/quantifiers
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import RgxClassMembership from '../../../components/demos/RgxClassMembership.tsx';
+
+## The hook: "any one of these"
+
+The dot was blunt — it matches *anything*. Real patterns need nuance: a digit but not a letter, a vowel
+but not a consonant, a hex digit `0`–`9` or `a`–`f`. A **character class** is a token that matches exactly
+one character, chosen from a *set* you define. And once you can name a set of characters, you also want to
+say *where* a match must sit — glued to the start of the line, or the very end. That is the job of
+**anchors**, tokens that match a position and consume nothing.
+
+<Callout type="intuition" title="The one-sentence idea">
+A character class is a one-character membership test — `[a-f]` means "any single character in this set" —
+while anchors like `^` and `$` are zero-width checks that a position is the start or end of the text.
+</Callout>
+
+## Intuition
+
+Inside square brackets you list what you will accept. `[aeiou]` matches one vowel. Ranges compress runs:
+`[a-z]`, `[A-Z]`, `[0-9]`. Combine freely: `[a-zA-Z0-9_]` is "any word character." Put a caret *first*
+inside the brackets to **negate**: `[^0-9]` means "any single character that is *not* a digit."
+
+Because a few sets are so common, regex ships shorthands:
+
+- `\d` — a digit, same as `[0-9]`; `\D` is its opposite.
+- `\w` — a word character `[A-Za-z0-9_]`; `\W` is its opposite.
+- `\s` — whitespace (space, tab, newline…); `\S` is its opposite.
+
+Anchors are different animals — they match *between* characters. `^` asserts "we are at the start,"
+`$` asserts "we are at the end," and `\b` asserts a **word boundary** (the seam between a `\w` and a
+non-`\w`). They consume no characters, so `^abc$` means the *entire* string is exactly `abc`, not merely
+that `abc` appears somewhere.
+
+## Play with it
+
+Type a pattern mixing classes and anchors — try `[a-f]\d`, or `^\d`, or `[^aeiou]`. Each class token
+lights up the character it is testing and tells you whether that character *belongs* to the set. Anchor
+tokens flash without moving the cursor.
+
+<RgxClassMembership client:visible />
+
+<Callout type="tip">
+Load `\d[a-f]` against `3a 9z 7c`. Notice the second token rejects `z` (not in `a`–`f`) and the whole
+attempt slides on. Then try `^\d` versus `\d`: the anchored version only ever succeeds at position 0.
+</Callout>
+
+## How it works
+
+Dry-run `[a-f]\d` against `"z a3"`:
+
+```
+start 0: [a-f] vs 'z'  ✗ (z ∉ a–f)      → slide
+start 1: [a-f] vs ' '  ✗                → slide
+start 2: [a-f] vs 'a'  ✓ (a ∈ a–f)
+         \d    vs '3'  ✓ (3 is a digit) → match "a3"
+```
+
+A class is still *one* character wide — it just accepts a whole set for that one slot. Anchors are the odd
+ones out: they test the gap, not a character. Run these:
+
+<CodeRunner
+  client:visible
+  code={`// A class matches ONE character from a set.
+function hexDigits(text) {
+  return text.match(/[0-9a-fA-F]/g) || [];
+}
+
+// Negation: everything that is NOT a word character.
+function separators(text) {
+  return text.match(/[^\\w]/g) || [];
+}
+
+// Anchors pin the match to the whole string.
+function isThreeLetters(text) {
+  return /^[a-zA-Z]{3}$/.test(text);
+}
+
+// \\b is a zero-width word boundary.
+function wholeWord(word, text) {
+  return new RegExp('\\\\b' + word + '\\\\b').test(text);
+}`}
+  tests={[
+    { expr: `hexDigits('color #F0A9!')`, label: 'hex digits' },
+    { expr: `separators('a-b c.d')`, label: 'non-word chars' },
+    { expr: `isThreeLetters('cat')`, label: '"cat" is 3 letters?' },
+    { expr: `isThreeLetters('cats')`, label: '"cats" is 3 letters?' },
+    { expr: `wholeWord('cat', 'a catfish')`, label: '"cat" as whole word?' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — shorthands, negation, custom classes, and Unicode property escapes, wired into
+real validators:
+
+```ts
+// /dsa/26-regular-expressions/character-classes.ts
+function isAlphanumeric(str: string): boolean {
+    return /^[a-zA-Z0-9]+$/.test(str);        // whole string, letters+digits
+}
+function hasSpecialChar(str: string): boolean {
+    return /[^a-zA-Z0-9]/.test(str);          // any NON-alphanumeric
+}
+function isValidHexColor(color: string): boolean {
+    return /^#?[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(color);
+}
+function isStrongPassword(password: string): boolean {
+    return /[a-z]/.test(password) && /[A-Z]/.test(password)
+        && /\d/.test(password) && /[!@#$%^&*(),.?":{}|<>]/.test(password)
+        && password.length >= 8;
+}
+// Unicode property escapes need the u flag:
+function hasEmoji(str: string): boolean {
+    return /\p{Emoji}/u.test(str);
+}
+```
+
+Run the full file: `npx tsx 26-regular-expressions/character-classes.ts`.
+
+## Complexity
+
+Nothing changes asymptotically: each class token is a constant-time membership test, so scanning stays
+linear in the text. A class is dramatically faster than the equivalent alternation, which is why engines
+prefer it:
+
+$$
+T(n) = O(n), \qquad S = O(1).
+$$
+
+| Token | Meaning | Cost per char |
+|-------|---------|---------------|
+| `[a-z]` | one char in the set | $O(1)$ |
+| `\d`, `\w`, `\s` | shorthand sets | $O(1)$ |
+| `[^…]` | one char *not* in the set | $O(1)$ |
+| `^ $ \b` | position assertion (zero-width) | $O(1)$ |
+| `(a\|e\|i\|o\|u)` | alternation (avoid) | slower, may backtrack |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Account security" icon="🔐">
+Password strength rules are stacked class checks: at least one <code>[a-z]</code>, one <code>[A-Z]</code>,
+one <code>\d</code>, and one symbol. Each rule is a membership test over a different set — combine them and
+you have a policy.
+</ExampleCard>
+
+<ExampleCard domain="Postal logistics" icon="📮">
+Sorting machines validate postcodes with anchored classes. A UK-style check pins the whole field with
+<code>^</code> … <code>$</code> so that <code>SW1A</code> passes but <code>SW1A extra junk</code> does not —
+the anchors reject anything trailing.
+</ExampleCard>
+
+<ExampleCard domain="Linguistics" icon="🔤">
+Counting syllable nuclei starts with a vowel class <code>[aeiouy]</code> and consonant clusters with its
+negation <code>[^aeiouy]</code>. Word boundaries <code>\b</code> then isolate tokens without splitting
+hyphenated compounds mid-stream.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Inside brackets, most metacharacters go quiet.** `[.+*]` matches a literal dot, plus, or star — no
+  escaping needed. The exceptions are `^` (negation, only when first), `-` (range, unless first/last), and
+  `]` and `\`.
+- **`^` means two different things.** At the start of a *pattern* it is the start anchor; as the first
+  character *inside brackets* it negates the class. `[^a]` is "not a"; `^a` is "a at the start."
+- **Anchors are zero-width.** `^abc$` is not "contains abc" — it is "is exactly abc." Forgetting the
+  anchors is the number-one validation bug: `/\d{5}/` accepts `abc12345xyz`, while `/^\d{5}$/` does not.
+- **`\d` can be wider than 0–9.** With the `u` flag and Unicode text, `\d` still means ASCII digits, but
+  `\w` and `\p{…}` behave differently — know your flags before validating non-English input.
+- **Interview cue:** "validate that a string is *exactly* …" is a giant hint to anchor with `^` and `$`.
+
+## Practice
+
+1. **Easy:** Write a class that matches a single hexadecimal digit (0–9, a–f, A–F).
+2. **Easy:** What is the difference between `[^a-z]` and `^[a-z]`?
+3. **Medium:** Use `\b` to match the whole word `cat` but not `cat` inside `catfish` or `wildcat`.
+4. **Medium:** Write an anchored pattern that accepts a string of exactly three digits and nothing else,
+   then explain why dropping the anchors breaks it.
+5. **Hard:** Build a class-only pattern that matches one character that is a letter *or* a digit but not a
+   vowel. (Hint: there is no "and" inside a class — think about how to phrase it as a single set.)
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does [^0-9] match?',
+      options: ['The start of the string, then a digit', 'Any single character that is not a digit', 'A literal caret followed by digits', 'Zero or more digits'],
+      answer: 1,
+      explain: 'A caret as the FIRST character inside brackets negates the class, so [^0-9] is any one non-digit character.',
+    },
+    {
+      q: 'Which pattern accepts ONLY the string "cat" and rejects "cats" and "a cat"?',
+      options: ['/cat/', '/^cat$/', '/[cat]/', '/\\bcat/'],
+      answer: 1,
+      explain: 'Anchoring both ends with ^ and $ forces the entire string to be exactly "cat" — no leading or trailing characters allowed.',
+    },
+    {
+      q: 'Why is [aeiou] preferred over (a|e|i|o|u)?',
+      options: ['It matches more characters', 'A character class is a single O(1) membership test with no backtracking', 'Alternation cannot match vowels', 'They are identical in every way'],
+      answer: 1,
+      explain: 'A class is one constant-time set test; alternation makes the engine try each branch and can introduce backtracking.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>character class</strong> <code>[…]</code> matches exactly one character from a set; ranges like <code>[a-z]</code> and negation <code>[^…]</code> extend it.',
+    'Shorthands <strong>\\d, \\w, \\s</strong> (and uppercase negations \\D, \\W, \\S) name the most common sets.',
+    '<strong>Anchors are zero-width</strong>: <code>^</code> (start), <code>$</code> (end), <code>\\b</code> (word boundary) match a position, not a character.',
+    'Wrap a validator in <code>^…$</code> to test the <strong>whole string</strong> — the most common way to fix a too-loose pattern.',
+    'Prefer classes over alternation: a class is a constant-time membership test with <strong>no backtracking</strong>.',
+  ]}
+/>
+
+Next up: **Quantifiers** — the `*`, `+`, `?` and `{n,m}` operators that let one token repeat, and the
+crucial difference between grabbing greedily and matching lazily.

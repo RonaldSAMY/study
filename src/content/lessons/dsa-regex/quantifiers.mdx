@@ -1,0 +1,241 @@
+---
+title: Quantifiers
+track: dsa-regex
+summary: "Let a token repeat: star, plus, question mark and {n,m} counts — and the pivotal difference between greedy matching that grabs everything and lazy matching that takes the least."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-regex/character-classes
+leadsTo:
+  - dsa-regex/groups-capturing
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import RgxQuantifierGreed from '../../../components/demos/RgxQuantifierGreed.tsx';
+
+## The hook: "one or more, but how many?"
+
+A phone number is *some* digits. A tag is `<` then *stuff* then `>`. "Some" and "stuff" are repetition,
+and repetition is where regex gets both powerful and slippery. A **quantifier** attaches to the token
+before it and says how many times it may repeat. The twist: when a quantifier *could* match different
+amounts, it must decide — grab as much as possible, or as little? That single choice, **greedy** versus
+**lazy**, decides whether `<div>a</div><div>b</div>` comes back as one giant match or two neat ones.
+
+<Callout type="intuition" title="The one-sentence idea">
+A quantifier repeats the preceding token; by default it is greedy (takes the most it can, then hands
+characters back only when forced), and adding `?` makes it lazy (takes the fewest, then grabs more only
+when forced).
+
+</Callout>
+
+## Intuition
+
+The four core quantifiers:
+
+- `*` — zero or more (`ab*` matches `a`, `ab`, `abbb`).
+- `+` — one or more (`ab+` needs at least one `b`).
+- `?` — zero or one, i.e. optional (`colou?r` matches both spellings).
+- `{n}`, `{n,}`, `{n,m}` — exact, at-least, and ranged counts (`\d{3}`, `\d{2,}`, `\d{3,5}`).
+
+By default every one of these is **greedy**: it first consumes as many repetitions as it can, then, if the
+rest of the pattern cannot match, it **backtracks** — releasing one character at a time until the rest fits
+or it drops below its minimum. Add a `?` after the quantifier to make it **lazy**: now it takes the
+*fewest* repetitions and only grabs more when the rest of the pattern demands it. Same characters accepted;
+completely different amount consumed.
+
+This is your first real taste of **backtracking**, the engine's undo-and-retry mechanism. Watching a
+greedy `.*` grab the whole line and then reluctantly give characters back is the single most clarifying
+thing you can see in regex.
+
+## Play with it
+
+Compare `a.*c` (greedy) with `a.*?c` (lazy) on the same text. Watch the greedy version swallow everything
+after `a` (sky), hit the end, and then *release* characters (amber) until a `c` lines up — that releasing
+is backtracking. The lazy version takes the opposite tack: match `c` as soon as possible.
+
+<RgxQuantifierGreed client:visible />
+
+<Callout type="tip">
+Load `a.*c` on `xabcayc!` and step to the end: the greedy match is the long `abcayc`. Now change the
+pattern to `a.*?c` and reload — the lazy match stops at the first `c`, giving `abc`. The legend colours
+tell the story: sky = grab, amber = release/backtrack.
+</Callout>
+
+## How it works
+
+Dry-run greedy `a.*c` on `"abcayc"`:
+
+```
+a      matches 'a' at 0
+.*     greedily grabs "bcayc" to the end (pos 6)
+c      needs a 'c' at pos 6 — end of string ✗
+.*     backtracks: give back 'c' (pos 5)
+c      'c'? char at 5 is 'c' ✓  → match "abcayc" [0,6)
+```
+
+The lazy `a.*?c` instead expands from empty: match `a`, try `c` immediately (fails on `b`), grab one, try
+`c` again, … stopping at the first `c` for the match `abc`. Run both and a few counted quantifiers:
+
+<CodeRunner
+  client:visible
+  code={`// Greedy vs lazy on the same text.
+function greedy(text) {
+  const m = text.match(/<.*>/);      // grabs the widest span
+  return m ? m[0] : null;
+}
+function lazy(text) {
+  const m = text.match(/<.*?>/);     // stops at the first '>'
+  return m ? m[0] : null;
+}
+
+// Counted quantifiers.
+function isUsPhone(text) {
+  return /^\\d{3}-\\d{3}-\\d{4}$/.test(text);
+}
+function trimZeros(text) {
+  return text.replace(/^0+/, '');    // one-or-more leading zeros
+}`}
+  tests={[
+    { expr: `greedy('<a><b>')`, label: 'greedy <.*>' },
+    { expr: `lazy('<a><b>')`, label: 'lazy <.*?>' },
+    { expr: `isUsPhone('123-456-7890')`, label: 'valid phone?' },
+    { expr: `isUsPhone('12-3456-7890')`, label: 'wrong grouping?' },
+    { expr: `trimZeros('00042')`, label: 'strip leading zeros' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — counted quantifiers for exact formats, and the greedy/lazy pair that separates
+"one big match" from "many small ones":
+
+```ts
+// /dsa/26-regular-expressions/quantifiers-anchors.ts
+function isValidPhone(phone: string): boolean {
+    return /^\d{10}$/.test(phone);               // exactly ten digits
+}
+function isValidUsernameLength(u: string): boolean {
+    return /^[a-zA-Z0-9_]{3,16}$/.test(u);       // between 3 and 16
+}
+function isValidZipCode(zip: string): boolean {
+    return /^\d{5}(-\d{4})?$/.test(zip);         // optional +4 suffix
+}
+
+// Greedy vs lazy — the classic <div> example:
+const html = "<div>Hello</div><div>World</div>";
+html.match(/<div>.*<\/div>/);    // ONE match: the whole string (greedy)
+html.match(/<div>.*?<\/div>/g);  // TWO matches: each <div>…</div> (lazy)
+
+// Lazy extraction of quoted text:
+function extractQuoted(text: string): string[] {
+    return (text.match(/".*?"/g) || []).map(m => m.slice(1, -1));
+}
+```
+
+Run the full file: `npx tsx 26-regular-expressions/quantifiers-anchors.ts`.
+
+## Complexity
+
+A single quantifier over a simple token is still linear — the engine may backtrack, but only within that
+one repetition. The danger is *nested* quantifiers, where backtracking multiplies:
+
+$$
+T_\text{simple}(n) = O(n), \qquad T_\text{nested-worst}(n) = O(2^{\,n}).
+$$
+
+That exponential is catastrophic backtracking; the automaton you meet in the final lesson matches in
+$O(n \cdot m)$ with no backtracking at all.
+
+| Pattern | Behaviour | Consumes |
+|---------|-----------|----------|
+| `.*` | greedy | as much as possible, then backtracks |
+| `.*?` | lazy | as little as possible, then grows |
+| `\d{3}` | exact | precisely 3 |
+| `\d{2,}` | at least | 2 or more (greedy) |
+| `(a+)+` | nested | ⚠️ exponential — avoid |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Web scraping" icon="🕸️">
+The first scraper everyone writes uses greedy `<td>.*</td>` and accidentally
+swallows an entire table row into one cell. Switching to the lazy `<td>.*?</td>`
+recovers the individual cells — a five-character fix that saves the parse.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+Microsatellites are short tandem repeats like `(CAG)` repeated many times. A quantifier such as
+`(CAG){5,40}` models the healthy range; counts beyond it flag repeat-expansion disorders. The bounds
+`{n,m}` encode a biological threshold directly.
+</ExampleCard>
+
+<ExampleCard domain="Telecom" icon="☎️">
+Number plans are quantifier grammars: a country code of `\d{1,3}`, then a subscriber number of
+`\d{4,10}`, with an optional `+` prefix expressed as `\+?`. Each carrier's rules are just different
+repetition counts.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Greedy by default bites HTML.** `<.*>` on `<a><b>` matches the whole thing. Use `<.*?>` or, better,
+  the negated class `<[^>]*>` which cannot overshoot in the first place.
+- **Lazy is not "correct," just different.** Both greedy and lazy find *a* match if one exists; they only
+  differ in *which*. Choose by what you want to capture, not by superstition.
+- **`*` and `?` can match nothing.** `a*` succeeds on `"xyz"` by matching zero `a`s. If you need at least
+  one, use `+`; if you forgot anchors, an empty match can hide bugs.
+- **Nested quantifiers are a ReDoS landmine.** `(a+)+`, `(a*)*`, `(a|a)*` make the engine try exponentially
+  many splits on non-matching input. Prefer a single quantifier and a negated class; the last lesson shows
+  the blow-up live.
+- **Interview cue:** if asked to "extract each tag / each quote / each field," reach for a lazy quantifier
+  or a negated class, and be ready to explain greedy backtracking on a whiteboard.
+
+## Practice
+
+1. **Easy:** What does `ab*` match that `ab+` does not?
+2. **Easy:** Write a pattern for a 4-to-6 digit PIN using a counted quantifier.
+3. **Medium:** On the text `"'a' and 'b'"`, why does `'.*'` capture the whole thing while `'.*?'` captures
+   just `'a'`? Trace the backtracking.
+4. **Medium:** Rewrite the greedy `<.*>` as a negated-class pattern that matches a single tag and cannot
+   overshoot.
+5. **Hard:** Explain, step by step, why matching `(a+)+$` against `"aaaaaaaaaa!"` is slow, and how many
+   ways the engine can split ten `a`s among the repetitions.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'On the text "<a><b>", what does the greedy pattern <.*> match?',
+      options: ['"<a>"', '"<b>"', 'The whole string "<a><b>"', 'Nothing'],
+      answer: 2,
+      explain: 'Greedy .* grabs as far as possible, then backtracks to the LAST ">". The result is the widest match, the entire "<a><b>".',
+    },
+    {
+      q: 'What does adding ? after a quantifier (e.g. .*?) do?',
+      options: ['Makes it optional', 'Makes it lazy — match the fewest repetitions', 'Makes it match more', 'Turns off backtracking'],
+      answer: 1,
+      explain: 'A trailing ? makes the quantifier lazy: it starts with the minimum and only takes more when the rest of the pattern forces it.',
+    },
+    {
+      q: 'Which pattern is a catastrophic-backtracking risk?',
+      options: ['/\\d{3}/', '/a+b/', '/(a+)+$/', '/[^>]*/'],
+      answer: 2,
+      explain: 'Nested quantifiers like (a+)+ let the engine try exponentially many ways to divide the input, causing catastrophic backtracking (ReDoS).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Quantifiers repeat the previous token: <strong>*</strong> (0+), <strong>+</strong> (1+), <strong>?</strong> (0 or 1), and counted <code>{n}</code>, <code>{n,}</code>, <code>{n,m}</code>.',
+    'Default matching is <strong>greedy</strong> — take the most, then backtrack; a trailing <code>?</code> makes it <strong>lazy</strong> — take the least, then grow.',
+    'Greedy overshoot is the classic HTML bug; a <strong>negated class</strong> like <code>[^>]*</code> avoids it without backtracking.',
+    '<strong>Nested quantifiers</strong> such as <code>(a+)+</code> risk exponential catastrophic backtracking (ReDoS).',
+    'One quantifier over a simple token is <strong>O(n)</strong>; the worst nested case is <strong>O(2ⁿ)</strong>.',
+  ]}
+/>
+
+Next up: **Groups & Backreferences** — parentheses that capture pieces of a match, alternation for
+choices, and backreferences that force later text to equal something matched earlier.

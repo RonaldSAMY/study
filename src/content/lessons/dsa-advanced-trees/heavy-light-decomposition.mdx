@@ -1,0 +1,275 @@
+---
+title: Heavy-Light Decomposition
+track: dsa-advanced-trees
+summary: "Slice a tree into a few straight chains so a segment tree can answer path queries: any root-to-leaf path crosses only O(log n) chains."
+difficulty: advanced
+estMinutes: 22
+prereqs:
+  - dsa-advanced-trees/lca
+leadsTo:
+  - dsa-advanced-trees/centroid-decomposition
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvTreeHeavyLight from '../../../components/demos/AdvTreeHeavyLight.tsx';
+
+## The hook: a segment tree is great on an array — so flatten the tree
+
+A segment tree answers "sum of this contiguous range" in $O(\log n)$ and updates a value just as fast —
+but only on a flat array. Trees are not flat: the path between two nodes zig-zags up and down and is *not*
+a contiguous slice of any linearization. Heavy-light decomposition (HLD) is the bridge. It carves the tree
+into a small set of **straight chains**, lays each chain down as a contiguous block of one big array, and
+proves that the path between any two nodes touches only $O(\log n)$ of those chains. A path query then
+becomes a handful of ordinary segment-tree range queries — so "maximum toll on the road from $u$ to $v$,
+with live updates" runs in $O(\log^2 n)$ instead of $O(n)$.
+
+<Callout type="intuition" title="The one-sentence idea">
+From each node draw a "heavy" edge to its largest-subtree child; the heavy edges link up into long chains,
+each chain becomes a contiguous array segment, and because a path can enter at most $O(\log n)$ chains, a
+tree-path query reduces to $O(\log n)$ array-range queries.
+</Callout>
+
+## Intuition: why "heavy" edges make chains short in number
+
+At every node, look at its children and follow the edge into the child with the **largest subtree** — call
+that the heavy edge; all its siblings are light edges. Chaining heavy edges together partitions the tree
+into disjoint vertical paths.
+
+The magic is a counting argument about light edges. When you step *down* a light edge, you move into a
+subtree of at most **half** the size of where you were — because if a sibling's subtree were more than
+half, *it* would have been the heavy child. Halving can happen at most $\log_2 n$ times before the subtree
+shrinks to one node, so **any root-to-leaf path crosses at most $O(\log n)$ light edges**, hence enters at
+most $O(\log n)$ chains. A general $u$–$v$ path is just two root-ward walks meeting at their LCA, so it too
+spans only $O(\log n)$ chains. Because the second DFS visits the heavy child first, every chain occupies a
+*contiguous* run of positions in the flattened array — exactly what a segment tree needs.
+
+## Play with it
+
+First the demo computes subtree sizes and thickens each heavy edge. Then a heavy-first DFS paints each
+chain its own colour and drops the nodes, in order, into the array shown along the bottom. Watch how nodes
+on the same chain land next to each other.
+
+<AdvTreeHeavyLight client:visible />
+
+<Callout type="tip">
+Follow the thick sky-blue chain from the root downward: those nodes end up as one solid coloured block in
+the bottom array. Every time the walk crosses a thin (light) edge it starts a brand-new chain — count the
+colours and you have counted the chains a path might have to visit.
+</Callout>
+
+## How it works
+
+Two depth-first passes build everything:
+
+```
+1. dfs1: compute parent, depth, subtreeSize, and pick heavy[v] = child with the largest subtree.
+2. dfs2: assign positions; recurse into the HEAVY child first (same chainHead),
+         then into each light child (which opens a NEW chain headed by itself).
+3. Load node values into a segment tree indexed by chainPos.
+4. queryPath(u, v): while u and v are in different chains, lift the one whose chain head is deeper —
+   add the segment-tree range from its chain head up to it, then jump to the parent of that head.
+   When they share a chain, add the single range between them. That closing range straddles the LCA.
+```
+
+<CodeRunner
+  client:visible
+  code={`// Heavy-light decomposition + path sum on the demo tree (plain JS)
+const EDGES = [[0,1],[0,2],[0,3],[1,4],[1,5],[3,6],[4,7],[4,8]];
+const N = 9;
+const values = [1, 2, 3, 4, 5, 6, 7, 8, 9]; // value of node i is values[i]
+const adj = Array.from({ length: N }, () => []);
+for (const [a, b] of EDGES) { adj[a].push(b); adj[b].push(a); }
+
+const parent = Array(N).fill(-1), depth = Array(N).fill(0);
+const size = Array(N).fill(1), heavy = Array(N).fill(-1);
+function dfs1(v, p, d) {
+  parent[v] = p; depth[v] = d; size[v] = 1;
+  let best = 0;
+  for (const u of adj[v]) if (u !== p) {
+    dfs1(u, v, d + 1); size[v] += size[u];
+    if (size[u] > best) { best = size[u]; heavy[v] = u; } // largest-subtree child
+  }
+}
+dfs1(0, -1, 0);
+
+const head = Array(N).fill(0), pos = Array(N).fill(0);
+let cur = 0;
+function dfs2(v, h) {
+  head[v] = h; pos[v] = cur++;
+  if (heavy[v] !== -1) dfs2(heavy[v], h);                 // heavy child continues the chain
+  for (const u of adj[v]) if (u !== parent[v] && u !== heavy[v]) dfs2(u, u); // light child: new chain
+}
+dfs2(0, 0);
+
+const arr = Array(N).fill(0);
+for (let v = 0; v < N; v++) arr[pos[v]] = values[v];      // contiguous per chain
+const rangeSum = (l, r) => { let s = 0; for (let i = l; i <= r; i++) s += arr[i]; return s; };
+
+function queryPath(u, v) {
+  let res = 0;
+  while (head[u] !== head[v]) {
+    if (depth[head[u]] < depth[head[v]]) { const t = u; u = v; v = t; }
+    res += rangeSum(pos[head[u]], pos[u]);                // climb one whole chain
+    u = parent[head[u]];
+  }
+  if (depth[u] > depth[v]) { const t = u; u = v; v = t; }
+  res += rangeSum(pos[u], pos[v]);                        // final chunk across the LCA
+  return res;
+}`}
+  tests={[
+    { expr: 'queryPath(7, 6)', label: 'sum along path 7→4→1→0→3→6' },
+    { expr: 'queryPath(8, 5)', label: 'sum along path 8→4→1→5' },
+    { expr: 'new Set(head).size', label: 'number of chains' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds a lazy segment tree, runs the two DFS passes, and exposes path/subtree queries plus
+updates. Here is the path-query loop that walks chain by chain — the heart of HLD:
+
+```ts
+// /dsa/20-advanced-trees/heavy-light-decomposition.ts
+queryPath(u: number, v: number): number {
+  let result = 0;
+
+  while (this.chainHead[u] !== this.chainHead[v]) {
+    // Move the one with deeper chain head up
+    if (this.depth[this.chainHead[u]] < this.depth[this.chainHead[v]]) {
+      [u, v] = [v, u];
+    }
+
+    // Query from u to head of its chain
+    result += this.segTree.query(
+      this.chainPos[this.chainHead[u]],
+      this.chainPos[u]
+    );
+
+    // Move to parent of chain head
+    u = this.parent[this.chainHead[u]];
+  }
+
+  // Both in same chain now
+  if (this.depth[u] > this.depth[v]) {
+    [u, v] = [v, u];
+  }
+
+  result += this.segTree.query(this.chainPos[u], this.chainPos[v]);
+  return result;
+}
+```
+
+Run the full file: `npx tsx 20-advanced-trees/heavy-light-decomposition.ts`.
+
+## Complexity
+
+A path visits $O(\log n)$ chains, and each chain is handled by one segment-tree operation costing
+$O(\log n)$, so path work multiplies to $O(\log^2 n)$. Subtree queries need only a single range (a subtree
+is itself contiguous under this ordering), so they cost $O(\log n)$:
+
+$$
+\text{build} = O(n), \qquad \text{path query/update} = O(\log^2 n), \qquad \text{subtree query} = O(\log n).
+$$
+
+| Operation | Cost | Why |
+|-----------|------|-----|
+| Build (two DFS + seg tree) | $O(n)$ | linear passes over the tree |
+| Path query / update | $O(\log^2 n)$ | $O(\log n)$ chains $\times$ $O(\log n)$ per range |
+| Subtree query / update | $O(\log n)$ | one contiguous range |
+| LCA (as a by-product) | $O(\log n)$ | walk up until chains match |
+
+The extra $\log$ over plain binary-lifting LCA is the price of also supporting **updates** along paths —
+that is HLD's whole reason to exist.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Competitive programming" icon="🏆">
+HLD is the standard tool for "assign weights to tree edges, then support path-max, path-sum, and path-add
+under updates." Problems like SPOJ QTREE reduce directly to a segment tree living on the flattened chains.
+</ExampleCard>
+
+<ExampleCard domain="Road & utility networks" icon="🛣️">
+On a tree-shaped road or pipeline network, "what is the heaviest load / narrowest pipe on the route from
+$A$ to $B$?" with edges whose capacities change over time is exactly a path-aggregate-with-updates query —
+HLD answers each in $O(\log^2 n)$.
+</ExampleCard>
+
+<ExampleCard domain="Org & permission hierarchies" icon="🏢">
+Rolling up a metric (headcount, budget, access level) along the reporting chain from an employee to a
+common manager — while individual nodes get re-tagged — maps a mutable path query onto the same chained
+segment tree.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Recursing light-first.** The heavy child *must* be visited first in `dfs2`, otherwise a chain's nodes
+  are no longer contiguous in the array and the segment tree ranges break.
+- **Node values vs. edge values.** If weights live on edges, push each edge's value onto its *child* node
+  and exclude the LCA from the final range — a classic silent off-by-one.
+- **Forgetting to swap by chain-head depth.** In the loop you lift whichever endpoint has the *deeper chain
+  head*, not the deeper node; swapping on the wrong key can loop forever.
+- **Confusing HLD with plain LCA.** If you only need LCA or distance on a static tree, binary lifting is
+  simpler and one $\log$ faster. Reach for HLD when the tree carries **updatable path data**.
+- **Interview cue:** "Path queries with updates on a tree?" → "Heavy-light decomposition: chains plus a
+  segment tree, $O(\log^2 n)$ per operation."
+
+## Practice
+
+1. **Easy:** In the demo, how many chains does the tree decompose into? Confirm with the code runner.
+2. **Easy:** Why can a root-to-leaf path cross at most $O(\log n)$ light edges?
+3. **Medium:** Trace `queryPath(8, 5)` by hand: which chains does it touch, and where is the LCA?
+4. **Medium:** Explain why a subtree query needs only one range while a path query needs $O(\log n)$.
+5. **Hard:** Modify the decomposition to store values on **edges** instead of nodes, and describe the one
+   index you must skip so the LCA's incoming edge is not double-counted.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which child does the heavy edge from a node point to?',
+      options: [
+        'The child with the smallest subtree',
+        'The leftmost child',
+        'The child with the largest subtree',
+        'The deepest descendant',
+      ],
+      answer: 2,
+      explain: 'The heavy edge goes to the largest-subtree child. That guarantees stepping down a light edge at least halves the subtree size.',
+    },
+    {
+      q: 'Why does any root-to-leaf path cross only O(log n) light edges?',
+      options: [
+        'Because heavy edges are longer',
+        'Because each light step lands in a subtree at most half the size',
+        'Because the tree is balanced by construction',
+        'Because chains are sorted by depth',
+      ],
+      answer: 1,
+      explain: 'A sibling subtree bigger than half would have been the heavy child, so a light step at most halves the size — and halving happens at most log n times.',
+    },
+    {
+      q: 'What is the cost of a path query with updates under HLD?',
+      options: ['O(1)', 'O(log n)', 'O(log^2 n)', 'O(n)'],
+      answer: 2,
+      explain: 'A path spans O(log n) chains and each chain costs O(log n) in the segment tree, giving O(log^2 n).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'HLD splits a tree into <strong>heavy chains</strong> by always following the edge to the <strong>largest-subtree child</strong>.',
+    'Each chain becomes a <strong>contiguous array segment</strong>, so a segment tree can query and update it.',
+    'Any path crosses <strong>O(log n) light edges</strong>, hence touches only O(log n) chains.',
+    'Path queries/updates cost <strong>O(log^2 n)</strong>; subtree queries cost O(log n).',
+    'Use it when a tree carries <strong>updatable path data</strong> — plain LCA suffices for static distance.',
+  ]}
+/>
+
+Next up: **Centroid Decomposition** — instead of chains, we recursively remove the node that splits the
+tree into halves, building a shallow $O(\log n)$-deep helper tree that makes "count all paths with property
+$X$" tractable.

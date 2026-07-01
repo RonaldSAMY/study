@@ -1,0 +1,262 @@
+---
+title: Coordinate Compression
+track: dsa-misc-algorithms
+summary: "Coordinate compression: replace huge, sparse values with their sorted ranks 0,1,2,… so order-based structures need only as many slots as there are distinct values."
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - dsa-misc-algorithms/meet-in-the-middle
+leadsTo:
+  - dsa-misc-algorithms/reservoir-sampling
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MiscCoordCompression from '../../../components/demos/MiscCoordCompression.tsx';
+
+## The hook: a stadium with six people in it
+
+Your data structure wants to index values directly — a Fenwick tree or segment tree over "value $v$" needs
+an array slot for every possible $v$. But your values are timestamps like `1_700_000_000` or coordinates up
+to a billion, while you only have a few thousand of them. Allocating a billion slots to hold six numbers is
+absurd. **Coordinate compression** fixes this: since these structures only ever compare values (is $a$
+before $b$?), you can replace each value with its *rank* in sorted order. A billion-wide universe collapses
+to exactly as many slots as you have distinct values.
+
+<Callout type="intuition" title="The one-sentence idea">
+Sort the distinct values, give each one a small index $0, 1, 2, \dots$, and rewrite the data with those
+ranks — order and equality are preserved, so any comparison-based structure works unchanged on a tiny range.
+
+</Callout>
+
+## Intuition: only order survives, and that is enough
+
+Many algorithms never do arithmetic on the raw values; they only ask *ordering* questions — "how many
+elements are smaller than this one?", "is this point to the left of that one?", "insert at value $v$ in a
+BIT." For all of those, the *actual* number does not matter, only its position in the sorted order.
+
+So take the multiset of values, keep the distinct ones, sort them, and map
+
+$$
+v \;\longmapsto\; \operatorname{rank}(v) = \#\{\,u : u < v,\ u \text{ distinct}\,\}.
+$$
+
+The smallest distinct value becomes $0$, the next $1$, and so on. Two important guarantees:
+
+- **Order is preserved:** $a < b \iff \operatorname{rank}(a) < \operatorname{rank}(b)$.
+- **Equality is preserved:** identical values get the same rank.
+
+That is all a comparison-based structure needs. A segment tree that would need $10^9$ leaves now needs only
+$m$ (the number of distinct values). Building the map is one sort plus a hash lookup — $O(n \log n)$ — and
+you keep the sorted array around to *decompress* a rank back to its original value when you report answers.
+
+## Play with it
+
+Feed in some huge, sparse values. The demo collects the distinct ones, sorts them, assigns ranks
+$0, 1, 2, \dots$, then rewrites the original array with those ranks. Notice equal inputs (the two `5`s) always
+receive the same rank.
+
+<MiscCoordCompression client:visible />
+
+<Callout type="tip">
+The gaps between the original values vanish completely — `5, 250000, 1000000` compress to `0, 1, 3` with no
+regard for *how far apart* they were. That is exactly why you must **not** compress when distances or sums
+of the raw values matter.
+</Callout>
+
+## How it works
+
+Values `[1000000, 5, 500000, 5, 750000, 250000]`. Distinct-and-sorted: `[5, 250000, 500000, 750000, 1000000]`.
+Ranks:
+
+```
+        5 → 0
+   250000 → 1
+   500000 → 2
+   750000 → 3
+  1000000 → 4
+
+original:   1000000  5  500000  5  750000  250000
+compressed:       4  0       2  0       3       1
+```
+
+A billion-wide universe now lives in five slots — and the two `5`s both map to rank `0`.
+
+<CodeRunner
+  client:visible
+  code={`// Compress values to ranks; keep the sorted array to decompress.
+function compress(values) {
+  const sorted = [...new Set(values)].sort((a, b) => a - b);
+  const rank = new Map();
+  sorted.forEach((v, i) => rank.set(v, i));
+  return { compressed: values.map(v => rank.get(v)), decompress: sorted };
+}
+
+// Count how many elements to the RIGHT of each index are smaller (LC 315),
+// using a Fenwick tree over the *compressed* ranks — array size = #distinct.
+function countSmaller(nums) {
+  const { compressed } = compress(nums);
+  const m = new Set(nums).size;
+  const bit = Array(m + 1).fill(0);
+  const add = i => { for (i++; i <= m; i += i & -i) bit[i]++; };
+  const sum = i => { let s = 0; for (i++; i > 0; i -= i & -i) s += bit[i]; return s; };
+  const res = [];
+  for (let i = nums.length - 1; i >= 0; i--) {
+    res.push(sum(compressed[i] - 1));   // ranks strictly smaller, already seen
+    add(compressed[i]);
+  }
+  return res.reverse();
+}`}
+  tests={[
+    { expr: 'compress([1000000,5,500000,5,750000,250000]).compressed', label: 'ranks' },
+    { expr: 'countSmaller([5,2,6,1])', label: 'LC315 counts' },
+    { expr: 'countSmaller([2,0,1])', label: 'LC315 again' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the reusable compressor with `lowerBound`/`upperBound`, and `countInversions`
+showing why compression is the enabler for a Fenwick tree over sparse values:
+
+```ts
+// /dsa/25-misc-algorithms/coordinate-compression.ts
+class CoordinateCompressor<T = number> {
+    private values: T[];
+    private valueToIndex: Map<T, number>;
+
+    constructor(values: T[],
+        private compare: (a: T, b: T) => number = (a, b) => (a as number) - (b as number)) {
+        this.values = [...new Set(values)].sort(compare);   // distinct + sorted
+        this.valueToIndex = new Map();
+        this.values.forEach((v, i) => this.valueToIndex.set(v, i));
+    }
+    compress(value: T): number { return this.valueToIndex.get(value)!; }   // value → rank
+    decompress(index: number): T { return this.values[index]; }            // rank → value
+    size(): number { return this.values.length; }
+}
+
+function countInversions(arr: number[]): number {
+    const c = new CoordinateCompressor(arr);
+    const n = c.size();
+    const bit = Array(n + 1).fill(0);
+    const update = (i: number) => { for (i++; i <= n; i += i & -i) bit[i]++; };
+    const query = (i: number) => { let s = 0; for (i++; i > 0; i -= i & -i) s += bit[i]; return s; };
+
+    let inversions = 0;
+    for (let i = arr.length - 1; i >= 0; i--) {
+        const r = c.compress(arr[i]);
+        inversions += query(r - 1);   // already-seen ranks smaller than this
+        update(r);
+    }
+    return inversions;
+}
+```
+
+The same file compresses 2-D points independently, unions rectangle areas via a compressed sweep line, and
+solves *Count of Smaller Numbers After Self*. Run the full file:
+`npx tsx 25-misc-algorithms/coordinate-compression.ts`.
+
+## Complexity
+
+One sort dominates the build; every lookup afterward is a hash hit or a binary search:
+
+$$
+\text{build } O(n \log n), \qquad \text{compress } O(1)\text{ or }O(\log n), \qquad \text{space } O(m),
+$$
+
+where $m$ is the number of distinct values.
+
+| Aspect | Without compression | With compression |
+|--------|---------------------|------------------|
+| Structure size | $O(\max v)$ | $O(m)$ |
+| Build | — | $O(n \log n)$ |
+| Query | $O(\log \max v)$ | $O(\log m)$ |
+
+When $\max v$ is $10^9$ and $m$ is $10^4$, the structure shrinks by five orders of magnitude — the
+difference between "out of memory" and "instant."
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cartography" icon="🗺️">
+A sweep-line over map features only cares which longitude comes before which, not the exact degrees.
+Compressing the event x-coordinates to ranks lets a segment tree tile the plane with one cell per distinct
+boundary instead of one per micro-degree.
+</ExampleCard>
+
+<ExampleCard domain="Databases" icon="🗄️">
+Dictionary (a.k.a. ordinal) encoding stores a column of long strings as small integer codes into a sorted
+dictionary. Range and equality filters run on the compact codes; it is coordinate compression under a
+different name.
+</ExampleCard>
+
+<ExampleCard domain="Competitive gaming" icon="🎮">
+Leaderboards with scores up to billions but only thousands of players: rank-compress the scores so a
+Fenwick tree can answer "how many players scored below me?" without a billion-slot array.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Never compress when magnitudes matter.** Distances, differences, and sums of the raw values are
+  destroyed — compression keeps only order and equality. Use it purely for comparison-based work.
+- **De-duplicate before ranking.** Forgetting `new Set` gives duplicate values different ranks and inflates
+  your structure. Equal values must share one rank.
+- **Keep the decompress array.** You will almost always need to translate a rank back to the real value when
+  reporting results (e.g. the actual coordinate of an answer).
+- **Compress each axis separately in 2-D.** X-ranks and Y-ranks are independent; mixing them scrambles the
+  geometry.
+- **Interview cue:** "values up to $10^9$ but $n \le 10^5$, and I want a BIT / segment tree over values" is
+  the compression flag. Say "sort distinct, map to ranks, index the structure by rank."
+
+## Practice
+
+1. **Easy:** Compress `[50, 10, 50, 30]` to ranks. What rank do the two `50`s share?
+2. **Easy:** Why does compression preserve the answer to "how many values are smaller than $x$"?
+3. **Medium:** Use compression + a Fenwick tree to count inversions in `[5, 2, 6, 1, 3, 4]`.
+4. **Medium:** Explain why you must *not* compress if the task is "sum of values in a range."
+5. **Hard:** Compress a set of rectangles' x- and y-coordinates to compute the area of their union with a sweep line.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Coordinate compression preserves which properties of the data?',
+      options: ['Exact values and distances', 'Only the relative order and equality of values', 'Only the sum of values', 'The sign of each value only'],
+      answer: 1,
+      explain: 'Each value is replaced by its sorted rank, so a < b stays a < b and equal values share a rank — but distances and magnitudes are gone.',
+    },
+    {
+      q: 'You want a Fenwick tree indexed by value, with values up to 1e9 but only 1e4 distinct values present. Compression makes the array size:',
+      options: ['1e9', 'about 1e4 (the number of distinct values)', '1', '1e5 always'],
+      answer: 1,
+      explain: 'The tree is indexed by rank instead of raw value, so it needs one slot per distinct value — here ~1e4 — not one per possible value.',
+    },
+    {
+      q: 'For which task is coordinate compression the WRONG tool?',
+      options: [
+        'Counting elements smaller than each element to its right',
+        'Counting inversions with a BIT',
+        'Computing the sum of the actual values in a range',
+        'A sweep line that only needs left/right ordering',
+      ],
+      answer: 2,
+      explain: 'Summing actual values needs the magnitudes, which compression discards. It only helps comparison/order-based tasks.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Replace each value with its <strong>rank in sorted, de-duplicated order</strong> (0, 1, 2, …).',
+    'Compression <strong>preserves order and equality</strong> but discards magnitudes and distances.',
+    'It shrinks a value-indexed structure from <strong>O(max value) to O(distinct values)</strong>.',
+    'Build is one <strong>O(n log n)</strong> sort; keep the sorted array to <strong>decompress ranks back to values</strong>.',
+    'It powers <strong>Fenwick/segment trees over sparse values, sweep lines, and inversion counting</strong> — never use it when raw magnitudes matter.',
+  ]}
+/>
+
+Next up: **Reservoir Sampling** — a last gem, drawing a fair random sample from a stream so long you can
+never hold it all in memory.

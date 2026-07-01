@@ -1,0 +1,265 @@
+---
+title: Lowest Common Ancestor
+track: dsa-advanced-trees
+summary: "The deepest node that sits above two others: precompute power-of-two jump pointers once and every LCA query collapses to O(log n) hops."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-advanced-trees/splay-treap
+leadsTo:
+  - dsa-advanced-trees/heavy-light-decomposition
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvTreeLcaLifting from '../../../components/demos/AdvTreeLcaLifting.tsx';
+
+## The hook: the meeting point of two family lines
+
+Point at any two people in a family tree and ask "who is their closest shared ancestor?" You could crawl
+up from each of them one generation at a time and wait for the paths to collide — but that is $O(n)$ per
+question, and on a tree with millions of nodes answering thousands of questions that way is hopeless. The
+**lowest common ancestor** (LCA) is the deepest node that is an ancestor of both $u$ and $v$, and it is
+the hinge of nearly every tree-path computation: the distance between two nodes, the sum along a path, the
+node where two lineages merge. The trick that makes it fast is to precompute, for every node, its
+ancestor $2^0, 2^1, 2^2, \dots$ levels up — so you can leap up the tree in giant power-of-two strides
+instead of crawling one step at a time.
+
+<Callout type="intuition" title="The one-sentence idea">
+Store each node's $2^j$-th ancestor in a table, then answer any LCA query by first lifting the deeper node
+to the same depth and then jumping both nodes upward by the largest strides that keep them apart — where
+they finally meet is the LCA.
+</Callout>
+
+## Intuition: climb in powers of two, not one step at a time
+
+Every positive integer is a sum of distinct powers of two — that is just its binary representation. Binary
+lifting turns that fact into a movement strategy on a tree. If a node needs to rise 13 levels, and
+$13 = 8 + 4 + 1$, then three precomputed jumps ($2^3$, then $2^2$, then $2^0$) get it there instead of
+thirteen single steps.
+
+The query has two phases. First, **level the two nodes**: whichever is deeper is lifted by exactly
+$\text{depth}(u) - \text{depth}(v)$ levels, using the binary decomposition above, so both sit at the same
+depth. If they landed on the same node, one was an ancestor of the other and we are done. Otherwise,
+**rise together**: for $j$ from large to small, if the $2^j$-th ancestors of $u$ and $v$ *differ*, jump
+both up by $2^j$. Each such jump is safe because differing ancestors are still strictly below the LCA.
+When no jump is safe anymore, $u$ and $v$ are the two children just below the meeting point, so their
+common parent $\text{up}[u][0]$ is the LCA.
+
+## Play with it
+
+Query the LCA of two nodes and watch the pointers climb. The sky pointer is $u$, the emerald pointer is
+$v$; each caption names the $2^j$ stride being taken, and the indigo ring lands on the answer.
+
+<AdvTreeLcaLifting client:visible />
+
+<Callout type="tip">
+Try <code>u=7, v=8</code> (both under node 4, so LCA = 4), then <code>u=7, v=6</code> whose lineages only
+meet at the root (LCA = 0), then <code>u=7, v=4</code> where one node is literally an ancestor of the
+other — notice the query stops during the first "level them" phase.
+</Callout>
+
+## How it works
+
+Preprocessing runs one DFS to record each node's depth and immediate parent, then fills the jump table by
+the recurrence "your $2^j$-th ancestor is the $2^{j-1}$-th ancestor of your $2^{j-1}$-th ancestor":
+
+```
+1. DFS from the root: record depth[v] and up[v][0] = parent(v).
+2. For j = 1..LOG:  up[v][j] = up[ up[v][j-1] ][j-1]   (a jump is two half-jumps).
+3. Query(u, v): lift the deeper node to the shallower one's depth using the binary digits of the gap.
+4. If they coincide, that's the LCA. Otherwise jump both up by every 2^j whose ancestors still differ.
+5. The LCA is up[u][0] — the parent just above where they stopped.
+```
+
+<CodeRunner
+  client:visible
+  code={`// Binary-lifting LCA on the demo tree (plain JS)
+const EDGES = [[0,1],[0,2],[0,3],[1,4],[1,5],[3,6],[4,7],[4,8]];
+const N = 9, LOG = 4;
+const adj = Array.from({ length: N }, () => []);
+for (const [a, b] of EDGES) { adj[a].push(b); adj[b].push(a); }
+const depth = Array(N).fill(0);
+const up = Array.from({ length: N }, () => Array(LOG).fill(-1));
+
+function dfs(v, p, d) {
+  depth[v] = d; up[v][0] = p;
+  for (const u of adj[v]) if (u !== p) dfs(u, v, d + 1);
+}
+dfs(0, -1, 0);
+// Build the jump table: a 2^j hop is two 2^(j-1) hops stitched together.
+for (let j = 1; j < LOG; j++)
+  for (let i = 0; i < N; i++)
+    if (up[i][j - 1] !== -1) up[i][j] = up[up[i][j - 1]][j - 1];
+
+function kthAncestor(v, k) {
+  for (let j = 0; j < LOG && v !== -1; j++) if ((k >> j) & 1) v = up[v][j];
+  return v;
+}
+function lca(u, v) {
+  if (depth[u] < depth[v]) { const t = u; u = v; v = t; } // u is deeper
+  u = kthAncestor(u, depth[u] - depth[v]);                // level them
+  if (u === v) return u;                                  // one was an ancestor
+  for (let j = LOG - 1; j >= 0; j--)
+    if (up[u][j] !== up[v][j]) { u = up[u][j]; v = up[v][j]; } // rise together
+  return up[u][0];
+}
+function dist(u, v) { return depth[u] + depth[v] - 2 * depth[lca(u, v)]; }`}
+  tests={[
+    { expr: 'lca(7, 8)', label: 'LCA of 7 and 8 (both under 4)' },
+    { expr: 'lca(7, 6)', label: 'LCA of 7 and 6 (meet at root)' },
+    { expr: 'lca(4, 5)', label: 'LCA of 4 and 5' },
+    { expr: 'dist(7, 6)', label: 'distance from 7 to 6' },
+  ]}
+/>
+
+## The real implementation
+
+The course file offers four LCA strategies — naive, binary lifting, Euler tour + RMQ, and Tarjan's offline
+union-find. Here is the binary-lifting query, the workhorse most people reach for because it also answers
+"$k$-th ancestor" and "distance" for free:
+
+```ts
+// /dsa/20-advanced-trees/lca-algorithms.ts
+query(u: number, v: number): number {
+  // Ensure u is deeper
+  if (this.depth[u] < this.depth[v]) {
+    [u, v] = [v, u];
+  }
+
+  // Bring u to same depth as v
+  const diff = this.depth[u] - this.depth[v];
+  u = this.getKthAncestor(u, diff);
+
+  if (u === v) return u;
+
+  // Binary search for LCA
+  for (let j = this.LOG - 1; j >= 0; j--) {
+    if (this.parent[u][j] !== this.parent[v][j]) {
+      u = this.parent[u][j];
+      v = this.parent[v][j];
+    }
+  }
+
+  return this.parent[u][0];
+}
+```
+
+Run the full file: `npx tsx 20-advanced-trees/lca-algorithms.ts`.
+
+## Complexity
+
+Let $n$ be the number of nodes. The jump table has $n$ rows and $\lceil\log_2 n\rceil + 1$ columns, and
+each query performs a constant amount of work per column:
+
+$$
+\text{preprocess} = O(n \log n), \qquad \text{query} = O(\log n), \qquad \text{space} = O(n \log n).
+$$
+
+| Approach | Preprocessing | Query | Space |
+|----------|---------------|-------|-------|
+| Naive (crawl to root) | $O(1)$ | $O(n)$ | $O(1)$ |
+| Binary lifting | $O(n \log n)$ | $O(\log n)$ | $O(n \log n)$ |
+| Euler tour + sparse-table RMQ | $O(n \log n)$ | $O(1)$ | $O(n \log n)$ |
+| Tarjan's offline (union-find) | $O(n + q)$ | amortized $O(1)$ | $O(n)$ |
+
+Binary lifting is the sweet spot for online queries: simple to code, and its jump table doubles as a
+$k$-th-ancestor oracle. The Euler-tour method wins when you need true $O(1)$ queries and never update the
+tree.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Version control" icon="🔀">
+When Git performs a three-way merge it computes the <code>merge-base</code> of two branches — the lowest
+common ancestor in the commit DAG. The diff each side made <em>since that shared commit</em> is exactly
+what gets reconciled.
+</ExampleCard>
+
+<ExampleCard domain="Computational biology" icon="🧬">
+Phylogenetic software maps species onto a tree of life; the LCA of two organisms is their most recent
+common ancestor, and the distance formula $\text{depth}(u) + \text{depth}(v) - 2\,\text{depth}(\text{LCA})$
+estimates evolutionary divergence.
+</ExampleCard>
+
+<ExampleCard domain="Networking" icon="🌐">
+IP multicast and routing hierarchies deliver a packet up to the LCA of the sender and receiver in the
+distribution tree, then back down — the shortest path in a tree always passes through their LCA.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting to level first.** Jumping both nodes together only works once they share a depth. Lift the
+  deeper node by exactly the depth gap before the second phase, or the "differ?" test is meaningless.
+- **Overshooting the LCA.** During the rise-together phase you jump only when the $2^j$-th ancestors
+  *differ*. If you jumped when they were equal you would sail past the LCA into a common ancestor above it.
+- **Off-by-one on `LOG`.** The table needs $\lceil\log_2 n\rceil + 1$ columns; sizing it to
+  $\lfloor\log_2 n\rfloor$ silently drops the top jump on the deepest trees.
+- **Rebuilding on every change.** Binary lifting assumes a static tree. If parents change often you must
+  rebuild the table — that is the cue to reach for a link-cut tree or Euler-tour-on-a-BIT instead.
+- **Interview cue:** "Distance between two tree nodes?" → "LCA, then
+  $\text{depth}(u) + \text{depth}(v) - 2\,\text{depth}(\text{LCA})$."
+
+## Practice
+
+1. **Easy:** In the demo tree, what is $\text{LCA}(5, 8)$? Verify with the code runner.
+2. **Easy:** Why does the query return early when one node is an ancestor of the other?
+3. **Medium:** Using only depths and the LCA, write the formula for the number of edges on the path from
+   $u$ to $v$.
+4. **Medium:** How many columns does the jump table need for $n = 10^6$ nodes? Justify the number.
+5. **Hard:** Adapt binary lifting to also return the maximum edge weight on the path from $u$ to $v$ (store
+   a second table of max-weight-over-a-$2^j$-jump alongside the ancestor table).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does up[v][j] store in binary lifting?',
+      options: [
+        'The j-th child of v',
+        'The ancestor of v that is 2^j levels above it',
+        'The subtree size of v at level j',
+        'The j-th node in a DFS order',
+      ],
+      answer: 1,
+      explain: 'up[v][j] is the 2^j-th ancestor of v, built from two 2^(j-1) jumps: up[v][j] = up[up[v][j-1]][j-1].',
+    },
+    {
+      q: 'In the second phase, when do you jump u and v up by 2^j together?',
+      options: [
+        'Whenever up[u][j] equals up[v][j]',
+        'Only when up[u][j] differs from up[v][j]',
+        'Always, for every j',
+        'Only for j = 0',
+      ],
+      answer: 1,
+      explain: 'You jump only when the 2^j-th ancestors differ — those are still strictly below the LCA, so the jump is safe. Jumping when they are equal would overshoot.',
+    },
+    {
+      q: 'What are the preprocessing and per-query costs of binary lifting?',
+      options: [
+        'O(n) build, O(n) query',
+        'O(n log n) build, O(log n) query',
+        'O(n log n) build, O(1) query',
+        'O(1) build, O(log n) query',
+      ],
+      answer: 1,
+      explain: 'The table has n × O(log n) entries (built in O(n log n)), and each query walks the O(log n) columns twice.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The <strong>LCA</strong> of two nodes is the <strong>deepest</strong> node that is an ancestor of both.',
+    'Binary lifting stores each node\'s <strong>2^j-th ancestor</strong>, so you climb the tree in power-of-two strides.',
+    'A query <strong>levels the deeper node</strong>, then <strong>raises both</strong> by the largest jumps whose ancestors still differ.',
+    'Cost is <strong>O(n log n)</strong> preprocessing and <strong>O(log n)</strong> per query, on a static tree.',
+    'LCA underpins <strong>tree distance</strong>, path sums, git merge-base, and phylogenetics.',
+  ]}
+/>
+
+Next up: **Heavy-Light Decomposition** — we slice the tree into a handful of straight chains so that a
+segment tree can answer path queries, turning "sum along the $u$–$v$ path" into a few array ranges.

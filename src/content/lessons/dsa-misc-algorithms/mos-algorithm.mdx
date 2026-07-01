@@ -1,0 +1,258 @@
+---
+title: Mo’s Algorithm
+track: dsa-misc-algorithms
+summary: "Mo's algorithm: answer a whole batch of range queries offline by reordering them so one sliding window moves as little as possible."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-misc-algorithms/sqrt-decomposition
+leadsTo:
+  - dsa-misc-algorithms/meet-in-the-middle
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MiscMosPointers from '../../../components/demos/MiscMosPointers.tsx';
+
+## The hook: batch the questions, then answer lazily
+
+Some range questions have no neat merge rule. "How many *distinct* values are in $[L, R]$?" cannot be
+stitched from two half-answers, so a segment tree stalls. But suppose you are handed *all* the queries at
+once — you do not have to answer them in order. If you already know the distinct count for $[3, 9]$, then
+$[3, 10]$ is just "add one element" and $[4, 9]$ is just "remove one." **Mo's algorithm** exploits exactly
+this: reorder the queries so consecutive ones are near-neighbours, then slide a single window between them,
+adding and removing one element at a time.
+
+<Callout type="intuition" title="The one-sentence idea">
+When every query is known up front and you can add/remove one element cheaply, sort the queries by
+($\lfloor L/\sqrt{n}\rfloor$, then $R$) so a single window $[curL, curR]$ crawls the minimum distance across all of them.
+
+</Callout>
+
+## Intuition: why the ordering bounds the travel
+
+Maintain a window $[curL, curR]$ and a running answer (say, the distinct count). Moving the window means
+four cheap operations: extend right, extend left, shrink right, shrink left — each an `add` or `remove` of
+one element. The cost of the whole algorithm is the *total distance* the two pointers travel across all
+queries. Answer the queries in a bad order and the window thrashes back and forth, $O(nq)$ in the worst case.
+
+Mo's ordering tames it. Put $L$ into a block of width $\sqrt{n}$ and sort queries by (block of $L$, then $R$):
+
+- **Right pointer:** within one block of $L$, we sort by $R$ ascending, so $curR$ only moves *forward* —
+  at most $n$ steps per block, over $\sqrt{n}$ blocks: $O(n\sqrt{n})$ total.
+- **Left pointer:** all queries in a block share the same $\sqrt{n}$-wide band of $L$ values, so $curL$
+  jitters at most $\sqrt{n}$ per query: $O(q\sqrt{n})$ total.
+
+Add them: $O((n + q)\sqrt{n})$. The block idea from the last lesson reappears — this time as the *sort key*
+for a batch of queries rather than a partition of the array. (The zig-zag trick — sort $R$ descending in
+odd blocks — squeezes out even more pointer travel.)
+
+## Play with it
+
+The array is fixed; edit the list of queries. The demo sorts them by (block of $L$, then $R$), then slides
+the window one element at a time. Green flashes are **adds**, red flashes are **removes**, and the live
+distinct count updates on every move. Answered queries turn blue.
+
+<MiscMosPointers client:visible />
+
+<Callout type="tip">
+Watch the window between two consecutive sorted queries — it barely moves. Now imagine answering them in
+the original order: the window would leap across the array and back. That saved travel is the whole win.
+</Callout>
+
+## How it works
+
+Array `[1,3,2,1,4,1,3,5,2,1]` ($n=10$, block size $3$), queries `[(0,3),(2,5),(1,4),(5,8),(0,9)]`.
+Sorted by (block of $L$, then $R$):
+
+```
+block 0 (L in 0..2):  (0,3) (1,4) (2,5) (0,9)
+block 1 (L in 3..5):  (5,8)
+
+window crawls:  [0,3] → extend R to 4, drop index 0        → [1,4]
+                [1,4] → extend R to 5, drop index 1        → [2,5]
+                [2,5] → extend R to 9, extend L back to 0  → [0,9]
+                [0,9] → jump to [5,8]  (new block)
+```
+
+Between neighbours the window slides only a step or two; the one big jump is between blocks.
+
+<CodeRunner
+  client:visible
+  code={`// Mo's algorithm: count distinct values for each query, offline.
+function distinctCounts(arr, queries) {
+  const n = arr.length;
+  const bs = Math.max(1, Math.floor(Math.sqrt(n)));
+  const order = queries.map(([l, r], i) => ({ l, r, i }))
+    .sort((a, b) => {
+      const ba = Math.floor(a.l / bs), bb = Math.floor(b.l / bs);
+      if (ba !== bb) return ba - bb;
+      return ba % 2 === 0 ? a.r - b.r : b.r - a.r;   // zig-zag on R
+    });
+  const freq = new Map(); let distinct = 0;
+  const add = v => { const f = (freq.get(v) || 0) + 1; freq.set(v, f); if (f === 1) distinct++; };
+  const remove = v => { const f = freq.get(v) - 1; if (f === 0) { freq.delete(v); distinct--; } else freq.set(v, f); };
+  const ans = new Array(queries.length);
+  let curL = 0, curR = -1;
+  for (const { l, r, i } of order) {
+    while (curR < r) add(arr[++curR]);
+    while (curL > l) add(arr[--curL]);
+    while (curR > r) remove(arr[curR--]);
+    while (curL < l) remove(arr[curL++]);
+    ans[i] = distinct;
+  }
+  return ans;
+}`}
+  tests={[
+    { expr: 'distinctCounts([1,3,2,1,4,1,3,5,2,1], [[0,3],[2,5],[1,4],[5,8],[0,9]])', label: 'distinct per query' },
+    { expr: 'distinctCounts([1,1,1,1], [[0,3],[1,2]])', label: 'all-equal' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the generic engine parameterized by `add`/`remove`/`getResult`, so the same sort
+and sweep answer distinct-count, sum, mode, or range-XOR by swapping the state hooks:
+
+```ts
+// /dsa/25-misc-algorithms/mos-algorithm.ts
+class MosAlgorithm<State, Result> {
+    private blockSize: number;
+    // ...init/add/remove/getResult stored from config...
+
+    process(queries: [number, number][]): Result[] {
+        const results: Result[] = new Array(queries.length);
+        const q = queries.map(([l, r], i) => ({ left: l, right: r, index: i }));
+
+        q.sort((a, b) => {
+            const ba = Math.floor(a.left / this.blockSize);
+            const bb = Math.floor(b.left / this.blockSize);
+            if (ba !== bb) return ba - bb;
+            return ba % 2 === 0 ? a.right - b.right : b.right - a.right; // zig-zag
+        });
+
+        this.state = this.init();
+        let curL = 0, curR = -1;
+        for (const { left: L, right: R, index } of q) {
+            while (curR < R) { curR++; this.add(this.state, this.arr[curR], curR); }
+            while (curL > L) { curL--; this.add(this.state, this.arr[curL], curL); }
+            while (curR > R) { this.remove(this.state, this.arr[curR], curR); curR--; }
+            while (curL < L) { this.remove(this.state, this.arr[curL], curL); curL++; }
+            results[index] = this.getResult(this.state);
+        }
+        return results;
+    }
+}
+```
+
+The file plugs in `distinctCountQueries`, `rangeSumQueries`, `modeQueries`, `equalPairQueries`, and even a
+`MosWithUpdates` variant at $O(n^{5/3})$. Run the full file: `npx tsx 25-misc-algorithms/mos-algorithm.ts`.
+
+## Complexity
+
+Sorting dominates only logarithmically; the pointer travel dominates the rest:
+
+$$
+T = O\big(q \log q\big) \;+\; O\big((n + q)\sqrt{n}\big) = O\big((n + q)\sqrt{n}\big).
+$$
+
+| Component | Cost |
+|-----------|------|
+| Sort queries | $O(q \log q)$ |
+| Right-pointer travel | $O(n\sqrt{n})$ |
+| Left-pointer travel | $O(q\sqrt{n})$ |
+| Per-move `add`/`remove` | $O(1)$ (or $\times \log n$) |
+| Space | $O(n + q)$ |
+
+For $n = q = 10^5$, $(n+q)\sqrt{n} \approx 6\times 10^7$ — fast, whereas answering each query independently
+would be $10^{10}$.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Genomics" icon="🧬">
+Biologists ask "how many distinct gene variants appear between position $L$ and $R$?" across thousands of
+overlapping windows of a chromosome. Batching the windows and sliding one interval reuses almost all the
+counting between neighbouring queries.
+</ExampleCard>
+
+<ExampleCard domain="Log analytics" icon="📊">
+An ops team runs hundreds of "unique users active between timestamp A and B" reports overnight. Since the
+reports are known in advance and order does not matter, a single sliding window over the event log answers
+them all far cheaper than one scan each.
+</ExampleCard>
+
+<ExampleCard domain="Text search" icon="📝">
+"How many different words occur in chapters $i$ through $j$?" over many chapter ranges of a book: reorder
+the ranges, then add/remove a word's count as the window edges cross each word position.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Offline only.** Mo's needs *all* queries up front and lets you answer them in any order. If queries
+  arrive online (each depends on the previous answer), Mo's does not apply.
+- **`remove` must be reversible.** The window shrinks as well as grows, so every `add` needs an exact
+  inverse. Problems where you can add but not cleanly remove (e.g. some max-in-window states) do not fit.
+- **Get the pointer order right.** A subtle bug: doing the shrink loops before the extend loops can make
+  `curR` cross `curL`. The safe order is extend-right, extend-left, shrink-right, shrink-left.
+- **Updates change the exponent.** Point updates between queries need the 3-D "Mo's with updates" and a
+  block size of $n^{2/3}$, giving $O(n^{5/3})$ — a different beast.
+- **Interview cue:** "many range queries, offline, weird aggregate (distinct/mode/pair-count), add and
+  remove are cheap" is the flashing Mo's sign. Say "sort by $\sqrt{n}$ block of L, then R."
+
+## Practice
+
+1. **Easy:** For $n = 16$ (block size 4), which block does a query with $L = 9$ fall into?
+2. **Easy:** Given the window is exactly $[2,5]$, list the pointer moves to reach $[2,7]$.
+3. **Medium:** Swap the state hooks to answer **range sum** instead of distinct count; what are `add`/`remove`?
+4. **Medium:** Explain why sorting $R$ descending in odd blocks reduces total right-pointer travel.
+5. **Hard:** Design `add`/`remove` to track the **mode** (most frequent value) — you will need a frequency-of-frequencies map.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Mo\'s algorithm requires that:',
+      options: [
+        'Queries arrive one at a time and must be answered immediately',
+        'All queries are known in advance and may be answered in any order',
+        'The array never changes and there is exactly one query',
+        'The aggregate has an associative merge like a segment tree',
+      ],
+      answer: 1,
+      explain: 'Mo\'s is an offline technique: it reorders the whole batch of queries, so it needs them all up front and the freedom to answer out of order.',
+    },
+    {
+      q: 'Why does sorting by (block of L, then R) bound the total work to O((n+q)√n)?',
+      options: [
+        'Sorting is O(n√n)',
+        'Within a block R only increases (≤ n per block × √n blocks), and L jitters ≤ √n per query',
+        'Each query is answered in O(1)',
+        'The window never moves',
+      ],
+      answer: 1,
+      explain: 'The right pointer sweeps forward n per block across √n blocks (n√n); the left pointer moves at most √n per query (q√n). Together O((n+q)√n).',
+    },
+    {
+      q: 'Which operation must every Mo\'s state support besides add?',
+      options: ['sort', 'a reversible remove', 'binary search', 'hashing'],
+      answer: 1,
+      explain: 'The window shrinks as well as grows, so each element added must be exactly undoable with remove; otherwise the sliding window cannot contract.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Mo\'s algorithm answers a <strong>batch of offline range queries</strong> by sliding one window between them.',
+    'Sort queries by <strong>(⌊L/√n⌋, then R)</strong> so the two pointers travel a total of <strong>O((n+q)√n)</strong>.',
+    'Each window move is an <strong>add or remove of a single element</strong>; the aggregate updates incrementally.',
+    'It needs <strong>reversible updates</strong> and <strong>all queries known up front</strong> — it does not work online.',
+    'It shines for aggregates with <strong>no clean merge rule</strong> (distinct count, mode, equal-pairs) where trees struggle.',
+  ]}
+/>
+
+Next up: **Meet in the Middle** — a different flavour of "split to conquer," halving an exponential search
+by enumerating two halves and combining them with a sorted lookup.

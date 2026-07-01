@@ -1,0 +1,226 @@
+---
+title: Rabin-Karp & Rolling Hashes
+track: dsa-string-algorithms
+summary: "Hash a sliding window instead of comparing it: a rolling hash updates in O(1) per step, turning substring search into number comparison."
+difficulty: intermediate
+estMinutes: 17
+prereqs:
+  - dsa-string-algorithms/z-algorithm
+  - dsa-hash-tables/hash-functions
+leadsTo:
+  - dsa-string-algorithms/boyer-moore
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SAlgRollingHash from '../../../components/demos/SAlgRollingHash.tsx';
+
+## The hook: compare fingerprints, not whole strings
+
+Two documents are identical only if they match character by character — but you rarely need to *prove* equality to *rule it out*. A short fingerprint does that instantly: if two fingerprints differ, the strings differ, no further looking required. Rabin-Karp applies this to substring search. It fingerprints the pattern once, then slides a window across the text and fingerprints each window. Almost every window disagrees on the fingerprint and is dismissed in a single integer comparison; only the rare fingerprint collision triggers a real character check.
+
+The magic ingredient is a **rolling hash**: the fingerprint of the next window is computed from the current one in constant time, so the whole scan is linear on average.
+
+<Callout type="intuition" title="The one-sentence idea">
+Treat each length-m window as a base-b number mod a prime; sliding the window is "drop the top digit, shift, add the new digit" — one O(1) update — so you compare hashes instead of strings.
+</Callout>
+
+## Intuition
+
+You have seen **hash functions** turn a key into an array index. Here we hash a *string* into a number with a **polynomial hash**:
+
+$$
+h(s) = \big(s_0\,b^{m-1} + s_1\,b^{m-2} + \dots + s_{m-1}\,b^0\big) \bmod q,
+$$
+
+where $b$ is a base (say $256$) and $q$ is a large prime. Think of the characters as digits of a number written in base $b$. The point of this particular shape is that neighbouring windows share almost all their digits. When the window slides one step right, the leftmost digit $s_i\,b^{m-1}$ leaves and a new digit joins at the bottom:
+
+$$
+h_{\text{next}} = \big(b\,(h_{\text{cur}} - s_i\,b^{m-1}) + s_{i+m}\big) \bmod q.
+$$
+
+That is the **rolling** update — a subtraction, a multiply, an add, all mod $q$. Because a hash collision is possible (many strings, few residues), a hash match is only a *candidate*: we confirm it with a direct comparison. With a good prime the false-positive rate is about $1/q$, so confirmations are rare and cheap.
+
+## Play with it
+
+Watch the window slide. The hash rolls in one step each move; blue means the hashes disagree (skip immediately), red is a **spurious hit** (hashes agree but the characters differ — caught by verification), and emerald is a verified match.
+
+<SAlgRollingHash client:visible />
+
+<Callout type="tip">
+The demo uses a deliberately tiny modulus so collisions actually appear. In production you would pick a large prime (and often two independent hashes) so red "spurious hit" frames become astronomically unlikely.
+</Callout>
+
+## How it works
+
+Search `"abra"` in `"abracadabra"` with base $31$, mod $1009$. Hash the pattern once, hash the first window, then roll:
+
+```
+pattern "abra" → hash H
+window 0 "abra" → hash == H → verify "abra"=="abra" ✓ match at 0
+roll: drop 'a', add 'c' → window 1 "brac" → hash ≠ H → skip
+roll: drop 'b', add 'a' → window 2 "raca" → hash ≠ H → skip
+… keep rolling …
+window 7 "abra" → hash == H → verify ✓ match at 7
+```
+
+Every slide is one arithmetic update, not four character reads. Here it is running:
+
+<CodeRunner
+  client:visible
+  code={`function rabinKarp(text, pattern) {
+  const n = text.length, m = pattern.length;
+  if (m === 0 || m > n) return [];
+  const base = 256, mod = 1000000007;
+  const hash = s => { let h = 0; for (const c of s) h = (h * base + c.charCodeAt(0)) % mod; return h; };
+  const patHash = hash(pattern);
+  let winHash = hash(text.slice(0, m));
+  let high = 1;                        // base^(m-1) mod mod
+  for (let i = 0; i < m - 1; i++) high = (high * base) % mod;
+  const hits = [];
+  for (let i = 0; i <= n - m; i++) {
+    if (winHash === patHash && text.slice(i, i + m) === pattern) hits.push(i);
+    if (i < n - m) {                   // roll to the next window
+      let h = winHash - (text.charCodeAt(i) * high) % mod;
+      h = ((h % mod) + mod) % mod;      // keep it non-negative
+      winHash = (h * base + text.charCodeAt(i + m)) % mod;
+    }
+  }
+  return hits;
+}`}
+  tests={[
+    { expr: 'JSON.stringify(rabinKarp("abracadabra", "abra"))', label: 'abra in abracadabra' },
+    { expr: 'JSON.stringify(rabinKarp("AABAACAADAABAAABAA", "AABA"))', label: 'AABA positions' },
+    { expr: 'JSON.stringify(rabinKarp("aaaaa", "aa"))', label: 'overlapping aa' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses the same roll, plus a reusable `RollingHash` that answers "hash of any substring" in $O(1)$ after linear preprocessing — the workhorse behind duplicate-substring and longest-common-substring solutions:
+
+```ts
+// /dsa/18-string-algorithms/rabin-karp.ts
+export function rabinKarpSearch(
+  text: string, pattern: string,
+  base = 256, mod = 1_000_000_007,
+): number[] {
+  const n = text.length, m = pattern.length;
+  const result: number[] = [];
+  if (m === 0 || m > n) return result;
+
+  const patternHash = computeHash(pattern, base, mod);
+  let windowHash = computeHash(text.slice(0, m), base, mod);
+  const highestPow = modPow(base, m - 1, mod);   // base^(m-1) mod q
+
+  if (windowHash === patternHash && text.slice(0, m) === pattern) result.push(0);
+
+  for (let i = 1; i <= n - m; i++) {
+    const leftChar = text.charCodeAt(i - 1);
+    const rightChar = text.charCodeAt(i + m - 1);
+    windowHash = windowHash - (leftChar * highestPow) % mod;
+    windowHash = ((windowHash % mod) + mod) % mod;  // handle negatives
+    windowHash = (windowHash * base + rightChar) % mod;
+    if (windowHash === patternHash && text.slice(i, i + m) === pattern) result.push(i);
+  }
+  return result;
+}
+```
+
+Run the full file: `npx tsx 18-string-algorithms/rabin-karp.ts`.
+
+## Complexity
+
+Each roll is $O(1)$ and verification only fires on a hash hit. With a well-chosen prime the average is linear; the worst case (a pathological flood of collisions, or a text like `"aaaa"` searched for `"aaa"` where every window truly matches) degrades to $O(nm)$:
+
+$$
+T_{\text{avg}}(n, m) = O(n + m), \qquad T_{\text{worst}}(n, m) = O(nm), \qquad S = O(1).
+$$
+
+| Case | Time | Note |
+|------|------|------|
+| Average (good hash) | $O(n + m)$ | one integer compare per window |
+| Worst (many collisions) | $O(nm)$ | every window forces a verify |
+| Multiple patterns of same length | $O(n + km)$ | hash all $k$ into a set, one pass |
+
+<Callout type="why">
+Rolling hashes are the beating heart of content-defined chunking in backup and sync tools: a rolling fingerprint over a byte stream marks chunk boundaries wherever the hash hits a special value, so an edit only re-uploads the chunks that actually changed.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Academic integrity" icon="📝">
+Plagiarism detectors fingerprint every k-word shingle of every submission and compare fingerprint sets. Rolling the hash across a document is what makes scanning millions of overlapping shingles affordable — matching passages surface as shared fingerprints, not as pairwise string diffs.
+</ExampleCard>
+
+<ExampleCard domain="Audio recognition" icon="🎵">
+Shazam-style matching hashes short spectrogram windows into compact fingerprints and rolls the window along the recording. A noisy clip still shares enough exact fingerprint hits with the reference track to identify the song in a fraction of a second.
+</ExampleCard>
+
+<ExampleCard domain="Version control & backup" icon="🗄️">
+rsync and deduplicating backends slide a rolling checksum over files to find byte ranges that already exist on the far side. Only mismatched fingerprints trigger a full transfer, so a one-line edit ships a few kilobytes instead of the whole file.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Always verify a hash hit.** A hash match is a *candidate*, not a match. Skipping the character check is the classic bug — it silently returns false positives.
+- **Guard against negatives.** After subtracting the leftmost term, the value can go negative; add `mod` back before the next multiply, or the residue is wrong.
+- **Pick a large prime and a base coprime to it.** Tiny moduli (like the demo's) collide constantly. For adversarial inputs use **double hashing** (two independent base/mod pairs) to crush the collision odds.
+- **Interview cue:** "compare many substrings for equality" or "longest duplicate substring" scream rolling hash + binary search. Mention the $1/q$ collision bound to show you know why verification matters.
+
+## Practice
+
+1. **Easy:** By hand, roll the hash of `"abc"` to `"bcd"` in base $10$ using digit codes — show the drop/shift/add steps.
+2. **Easy:** Explain why searching `"aaa"` inside `"aaaaaa"` is a worst case for Rabin-Karp.
+3. **Medium:** Use one pass to find all length-10 substrings that occur more than once (LeetCode 187, "Repeated DNA Sequences").
+4. **Medium:** Given a `RollingHash`, decide in $O(1)$ whether two substrings are equal, and explain the false-positive risk.
+5. **Hard:** Combine binary search with a rolling hash to find the longest duplicated substring (LeetCode 1044).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What makes the "rolling" update O(1)?',
+      options: [
+        'It re-hashes the whole window each time',
+        'Adjacent windows share all but two characters, so one drop/shift/add reuses the old hash',
+        'It caches every window hash in a map',
+        'It sorts the characters first',
+      ],
+      answer: 1,
+      explain: 'Removing the leftmost contribution and appending the new character transforms the previous hash directly, in constant time.',
+    },
+    {
+      q: 'Why must a hash match be verified with a direct comparison?',
+      options: [
+        'Because the hash could be negative',
+        'Because different strings can share a hash (a collision), so a match is only a candidate',
+        'Because the modulus changes each step',
+        'It does not need verification',
+      ],
+      answer: 1,
+      explain: 'Many strings map to the same residue mod q; verification rejects those spurious hits, at cost ~1/q per window.',
+    },
+    {
+      q: 'What is the worst-case time of Rabin-Karp?',
+      options: ['O(n log n)', 'O(n + m) always', 'O(nm) when collisions or real matches flood every window', 'O(m^2)'],
+      answer: 2,
+      explain: 'If every window forces a verification (e.g. searching "aaa" in "aaaa"), the character checks dominate at O(nm).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>polynomial hash</strong> reads a window as a base-b number mod a prime q.',
+    'The <strong>rolling update</strong> drop–shift–add turns one window\'s hash into the next in O(1).',
+    'Compare <strong>hashes, not strings</strong>; only verify the rare candidates that collide.',
+    'Average time is <strong>O(n + m)</strong>; the worst case is <strong>O(nm)</strong> when verifications flood.',
+    'Use a <strong>large prime</strong> (or double hashing) to make collisions — and false matches — vanishingly rare.',
+  ]}
+/>
+
+Next up: **Boyer-Moore** — instead of hashing, learn to *skip*: match from the right and jump the pattern forward past whole chunks of text.

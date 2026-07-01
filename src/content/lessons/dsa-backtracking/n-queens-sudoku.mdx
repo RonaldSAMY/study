@@ -1,0 +1,314 @@
+---
+title: N-Queens & Sudoku
+track: dsa-backtracking
+summary: "Hard puzzles have a shared shape: assign one variable at a time, and the instant a constraint breaks, abandon the whole branch — pruning, not cleverness, is what makes the search finish."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-backtracking/combinations
+leadsTo:
+  - dsa-backtracking/string-backtracking
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BtNQueensBoard from '../../../components/demos/BtNQueensBoard.tsx';
+
+## The hook: a puzzle that fights back
+
+Combinations and permutations enumerate freely — every path to a leaf is a valid answer. Constraint
+satisfaction is different: most branches are **illegal**, and the whole game is noticing that as early as
+possible. Place a queen, and it forbids a column and two diagonals for every row below it. Write a digit into
+a Sudoku cell, and it vanishes from a row, a column, and a $3\times3$ box.
+
+These are **constraint satisfaction problems** (CSPs): assign values to variables so that a set of rules
+holds. Backtracking is the natural weapon — one variable at a time, check the rules, and the moment a rule
+breaks, throw the entire sub-tree away without exploring it. On an empty $9\times9$ Sudoku the naive space is
+$9^{81}$; aggressive pruning is the only reason a solver returns before the heat death of the universe.
+
+<Callout type="intuition" title="The one-sentence idea">
+Assign one variable at a time and <strong>test every constraint before you recurse</strong>; an illegal
+partial assignment can never become legal, so prune it now and never look inside that branch.
+</Callout>
+
+## Intuition: pruning is the whole algorithm
+
+N-Queens places one queen **per row**, so the only decision at row `r` is *which column*. A column is legal
+only if no earlier queen shares its column or either diagonal. The elegant trick is to track those three
+threats in sets keyed by simple arithmetic:
+
+- **Column:** the column index `col` itself.
+- **↘ diagonal:** every cell on it has the same `row - col`.
+- **↗ diagonal:** every cell on it has the same `row + col`.
+
+So "is this square attacked?" is three $O(1)$ set lookups, not a scan of the board. When all N rows are
+filled, every constraint held the entire way down — that is a solution.
+
+Sudoku is the same skeleton with richer bookkeeping: walk cells in order, and for each empty one try digits
+1–9, keeping a set per row, per column, and per box so validity is again $O(1)$. Both problems live or die on
+the same move — **check, then descend; on failure, undo and try the next value.**
+
+## Play with it
+
+Set the board size N and step through the search. The indigo square is the placement under consideration;
+red squares are pruned because an existing queen attacks them (the tint shows *why*); an emerald board is a
+completed, legal solution. Watch how a single early queen paints whole regions red — that is pruning
+shrinking the tree.
+
+<BtNQueensBoard client:visible />
+
+<Callout type="tip">
+Notice how N = 4 finds only 2 solutions after a lot of dead ends, while N = 5 jumps to 10. Each placed queen
+knocks out a column and two diagonals, so most columns in the next row are already forbidden — the search
+never even tries them.
+</Callout>
+
+## How it works
+
+One queen per row means the recursion depth is fixed at N; the branching is "which column", filtered by three
+constraint sets:
+
+```ts
+function solveNQueens(n) {
+  const result = [];
+  const queens = [];                     // queens[row] = col
+  const cols = new Set(), d1 = new Set(), d2 = new Set();
+  function backtrack(row) {
+    if (row === n) { result.push(queens.slice()); return; }
+    for (let col = 0; col < n; col++) {
+      if (cols.has(col) || d1.has(row - col) || d2.has(row + col)) continue; // prune
+      queens[row] = col;                 // choose
+      cols.add(col); d1.add(row - col); d2.add(row + col);
+      backtrack(row + 1);                // explore
+      queens.length = row;               // un-choose
+      cols.delete(col); d1.delete(row - col); d2.delete(row + col);
+    }
+  }
+  backtrack(0);
+  return result;
+}
+```
+
+**Dry run** of `n = 4` (columns 0–3), showing how row 0's choice cascades:
+
+```
+row 0: place col 1 → bans col 1, d1=-1, d2=1
+row 1: col 0,1,2 attacked → only col 3 survives → place col 3
+row 2: every column attacked → dead end → backtrack to row 1
+...eventually: [1,3,0,2] and its mirror [2,0,3,1] are the 2 solutions
+```
+
+Run it and count solutions for several board sizes:
+
+<CodeRunner
+  client:visible
+  code={`function solveNQueens(n) {
+  const result = [];
+  const queens = [];
+  const cols = new Set(), d1 = new Set(), d2 = new Set();
+  function backtrack(row) {
+    if (row === n) { result.push(queens.slice()); return; }
+    for (let col = 0; col < n; col++) {
+      if (cols.has(col) || d1.has(row - col) || d2.has(row + col)) continue;
+      queens[row] = col;
+      cols.add(col); d1.add(row - col); d2.add(row + col);
+      backtrack(row + 1);
+      queens.length = row;
+      cols.delete(col); d1.delete(row - col); d2.delete(row + col);
+    }
+  }
+  backtrack(0);
+  return result;
+}
+
+// Count-only variant reuses the exact same pruning
+function totalNQueens(n) { return solveNQueens(n).length; }`}
+  tests={[
+    { expr: 'solveNQueens(4).length', label: 'number of 4-queens solutions' },
+    { expr: 'JSON.stringify(solveNQueens(4)[0])', label: 'first solution (col per row)' },
+    { expr: 'totalNQueens(6)', label: '6-queens solution count' },
+    { expr: '[1,2,3,4,5].map(totalNQueens).join(",")', label: 'counts for N = 1..5' },
+  ]}
+/>
+
+## The real implementation
+
+The course file writes the board as strings and tracks the same three constraint sets — note the symmetric
+`add` before recursing and `delete` after, the signature of correct backtracking:
+
+```ts
+// /dsa/15-backtracking/constraint-satisfaction.ts
+function solveNQueens(n: number): string[][] {
+    const result: string[][] = [];
+    const board: string[] = Array(n).fill('.'.repeat(n));
+
+    const cols = new Set<number>();
+    const diag1 = new Set<number>();  // row - col (↘ diagonals)
+    const diag2 = new Set<number>();  // row + col (↗ diagonals)
+
+    function backtrack(row: number): void {
+        if (row === n) { result.push([...board]); return; }
+
+        for (let col = 0; col < n; col++) {
+            if (cols.has(col) || diag1.has(row - col) || diag2.has(row + col)) {
+                continue;                                 // pruned: under attack
+            }
+            board[row] = board[row].substring(0, col) + 'Q' + board[row].substring(col + 1);
+            cols.add(col); diag1.add(row - col); diag2.add(row + col);
+
+            backtrack(row + 1);
+
+            board[row] = board[row].substring(0, col) + '.' + board[row].substring(col + 1);
+            cols.delete(col); diag1.delete(row - col); diag2.delete(row + col);
+        }
+    }
+
+    backtrack(0);
+    return result;
+}
+```
+
+The Sudoku solver in the same file is the identical pattern with one twist: it returns a **boolean** and
+stops at the first full board, because a well-formed puzzle has a unique solution and there is no reason to
+keep searching:
+
+```ts
+// /dsa/15-backtracking/constraint-satisfaction.ts
+function backtrack(row: number, col: number): boolean {
+    if (col === 9) { col = 0; row++; }
+    if (row === 9) return true;                     // solved
+    if (board[row][col] !== '.') return backtrack(row, col + 1);  // skip givens
+
+    const boxIndex = Math.floor(row / 3) * 3 + Math.floor(col / 3);
+    for (let num = 1; num <= 9; num++) {
+        const char = String(num);
+        if (isValid(row, col, char)) {              // O(1) row/col/box check
+            board[row][col] = char;
+            rows[row].add(char); cols[col].add(char); boxes[boxIndex].add(char);
+            if (backtrack(row, col + 1)) return true;   // short-circuit on success
+            board[row][col] = '.';
+            rows[row].delete(char); cols[col].delete(char); boxes[boxIndex].delete(char);
+        }
+    }
+    return false;                                   // trigger backtrack
+}
+```
+
+Run the full file: `npx tsx 15-backtracking/constraint-satisfaction.ts`.
+
+## Complexity
+
+Both problems are worst-case exponential; pruning slashes the *constant* and the realised tree, not the Big-O
+ceiling. For N-Queens the branching collapses from $N^{N}$ to roughly $N!$ because each row must pick a fresh
+column, and diagonals prune far more:
+
+$$
+T_{\text{queens}}(n) = O(n!), \qquad T_{\text{sudoku}} = O(9^{\,m}) \text{ for } m \text{ empty cells}.
+$$
+
+| Problem | Variables | Branch factor | Time (worst) | Space |
+|---------|-----------|---------------|--------------|-------|
+| N-Queens (all solutions) | $n$ rows | $\le n$ columns | $O(n!)$ | $O(n)$ |
+| Sudoku | $m$ empty cells | $\le 9$ digits | $O(9^{m})$ | $O(1)$ board |
+| Graph $m$-coloring | $V$ vertices | $m$ colors | $O(m^{V})$ | $O(V)$ |
+
+The space is tiny — only the current partial assignment plus the constraint sets — which is exactly why
+backtracking beats storing the whole search frontier.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Exam timetabling" icon="🗓️">
+Scheduling university exams so no student sits two at once is graph coloring in disguise: exams are vertices,
+a shared student is an edge, and time slots are colors. The same "assign, check adjacency, backtrack on
+conflict" loop that solves N-Queens finds a clash-free timetable.
+</ExampleCard>
+
+<ExampleCard domain="Chip design" icon="🔌">
+Register allocation in a compiler maps program variables to a fixed number of CPU registers so that two
+values live at once never share one. It is graph coloring with registers as colors — solved by the identical
+constrained backtracking, spilling to memory when no coloring exists.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="🚚">
+Assigning delivery trucks to routes under capacity and time-window rules is a CSP: each assignment must
+respect every constraint, and an early violation prunes an entire family of impossible schedules before the
+solver wastes time on them.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting to undo state.** Every `add` needs its matching `delete` on the way back up. Leave one behind
+  and later branches inherit a phantom constraint — the classic backtracking bug.
+- **Checking constraints too late.** Test *before* you recurse, not after placing and descending. Pruning at
+  the point of choice is the entire performance story.
+- **Scanning the board instead of using sets.** Recomputing "is this attacked?" by looping the board turns
+  $O(1)$ checks into $O(n)$ and can be the difference between milliseconds and timeouts.
+- **Sudoku: not returning early.** A puzzle has one answer, so short-circuit with a boolean the instant the
+  board is full; enumerating "all" solutions wastes the rest of the tree.
+- **Interview cue:** "place items under rules", "no two may…", "fill the grid so that…", "color/schedule
+  without conflicts" all mean CSP — reach for one-variable-at-a-time backtracking with early pruning.
+
+## Practice
+
+1. **Easy:** By hand, place 4 queens on a $4\times4$ board and confirm only 2 legal arrangements exist.
+2. **Easy:** Modify `solveNQueens` into `totalNQueens` that returns a count without building boards (LeetCode
+   52) — the pruning is untouched.
+3. **Medium:** N-Queens I (LeetCode 51): return every board as strings, exactly like the course file.
+4. **Medium:** Sudoku Solver (LeetCode 37): fill a $9\times9$ grid with row, column, and box constraint sets.
+5. **Hard:** Graph $m$-Coloring: decide whether a graph is colorable with `m` colors, then find the chromatic
+   number by trying `m = 1, 2, 3, …` until one succeeds.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does N-Queens place exactly one queen per row?',
+      options: [
+        'To make the board smaller',
+        'Because two queens in the same row always attack, so the per-row choice is only which column',
+        'To avoid using diagonals',
+        'It is an arbitrary optimization with no effect',
+      ],
+      answer: 1,
+      explain: 'Any two queens sharing a row attack each other, so a solution has exactly one per row; the only free variable is the column, which shrinks branching to at most n.',
+    },
+    {
+      q: 'How does the solver test a diagonal attack in O(1)?',
+      options: [
+        'By scanning every previously placed queen',
+        'By storing occupied values of row - col and row + col in sets and checking membership',
+        'By recomputing the board each step',
+        'Diagonals cannot be checked in O(1)',
+      ],
+      answer: 1,
+      explain: 'All cells on a ↘ diagonal share row - col, and all on a ↗ diagonal share row + col, so two sets give constant-time attack checks.',
+    },
+    {
+      q: 'What is the single most important reason backtracking can solve a Sudoku that has 9^(empty) raw possibilities?',
+      options: [
+        'It uses more memory',
+        'Early pruning: an invalid partial board is abandoned before its sub-tree is ever explored',
+        'It guesses randomly until it works',
+        'It converts the problem to sorting',
+      ],
+      answer: 1,
+      explain: 'Constraint checks reject illegal partial assignments immediately, so the vast majority of the 9^(empty) space is never visited.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Constraint satisfaction problems assign <strong>one variable at a time</strong> and prune the instant a rule breaks.',
+    'N-Queens places <strong>one queen per row</strong>; column and the two diagonals (row − col, row + col) give O(1) attack checks via sets.',
+    'Sudoku is the same skeleton with row, column, and box sets — and it <strong>returns early</strong> because the answer is unique.',
+    'Always <strong>undo state on backtrack</strong>: every add needs a matching delete, or later branches inherit phantom constraints.',
+    'Pruning cuts the <strong>realised tree</strong>, not the worst-case Big-O — but that is exactly what makes these searches finish.',
+  ]}
+/>
+
+Next up: **String Backtracking** — the same choose/explore/undo engine, now cutting strings into valid pieces
+like palindromes and IP addresses.
