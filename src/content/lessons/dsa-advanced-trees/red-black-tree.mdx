@@ -1,0 +1,278 @@
+---
+title: Red-Black Trees
+track: dsa-advanced-trees
+summary: "The balanced BST behind language standard libraries: one color bit and a few rotations keep height within 2 log n."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-trees/avl-tree
+  - dsa-advanced-algorithms/heuristic-algorithms
+leadsTo:
+  - dsa-advanced-trees/b-tree
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvTreeRedBlackInsert from '../../../components/demos/AdvTreeRedBlackInsert.tsx';
+
+## The hook: the tree inside your standard library
+
+Every time you reach for an ordered map in C++ (`std::map`), Java (`TreeMap`), or the Linux kernel's
+process scheduler, a red-black tree is quietly doing the work. It is the workhorse balanced search tree:
+not the most rigidly balanced, not the simplest, but the best *engineering compromise*. It stores one
+extra bit per node — a color — and uses it to guarantee that the tree never gets more than twice as tall
+as a perfect tree, while doing far fewer rotations on insert than a strict AVL tree would.
+
+<Callout type="intuition" title="The one-sentence idea">
+Color each node red or black so that every root-to-leaf path has the same number of black nodes and no
+red node parents a red node — those two rules alone force the height to stay within twice the minimum.
+</Callout>
+
+## Intuition: red nodes are "free" extra height
+
+You already met the AVL tree, which keeps the two sides of every node within one level of each other.
+That is strict — and strictness costs rotations on almost every update. Red-black trees relax the rule.
+Picture the **black nodes** as the skeleton of a perfectly balanced tree: every path from the root down
+to a missing child crosses the *same* number of black nodes. That's the **black-height**. Now you are
+allowed to slip in **red nodes** as bonus levels — but with one catch: a red node can never sit directly
+above another red node.
+
+Why does that bound the height? On any path the black nodes alone form a balanced backbone of height
+about $\log n$. The red nodes can at most double the length of a path (they alternate with blacks), so
+the tallest path is at most twice the shortest. That is the whole guarantee. Insert puts the new node in
+red (so it never disturbs the black-height), then **recolors** and **rotates** locally to repair the
+"no red-over-red" rule.
+
+## Play with it
+
+Type a list of keys and build the tree one insertion at a time. Watch each new node arrive red, then see
+the recolorings and rotations that fix any red-over-red violation. The sky-blue ring marks the node
+currently being repaired.
+
+<AdvTreeRedBlackInsert client:visible />
+
+<Callout type="tip">
+Insert <code>1, 2, 3, 4, 5, 6, 7</code> in order. A plain BST would become a straight line, but the
+red-black fix-ups rotate it back into a bushy, shallow tree after almost every insertion — that is the
+balancing happening in front of you.
+</Callout>
+
+## How it works
+
+Insertion has two phases. First an ordinary BST descent drops the new node in as a **red leaf**. Then a
+fix-up loop walks up from that node, and only three local cases can occur (plus their mirror images):
+
+```
+Case 1 — uncle is RED:   recolor parent + uncle BLACK, grandparent RED, then recurse up from grandparent.
+Case 2 — uncle is BLACK, node is the "inner" grandchild:  rotate the parent to make it the "outer" one.
+Case 3 — uncle is BLACK, node is the "outer" grandchild:  recolor + rotate the grandparent. Done.
+```
+
+Case 1 is pure recoloring — it pushes the problem two levels up the tree without touching shape. Cases 2
+and 3 are at most two rotations and then the fix-up *terminates*. So a single insert does $O(\log n)$
+recolorings but only a constant number of rotations — the property that makes red-black trees cheaper to
+update than AVL trees.
+
+<CodeRunner
+  client:visible
+  code={`// Compact red-black tree: insert + validity check (plain JS)
+const RED = 0, BLACK = 1;
+const NIL = { color: BLACK };
+let root = NIL;
+
+function rotateLeft(x) {
+  const y = x.right; x.right = y.left;
+  if (y.left !== NIL) y.left.parent = x;
+  y.parent = x.parent;
+  if (x.parent === null) root = y;
+  else if (x === x.parent.left) x.parent.left = y; else x.parent.right = y;
+  y.left = x; x.parent = y;
+}
+function rotateRight(x) {
+  const y = x.left; x.left = y.right;
+  if (y.right !== NIL) y.right.parent = x;
+  y.parent = x.parent;
+  if (x.parent === null) root = y;
+  else if (x === x.parent.right) x.parent.right = y; else x.parent.left = y;
+  y.right = x; x.parent = y;
+}
+function insert(key) {
+  const z = { key, color: RED, left: NIL, right: NIL, parent: null };
+  let y = null, x = root;
+  while (x !== NIL) { y = x; x = key < x.key ? x.left : x.right; }
+  z.parent = y;
+  if (y === null) root = z; else if (key < y.key) y.left = z; else y.right = z;
+  while (z.parent && z.parent.color === RED) {
+    const gp = z.parent.parent;
+    if (z.parent === gp.left) {
+      const u = gp.right;
+      if (u.color === RED) { z.parent.color = BLACK; u.color = BLACK; gp.color = RED; z = gp; }
+      else { if (z === z.parent.right) { z = z.parent; rotateLeft(z); } z.parent.color = BLACK; z.parent.parent.color = RED; rotateRight(z.parent.parent); }
+    } else {
+      const u = gp.left;
+      if (u.color === RED) { z.parent.color = BLACK; u.color = BLACK; gp.color = RED; z = gp; }
+      else { if (z === z.parent.left) { z = z.parent; rotateRight(z); } z.parent.color = BLACK; z.parent.parent.color = RED; rotateLeft(z.parent.parent); }
+    }
+  }
+  root.color = BLACK;
+}
+function inorder(n = root) { return n === NIL ? [] : [...inorder(n.left), n.key, ...inorder(n.right)]; }
+function blackHeight(n = root) {
+  if (n === NIL) return 1;
+  const l = blackHeight(n.left), r = blackHeight(n.right);
+  if (l === -1 || r === -1 || l !== r) return -1;
+  return l + (n.color === BLACK ? 1 : 0);
+}
+[10, 20, 30, 15, 25, 5, 1].forEach(insert);`}
+  tests={[
+    { expr: 'inorder().join(",")', label: 'sorted keys' },
+    { expr: 'blackHeight() !== -1', label: 'valid red-black tree?' },
+    { expr: 'root.key', label: 'root key after balancing' },
+  ]}
+/>
+
+## The real implementation
+
+The course file is the full Cormen-style red-black tree — insert, delete, search, floor/ceiling, range,
+and an `isValid` property checker. Here is the heart of it: `insertFixup`, where the three cases live.
+
+```ts
+// /dsa/20-advanced-trees/red-black-tree.ts
+private insertFixup(z: RBNode<K, V>): void {
+  while (z.parent !== null && z.parent.color === Color.RED) {
+    if (z.parent === z.parent.parent?.left) {
+      const y = z.parent.parent.right; // uncle
+      if (y && y.color === Color.RED) {
+        z.parent.color = Color.BLACK;            // Case 1: recolor and move up
+        y.color = Color.BLACK;
+        z.parent.parent.color = Color.RED;
+        z = z.parent.parent;
+      } else {
+        if (z === z.parent.right) {              // Case 2: make z an outer child
+          z = z.parent;
+          this.rotateLeft(z);
+        }
+        z.parent!.color = Color.BLACK;           // Case 3: recolor + rotate grandparent
+        z.parent!.parent!.color = Color.RED;
+        this.rotateRight(z.parent!.parent!);
+      }
+    } else {
+      // ...mirror image: swap left <-> right...
+    }
+  }
+  this.root!.color = Color.BLACK;                // the root is always black
+}
+```
+
+Run the full file: `npx tsx 20-advanced-trees/red-black-tree.ts`.
+
+## Complexity
+
+The five red-black properties force the longest path to be at most twice the shortest, so the height is
+bounded and every operation is logarithmic:
+
+$$
+h \le 2\log_2(n+1), \qquad T_{\text{search}} = T_{\text{insert}} = T_{\text{delete}} = O(\log n).
+$$
+
+| Operation | Time | Rotations per update |
+|-----------|------|----------------------|
+| Search | $O(\log n)$ | — |
+| Insert | $O(\log n)$ | $\le 2$ |
+| Delete | $O(\log n)$ | $\le 3$ |
+
+Compared with an AVL tree (up to $O(\log n)$ rotations are unnecessary, but AVL does more *rebalancing
+work* and stays slightly shorter), red-black trees trade a touch of height for far cheaper updates — the
+right call when writes are common.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Operating systems" icon="🧠">
+The Linux Completely Fair Scheduler keeps runnable tasks in a red-black tree keyed by "virtual runtime",
+so the next task to run is always the leftmost node — picked in $O(\log n)$ while thousands of tasks come
+and go every second.
+</ExampleCard>
+
+<ExampleCard domain="Genealogy software" icon="🌿">
+A family-history app storing millions of birth records by date needs fast ordered inserts as new records
+stream in. A red-black index gives logarithmic insert without the rotation churn a stricter tree would
+suffer during bulk imports.
+</ExampleCard>
+
+<ExampleCard domain="Networking" icon="🌐">
+Routers keep timer events (retransmissions, keep-alives) in a balanced tree so the soonest-to-fire timer
+is always at the front. Red-black trees back many such timer wheels because expirations are inserted and
+cancelled constantly.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting the new node starts red.** Inserting it black would instantly break the equal-black-height
+  rule on its path; red keeps black-heights untouched and defers the repair to recoloring.
+- **Confusing the cases by which side the uncle is on.** The whole fix-up has a left version and a mirror
+  right version — practice drawing both so you don't blank in an interview.
+- **Thinking red-black means "perfectly balanced".** It does not — it guarantees height $\le 2\log n$,
+  not the AVL-tight $1.44\log n$. The looser bound is the *feature*, not a bug.
+- **Interview cue:** if asked "how does `std::map` / `TreeMap` stay balanced?", say "red-black tree:
+  color invariant plus local rotations, $O(\log n)$ with at most a couple of rotations per insert."
+
+## Practice
+
+1. **Easy:** Insert `10, 20, 30` into an empty red-black tree by hand. Which case fires, and what is the
+   root afterward?
+2. **Easy:** Why must the root always be black? What rule would break if it were red?
+3. **Medium:** Build the tree for `1..7` inserted in order in the demo. How tall does it get, and how many
+   rotations happened total?
+4. **Medium:** Explain why Case 1 (red uncle) never needs a rotation, only recoloring.
+5. **Hard:** Prove that a red-black tree with $n$ internal nodes has height at most $2\log_2(n+1)$ using
+   the black-height argument.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the "no red node has a red child" rule guarantee about path lengths?',
+      options: [
+        'All paths have exactly equal length',
+        'The longest root-to-leaf path is at most twice the shortest',
+        'Every node has two children',
+        'The tree is a complete binary tree',
+      ],
+      answer: 1,
+      explain: 'Reds cannot stack, so on any path reds at most alternate with blacks — doubling the black backbone length in the worst case.',
+    },
+    {
+      q: 'A newly inserted red-black node is colored…',
+      options: ['Black, to preserve black-height', 'Red, then fixed up by recolor/rotation', 'Whatever its parent is', 'Red only if it is the root'],
+      answer: 1,
+      explain: 'Inserting red keeps every black-height unchanged; the fix-up then repairs any red-over-red violation locally.',
+    },
+    {
+      q: 'Compared with an AVL tree, a red-black tree typically…',
+      options: [
+        'Is shorter but does more rotations',
+        'Is slightly taller but does fewer rotations per update',
+        'Has O(n) search',
+        'Cannot support ordered iteration',
+      ],
+      answer: 1,
+      explain: 'Red-black trees accept a looser height bound (≤ 2 log n) in exchange for at most a couple of rotations per insert — cheaper writes.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A red-black tree is a BST plus one <strong>color bit</strong> per node and five invariants.',
+    'Equal <strong>black-height</strong> on every path + <strong>no red-over-red</strong> bound the height to <strong>≤ 2 log₂(n+1)</strong>.',
+    'Insert adds a <strong>red leaf</strong>, then repairs with O(log n) recolorings but <strong>at most two rotations</strong>.',
+    'It powers <strong>std::map, TreeMap, and the Linux scheduler</strong> — the default ordered container.',
+    'Versus AVL: slightly taller, but <strong>cheaper updates</strong>, which wins when writes are frequent.',
+  ]}
+/>
+
+Next up: **B-Trees** — the same balancing instinct, but with wide, shallow nodes built to minimize the
+disk reads that dominate databases and file systems.

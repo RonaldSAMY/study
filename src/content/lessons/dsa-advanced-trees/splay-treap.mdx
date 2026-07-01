@@ -1,0 +1,247 @@
+---
+title: Splay Trees & Treaps
+track: dsa-advanced-trees
+summary: "Two trees that abandon rigid balance: a splay tree rebalances toward what you just touched, a treap lets random priorities do the balancing for free."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-advanced-trees/b-tree
+leadsTo:
+  - dsa-advanced-trees/lca
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvTreeSplayTreap from '../../../components/demos/AdvTreeSplayTreap.tsx';
+
+## The hook: two lazy trees that still win
+
+Red-black and B-trees enforce balance with strict bookkeeping. The two trees in this lesson refuse to.
+A **splay tree** keeps no balance information at all — it just drags whatever you last touched up to the
+root, and that habit alone yields $O(\log n)$ *amortized* cost. A **treap** assigns every key a random
+priority and keeps a heap on those priorities; the randomness, with overwhelming probability, balances the
+tree without a single explicit rule. Less machinery, comparable guarantees — and some abilities (instant
+split and merge, free caching of hot keys) the strict trees can't match.
+
+<Callout type="intuition" title="The one-sentence idea">
+Stop enforcing balance directly: a splay tree rotates the node you just accessed to the root so recent
+keys are cheap, while a treap layers a random max-heap on top of the BST so its expected height is
+logarithmic for free.
+</Callout>
+
+## Intuition: let access patterns or randomness do the work
+
+**Splay trees** exploit *temporal locality* — the fact that real workloads touch the same few keys over
+and over. Every time you search, insert, or delete a node, you **splay** it: a sequence of rotations that
+carries it all the way to the root. Hot keys end up near the top, so the next access is fast. A single
+operation can be $O(n)$ in the worst case, but any *sequence* of $m$ operations costs $O(m \log n)$ — the
+expensive splays pay for many cheap ones. The rotations come in three shapes named by the path from the
+node to the root: **zig** (parent is the root), **zig-zig** (node and parent lean the same way), and
+**zig-zag** (they lean opposite ways).
+
+**Treaps** ("tree" + "heap") exploit *randomness*. Each node carries its key and a random priority. The
+keys obey the BST rule left-to-right; the priorities obey a max-heap rule top-to-bottom. Here's the magic:
+fixing the priorities completely determines the tree's shape — and since the priorities are random, that
+shape is exactly what you'd get by inserting the keys in random order, which has expected height
+$O(\log n)$. You insert a node as a BST leaf, then rotate it upward while its priority beats its parent's.
+
+## Play with it
+
+Switch between the two modes. In **Splay** mode, insert `1..7` in order (a worst-case chain), then access
+key 1 and watch zig-zig and zig-zag rotations rocket it to the root. In **Treap** mode, insert keys and
+watch each one bubble up by rotation until its random priority `p` fits the max-heap.
+
+<AdvTreeSplayTreap client:visible />
+
+<Callout type="tip">
+In splay mode, access the same deep key twice. The first access is expensive (many rotations); the second
+is instant because the key is already at the root — that is amortization and caching in one picture.
+</Callout>
+
+## How it works
+
+A splay's three cases, applied repeatedly until the node reaches the root:
+
+```
+zig      : parent is the root            -> one rotation.
+zig-zig  : node and parent are both left (or both right) children -> rotate grandparent, then parent.
+zig-zag  : node and parent lean opposite ways -> rotate parent, then grandparent.
+```
+
+The zig-zig case is the secret sauce: rotating the *grandparent first* roughly halves the depth of every
+node on the access path, which is what makes the amortized bound work (a plain "rotate to root" without
+the zig-zig ordering does not).
+
+A treap insert is even shorter: descend as a BST, drop the node in as a leaf, then while its priority
+exceeds its parent's, rotate it up.
+
+<CodeRunner
+  client:visible
+  code={`// Treap: BST on keys, max-heap on random priorities (plain JS)
+function makeNode(key) { return { key, prio: Math.random(), left: null, right: null }; }
+function rotR(n) { const l = n.left; n.left = l.right; l.right = n; return l; }
+function rotL(n) { const r = n.right; n.right = r.left; r.left = n; return r; }
+function insert(node, key) {
+  if (!node) return makeNode(key);
+  if (key < node.key) { node.left = insert(node.left, key); if (node.left.prio > node.prio) node = rotR(node); }
+  else if (key > node.key) { node.right = insert(node.right, key); if (node.right.prio > node.prio) node = rotL(node); }
+  return node;
+}
+function inorder(n) { return n ? [...inorder(n.left), n.key, ...inorder(n.right)] : []; }
+function heapOK(n) {
+  if (!n) return true;
+  if (n.left && n.left.prio > n.prio) return false;
+  if (n.right && n.right.prio > n.prio) return false;
+  return heapOK(n.left) && heapOK(n.right);
+}
+let root = null;
+[5, 3, 8, 1, 4, 7, 9, 2, 6].forEach(k => { root = insert(root, k); });`}
+  tests={[
+    { expr: 'inorder(root).join(",")', label: 'keys in sorted order (BST holds)' },
+    { expr: 'heapOK(root)', label: 'priorities form a max-heap?' },
+  ]}
+/>
+
+## The real implementation
+
+The course splay file carries the full zig / zig-zig / zig-zag splay plus split, join, and order
+statistics; the treap file adds randomized insert/delete and an implicit treap for array operations. Here
+is the splay loop — the engine that moves an accessed node to the root:
+
+```ts
+// /dsa/20-advanced-trees/splay-tree.ts
+private splay(x: SplayNode<K, V>): void {
+  while (x.parent) {
+    if (!x.parent.parent) {                                   // Zig
+      if (x === x.parent.left) this.rotateRight(x.parent);
+      else this.rotateLeft(x.parent);
+    } else if (x === x.parent.left && x.parent === x.parent.parent.left) {
+      this.rotateRight(x.parent.parent);                      // Zig-zig (left-left)
+      this.rotateRight(x.parent);
+    } else if (x === x.parent.right && x.parent === x.parent.parent.right) {
+      this.rotateLeft(x.parent.parent);                       // Zig-zig (right-right)
+      this.rotateLeft(x.parent);
+    } else if (x === x.parent.right && x.parent === x.parent.parent.left) {
+      this.rotateLeft(x.parent);                              // Zig-zag (left-right)
+      this.rotateRight(x.parent);
+    } else {
+      this.rotateRight(x.parent);                             // Zig-zag (right-left)
+      this.rotateLeft(x.parent);
+    }
+  }
+}
+```
+
+Run them: `npx tsx 20-advanced-trees/splay-tree.ts` and `npx tsx 21-advanced-data-structures/treap.ts`.
+
+## Complexity
+
+The splay tree's bound is amortized; the treap's is in expectation over its random priorities:
+
+$$
+\text{Splay: } O(\log n)\ \text{amortized per op}, \qquad \text{Treap: } \mathbb{E}[h] = O(\log n).
+$$
+
+| Tree | Search / Insert / Delete | Worst case | Special power |
+|------|--------------------------|------------|---------------|
+| Splay | $O(\log n)$ amortized | $O(n)$ single op | self-caching hot keys; split/join |
+| Treap | $O(\log n)$ expected | $O(n)$ (unlucky) | trivial split/merge; implicit-key arrays |
+
+Neither gives a worst-case per-operation guarantee — that is the price of dropping strict balance. In
+return you get dramatically simpler code and abilities the strict trees lack.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Text editors" icon="📝">
+A rope or gap buffer backed by an <strong>implicit treap</strong> stores a document as a sequence whose
+positions are keys. Inserting, deleting, or reversing a block of characters becomes an O(log n) split and
+merge — how some editors handle million-character files smoothly.
+</ExampleCard>
+
+<ExampleCard domain="Web caching" icon="⚡">
+A splay tree used as a cache index naturally floats frequently requested URLs toward the root, so the
+hottest pages are the cheapest to look up — the structure adapts to traffic with no tuning.
+</ExampleCard>
+
+<ExampleCard domain="Competitive programming" icon="🏆">
+Treaps are a contest favourite: with random priorities and split/merge you get an order-statistics tree,
+a sequence with range-reverse, or a mergeable set in a few dozen lines — no rotation-case bookkeeping to
+get wrong under time pressure.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **"Rotate to root" is not splaying.** You must use the zig-zig ordering (grandparent first). Naively
+  rotating the node straight up breaks the amortized $O(\log n)$ guarantee.
+- **Splaying mutates on reads.** A lookup rewrites the tree, so splay trees are awkward to share across
+  threads — every reader is also a writer.
+- **Treap priorities must be effectively unique and random.** Reusing a fixed seed or colliding priorities
+  can skew the shape; real implementations draw from a large random range.
+- **Interview cue:** "Give me a balanced BST with easy split and merge" → treap. "Give me a self-tuning
+  cache-friendly BST" → splay tree.
+
+## Practice
+
+1. **Easy:** In the demo's splay mode, insert `1..7` and access 4. Name each rotation (zig / zig-zig /
+   zig-zag) as it happens.
+2. **Easy:** Why does accessing a key twice in a row make the second access $O(1)$?
+3. **Medium:** Explain why a treap's expected height equals that of a randomly-built BST.
+4. **Medium:** Using split and merge, describe how to delete a key from a treap without a special delete
+   case.
+5. **Hard:** Sketch why the zig-zig case (grandparent first) is essential to the amortized analysis.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a splay tree do on every access?',
+      options: [
+        'Recolors nodes along the path',
+        'Rotates the accessed node all the way to the root',
+        'Rebuilds the whole tree',
+        'Checks AVL balance factors',
+      ],
+      answer: 1,
+      explain: 'Splaying moves the touched node to the root via zig / zig-zig / zig-zag, making recently used keys cheap to reach.',
+    },
+    {
+      q: 'A treap keeps which two invariants simultaneously?',
+      options: [
+        'BST order on keys and max-heap order on random priorities',
+        'AVL balance and red-black coloring',
+        'Min-heap on keys and BST on priorities',
+        'All leaves at equal depth',
+      ],
+      answer: 0,
+      explain: 'Keys obey the BST rule left-to-right; random priorities obey a heap rule top-to-bottom, and the randomness yields expected O(log n) height.',
+    },
+    {
+      q: 'What kind of time guarantee does a single splay operation have?',
+      options: [
+        'Worst-case O(log n)',
+        'Worst-case O(1)',
+        'Amortized O(log n), but a single op can be O(n)',
+        'Always O(n)',
+      ],
+      answer: 2,
+      explain: 'Splay trees guarantee O(log n) amortized over a sequence; one unlucky operation may cost O(n).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Both trees <strong>drop strict balance</strong> — and still reach O(log n), one amortized, one in expectation.',
+    'A <strong>splay tree</strong> rotates the accessed node to the root (zig / zig-zig / zig-zag), caching hot keys for free.',
+    'A <strong>treap</strong> layers a <strong>random max-heap</strong> on the BST so its shape is a random BST — expected height O(log n).',
+    'Splay = O(log n) <strong>amortized</strong>; treap = O(log n) <strong>expected</strong>; neither has a per-op worst-case bound.',
+    'Their superpowers: splay <strong>self-tunes to access patterns</strong>; treaps give <strong>trivial split/merge</strong> and implicit-array tricks.',
+  ]}
+/>
+
+Next up: **Lowest Common Ancestor** — leaving self-balancing behind to ask a different question: given a
+fixed tree, how do we answer "what is the deepest shared ancestor of these two nodes?" in log time or even
+constant time.

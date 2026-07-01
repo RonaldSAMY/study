@@ -1,0 +1,271 @@
+---
+title: Divide & Conquer Optimization
+track: dsa-dp-optimization
+summary: "Divide & conquer DP: when the best split point is monotone in the endpoint, recurse on the middle first to cut a layer from O(n^2) to O(n log n)."
+difficulty: advanced
+estMinutes: 19
+prereqs:
+  - dsa-dp-optimization/profile-bitmask-dp
+leadsTo:
+  - dsa-dp-optimization/convex-hull-trick
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpOptDivideConquer from '../../../components/demos/DpOptDivideConquer.tsx';
+
+## The hook: cut an array into k pieces, cheaply
+
+You must split an array into $k$ contiguous groups so the sum of *squared* group sums is as small as
+possible — a load-balancing flavor that punishes lumpy pieces. The natural DP is
+$dp[i][j] = \min_{k<j}\, dp[i-1][k] + \mathrm{cost}(k, j)$, and for each of the $n$ endpoints you scan
+all $n$ candidate split points: $O(n^2)$ per layer. But look closer: as the right end $j$ slides
+rightward, the *best place to cut* never slides back left. That monotonicity is a gift — it lets you
+find all the optimal cuts with a divide-and-conquer that touches each candidate only a logarithmic
+number of times.
+
+<Callout type="intuition" title="The one-sentence idea">
+If the optimal split point $\mathrm{opt}(j)$ only ever moves forward as $j$ grows, solve the middle
+$j$ first and recurse — left half can only use earlier splits, right half only later ones.
+</Callout>
+
+## Intuition: the optimum can't go backwards
+
+The transition $dp[j] = \min_{k<j} \bigl(\mathrm{prev}[k] + \mathrm{cost}(k, j)\bigr)$ assigns each
+endpoint $j$ a winning argument $\mathrm{opt}(j)$ — the $k$ that achieves the minimum. For a large
+family of costs, these winners are **non-decreasing**:
+
+$$
+\mathrm{opt}(j) \le \mathrm{opt}(j+1).
+$$
+
+This holds whenever $\mathrm{cost}$ satisfies the **quadrangle inequality**
+$\mathrm{cost}(a,c) + \mathrm{cost}(b,d) \le \mathrm{cost}(a,d) + \mathrm{cost}(b,c)$ for
+$a \le b \le c \le d$ — and squared segment sums, among many others, do.
+
+So compute $\mathrm{opt}$ for the *middle* index $m$ by scanning its allowed range. Now you know
+something powerful for free: every $j < m$ has $\mathrm{opt}(j) \le \mathrm{opt}(m)$, and every
+$j > m$ has $\mathrm{opt}(j) \ge \mathrm{opt}(m)$. Recurse into the two halves with these shrunken
+$k$-ranges. The candidate ranges across one recursion level overlap by at most their endpoints and
+sum to $O(n)$ per level, over $O(\log n)$ levels — hence $O(n \log n)$ for the whole layer.
+
+## Play with it
+
+The visualizer computes one DP layer — the best split point for each prefix end $j$ — by divide and
+conquer. The horizontal axis is $j$, the vertical axis is the split point $k$. D&C resolves the middle
+$j$ first; the indigo band is the only $k$-range it still has to scan, and the green dots trace
+$\mathrm{opt}(j)$ — a staircase that *only climbs*. Compare the running D&C check count against the
+naive full scan.
+
+<DpOptDivideConquer client:visible />
+
+<Callout type="tip">
+Watch the band shrink as recursion deepens. Once the middle pins $\mathrm{opt}(m)$, the left subcall
+is forbidden from looking past it and the right subcall is forbidden from looking before it. The grey
+cells are work the naive $O(n^2)$ scan would have done and D&C provably never needs.
+</Callout>
+
+## How it works
+
+Partition `[3, 1, 4, 1, 5, 9, 2, 6]` into 3 groups, minimizing the sum of squared group sums. Each
+extra group is one D&C layer over the previous one.
+
+```
+solve(jLo, jHi, kLo, kHi):
+  m = (jLo+jHi)/2
+  scan k in [kLo, min(kHi, m-1)] → best split opt(m), value dp[m]
+  solve(jLo, m-1, kLo, opt(m))     # left: splits ≤ opt(m)
+  solve(m+1, jHi, opt(m), kHi)     # right: splits ≥ opt(m)
+```
+
+<CodeRunner
+  client:visible
+  code={`// Partition arr into k contiguous groups, minimizing sum of (group sum)^2.
+function partitionMinSquares(arr, k) {
+  const n = arr.length;
+  const pre = [0];
+  for (const x of arr) pre.push(pre[pre.length - 1] + x);
+  const seg = (i, j) => pre[j + 1] - pre[i];            // sum arr[i..j]
+  const cost = (a, b) => { const s = seg(a + 1, b); return s * s; };
+
+  let prev = arr.map((_, j) => seg(0, j) ** 2);         // 1 group on [0..j]
+
+  for (let layer = 2; layer <= k; layer++) {
+    const dp = new Array(n).fill(Infinity);
+    const solve = (jLo, jHi, kLo, kHi) => {
+      if (jLo > jHi) return;
+      const m = (jLo + jHi) >> 1;
+      let best = Infinity, opt = kLo;
+      const end = Math.min(kHi, m - 1);
+      for (let kk = kLo; kk <= end; kk++) {
+        const v = prev[kk] + cost(kk, m);
+        if (v < best) { best = v; opt = kk; }
+      }
+      dp[m] = best;
+      solve(jLo, m - 1, kLo, opt);
+      solve(m + 1, jHi, opt, kHi);
+    };
+    solve(layer - 1, n - 1, layer - 2, n - 2);
+    prev = dp;
+  }
+  return prev[n - 1];
+}`}
+  tests={[
+    { expr: 'partitionMinSquares([3,1,4,1,5,9,2,6], 3)', label: '8 items into 3 groups' },
+    { expr: 'partitionMinSquares([1,1,1,1], 2)', label: '[1,1,1,1] into 2' },
+    { expr: 'partitionMinSquares([10,1,1,10], 2)', label: '[10,1,1,10] into 2' },
+  ]}
+/>
+
+## The real implementation
+
+The reusable D&C-DP layer from the course file — it computes one $dp$ row from `prev`, exploiting the
+monotone optimum:
+
+```ts
+// /dsa/24-dp-optimization/divide-conquer-dp.ts
+function divideConquerDP(
+  n: number,
+  cost: (k: number, j: number) => number,
+  prev: number[]
+): number[] {
+  const dp = Array(n).fill(Infinity);
+
+  function solve(jLo: number, jHi: number, kLo: number, kHi: number): void {
+    if (jLo > jHi) return;
+    const jMid = Math.floor((jLo + jHi) / 2);
+    let bestK = kLo, bestVal = Infinity;
+
+    const kEnd = Math.min(kHi, jMid);
+    for (let k = kLo; k <= kEnd; k++) {          // only the allowed window
+      const val = prev[k] + cost(k, jMid);
+      if (val < bestVal) { bestVal = val; bestK = k; }
+    }
+    dp[jMid] = bestVal;
+
+    solve(jLo, jMid - 1, kLo, bestK);            // left can't pass bestK
+    solve(jMid + 1, jHi, bestK, kHi);            // right can't precede bestK
+  }
+
+  solve(0, n - 1, 0, n - 1);
+  return dp;
+}
+```
+
+Run the full file: `npx tsx 24-dp-optimization/divide-conquer-dp.ts`.
+
+## Complexity
+
+One layer drops from $O(n^2)$ to $O(n \log n)$; with $k$ layers:
+
+$$
+T = O(k\, n \log n), \qquad S = O(n).
+$$
+
+| Approach | Time | Needs |
+|----------|------|-------|
+| Naive DP | $O(k\, n^2)$ | nothing |
+| **Divide & conquer** | $O(k\, n \log n)$ | monotone $\mathrm{opt}$ (quadrangle inequality) |
+| Knuth's optimization | $O(k\, n)$ | stronger 2D monotonicity |
+
+For $n = 5000, k = 50$ that is the difference between ~1.25 billion and ~3 million candidate checks.
+When the even stronger Knuth condition $\mathrm{opt}[i][j-1] \le \mathrm{opt}[i][j] \le
+\mathrm{opt}[i+1][j]$ holds (e.g. optimal BSTs), you reach $O(n)$ per layer.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Logistics" icon="🚚">
+Placing $k$ depots along a delivery route to minimize total squared travel is this exact partition —
+the optimal depot boundary marches forward as you extend the route, so D&C applies.
+</ExampleCard>
+
+<ExampleCard domain="Signal processing" icon="📈">
+Piecewise-constant approximation of a time series into $k$ segments minimizing squared error is
+divide-and-conquer DP; the best changepoint never retreats as the window grows.
+</ExampleCard>
+
+<ExampleCard domain="Typesetting" icon="📰">
+Knuth–Plass line breaking — splitting words into lines to minimize raggedness — relies on the same
+monotone-split structure that powers optimal-BST style speedups.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Verify monotonicity before trusting it.** D&C is only correct when $\mathrm{opt}(j)$ is
+  non-decreasing. If the cost violates the quadrangle inequality, the recursion silently prunes the
+  true optimum. Prove it or test against brute force.
+- **Mind the $k$-window edges.** The allowed range is $[\,k_{\text{Lo}},\, \min(k_{\text{Hi}}, j_{\text{mid}}-1)\,]$
+  for partition problems — an empty group or off-by-one here gives wrong answers, not crashes.
+- **It optimizes a layer, not the recurrence shape.** D&C assumes $dp[j]$ depends on a *single*
+  previous layer. Interval DPs of the form $dp[i][k] + dp[k][j]$ want Knuth's optimization instead.
+- **Reconstruct with a parent array.** To recover the actual cuts, store $\mathrm{opt}(j)$ per layer
+  and walk back from the end.
+- **Interview cue:** "minimize total cost of partitioning into $k$ parts, cost is a convex function of
+  segment length/sum" ⇒ check the quadrangle inequality, then reach for D&C.
+
+## Practice
+
+1. **Easy:** For `[1, 2, 3, 4]` split into 2 groups, list every split and find the one minimizing the
+   sum of squared sums.
+2. **Easy:** State the quadrangle inequality and check it for $\mathrm{cost}(i,j) = (\text{sum}_{i..j})^2$
+   on a tiny example.
+3. **Medium:** Modify the layer code to also return the split points (a `parent` array).
+4. **Medium:** LeetCode 1478 — place $k$ mailboxes to minimize total distance; show the optimal
+   boundary is monotone.
+5. **Hard:** Solve "split into $k$ parts minimizing sum of squared sums" for $n = 10^4, k = 100$ within
+   time — and separately implement the optimal-BST version with Knuth's $O(n^2)$ optimization.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What property of the optimal split point does divide & conquer DP exploit?',
+      options: [
+        'It is always the midpoint',
+        'opt(j) is non-decreasing as j increases',
+        'opt(j) decreases as j increases',
+        'opt(j) is constant',
+      ],
+      answer: 1,
+      explain: 'Monotone optima — opt(j) ≤ opt(j+1) — let the middle’s answer bound the search ranges of both halves.',
+    },
+    {
+      q: 'After resolving the middle index m, what range may the LEFT recursion use for k?',
+      options: [
+        'The full range [kLo, kHi]',
+        '[opt(m), kHi]',
+        '[kLo, opt(m)]',
+        'Only k = opt(m)',
+      ],
+      answer: 2,
+      explain: 'Every j < m has opt(j) ≤ opt(m), so the left half is restricted to k in [kLo, opt(m)].',
+    },
+    {
+      q: 'From O(k·n^2), divide & conquer optimization gives which running time?',
+      options: [
+        'O(k·n)',
+        'O(k·n log n)',
+        'O(n^3)',
+        'O(k·log n)',
+      ],
+      answer: 1,
+      explain: 'Each layer becomes O(n log n) because the summed candidate windows are O(n) over O(log n) recursion levels.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'D&C optimization speeds up <strong>dp[j] = min over k of prev[k] + cost(k, j)</strong> layers.',
+    'It requires a <strong>monotone optimum</strong> opt(j) ≤ opt(j+1), guaranteed by the quadrangle inequality.',
+    'Solve the <strong>middle j first</strong>, then recurse with the left bounded above and the right bounded below by opt(mid).',
+    'One layer drops from <strong>O(n²) to O(n log n)</strong>; k layers give O(k·n log n).',
+    'When the stronger 2D monotonicity holds, <strong>Knuth’s optimization</strong> reaches O(n) per layer.',
+  ]}
+/>
+
+Next up: **Convex Hull Trick** — another way to crush an $O(n^2)$ transition, this time when each
+candidate is a straight *line* and you want the lower envelope.

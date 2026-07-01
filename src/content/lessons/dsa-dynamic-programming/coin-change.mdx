@@ -1,0 +1,274 @@
+---
+title: Coin Change
+track: dsa-dynamic-programming
+summary: "Build the fewest-coins answer for every amount from the ground up, reusing smaller answers so each amount is solved exactly once."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-dynamic-programming/fibonacci-memoization
+leadsTo:
+  - dsa-dynamic-programming/knapsack
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpCoinChangeTable from '../../../components/demos/DpCoinChangeTable.tsx';
+
+## The hook: a cashier counting out change
+
+A customer is owed 11 in change and you want to hand it over in as few coins as possible. With coins
+of 1, 2, and 5 you might reach for a 5, then another 5, then a 1 — three coins, done. But what if the
+coin system were stranger, say 1, 3, and 4, and you owed 6? Grabbing the biggest coin first (a 4, then
+two 1s) gives three coins, yet **two** threes do it better. The fewest-coins question is exactly the
+kind of problem dynamic programming was built for: the best answer for a big amount is hiding inside
+the best answers for smaller ones.
+
+<Callout type="intuition" title="The one-sentence idea">
+The fewest coins to make an amount is one coin plus the fewest coins to make the amount that is left
+over after taking that coin — so solve every smaller amount first, then read off the answer.
+</Callout>
+
+## Intuition
+
+In the last lesson you turned Fibonacci's exponential recursion into a fast solution by *remembering*
+each subproblem instead of recomputing it. Coin change reuses the very same two ingredients.
+
+**Optimal substructure.** Suppose the best way to make amount $a$ ends by handing over a coin of value
+$c$. Remove that coin and you are left with a smaller pile worth $a - c$ — and that remaining pile must
+itself be made with the fewest possible coins, or you could swap it for a cheaper one and improve the
+whole answer. So the best answer for $a$ is built from the best answer for $a - c$.
+
+**Overlapping subproblems.** You don't know which coin comes last, so you try them all: for each coin
+$c \le a$, the candidate cost is "best for $a - c$, plus one." The smallest candidate wins. Because many
+different amounts all depend on the same smaller amounts, a plain recursion would recompute them over
+and over — exactly the blow-up memoization fixed for Fibonacci. Here we go bottom-up instead, filling a
+table $dp[0], dp[1], \dots$ in order so every value we need is already known.
+
+Why not just be greedy and always grab the largest coin that fits? For everyday currencies that happens
+to work, but it is **not** a general truth. With coins $\{1, 3, 4\}$ and amount $6$, greedy takes
+$4 + 1 + 1 = 3$ coins, while $3 + 3 = 2$ coins is optimal. Greed commits to a big coin too early; DP
+quietly considers every last-coin choice and keeps the best.
+
+## Play with it
+
+Watch the table fill one cell at a time. For each amount $a$, every coin $c \le a$ is tried in turn:
+the demo highlights the sub-cell $dp[a-c]$ it reads from and updates the running minimum. Cells that
+were never reached stay at $\infty$.
+
+<DpCoinChangeTable client:visible />
+
+<Callout type="tip">
+Set the coins to <code>1, 3, 4</code> and the amount to <code>6</code>, then step through. Greedy would
+start with the 4 and need three coins; the table finds <code>dp[6] = 2</code> by reading
+<code>dp[3] + 1</code>. Seeing both threes appear is the clearest proof that greedy is not enough.
+</Callout>
+
+## How it works
+
+Let $dp[a]$ be the fewest coins that sum to exactly $a$. The recurrence and base case are:
+
+$$
+dp[a] = \min_{c \,\in\, \text{coins},\; c \le a} \big( dp[a - c] + 1 \big), \qquad dp[0] = 0.
+$$
+
+Every other cell starts at $\infty$, meaning "not yet reachable." A cell that is still $\infty$ at the
+end marks an amount that simply cannot be formed.
+
+Here is the table for coins $\{1, 2, 5\}$ and amount $11$, filled left to right:
+
+```
+amount: 0  1  2  3  4  5  6  7  8  9 10 11
+dp:     0  1  1  2  2  1  2  2  3  3  2  3
+```
+
+Read $dp[11]$: the winning move is a 5 leading back to $dp[6] = 2$, so $dp[11] = 3$. Trace it and you
+get $5 + 5 + 1$. The same table also tells you $dp[8] = 3$ (that is $5 + 2 + 1$) for free, because we
+solved every amount on the way.
+
+A close cousin asks *how many ways* you can make an amount, counting $1 + 2$ and $2 + 1$ as the same
+combination. That one **adds up** sub-answers instead of taking a minimum, and it loops over coins on
+the outside so each combination is counted once:
+
+<CodeRunner
+  client:visible
+  code={`// Fewest coins to make 'amount' (returns -1 if impossible)
+function coinChange(coins, amount) {
+  const dp = new Array(amount + 1).fill(Infinity);
+  dp[0] = 0;
+  for (let a = 1; a <= amount; a++) {
+    for (const c of coins) {
+      if (c <= a && dp[a - c] !== Infinity) {
+        dp[a] = Math.min(dp[a], dp[a - c] + 1);
+      }
+    }
+  }
+  return dp[amount] === Infinity ? -1 : dp[amount];
+}
+
+// Number of distinct combinations that sum to 'amount'
+function coinChangeWays(coins, amount) {
+  const dp = new Array(amount + 1).fill(0);
+  dp[0] = 1;                    // one way to make 0: use nothing
+  for (const c of coins) {      // coins OUTER => combinations, not permutations
+    for (let a = c; a <= amount; a++) {
+      dp[a] += dp[a - c];
+    }
+  }
+  return dp[amount];
+}`}
+  tests={[
+    { expr: 'coinChange([1,2,5], 11)', label: 'min coins for 11' },
+    { expr: 'coinChange([1,3,4], 6)', label: 'min coins for 6 (beats greedy)' },
+    { expr: 'coinChange([2], 3)', label: 'min coins for 3 with only 2s' },
+    { expr: 'coinChangeWays([1,2,5], 5)', label: 'ways to make 5' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — the minimum-coins solver and the count-the-ways variant side by side:
+
+```ts
+// /dsa/13-dynamic-programming/coin-change.ts
+function coinChange(coins: number[], amount: number): number {
+    const dp = new Array(amount + 1).fill(Infinity);
+    dp[0] = 0;
+
+    for (let i = 1; i <= amount; i++) {
+        for (const coin of coins) {
+            if (coin <= i && dp[i - coin] !== Infinity) {
+                dp[i] = Math.min(dp[i], dp[i - coin] + 1);
+            }
+        }
+    }
+
+    return dp[amount] === Infinity ? -1 : dp[amount];
+}
+
+function coinChangeWays(coins: number[], amount: number): number {
+    const dp = new Array(amount + 1).fill(0);
+    dp[0] = 1;  // One way to make 0: use no coins
+
+    // Iterate coins first to avoid counting the same combination twice
+    for (const coin of coins) {
+        for (let i = coin; i <= amount; i++) {
+            dp[i] += dp[i - coin];
+        }
+    }
+
+    return dp[amount];
+}
+```
+
+Run the full file: `npx tsx 13-dynamic-programming/coin-change.ts`.
+
+## Complexity
+
+There is one state per amount, and resolving each state scans every coin once:
+
+$$
+T = O(\text{amount} \times \lvert \text{coins} \rvert), \qquad S = O(\text{amount}).
+$$
+
+| Quantity | Value | Why |
+|----------|-------|-----|
+| States | $\text{amount} + 1$ | one cell per amount $0 \dots \text{amount}$ |
+| Transition | $\lvert \text{coins} \rvert$ | try each coin as the "last" coin |
+| Time | $O(\text{amount} \times \lvert \text{coins} \rvert)$ | states $\times$ transition |
+| Space | $O(\text{amount})$ | the 1-D table (drop the recursion stack entirely) |
+
+The table is *pseudo-polynomial*: it grows with the numeric value of the amount, not with the number of
+digits you write it in. A target of a billion would need a billion cells.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Vending machines" icon="🥤">
+A vending machine returning change wants to dispense the fewest coins so its hoppers last longer. With
+an arbitrary set of denominations, greedy can misfire, so firmware runs exactly this minimum-coins DP
+over the machine's coin tubes.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing / cutting stock" icon="🪚">
+A workshop must cut standard 6-metre bars into pieces of a few fixed lengths to fill an order with the
+fewest bars wasted. "Fewest pieces to hit a target length" is the coin-change recurrence with bar
+lengths playing the role of coins.
+</ExampleCard>
+
+<ExampleCard domain="Postage" icon="📮">
+You need to cover exactly the postage on a parcel using stamps of a handful of fixed values. Asking for
+the fewest stamps that sum to the required amount is coin change, denomination for denomination.
+</ExampleCard>
+
+<ExampleCard domain="Strength training" icon="🏋️">
+To load a barbell to a target weight with the fewest plates, you pick plates whose values sum to the
+goal while minimising how many you slide on. Each plate is a coin and the target weight is the amount.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Greedy is not a theorem.** Always grabbing the largest coin works for many real currencies but
+  fails for systems like $\{1, 3, 4\}$. If the interviewer hand-picks the coins, suspect a greedy trap
+  and reach for DP.
+- **Combinations vs permutations is just loop order.** Coins on the *outer* loop counts each combination
+  once ($1{+}2$ equals $2{+}1$). Amount on the outer loop counts orderings separately ($1{+}2 \ne 2{+}1$,
+  "Combination Sum IV"). Same table, swapped loops, different meaning.
+- **Handle "unreachable" deliberately.** Keep cells at infinity and guard the read with
+  `dp[a - c] !== Infinity` before adding one, so an impossible amount cannot masquerade as a tiny cost.
+  Return $-1$ (or report "impossible") when the final cell is still infinity.
+- **Mind the base cases.** For minimum coins $dp[0] = 0$; for counting ways $dp[0] = 1$ (the empty
+  selection is one valid way to make zero). Getting these backwards is the classic off-by-one bug here.
+
+## Practice
+
+1. **Easy:** By hand, fill $dp$ for coins $\{1, 5\}$ and amount $7$. What is $dp[7]$, and which coins?
+2. **Easy:** With coins $\{2\}$ and amount $3$, what does `coinChange` return, and why?
+3. **Medium:** Find an amount where coins $\{1, 3, 4\}$ make greedy give a worse answer than the DP.
+4. **Medium:** Modify `coinChange` to also return the actual list of coins used (hint: store, for each
+   cell, which coin produced its minimum).
+5. **Hard:** Count the *permutations* that sum to an amount (order matters) and explain why moving the
+   amount loop to the outside is exactly the change that makes orderings distinct.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why can a greedy "largest coin first" strategy fail for coins {1, 3, 4} and amount 6?',
+      options: [
+        'Greedy is slower than DP',
+        'Greedy takes 4 + 1 + 1 = 3 coins, but 3 + 3 = 2 coins is better',
+        'Amount 6 is unreachable with those coins',
+        'Greedy uses too much memory',
+      ],
+      answer: 1,
+      explain: 'Greedy commits to the 4 and then needs two 1s (3 coins). The DP considers every last coin and finds 3 + 3 = 2 coins.',
+    },
+    {
+      q: 'In the minimum-coins DP, what does dp[a] stay equal to when amount a cannot be formed?',
+      options: ['0', '-1', 'Infinity (∞)', 'a'],
+      answer: 2,
+      explain: 'Unreached cells keep their initial value of Infinity; the solver converts a final Infinity into -1 for the caller.',
+    },
+    {
+      q: 'With coins {1, 2, 5}, how many coins does the table give for amount 11?',
+      options: ['2', '3', '4', '5'],
+      answer: 1,
+      explain: 'dp[11] = 3, realised as 5 + 5 + 1, reached from dp[6] = 2 by adding one more 5.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The recurrence is <strong>dp[a] = min over coins c ≤ a of (dp[a−c] + 1)</strong>, with <strong>dp[0] = 0</strong> and every other cell starting at ∞.',
+    'Coin change reuses Fibonacci\'s two pillars: <strong>optimal substructure</strong> and <strong>overlapping subproblems</strong>, solved bottom-up so each amount is computed once.',
+    '<strong>Greedy is not safe in general</strong> — DP wins because it tries every coin as the last one instead of committing early.',
+    'Counting ways flips min to a sum; <strong>coins-outer counts combinations, amount-outer counts permutations</strong>.',
+    'Cost is <strong>O(amount × |coins|)</strong> time and <strong>O(amount)</strong> space — pseudo-polynomial in the amount\'s value.',
+  ]}
+/>
+
+Next up: **0/1 Knapsack** — the same table-filling instinct, but now each item may be taken at most
+once and you are maximising value under a weight budget instead of minimising a count.

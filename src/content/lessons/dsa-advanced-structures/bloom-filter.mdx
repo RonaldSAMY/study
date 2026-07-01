@@ -1,0 +1,249 @@
+---
+title: "Bloom Filters"
+track: dsa-advanced-structures
+summary: "Probabilistic membership in tiny space: a Bloom filter answers 'definitely not' with certainty and 'probably yes' with a tunable error rate."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-advanced-structures/skip-list
+  - dsa-hash-tables/hash-functions
+leadsTo:
+  - dsa-advanced-structures/sparse-table
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvDsBloomFilter from '../../../components/demos/AdvDsBloomFilter.tsx';
+
+## The hook: the bouncer who never stores the guest list
+
+A nightclub bouncer wants to reject anyone not on the list without carrying the actual list of a million
+names. So instead he keeps a long strip of lightbulbs. For each invited guest he lights a few specific
+bulbs (chosen by hashing the name). When you arrive, he hashes *your* name to the same bulbs and checks
+them: if any is dark, you were definitely never invited — turned away with certainty. If all are lit,
+you are *probably* on the list, so you get in. He might occasionally wave through a gate-crasher whose
+bulbs happen to overlap with real guests, but he will **never** turn away a true guest. That strip of
+bulbs is a Bloom filter.
+
+<Callout type="intuition" title="The one-sentence idea">
+Hash each item to $k$ bit positions and set them; to test membership, check those same $k$ bits — all
+set means "maybe present", any unset means "definitely absent".
+
+</Callout>
+
+## Intuition: why "no" is certain but "yes" is only probable
+
+Adding an item only ever flips bits from 0 to 1, and it flips *every* bit the item hashes to. So if an
+item was truly added, all of its bits are guaranteed to be 1 forever. That is why a Bloom filter has
+**no false negatives**: if even one of your bits is 0, no one could have added you, full stop.
+
+The catch runs the other way. Different items share the same bit array, and over time unrelated
+insertions can collectively light up *all* of some non-member's bits by coincidence. The filter then
+says "maybe" for something never inserted — a **false positive**. You cannot get exactness back (the
+filter threw away the items themselves; it only kept bits), but you can *tune* how often it happens by
+choosing the array size $m$ and the number of hash functions $k$. This is the same hashing machinery
+from the hash-tables track, but instead of resolving collisions we deliberately *embrace* them to save
+space.
+
+## Play with it
+
+Insert a few words, then query one. Each insert lights $k = 3$ hash bits; each query checks them. Try
+querying a word you never inserted and hunt for a false positive — all bits lit, yet it was never added.
+
+<AdvDsBloomFilter client:visible />
+
+<Callout type="tip">
+Notice the filter never stores the words themselves — only the bit array. That is the whole point:
+constant space per item regardless of how long the strings are, at the price of an occasional confident
+"maybe" for something that was never there.
+</Callout>
+
+## How it works
+
+Insert lights bits; contains checks them and short-circuits on the first dark bit:
+
+```
+m = 12 bits, k = 3        bit:  0 1 2 3 4 5 6 7 8 9 10 11
+add("apple") -> {3,7,11}        . . . ■ . . . ■ . .  .  ■
+add("mango") -> {2,7,9}         . . ■ ■ . . . ■ . ■  .  ■
+
+contains("apple") -> {3,7,11} all set  -> "maybe"  (true)
+contains("grape") -> {1,..}   bit 1 = 0 -> "definitely not" (false, fast)
+```
+
+Here is a runnable miniature using double hashing (two base hashes combined into $k$ indices, exactly
+like the course file):
+
+<CodeRunner
+  client:visible
+  code={`function murmur(s){let h=0;for(let i=0;i<s.length;i++){let k=s.charCodeAt(i);k=Math.imul(k,0xcc9e2d51);k=(k<<15)|(k>>>17);k=Math.imul(k,0x1b873593);h^=k;h=(h<<13)|(h>>>19);h=Math.imul(h,5)+0xe6546b64;}h^=s.length;h^=h>>>16;h=Math.imul(h,0x85ebca6b);h^=h>>>13;return h>>>0;}
+function fnv(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;}
+function makeFilter(m, k){
+  const bits = new Array(m).fill(0);
+  const idx = (s) => { const a=murmur(s), b=fnv(s), out=[]; for(let i=0;i<k;i++) out.push(((a+i*b)%m+m)%m); return out; };
+  return {
+    add: (s) => idx(s).forEach(i => bits[i] = 1),
+    contains: (s) => idx(s).every(i => bits[i] === 1),
+  };
+}
+const f = makeFilter(36, 3);
+['cat','dog','fox','owl','bee'].forEach(w => f.add(w));`}
+  tests={[
+    { expr: 'f.contains("cat")', label: 'cat (inserted)' },
+    { expr: 'f.contains("dog")', label: 'dog (inserted)' },
+    { expr: 'f.contains("pig")', label: 'pig (never inserted)' },
+    { expr: 'f.contains("cow")', label: 'cow (never inserted)' },
+  ]}
+/>
+
+## The real implementation
+
+The course file packs the bits into a `Uint8Array` and derives $m$ and $k$ from the target false-positive
+rate. The membership test is the load-bearing part — short-circuit on the first 0:
+
+```ts
+// /dsa/21-advanced-data-structures/bloom-filter.ts
+add(item: string): void {
+  const hashes = getHashValues(item, this.k, this.m); // k indices via double hashing
+  for (const hash of hashes) this.setBit(hash);       // 0 -> 1, never the reverse
+  this.count++;
+}
+
+contains(item: string): boolean {
+  const hashes = getHashValues(item, this.k, this.m);
+  for (const hash of hashes) {
+    if (!this.getBit(hash)) return false;             // a 0 bit => definitely NOT in set
+  }
+  return true;                                        // all set => probably in set
+}
+```
+
+Run the full file: `npx tsx 21-advanced-data-structures/bloom-filter.ts`.
+
+## Complexity
+
+Both operations touch exactly $k$ bits, independent of how many items are stored. The optimal parameters
+for $n$ items and target false-positive rate $p$ are:
+
+$$
+m = -\frac{n \ln p}{(\ln 2)^2}, \qquad k = \frac{m}{n}\ln 2, \qquad
+p \approx \left(1 - e^{-kn/m}\right)^{k}.
+$$
+
+| Structure | Membership | Space | False positives | False negatives |
+|-----------|------------|-------|-----------------|-----------------|
+| Hash set | $O(1)$ | $O(n \cdot \text{item size})$ | none | none |
+| **Bloom filter** | $O(k)$ | $\approx 1.44\,n\log_2(1/p)$ bits | tunable $p$ | **never** |
+
+For a 1% error rate that is about **9.6 bits per item** — a few hundred kilobytes for a million URLs,
+versus megabytes for the strings themselves.
+
+<Callout type="why">
+This asymmetry is exactly what makes Bloom filters a front door for expensive lookups: a "definitely
+not" lets you skip a disk seek or network call entirely, and a rare false "maybe" only costs you the
+lookup you would have done anyway. You spend cheap RAM to save expensive I/O.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Databases" icon="🗄️">
+Every SSTable in Cassandra, RocksDB, and HBase carries a Bloom filter of its keys. Before reading a
+file from disk, the engine asks the filter "could this key be here?" — a "no" skips the read, turning
+most missing-key lookups into pure memory hits.
+</ExampleCard>
+
+<ExampleCard domain="Web browsers" icon="🛡️">
+Google Safe Browsing ships a Bloom-style filter of malicious URLs to your browser. A "maybe" triggers a
+real server check; the overwhelmingly common "definitely safe" needs no network round-trip, keeping you
+private and fast.
+</ExampleCard>
+
+<ExampleCard domain="Bioinformatics" icon="🧬">
+Genome assemblers store billions of k-mers (short DNA substrings) in Bloom filters to ask "have I seen
+this fragment before?" without holding the entire dataset in memory — the only way the data fits at all.
+</ExampleCard>
+
+<ExampleCard domain="CDNs & caching" icon="🌐">
+Content networks use the "one-hit-wonder" trick: only cache an object on its *second* request. A Bloom
+filter remembers first-seen URLs cheaply, so single-access junk never pollutes the cache.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **You cannot delete from a plain Bloom filter.** Clearing a bit might un-member some *other* item that
+  shares it. Use a **counting Bloom filter** (small counters instead of bits) when deletions are needed.
+- **More hash functions is not always better.** Too few bits leave gaps; too many flood the array.
+  There is an optimum $k \approx (m/n)\ln 2$; past it the false-positive rate *rises* again.
+- **Two real hashes are enough.** Double hashing $h_i = h_1 + i\,h_2 \pmod m$ synthesizes all $k$
+  indices, so you never pay for $k$ independent hash functions.
+- **It degrades as it fills.** The error rate is set for an *expected* $n$; insert far more and "maybe"
+  becomes nearly always. A **scalable Bloom filter** chains larger filters to keep $p$ bounded.
+- **Interview cue:** "test membership in huge data with tiny memory, false positives OK" is a Bloom
+  filter tell. Say "no false negatives" out loud.
+
+## Practice
+
+1. **Easy:** A filter reports a bit is 0 for your query. What can you conclude with certainty, and why?
+2. **Easy:** With $m = 36$ and $k = 3$, how many bits does inserting 5 items set *at most*? Why might it
+   be fewer?
+3. **Medium:** Compute the optimal $m$ and $k$ for $n = 1000$ items at $p = 0.01$, then estimate bits
+   per element.
+4. **Medium:** Implement a counting Bloom filter with 4-bit counters supporting `add`, `remove`, and
+   `contains`.
+5. **Hard:** Build a scalable Bloom filter that adds a new, larger sub-filter (tightening $p$ each time)
+   when the current one passes 50% fill, and query across all of them.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A Bloom filter returns false for an item. What does that mean?',
+      options: [
+        'The item is probably not in the set',
+        'The item is definitely not in the set',
+        'The item is definitely in the set',
+        'The result is inconclusive',
+      ],
+      answer: 1,
+      explain: 'A false means at least one of the item\'s k bits is 0. Since adding an item sets all its bits, a 0 proves it was never added — false negatives are impossible.',
+    },
+    {
+      q: 'Where do false positives come from?',
+      options: [
+        'A hash function returning a negative index',
+        'Bits set by other inserted items collectively covering all of a non-member\'s k bits',
+        'Deleting an item incorrectly',
+        'Using too large a bit array',
+      ],
+      answer: 1,
+      explain: 'Items share one bit array. Unrelated insertions can happen to light up every bit a non-member hashes to, producing a confident but wrong "maybe".',
+    },
+    {
+      q: 'Why can\'t you delete from a standard Bloom filter by clearing its bits?',
+      options: [
+        'Clearing is too slow',
+        'A shared bit might also belong to another inserted item, causing a false negative',
+        'The bits are read-only',
+        'Deletion would change m and k',
+      ],
+      answer: 1,
+      explain: 'A bit set by your item may also be set by others. Zeroing it could make those items test as absent — a false negative — which Bloom filters must never produce. Counting filters fix this.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A Bloom filter stores <strong>only a bit array</strong>: hash each item to k bits and set them.',
+    '<strong>No false negatives</strong> — a single 0 bit proves "definitely not in the set".',
+    '<strong>False positives are possible</strong> because items share bits, but the rate is tunable via m and k.',
+    'Optimal sizing is <strong>m ≈ 1.44 n log₂(1/p)</strong> bits with <strong>k ≈ (m/n) ln 2</strong> hashes — about 9.6 bits/item at 1%.',
+    'It is the gatekeeper for expensive lookups in <strong>databases, browsers, genomics, and CDNs</strong>; use a counting filter to delete.',
+  ]}
+/>
+
+Next up: **Sparse Tables** — a precomputed doubling trick that answers range-minimum queries in $O(1)$,
+trading exactness *back in* for static arrays.

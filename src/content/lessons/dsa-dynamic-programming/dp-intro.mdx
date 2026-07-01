@@ -1,0 +1,270 @@
+---
+title: What Is Dynamic Programming?
+track: dsa-dynamic-programming
+summary: DP solves each overlapping subproblem once and reuses the answer, turning exponential recursion into a linear walk up a table.
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-network-algorithms/social-network-analysis
+leadsTo:
+  - dsa-dynamic-programming/fibonacci-memoization
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpClimbingStairsTable from '../../../components/demos/DpClimbingStairsTable.tsx';
+
+## The hook: a hiker counting routes up a staircase
+
+A hiker stands at the bottom of a long stone staircase. They can take one step or two steps at a
+time, and they wonder: *how many different ways are there to reach the top?* For a few stairs you can
+just sketch the routes on paper. But the count explodes fast, and if you try to enumerate every path
+by brute force you end up re-counting the same little sub-staircases over and over — the routes for
+"the last three steps" get recomputed from every longer path that passes through them. Dynamic
+programming is the habit of noticing that repetition and refusing to pay for it twice.
+
+<Callout type="intuition" title="The one-sentence idea">
+Dynamic programming solves each overlapping subproblem exactly **once**, stores the answer, and reuses
+it everywhere it reappears.
+</Callout>
+
+## Intuition
+
+You just came from graph and network algorithms, where a shortest path from A to C through B was simply
+the shortest A→B glued to the shortest B→C. That gluing is the first hallmark DP needs:
+
+- **Optimal substructure** — the best answer to the whole problem is built from the best answers to
+  smaller pieces. Counting routes up `n` stairs is the routes up `n-1` (then a single step) plus the
+  routes up `n-2` (then a double step).
+- **Overlapping subproblems** — those smaller pieces are *shared* and asked for again and again. The
+  count for "8 stairs" needs "7 stairs" and "6 stairs"; "7 stairs" also needs "6 stairs"; and so on
+  down. The same subproblems light up everywhere.
+
+Naive recursion re-derives each shared piece from scratch, and the work branches in two at every call,
+so it costs $O(2^n)$ — astronomically slow. DP breaks the branching by writing each subproblem's answer
+in a table the first time it is solved. The next time that subproblem is needed, you read the answer
+instead of recomputing it. That single change collapses exponential work down to linear.
+
+The contrast with the graph world is worth holding onto: there, subproblems (shortest paths) overlapped
+but you cached them in a distance array. DP is the same instinct, made into a deliberate method.
+
+## Play with it
+
+Choose a number of stairs and watch the table fill one cell at a time. Each new cell is just the sum of
+the two cells immediately to its left — the answer you are "looking up" rather than recomputing.
+
+<DpClimbingStairsTable client:visible />
+
+<Callout type="tip">
+Notice that filling `dp[8]` never re-opens `dp[3]` — it was solved once, written down, and is simply
+read. That "solve once, reuse forever" is exactly what separates DP from naive recursion.
+</Callout>
+
+## How it works
+
+Let $dp[i]$ be the number of ways to reach stair $i$. To land on stair $i$ your final move was either a
+single step from $i-1$ or a double step from $i-2$, and those route sets never overlap, so you add them:
+
+$$
+dp[i] = dp[i-1] + dp[i-2], \qquad dp[0] = 1, \quad dp[1] = 1.
+$$
+
+The base cases say there is one way to "stand at the bottom" (do nothing) and one way to reach the first
+stair (a single step). A short dry run for $n = 5$:
+
+```
+dp[0] = 1
+dp[1] = 1
+dp[2] = dp[1] + dp[0] = 1 + 1 = 2
+dp[3] = dp[2] + dp[1] = 2 + 1 = 3
+dp[4] = dp[3] + dp[2] = 3 + 2 = 5
+dp[5] = dp[4] + dp[3] = 5 + 3 = 8
+```
+
+Eight ways to climb five stairs — and you can feel the Fibonacci numbers hiding inside. Here is the same
+idea as runnable code, plus its optimization-flavoured cousin (minimum cost instead of a count):
+
+<CodeRunner
+  client:visible
+  code={`// Count ways to climb n stairs taking 1 or 2 steps
+function climbStairs(n) {
+  if (n <= 1) return 1;
+  const dp = new Array(n + 1);
+  dp[0] = 1;
+  dp[1] = 1;
+  for (let i = 2; i <= n; i++) dp[i] = dp[i - 1] + dp[i - 2];
+  return dp[n];
+}
+
+// Same shape, but minimizing instead of counting:
+// cheapest way to climb past the top, stepping 1 or 2
+function minCostClimbing(cost) {
+  const n = cost.length;
+  if (n === 1) return cost[0];
+  const dp = new Array(n);
+  dp[0] = cost[0];
+  dp[1] = cost[1];
+  for (let i = 2; i < n; i++) dp[i] = cost[i] + Math.min(dp[i - 1], dp[i - 2]);
+  return Math.min(dp[n - 1], dp[n - 2]);
+}`}
+  tests={[
+    { expr: 'climbStairs(2)', label: 'ways to climb 2 stairs' },
+    { expr: 'climbStairs(5)', label: 'ways to climb 5 stairs' },
+    { expr: 'climbStairs(8)', label: 'ways to climb 8 stairs' },
+    { expr: 'minCostClimbing([10, 15, 20])', label: 'min cost of [10,15,20]' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds the same table with named base cases and an explicit fill loop:
+
+```ts
+// /dsa/13-dynamic-programming/dp-basics.ts
+function countWaysToClimb(n: number): number {
+    if (n <= 1) return 1;
+
+    const dp = new Array(n + 1);
+    dp[0] = 1;  // one way to stay at the ground
+    dp[1] = 1;  // one way to reach step 1
+
+    for (let i = 2; i <= n; i++) {
+        dp[i] = dp[i - 1] + dp[i - 2];   // reuse the two solved subproblems
+    }
+
+    return dp[n];
+}
+
+// Optimization variant: minimum cost to climb past the top.
+function minCostClimbing(cost: number[]): number {
+    const n = cost.length;
+    if (n === 1) return cost[0];
+
+    const dp = new Array(n);
+    dp[0] = cost[0];
+    dp[1] = cost[1];
+
+    for (let i = 2; i < n; i++) {
+        dp[i] = cost[i] + Math.min(dp[i - 1], dp[i - 2]);
+    }
+
+    return Math.min(dp[n - 1], dp[n - 2]);
+}
+```
+
+Run the full file: `npx tsx 13-dynamic-programming/dp-basics.ts`.
+
+## Complexity
+
+A DP cost is almost always the same product: **time = number of states × work per state**. Here there
+are $n+1$ states (one per stair) and each is a single addition, so:
+
+$$
+T(n) = \underbrace{(n+1)}_{\text{states}} \times \underbrace{O(1)}_{\text{work per state}} = O(n),
+\qquad S(n) = O(n).
+$$
+
+Naive recursion instead re-explores the branching call tree, costing $O(2^n)$. The table is what buys
+the speedup.
+
+| Approach | Time | Space |
+|----------|------|-------|
+| Naive recursion | $O(2^n)$ | $O(n)$ stack |
+| DP table (tabulation) | $O(n)$ | $O(n)$ |
+| DP, two rolling variables | $O(n)$ | $O(1)$ |
+
+Because each cell only reads the previous two, you can throw the table away and keep just two variables —
+the same answer in $O(1)$ space. That space trick is the topic of the next lesson.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Typing & autocomplete" icon="⌨️">
+A phone keyboard counting how many words a swipe could spell reuses the number of valid completions for
+each shared suffix. The suffix "…tion" is solved once and reused by *every* longer word ending in it —
+overlapping subproblems, cached.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+Aligning two DNA strands scores the best alignment of every shared prefix-pair once and stores it in a
+grid. Longer alignments are stitched from those already-solved corners instead of being recomputed —
+classic optimal substructure plus reuse.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+Scheduling an assembly line computes the cheapest way to finish through each station once, then later
+stations just read those minimums. The "best cost to reach station $k$" is a subproblem every downstream
+plan shares.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting or mis-setting the base cases.** Here $dp[0]=1$, not $0$ — "doing nothing" is a valid
+  route. A wrong base case silently corrupts every cell above it.
+- **Wrong iteration order.** A cell must be filled *after* the cells it depends on. Fill stairs low to
+  high; if you read $dp[i-1]$ before computing it, you get garbage.
+- **Recursion with no cache.** If you write the recurrence as plain recursion and forget to store
+  results, you are back to $O(2^n)$. The table (or a memo map) is the whole optimization.
+- **Spotting DP-applicability.** Watch for the phrases "count the number of ways", "minimum / maximum
+  cost", or "is it possible to…", combined with a choice repeated at each step. Those almost always have
+  overlapping subproblems and optimal substructure.
+
+## Practice
+
+1. **Easy:** Compute $dp[6]$ for climbing stairs by hand using the dry run above.
+2. **Easy:** What does the count become if you are also allowed to take *three* steps at a time? Write
+   the new recurrence.
+3. **Medium:** Re-run the demo for $n = 12$, then verify with `climbStairs(12)` in the runner.
+4. **Medium:** For `minCostClimbing([1, 100, 1, 1, 1, 100, 1, 1, 100, 1])`, trace the table and find the
+   minimum cost.
+5. **Hard:** Rewrite `countWaysToClimb` using only two variables instead of an array, and argue it gives
+   the same answers in $O(1)$ space.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which two properties must a problem have for dynamic programming to help?',
+      options: [
+        'Sorted input and a unique solution',
+        'Overlapping subproblems and optimal substructure',
+        'A balanced tree and constant memory',
+        'Random access and no recursion',
+      ],
+      answer: 1,
+      explain: 'DP pays off when subproblems repeat (so caching saves work) and the best whole answer is built from best sub-answers.',
+    },
+    {
+      q: 'For climbing stairs with dp[i] = dp[i-1] + dp[i-2] and dp[0]=dp[1]=1, what is dp[4]?',
+      options: ['3', '5', '8', '4'],
+      answer: 1,
+      explain: 'dp[2]=2, dp[3]=3, dp[4]=dp[3]+dp[2]=3+2=5.',
+    },
+    {
+      q: 'Why is the naive recursive version exponential while the table version is linear?',
+      options: [
+        'Recursion uses more memory per call',
+        'The table avoids re-solving the same overlapping subproblems',
+        'Addition is slower than function calls',
+        'The table sorts the subproblems first',
+      ],
+      answer: 1,
+      explain: 'Naive recursion re-derives shared subproblems from scratch (branching by two each call); the table solves each state once and reuses it.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'DP = <strong>solve each overlapping subproblem once</strong>, store it, and reuse the answer everywhere it reappears.',
+    'It needs two hallmarks: <strong>optimal substructure</strong> and <strong>overlapping subproblems</strong>.',
+    'Climbing stairs is the recurrence <strong>dp[i] = dp[i-1] + dp[i-2]</strong> with base cases dp[0]=dp[1]=1.',
+    'Cost follows <strong>states × work-per-state</strong>: here O(n), versus O(2<sup>n</sup>) for naive recursion.',
+    'Because each cell reads only the previous two, the table compresses to <strong>O(1) space</strong> with two variables.',
+  ]}
+/>
+
+Next up: **Memoization vs Tabulation** — the same Fibonacci-shaped problem solved top-down with a cache
+and bottom-up with a table, and when to reach for each.

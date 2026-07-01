@@ -1,0 +1,276 @@
+---
+title: DP on Trees
+track: dsa-dp-optimization
+summary: "DP on trees: compute each node's answer from its children in one post-order pass, then reroot to get every node's answer in a second."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-backtracking/string-backtracking
+leadsTo:
+  - dsa-dp-optimization/digit-dp
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpOptTreeReroot from '../../../components/demos/DpOptTreeReroot.tsx';
+
+## The hook: an answer that flows up the branches
+
+A company org chart is a tree. You want, for every employee, the total "distance" to everyone
+else — the sum of how many reporting hops separate them from each colleague. The CEO's number is
+easy to imagine, but recomputing a fresh BFS from all $n$ people is $O(n^2)$. There is a far slicker
+way: a tree has no cycles, so each subtree is an independent subproblem. Solve the leaves, let their
+answers **flow up** to parents, and the whole tree falls in one pass. Then a second pass *reroots*
+the answer to every node almost for free.
+
+<Callout type="intuition" title="The one-sentence idea">
+A tree gives subproblems a built-in order — children before parents — so DP becomes "combine each
+node's children into the node," and rerooting turns one node's answer into all of them.
+</Callout>
+
+## Intuition: post-order is the topological order
+
+In grid DP you fill cells left-to-right because each cell depends on earlier ones. A tree hands you
+the same gift: root it anywhere, and every node depends only on its children. Process nodes in
+**post-order** (a node after all its descendants) and the children's DP values are always ready when
+you need them.
+
+Take **maximum independent set** — pick nodes with no two adjacent, maximizing total value. For each
+node $u$ keep two numbers:
+
+- $dp[u][0]$ = best for $u$'s subtree when $u$ is **not** chosen,
+- $dp[u][1]$ = best when $u$ **is** chosen.
+
+The transitions just read the children $c$:
+
+$$
+dp[u][0] = \sum_{c}\max(dp[c][0], dp[c][1]), \qquad dp[u][1] = \mathrm{val}[u] + \sum_{c} dp[c][0].
+$$
+
+If you take $u$, no child may be taken; if you skip $u$, each child picks its own best. That is the
+whole algorithm. **House Robber III** and **Binary Tree Cameras** are the same shape with different
+states.
+
+The second trick is **rerooting**. Sometimes you need an answer rooted at *every* node — like our
+sum-of-distances problem. Computing each separately is quadratic, but moving the root from $u$ to a
+neighbor $v$ changes the answer by a tiny, local amount, so a single top-down pass updates all of
+them.
+
+## Play with it
+
+Below is the rerooting machine for **sum of distances**. Phase A folds subtree sizes and distances
+*up* to the root; phase B reroots that answer *down* to every node. Watch the active node and the
+state it reads (children in phase A, parent in phase B). Edit the edge list to try your own tree —
+node 0 is the root.
+
+<DpOptTreeReroot client:visible />
+
+<Callout type="tip">
+Notice phase B's update: <code>ans[v] = ans[parent] + (n - 2*size[v])</code>. Crossing the edge into
+$v$'s subtree, every one of its <code>size[v]</code> nodes gets one step closer and every other node
+gets one step farther — a net change of $n - 2\,\mathrm{size}[v]$. No re-traversal needed.
+</Callout>
+
+## How it works
+
+Run sum-of-distances on this tree (root 0): edges `0-1, 0-2, 1-3, 1-4`.
+
+```
+Phase A (post-order: 3,4,1,2,0)
+  size[3]=1 down[3]=0      size[4]=1 down[4]=0
+  size[1]=3 down[1]=down[3]+1 + down[4]+1 = 2
+  size[2]=1 down[2]=0
+  size[0]=5 down[0]=(down[1]+3)+(down[2]+1) = 6      → ans[0]=6
+
+Phase B (pre-order from root)
+  ans[1] = ans[0] + (5 - 2*3) = 6 - 1 = 5
+  ans[2] = ans[0] + (5 - 2*1) = 6 + 3 = 9
+  ans[3] = ans[1] + (5 - 2*1) = 5 + 3 = 8
+  ans[4] = ans[1] + (5 - 2*1) = 5 + 3 = 8
+```
+
+Two linear passes give all five answers. Here is the max-independent-set version you can run:
+
+<CodeRunner
+  client:visible
+  code={`// Max independent set on a tree (House Robber III style).
+// adj = adjacency list, val = node values, rooted at 0.
+function maxIndependentSet(adj, val) {
+  const n = val.length;
+  const dp = Array.from({ length: n }, () => [0, 0]); // [skip u, take u]
+  function dfs(u, parent) {
+    dp[u][1] = val[u];           // take u: add its value
+    for (const c of adj[u]) {
+      if (c === parent) continue;
+      dfs(c, u);
+      dp[u][0] += Math.max(dp[c][0], dp[c][1]); // skip u: child free to choose
+      dp[u][1] += dp[c][0];      // take u: children must be skipped
+    }
+  }
+  dfs(0, -1);
+  return Math.max(dp[0][0], dp[0][1]);
+}
+
+const adj = [[1,2,3],[0,4,5],[0],[0,6],[1],[1],[3]];
+const val = [5,3,4,2,1,6,7];`}
+  tests={[
+    { expr: 'maxIndependentSet(adj, val)', label: 'max independent set' },
+  ]}
+/>
+
+## The real implementation
+
+The rerooting pass straight from the course file — one DFS up for subtree distances, one DFS down to
+spread the answer:
+
+```ts
+// /dsa/24-dp-optimization/dp-on-trees.ts
+sumOfDistancesFromAllNodes(): number[] {
+    this.buildTree(0);
+    const subtreeSize = this.subtreeSizes(0);
+    const dp = Array(this.n).fill(0);
+
+    // Pass 1 (post-order): dp[u] = sum of distances from u into its subtree
+    for (const u of postOrder) {
+        for (const v of this.adj[u]) {
+            if (this.parent[v] === u) dp[u] += dp[v] + subtreeSize[v];
+        }
+    }
+
+    // Pass 2 (pre-order): reroot from u to each child v
+    const ans = Array(this.n).fill(0);
+    ans[0] = dp[0];
+    const reroot = (u: number, parent: number): void => {
+        for (const v of this.adj[u]) {
+            if (v !== parent) {
+                // v's subtree gets closer; everyone else gets farther
+                ans[v] = ans[u] - subtreeSize[v] + (this.n - subtreeSize[v]);
+                reroot(v, u);
+            }
+        }
+    };
+    reroot(0, -1);
+    return ans;
+}
+```
+
+Run the full file: `npx tsx 24-dp-optimization/dp-on-trees.ts`.
+
+## Complexity
+
+Each node and edge is touched a constant number of times across both passes:
+
+$$
+T(n) = O(n), \qquad S(n) = O(n).
+$$
+
+| Problem | Naive | Tree DP |
+|---------|-------|---------|
+| One node's subtree answer | $O(n)$ | $O(n)$ |
+| Every node's answer (no rerooting) | $O(n^2)$ | — |
+| Every node's answer (**rerooting**) | $O(n^2)$ | $O(n)$ |
+
+Rerooting is the headline: it collapses a quadratic "run the DP from each root" into a single linear
+sweep.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Epidemiology" icon="🦠">
+On a contact-tracing tree, the expected number of downstream infections from a person is exactly a
+subtree aggregate — fold each contact's expected spread up to its source in one post-order pass.
+</ExampleCard>
+
+<ExampleCard domain="3D graphics" icon="🎮">
+A character's skeleton is a tree of bones. A world transform is the parent's transform composed with
+the local one — computing all of them is a single root-to-leaf rerooting of the identity at the hips.
+</ExampleCard>
+
+<ExampleCard domain="Networking" icon="🌐">
+In a spanning tree of routers, the worst-case latency from each router (its eccentricity) comes from
+a two-pass tree DP: longest path going down, then the longest path going up through the parent.
+</ExampleCard>
+
+<ExampleCard domain="Org design" icon="🏢">
+Minimum number of managers who must attend so every reporting edge is "covered" is a minimum vertex
+cover on the org tree — the same $dp[u][0/1]$ recurrence, minimizing instead of maximizing.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Recursion depth.** A path-shaped tree of $10^5$ nodes blows the call stack. Convert to an explicit
+  stack or compute an iterative post-order (the course file builds the order first, then loops).
+- **Re-rooting needs subtree sizes first.** The phase-B formula uses `size[v]`; compute sizes in
+  phase A or you will reroot with stale data.
+- **"Adjacent" is undirected.** When you DFS, always skip the parent, or you will revisit it as a
+  "child" and double-count.
+- **Two states, not one.** Independent-set / house-robber problems fail with a single value per node —
+  you must track both "take" and "skip," because a parent's choice constrains its children.
+- **Interview cue:** "for every node…" on a tree almost always means rerooting. Say "solve down, then
+  push the answer up across one edge at a time" and you are on the rails.
+
+## Practice
+
+1. **Easy:** Compute every subtree's size for the tree `0-1, 0-2, 1-3`. (Post-order, add 1 plus
+   children.)
+2. **Easy:** Run the two-state recurrence by hand for House Robber III on a 3-node path with values
+   `[2, 9, 2]`.
+3. **Medium:** Find the tree's diameter with two BFS/DFS, then explain why a third pass is unnecessary.
+4. **Medium:** Solve Binary Tree Cameras (LeetCode 968) with three states: uncovered, covered, has a
+   camera.
+5. **Hard:** Sum of Distances in Tree (LeetCode 834) for $n = 3\times10^4$ — implement the rerooting
+   pass iteratively so it never overflows the stack.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does post-order traversal make tree DP correct?',
+      options: [
+        'It visits nodes in increasing value order',
+        'A node is processed only after all its children, so their DP values are ready',
+        'It avoids recursion entirely',
+        'It guarantees the tree is balanced',
+      ],
+      answer: 1,
+      explain: 'Post-order is the tree’s topological order: children finish before their parent, so the parent can combine them.',
+    },
+    {
+      q: 'In max independent set on a tree, what is dp[u][1] (u is taken)?',
+      options: [
+        'val[u] + sum over children of max(dp[c][0], dp[c][1])',
+        'val[u] + sum over children of dp[c][0]',
+        'sum over children of dp[c][1]',
+        'max(dp[u][0], val[u])',
+      ],
+      answer: 1,
+      explain: 'Taking u forbids taking any child, so each child must contribute its "not taken" value dp[c][0].',
+    },
+    {
+      q: 'Rerooting turns which complexity into O(n)?',
+      options: [
+        'Computing one subtree sum',
+        'Sorting the nodes',
+        'Computing every node’s answer by re-running the DP from each root (O(n^2))',
+        'Checking if the graph is a tree',
+      ],
+      answer: 2,
+      explain: 'Instead of an independent O(n) DP per root, rerooting updates the answer across one edge at a time for an O(n) total.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A tree orders subproblems for free: process <strong>children before parents</strong> (post-order).',
+    'Carry <strong>enough state per node</strong> — e.g. take/skip — so a parent’s choice can constrain children.',
+    '<strong>Rerooting</strong> converts a single subtree answer into every node’s answer in one extra top-down pass.',
+    'The reroot update is <strong>local</strong>: crossing one edge shifts distances by <code>n - 2·size[v]</code>.',
+    'Everything runs in <strong>O(n) time and space</strong> — watch recursion depth on deep trees.',
+  ]}
+/>
+
+Next up: **Digit DP** — counting numbers in a range by building them one digit at a time, with a
+"tight" flag that remembers whether you are still hugging the upper bound.

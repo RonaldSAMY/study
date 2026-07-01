@@ -1,0 +1,302 @@
+---
+title: Locality-Sensitive Hashing
+track: dsa-modern-structures
+summary: "A hash function engineered to make similar items collide on purpose: probe one bucket and you get the near neighbors, skipping almost everything else."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-modern-structures/lsm-tree
+  - dsa-hash-tables/hash-functions
+leadsTo:
+  - dsa-string-algorithms/z-algorithm
+  - dsa-ml-algorithms/embeddings
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import ModLshBuckets from '../../../components/demos/ModLshBuckets.tsx';
+
+## The hook: finding the needle without scanning the haystack
+
+You have a hundred million song embeddings and a new track. Which existing songs sound most like it?
+Comparing the query against every vector is a hundred million dot products — far too slow for a "you
+might also like" panel that has to render now. What if the hash table itself could do the filtering:
+drop the query into one bucket and have its near neighbors *already waiting there*?
+
+That sounds impossible, because ordinary hashing is built to do the exact opposite. A good hash
+function scatters similar inputs as far apart as possible — change one bit and the hash explodes to
+somewhere unrelated. Locality-sensitive hashing throws that goal out and engineers the reverse.
+
+<Callout type="intuition" title="The one-sentence idea">
+A locality-sensitive hash sends **similar items to the same bucket with high probability**, so an
+approximate nearest-neighbor search becomes a single bucket lookup instead of a full scan.
+</Callout>
+
+## Intuition: hash by which side of a random line you fall on
+
+In the **hash tables** track, a hash function deliberately destroys structure: nearby keys must land in
+unrelated buckets to spread load. LSH keeps the bucket idea but flips the objective — it *preserves*
+structure, so closeness in the original space survives the hash.
+
+The cleanest version, for comparing vectors by angle (cosine similarity), is the **random hyperplane**
+trick:
+
+1. Pick a random line through the origin (in high dimensions, a random hyperplane).
+2. For each point, record one bit: which side of the line is it on?
+3. Repeat with several independent random lines. The bits, stacked together, form the point's
+   **signature** — and the signature is its bucket.
+
+Two points close together in angle are almost always on the same side of a random line, so they tend
+to agree on every bit and share a bucket. Two points far apart disagree on some line and split into
+different buckets. The magic is probabilistic but precise: the chance two vectors collide on one line
+is exactly their angle's complement, so similarity becomes collision probability.
+
+## Play with it
+
+Step through the lines one at a time. Each line paints points blue or grey by which side they fall on
+— that is one bit. After the last line, points are colored by their full signature (their bucket).
+Finally the query probes its own bucket: the **near** point is a candidate, the **far** point is never
+even looked at. Drag the query around to watch its bucket flip as it crosses a line.
+
+<ModLshBuckets client:visible />
+
+<Callout type="tip">
+Slide the line count up. More lines means longer signatures and smaller, purer buckets — fewer
+accidental collisions, but also a higher chance a genuine neighbor just misses by one bit. Real
+systems get both by using several short signatures (multiple tables) and unioning the candidates.
+</Callout>
+
+## How it works
+
+Take three fixed lines and three points. Each line contributes one bit; stacking them gives a 3-bit
+bucket id:
+
+```
+line normals at 20°, 80°, 150°
+
+query  [0.90, 0.50] → bits 1 1 0 → bucket "110"
+near   [0.92, 0.48] → bits 1 1 0 → bucket "110"   ← same bucket as query!
+far    [-0.60, 0.80]→ bits 0 1 1 → bucket "011"   ← different bucket
+
+query probes bucket "110" → finds {near}, never compares against {far}
+```
+
+The near point matched the query on all three bits; the far point disagreed on the very first line and
+landed elsewhere. The query only ever touches its own bucket.
+
+<CodeRunner
+  client:visible
+  code={`// Random-projection LSH in 2D with three fixed hyperplanes.
+const deg = Math.PI / 180;
+const planes = [20, 80, 150].map(a => [Math.cos(a * deg), Math.sin(a * deg)]);
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1];
+
+// signature = one bit per hyperplane (which side of the line)
+function sign(v) {
+  return planes.map(p => (dot(v, p) >= 0 ? '1' : '0')).join('');
+}
+
+// index a few labelled points into buckets keyed by signature
+const points = { near: [0.92, 0.48], far: [-0.6, 0.8], other: [0.2, 0.95] };
+const buckets = {};
+for (const [name, v] of Object.entries(points)) {
+  const s = sign(v);
+  (buckets[s] = buckets[s] || []).push(name);
+}
+
+// a query only inspects the bucket it hashes to
+function candidates(v) { return buckets[sign(v)] || []; }
+const query = [0.9, 0.5];`}
+  tests={[
+    { expr: "sign([0.9, 0.5])", label: 'query signature' },
+    { expr: "sign([0.92, 0.48])", label: 'near signature (should match query)' },
+    { expr: "sign([-0.6, 0.8])", label: 'far signature (should differ)' },
+    { expr: "candidates(query)", label: 'bucket the query probes' },
+  ]}
+/>
+
+## The real implementation
+
+The course file generates random unit vectors as hyperplanes, hashes any vector to a bit-string
+signature, and stores ids in per-signature buckets. A query hashes once and only scores the candidates
+that share its bucket:
+
+```ts
+// /dsa/28-modern-data-structures/locality-sensitive-hashing.ts
+private hash(vector: number[]): string {
+  const bits: string[] = [];
+  for (const randomVec of this.randomVectors) {       // each random hyperplane
+    const dotProd = this.dotProduct(vector, randomVec);
+    bits.push(dotProd >= 0 ? "1" : "0");              // which side → one bit
+  }
+  return bits.join("");                                // signature = bucket key
+}
+
+insert(id: number, vector: number[]): void {
+  this.data.set(id, vector);
+  const signature = this.hash(vector);
+  for (const table of this.tables) {                   // several tables (banding)
+    if (!table.has(signature)) table.set(signature, []);
+    table.get(signature)!.push(id);
+  }
+}
+
+query(vector: number[], maxResults = 10) {
+  const signature = this.hash(vector);
+  const candidates = new Set<number>();
+  for (const table of this.tables) {                   // union candidates across tables
+    const bucket = table.get(signature);
+    if (bucket) bucket.forEach((id) => candidates.add(id));
+  }
+  return [...candidates]                                // only re-rank the few candidates
+    .map((id) => ({ id, similarity: this.cosineSimilarity(vector, this.data.get(id)!) }))
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, maxResults);
+}
+```
+
+The same file also implements **MinHash** for set/Jaccard similarity (documents as shingles). Run the
+full file: `npx tsx 28-modern-data-structures/locality-sensitive-hashing.ts`.
+
+## Complexity
+
+Hashing a $d$-dimensional vector with $k$ hyperplanes costs $k$ dot products; a query then re-scores
+only the $c$ items that share its bucket — not the whole dataset of $n$ items:
+
+$$
+T_\text{insert} = O(dk), \qquad
+T_\text{query} = O(dk + c), \qquad
+S = O(nk).
+$$
+
+For random hyperplanes, the probability that two vectors collide on a single line is set by the angle
+$\theta$ between them:
+
+$$
+\Pr[\,h(u) = h(v)\,] = 1 - \frac{\theta}{\pi}.
+$$
+
+Small angle (similar vectors) gives a high collision probability; a right angle gives one half. That
+monotone relationship — more similar means more likely to collide — is the formal definition of a
+*locality-sensitive* hash family.
+
+| Approach | Query time | Result |
+|----------|-----------|--------|
+| Brute-force scan | $O(nd)$ | exact |
+| KD-tree (low $d$) | $O(\log n)$ best, $O(nd)$ worst | exact |
+| **LSH** | $O(dk + c)$ | **approximate** |
+
+In high dimensions exact methods collapse toward a full scan (the curse of dimensionality), which is
+exactly where LSH's approximate, sub-linear query earns its keep — the same regime where **Embeddings
+& Vector Search** lives.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Music streaming" icon="🎧">
+Spotify turns each track into an audio/taste embedding and uses LSH-style bucketing so "more like
+this" is a handful of bucket lookups, not a comparison against every song in the catalog. The radio
+keeps playing instantly because the neighbors were pre-grouped.
+</ExampleCard>
+
+<ExampleCard domain="Academic integrity" icon="📝">
+Plagiarism and near-duplicate detectors shingle each document into overlapping n-grams, MinHash the
+shingle sets, and band the signatures. Two papers that share long passages collide in some band and
+get flagged — without an all-pairs comparison across millions of submissions.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+Read aligners and metagenomics tools (MinHash-based sketches like MinHash/Mash) compare DNA sequences
+by hashing k-mers. Genomes that share many k-mers collide, so you can estimate how related two
+organisms are from tiny sketches instead of aligning billions of bases.
+</ExampleCard>
+
+<ExampleCard domain="Photo libraries" icon="🖼️">
+Reverse image search and duplicate-photo cleanup hash perceptual fingerprints so visually similar
+images bucket together. A lightly cropped or re-compressed copy keeps almost the same signature, so it
+surfaces as a near-duplicate of the original.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **LSH is approximate.** It can miss a true neighbor (false negative) or surface a non-neighbor
+  (false positive). If you need exact results, LSH is only a *candidate generator* — you still re-rank
+  the bucket with the real distance, exactly as the `query` method does above.
+- **Tune with banding, not just bit-count.** One long signature gives high precision but poor recall.
+  Real systems use $L$ tables each with a short signature and take the union of buckets, then re-score.
+  More tables raise recall; longer signatures raise precision. That is the dial to discuss in an interview.
+- **Match the hash family to the metric.** Random projection (SimHash) is for cosine/angle; **MinHash**
+  is for Jaccard similarity of sets; **p-stable** hashing is for Euclidean distance. Using the wrong
+  family quietly destroys the locality guarantee.
+- **Do not reach for LSH in low dimensions.** With a handful of dimensions, a KD-tree or even brute
+  force beats it. LSH pays off precisely when dimensionality is high and exact structures degrade.
+- **Interview cue:** "find similar items / near-duplicates among billions, fast, approximate is OK" is
+  an LSH prompt. Say "hash so collisions mean similarity, probe the bucket, re-rank candidates," then
+  mention banding to trade precision against recall.
+
+## Practice
+
+1. **Easy:** With the three fixed lines from the demo, compute the 3-bit signature of `[0.1, 0.9]` by
+   hand (sign of each dot product). Which bucket is it in?
+2. **Easy:** Why does adding more random hyperplanes shrink the average bucket size?
+3. **Medium:** Using $\Pr[h(u)=h(v)] = 1 - \theta/\pi$, what is the single-line collision probability
+   for vectors 60° apart? For vectors 90° apart?
+4. **Medium:** Extend the `CodeRunner` index to use **two** independent sets of lines (two tables) and
+   return the union of both buckets as candidates. How does that change recall?
+5. **Hard:** You must catch any pair of documents with Jaccard similarity above 0.8 while keeping
+   buckets small. Sketch a MinHash + banding scheme (rows per band, number of bands) and explain how
+   the S-curve of the banding makes the 0.8 threshold sharp.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How does a locality-sensitive hash differ from an ordinary hash function?',
+      options: [
+        'It is faster to compute',
+        'It deliberately makes similar inputs collide in the same bucket with high probability',
+        'It never produces collisions',
+        'It only works on strings',
+      ],
+      answer: 1,
+      explain: 'Ordinary hashing scatters similar inputs apart to spread load. LSH is engineered so that similarity in the original space turns into a high probability of landing in the same bucket.',
+    },
+    {
+      q: 'In random-hyperplane LSH, what determines whether two vectors collide on a single line?',
+      options: [
+        'Their magnitudes',
+        'The angle between them — smaller angle means higher collision probability',
+        'Their first coordinate',
+        'The number of buckets',
+      ],
+      answer: 1,
+      explain: 'The collision probability on one random hyperplane is 1 − θ/π, where θ is the angle between the vectors. Similar (small-angle) vectors agree on a random side far more often.',
+    },
+    {
+      q: 'Why does an LSH query still compute exact distances on the bucket it probes?',
+      options: [
+        'To rebuild the hash tables',
+        'Because LSH is approximate — the bucket holds candidates that must be re-ranked by true distance',
+        'Because hashing is too slow',
+        'To compress the vectors',
+      ],
+      answer: 1,
+      explain: 'LSH narrows millions of items down to a small candidate set in one bucket lookup, but it can include false positives. Re-scoring the candidates with the real metric gives the actual nearest neighbors.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'LSH is a hash family built to <strong>make similar items collide</strong> — the opposite goal of a normal hash function.',
+    'Random-hyperplane hashing records, per random line, <strong>which side a vector falls on</strong>; the stacked bits are its bucket signature.',
+    'Collision probability is <strong>1 − θ/π</strong>: more similar (smaller angle) means more likely to share a bucket — the formal locality guarantee.',
+    'A query <strong>probes one bucket and re-ranks the candidates</strong>, giving sub-linear approximate nearest-neighbor search instead of a full scan.',
+    'Tune recall vs precision with <strong>banding</strong> (several short-signature tables), and match the <strong>hash family to the metric</strong> — SimHash for cosine, MinHash for Jaccard, p-stable for Euclidean.',
+  ]}
+/>
+
+Next up: **The Z-Algorithm** — back to exact, deterministic string matching, where instead of hashing
+for approximate collisions we compute precise prefix-match lengths in linear time.

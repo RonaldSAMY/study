@@ -1,0 +1,243 @@
+---
+title: The Greedy Strategy
+track: dsa-greedy
+summary: "Greedy algorithms grab the best-looking choice right now and never look back: fast and simple, but only optimal when a greedy-choice property holds."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-dynamic-programming/lis
+leadsTo:
+  - dsa-greedy/activity-selection
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GreedyCoinChange from '../../../components/demos/GreedyCoinChange.tsx';
+
+## The hook: paying with the biggest coins first
+
+A cashier handing back change does not solve an optimization problem in their head. They reach for
+the largest coin that still fits, then the next largest, and so on. For real-world coins this simple
+habit gives the fewest coins every time. That instinct — **take the biggest bite you can right now,
+then repeat** — is the whole of greedy algorithm design. The hard part is not the habit; it is knowing
+when the habit is actually right.
+
+<Callout type="intuition" title="The one-sentence idea">
+A greedy algorithm builds a solution one step at a time, always taking the choice that looks best at
+this instant, and never reconsidering — which is optimal exactly when each locally best choice is safe.
+</Callout>
+
+## Intuition: when is "best right now" also "best overall"?
+
+In the Longest Increasing Subsequence lesson you saw dynamic programming weigh *every* option before
+committing. Greedy is the opposite temperament: it commits immediately and moves on. That makes it
+faster and simpler, but it only finds the true optimum when two properties hold.
+
+1. **Greedy-choice property** — there is always an optimal solution that *contains* the greedy choice.
+   Picking it first never paints you into a corner.
+2. **Optimal substructure** — after making that choice, what remains is a smaller version of the same
+   problem, and solving it optimally finishes the job.
+
+The standard way to *prove* the greedy-choice property is the **exchange argument**. Take any optimal
+solution that does not start with the greedy choice. Swap its first choice for the greedy one and show
+the solution is no worse. Since you can always exchange your way toward the greedy choice without losing
+value, some optimal solution must begin with it. When that swap fails — when exchanging makes things
+worse — greedy is the wrong tool and you fall back to dynamic programming.
+
+## Play with it
+
+The demo makes change for an amount using a coin set, grabbing the largest coin that fits at each step.
+Run it on the everyday coins `25, 10, 5, 1` and greedy nails the minimum. Then load coins `1, 3, 4` with
+amount `6` and watch greedy take three coins where two would do.
+
+<GreedyCoinChange client:visible />
+
+<Callout type="tip">
+Greedy is a hypothesis, not a guarantee. The fastest way to test it is to hunt for a counterexample —
+one input where the locally best move leads to a worse total. If you cannot find one and can sketch an
+exchange argument, trust it.
+</Callout>
+
+## How it works
+
+Making change for `63` with `25, 10, 5, 1`, greedy peels off the biggest coin each round:
+
+```
+remaining 63 → take 25 → 38
+remaining 38 → take 25 → 13
+remaining 13 → take 10 → 3
+remaining  3 → take  1 →  2
+remaining  2 → take  1 →  1
+remaining  1 → take  1 →  0
+result: 25, 25, 10, 1, 1, 1  → 6 coins (optimal)
+```
+
+Each step shrinks the problem to a smaller identical one (make change for the remainder), and for this
+coin system the big-coin choice is always safe. Compare greedy against a dynamic-programming minimum to
+see where the two agree and where they part ways:
+
+<CodeRunner
+  client:visible
+  code={`// Greedy: take the largest coin that fits, repeat.
+function greedyCoins(amount, coins) {
+  const sorted = [...coins].sort((a, b) => b - a);
+  let count = 0;
+  for (const c of sorted) { count += Math.floor(amount / c); amount %= c; }
+  return amount === 0 ? count : -1;
+}
+
+// DP: the true minimum number of coins (always correct).
+function dpCoins(amount, coins) {
+  const dp = new Array(amount + 1).fill(Infinity);
+  dp[0] = 0;
+  for (let i = 1; i <= amount; i++)
+    for (const c of coins) if (c <= i) dp[i] = Math.min(dp[i], dp[i - c] + 1);
+  return dp[amount] === Infinity ? -1 : dp[amount];
+}`}
+  tests={[
+    { expr: 'greedyCoins(63, [25,10,5,1])', label: 'greedy on canonical coins' },
+    { expr: 'dpCoins(63, [25,10,5,1])', label: 'optimal on canonical coins' },
+    { expr: 'greedyCoins(6, [1,3,4])', label: 'greedy on [1,3,4]' },
+    { expr: 'dpCoins(6, [1,3,4])', label: 'optimal on [1,3,4]' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — the greedy coin maker beside the DP that proves greed can be wrong:
+
+```ts
+// /dsa/14-greedy/greedy-basics.ts
+function greedyMinCoins(amount: number, coins: number[]): number {
+    const sorted = [...coins].sort((a, b) => b - a);
+    let count = 0;
+    for (const coin of sorted) {
+        count += Math.floor(amount / coin);   // take as many of the biggest as fit
+        amount %= coin;                        // then move to the next size down
+    }
+    return amount === 0 ? count : -1;
+}
+
+function dpMinCoins(amount: number, coins: number[]): number {
+    const dp = new Array(amount + 1).fill(Infinity);
+    dp[0] = 0;
+    for (let i = 1; i <= amount; i++) {
+        for (const coin of coins) {
+            if (coin <= i && dp[i - coin] + 1 < dp[i]) {
+                dp[i] = dp[i - coin] + 1;      // consider EVERY coin, not just the biggest
+            }
+        }
+    }
+    return dp[amount] === Infinity ? -1 : dp[amount];
+}
+```
+
+Run the full file: `npx tsx 14-greedy/greedy-basics.ts`.
+
+## Complexity
+
+A greedy pass usually costs a sort plus a single sweep, which is why it is so attractive:
+
+$$
+T(n) = O(n \log n), \qquad S(n) = O(1).
+$$
+
+| Approach | Time | Space | Always optimal? |
+|----------|------|-------|-----------------|
+| Greedy | $O(n \log n)$ | $O(1)$ | Only with the greedy-choice property |
+| Dynamic programming | $O(n \cdot W)$ | $O(W)$ | Yes |
+| Brute force | $O(2^n)$ | $O(n)$ | Yes |
+
+The trade is stark: greedy is dramatically cheaper, but you must *earn* its correctness with a proof.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Networking" icon="📶">
+Dijkstra's shortest-path algorithm is greedy: it permanently settles the closest unvisited node at each
+step. With non-negative edge weights that local choice is provably safe, so the first time you reach a
+node you already have its shortest distance.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="💸">
+A cash machine dispensing the fewest notes uses greedy coin change on banknote denominations. Because
+note systems are designed to be "canonical," grabbing the largest note that fits is always optimal — a
+property the bank relies on without re-deriving it each time.
+</ExampleCard>
+
+<ExampleCard domain="Climate" icon="🌦️">
+Allocating a fixed carbon budget by funding the cheapest tonnes of abatement first is a greedy sweep
+over a "marginal abatement cost curve." It maximizes emissions cut per dollar — the same value-density
+logic behind fractional knapsack, which is coming up next.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Greedy is a claim that needs proof.** The most common interview mistake is asserting a greedy rule
+  works without an exchange argument. If you cannot argue it, look for a counterexample.
+- **Non-canonical coins break greedy.** Coins `1, 3, 4` and amount `6` give greedy three coins (`4+1+1`)
+  but two suffice (`3+3`). The big-coin choice is no longer safe, so dynamic programming is required.
+- **"Maximize value, not count" is a red flag.** Activity selection by count is greedy; the moment items
+  carry different weights or profits, greedy often fails and you need DP (you will see this contrast in
+  fractional vs 0/1 knapsack).
+- **Interview cue:** if the problem says "minimum coins / maximum non-overlapping / cheapest first," try
+  greedy first — it is fast to sketch and you can fall back to DP if a counterexample appears.
+
+## Practice
+
+1. **Easy:** Make change for `30` with coins `25, 10, 5, 1` by hand using the greedy rule. How many coins?
+2. **Easy:** Find an amount under `10` where greedy on coins `1, 5, 6, 9` uses more coins than necessary.
+3. **Medium:** Argue with an exchange argument why greedy is optimal for the coin set `1, 5, 10, 25`.
+4. **Medium:** Given costs and an unlimited budget, sketch a greedy rule for "buy as many distinct items
+   as possible" and prove it sorts by price ascending.
+5. **Hard:** Decide whether greedy "always send the closest courier" minimizes total delivery time, or
+   construct a counterexample where it does not.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the greedy-choice property guarantee?',
+      options: [
+        'Greedy is always faster than DP',
+        'Some optimal solution contains the greedy choice, so picking it first is safe',
+        'The problem has no optimal substructure',
+        'Greedy never needs sorting',
+      ],
+      answer: 1,
+      explain: 'The greedy-choice property says an optimal solution exists that includes the greedy pick — that is exactly what makes committing to it without backtracking correct.',
+    },
+    {
+      q: 'For coins [1, 3, 4] and amount 6, why does greedy fail?',
+      options: [
+        'It runs out of coins',
+        'It picks 4 then 1 then 1 (three coins) when 3 + 3 uses only two',
+        'The amount is odd',
+        'Greedy needs the coins sorted ascending',
+      ],
+      answer: 1,
+      explain: 'Greedy grabs the largest coin (4), leaving 2 that needs two 1s — three coins total. The optimum 3 + 3 uses two, so the greedy-choice property does not hold for this coin set.',
+    },
+    {
+      q: 'Which proof technique is the standard way to justify a greedy choice?',
+      options: ['Induction on array length', 'The exchange argument', 'Big-O analysis', 'Memoization'],
+      answer: 1,
+      explain: 'The exchange argument swaps a non-greedy first choice in an optimal solution for the greedy one and shows the result is no worse, proving an optimal solution can start greedily.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A greedy algorithm makes the <strong>locally best choice</strong> at each step and <strong>never reconsiders</strong>.',
+    'It is optimal only with the <strong>greedy-choice property</strong> plus <strong>optimal substructure</strong>.',
+    'The <strong>exchange argument</strong> is the standard proof: swap toward the greedy choice without losing value.',
+    'Greedy is typically <strong>O(n log n) time and O(1) space</strong> — far cheaper than DP when it applies.',
+    'When the greedy choice is unsafe (e.g. non-canonical coins, weighted items), fall back to <strong>dynamic programming</strong>.',
+  ]}
+/>
+
+Next up: **Activity Selection** — the cleanest example of a greedy choice that provably wins, where
+sorting by finish time lets you schedule the most events possible.

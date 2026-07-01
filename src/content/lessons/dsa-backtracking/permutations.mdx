@@ -1,0 +1,279 @@
+---
+title: Permutations
+track: dsa-backtracking
+summary: "A permutation fixes one unused element at each position and recurses — and the same un-choose retreat generates all n! orderings with a single shared array."
+difficulty: beginner
+estMinutes: 16
+prereqs:
+  - dsa-backtracking/backtracking-intro
+leadsTo:
+  - dsa-backtracking/combinations
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BtPermutationTree from '../../../components/demos/BtPermutationTree.tsx';
+
+## The hook: how many ways can the band line up?
+
+Three musicians walk on stage to take a bow. How many distinct left-to-right orders can they stand in? Pick
+anyone for the leftmost spot (3 ways), anyone of the remaining two for the middle (2 ways), and the last one
+is forced (1 way): `3 x 2 x 1 = 6`. That product is the **factorial**, and the six orders are the
+**permutations** of the band.
+
+Permutations are arrangements where **order matters** — `[guitar, bass, drums]` is a different photo than
+`[drums, bass, guitar]`. Backtracking generates every one of them by deciding "who stands here?" position by
+position.
+
+<Callout type="intuition" title="The one-sentence idea">
+To list all permutations, fill positions left to right: at each position try every element not yet used,
+recurse, then mark it unused again — the un-choose step that frees it for the next branch.
+</Callout>
+
+## Intuition: a tree where each level fixes one position
+
+Picture the choice tree for `[1, 2, 3]`. The root is empty. The first level chooses who goes in position 1
+(three branches). The second level chooses position 2 from the two that remain, and the last position is
+forced. Every leaf is a complete ordering, and there are exactly `3! = 6` of them.
+
+The bookkeeping is a `used[]` flag array. "Choose element i" means set `used[i] = true` and append it;
+"un-choose" means pop it and set `used[i] = false`. Because every leaf sits at depth n, no branch is ever
+pruned for being incomplete — permutations explore the whole tree. The only pruning appears with
+**duplicates** (next section).
+
+This is the same machinery as the ML combinatorics track's [counting of
+permutations](/lessons/combinatorics/permutations) — there you learned *how many* ($n!$); here you learn how
+to *enumerate* them.
+
+## Play with it
+
+Step through the permutation tree below. The indigo path from the root is the arrangement built so far; a
+complete ordering lights up emerald. Now type `1, 1, 2` and reload: a repeated value that would produce a
+duplicate ordering is pruned in red, collapsing 6 leaves down to 3 distinct permutations.
+
+<BtPermutationTree client:visible />
+
+<Callout type="tip">
+With distinct inputs the tree is perfectly bushy — n branches, then n−1, then n−2 — so the leaf count is
+exactly n!. The duplicate prune is the "skip equal siblings" trick: only the first copy of a repeated value
+is allowed to start a branch at each level.
+</Callout>
+
+## How it works
+
+The cleanest template tracks which elements are still available:
+
+```ts
+function permute(nums) {
+  const result = [];
+  const path = [];
+  const used = new Array(nums.length).fill(false);
+  function backtrack() {
+    if (path.length === nums.length) { result.push([...path]); return; }
+    for (let i = 0; i < nums.length; i++) {
+      if (used[i]) continue;          // already placed → skip
+      used[i] = true; path.push(nums[i]);   // choose
+      backtrack();                          // explore
+      path.pop(); used[i] = false;          // un-choose
+    }
+  }
+  backtrack();
+  return result;
+}
+```
+
+**Dry run** of the first branch on `[1, 2, 3]`:
+
+```
+[]            → place 1 → [1]
+[1]           → place 2 → [1,2]
+[1,2]         → place 3 → [1,2,3]  ✓
+back up, un-place 3 and 2
+[1]           → place 3 → [1,3]
+[1,3]         → place 2 → [1,3,2]  ✓
+```
+
+Try the runnable version, including the duplicate-aware variant:
+
+<CodeRunner
+  client:visible
+  code={`function permute(nums) {
+  const result = [], path = [], used = new Array(nums.length).fill(false);
+  function backtrack() {
+    if (path.length === nums.length) { result.push([...path]); return; }
+    for (let i = 0; i < nums.length; i++) {
+      if (used[i]) continue;
+      used[i] = true; path.push(nums[i]);
+      backtrack();
+      path.pop(); used[i] = false;
+    }
+  }
+  backtrack();
+  return result;
+}
+
+// Distinct permutations even when the input repeats
+function permuteUnique(nums) {
+  nums = [...nums].sort((a, b) => a - b);
+  const result = [], path = [], used = new Array(nums.length).fill(false);
+  function backtrack() {
+    if (path.length === nums.length) { result.push([...path]); return; }
+    for (let i = 0; i < nums.length; i++) {
+      if (used[i]) continue;
+      if (i > 0 && nums[i] === nums[i - 1] && !used[i - 1]) continue; // prune dup
+      used[i] = true; path.push(nums[i]);
+      backtrack();
+      path.pop(); used[i] = false;
+    }
+  }
+  backtrack();
+  return result;
+}`}
+  tests={[
+    { expr: 'permute([1,2,3]).length', label: 'count of permutations of [1,2,3]' },
+    { expr: 'JSON.stringify(permute([1,2,3]))', label: 'all permutations of [1,2,3]' },
+    { expr: 'permuteUnique([1,1,2]).length', label: 'distinct permutations of [1,1,2]' },
+  ]}
+/>
+
+## The real implementation
+
+The course file offers three equivalent engines; the **swap** version is the most memory-frugal because it
+permutes the array in place instead of carrying a `used[]` array:
+
+```ts
+// /dsa/15-backtracking/permutations.ts
+function permuteSwap<T>(nums: T[]): T[][] {
+    const result: T[][] = [];
+    const arr = [...nums];
+    function backtrack(start: number): void {
+        if (start === arr.length) { result.push([...arr]); return; }
+        for (let i = start; i < arr.length; i++) {
+            [arr[start], arr[i]] = [arr[i], arr[start]];  // choose: fix arr[i] here
+            backtrack(start + 1);                          // explore
+            [arr[start], arr[i]] = [arr[i], arr[start]];  // un-choose: swap back
+        }
+    }
+    backtrack(0);
+    return result;
+}
+```
+
+Run the full file: `npx tsx 15-backtracking/permutations.ts`.
+
+## Complexity
+
+There are $n!$ permutations, and copying each finished arrangement costs $O(n)$:
+
+$$
+T(n) = O(n \cdot n!), \qquad S(n) = O(n).
+$$
+
+Factorial growth is brutal — it outpaces every exponential. A few values make the danger concrete:
+
+| $n$ | $n!$ |
+|-----|------|
+| 5 | 120 |
+| 8 | 40,320 |
+| 10 | 3,628,800 |
+| 13 | over 6 billion |
+
+| Method | Idea | Extra space |
+|--------|------|-------------|
+| `used[]` flags | mark elements taken | $O(n)$ |
+| Swap in place | fix one slot per level | $O(1)$ beyond output |
+| Heap's algorithm | minimal-swap iteration | $O(1)$ |
+
+The lesson: enumerate full permutations only for small n. Past a dozen items you almost always want a
+*formula*, a *sample*, or a smarter pruned search rather than the whole list.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Logistics" icon="🚚">
+The travelling-salesperson route is a permutation of the stops. Brute force tries every ordering — fine for
+8 cities, hopeless for 30 — which is exactly why factorial growth pushes logistics toward heuristics and
+branch-and-bound pruning.
+</ExampleCard>
+
+<ExampleCard domain="Cryptography" icon="🔐">
+A substitution cipher is a permutation of the alphabet — one of 26! ≈ 4 × 10²⁶ possible mappings. That
+astronomically large permutation space is what made simple substitution feel secure before frequency
+analysis cracked it.
+</ExampleCard>
+
+<ExampleCard domain="Genetics" icon="🧬">
+Listing the possible orders in which a set of genes could appear along a chromosome is a permutation
+problem; biologists enumerate small cases to test which orderings are consistent with observed crossover
+data.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Reusing an element.** Without the `used[i]` guard (or the swap discipline) you generate sequences with
+  repeats, not permutations. The check that an element is still free is non-negotiable.
+- **Wrong duplicate prune.** For inputs with repeats you must **sort first**, then skip `nums[i]` when it
+  equals `nums[i-1]` and the previous copy is unused. Skipping without sorting misses or double-counts.
+- **Confusing permutations with combinations.** If `[1, 2]` and `[2, 1]` should count as the *same* answer,
+  you want combinations, not permutations — different problem, smaller tree.
+- **Interview cue:** "all orderings", "all arrangements", "anagrams of a string" signal permutations. State
+  the $n!$ cost up front so the interviewer knows you understand the blow-up.
+
+## Practice
+
+1. **Easy:** By hand, list all permutations of `[a, b, c]`. Confirm there are 6.
+2. **Easy:** How many distinct permutations does `[1, 1, 2]` have? Explain why it is not 6.
+3. **Medium:** Generate all permutations of the string `"abc"` by reusing the swap template on a char array.
+4. **Medium:** Implement k-permutations: arrangements of length k from n items by stopping recursion when the
+   path reaches length k.
+5. **Hard:** Next Permutation (LeetCode 31): rearrange a list into the next lexicographically greater ordering
+   in $O(n)$ without generating them all — find the pivot, swap, reverse the suffix.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How many permutations does a list of 4 distinct elements have?',
+      options: ['16', '24', '12', '256'],
+      answer: 1,
+      explain: '4! = 4 × 3 × 2 × 1 = 24.',
+    },
+    {
+      q: 'In the used[]-array template, what role does used[i] play?',
+      options: [
+        'It counts how many times element i appears',
+        'It marks whether element i is already placed in the current arrangement',
+        'It stores the result',
+        'It prunes by sum',
+      ],
+      answer: 1,
+      explain: 'used[i] = true means element i is in the current path; the loop skips it so each element is used exactly once per permutation.',
+    },
+    {
+      q: 'To enumerate DISTINCT permutations of [2, 2, 3], what must you do first?',
+      options: [
+        'Nothing special — the basic template handles it',
+        'Sort the array, then skip a value equal to its predecessor when the predecessor is unused',
+        'Remove all duplicates',
+        'Use a hash set on the final results only',
+      ],
+      answer: 1,
+      explain: 'Sorting groups equal values; the skip rule lets only the first unused copy start a branch at each level, avoiding repeated orderings cheaply.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A permutation is an <strong>ordered</strong> arrangement; there are <strong>n!</strong> of them for n distinct items.',
+    'Backtracking fills positions left to right, marking elements <strong>used</strong> and un-marking on the way back.',
+    'The <strong>swap-in-place</strong> variant needs no extra array — it fixes one slot per recursion level.',
+    'For duplicates, <strong>sort then skip equal unused siblings</strong> to emit each distinct ordering once.',
+    'Factorial growth means full enumeration is practical only for <strong>small n</strong> — otherwise use formulas or pruning.',
+  ]}
+/>
+
+Next up: **Combinations & Subsets** — drop the ordering, move forward only, and the tree shrinks from n! to
+manageable selections.

@@ -1,0 +1,230 @@
+---
+title: Activity Selection
+track: dsa-greedy
+summary: "Sort events by finish time and keep every one that starts after the last you kept: the earliest-finish choice provably packs in the most non-overlapping activities."
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - dsa-greedy/greedy-intro
+leadsTo:
+  - dsa-greedy/fractional-knapsack
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GreedyActivitySelection from '../../../components/demos/GreedyActivitySelection.tsx';
+
+## The hook: cramming the most talks into one room
+
+A conference has one room and a pile of talks, each with a fixed start and end time. You want to host as
+*many* talks as possible — every talk counts equally, you just want the biggest headcount of sessions.
+Which do you accept? The surprising answer is to ignore start times entirely and obsess over **finish
+times**: always accept the talk that ends soonest among those that still fit. Finishing early frees the
+room sooner, leaving the most runway for everything after.
+
+<Callout type="intuition" title="The one-sentence idea">
+To maximize the number of non-overlapping activities, repeatedly pick the one that finishes earliest and
+is still compatible — finishing soonest leaves the most room for the rest.
+</Callout>
+
+## Intuition: why finish time, not start time or length?
+
+From the greedy intro you know a greedy rule is only as good as its safety proof. Here the greedy choice
+is "the compatible activity with the earliest finish time," and the **exchange argument** makes it
+airtight.
+
+Suppose some optimal schedule does not start with the earliest-finishing activity $g$. Its first
+activity $x$ must finish no earlier than $g$ does. Swap $x$ out and $g$ in. Because $g$ ends at or before
+$x$ ended, $g$ cannot overlap anything that came after $x$ — so the schedule stays valid and keeps the
+same count. We just converted an optimal schedule into one that begins with the greedy choice without
+losing anything. Therefore picking the earliest finisher first is always safe, and by optimal
+substructure the same logic repeats on what remains.
+
+Tempting alternatives fail: picking the **shortest** activity can wedge two long ones apart, and picking
+the **earliest start** can grab a single marathon talk that blocks the whole day.
+
+## Play with it
+
+Edit the activities (each as `start-end`). The demo sorts them by finish time and walks left to right,
+keeping a dashed marker at the last finish it committed to. Green bars are kept; grey bars conflict and
+are skipped.
+
+<GreedyActivitySelection client:visible />
+
+<Callout type="tip">
+Watch the dashed "last finish" line. An activity is kept exactly when its left edge sits at or past that
+line. Every kept bar pushes the line as little as possible to the right — that is the earliest-finish rule
+maximizing future room.
+</Callout>
+
+## How it works
+
+With activities sorted by finish time, sweep once and keep an activity whenever its start is at or after
+the last kept finish:
+
+```
+sorted by end:  B(1-4) C(3-5) D(5-7) A(0-6) F(5-9) E(3-9) G(6-10) H(8-11)
+keep B → lastEnd = 4
+C starts 3 < 4 → skip
+D starts 5 ≥ 4 → keep, lastEnd = 7
+A,F,E start < 7 → skip
+G starts 6 < 7 → skip
+H starts 8 ≥ 7 → keep, lastEnd = 11
+kept: B, D, H  → 3 activities
+```
+
+<CodeRunner
+  client:visible
+  code={`function selectActivities(acts) {
+  const sorted = [...acts].sort((a, b) => a.end - b.end);
+  const kept = [];
+  let lastEnd = -Infinity;
+  for (const a of sorted) {
+    if (a.start >= lastEnd) { kept.push(a.id); lastEnd = a.end; }
+  }
+  return kept;
+}
+
+const acts = [
+  { id: 'A', start: 0, end: 6 }, { id: 'B', start: 1, end: 4 },
+  { id: 'C', start: 3, end: 5 }, { id: 'D', start: 5, end: 7 },
+  { id: 'E', start: 3, end: 9 }, { id: 'F', start: 5, end: 9 },
+  { id: 'G', start: 6, end: 10 }, { id: 'H', start: 8, end: 11 },
+];`}
+  tests={[
+    { expr: "selectActivities(acts).join(', ')", label: 'chosen activities' },
+    { expr: 'selectActivities(acts).length', label: 'how many fit' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — sort by end time, then a single linear sweep:
+
+```ts
+// /dsa/14-greedy/activity-selection.ts
+function activitySelection<T extends Activity>(activities: T[]): T[] {
+    if (activities.length === 0) return [];
+
+    // Sort by end time - THE KEY INSIGHT!
+    const sorted = [...activities].sort((a, b) => a.end - b.end);
+
+    const selected: T[] = [sorted[0]];
+    let lastEnd = sorted[0].end;
+
+    for (let i = 1; i < sorted.length; i++) {
+        if (sorted[i].start >= lastEnd) {   // compatible with the last pick?
+            selected.push(sorted[i]);
+            lastEnd = sorted[i].end;        // commit to its finish time
+        }
+    }
+    return selected;
+}
+```
+
+Run the full file: `npx tsx 14-greedy/activity-selection.ts`.
+
+## Complexity
+
+The sort dominates; the sweep is linear and uses a single variable:
+
+$$
+T(n) = O(n \log n), \qquad S(n) = O(1).
+$$
+
+| Step | Cost |
+|------|------|
+| Sort by finish time | $O(n \log n)$ |
+| Single greedy sweep | $O(n)$ |
+| Extra space (just `lastEnd`) | $O(1)$ |
+
+If the activities arrive already sorted by finish time, the whole thing collapses to a single $O(n)$ pass.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Broadcasting" icon="📺">
+Scheduling the maximum number of non-overlapping ad spots in a single commercial break is exact activity
+selection: each ad has a fixed slot, and accepting the earliest-ending compatible ad packs in the most.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="🔭">
+A telescope can observe one target at a time, each within a narrow visibility window. To log the most
+observations in a night, accept the target whose window closes first — finishing early keeps the
+instrument free for later windows.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+A single 3D printer with a queue of jobs that each have a fixed print window maximizes completed jobs by
+the same rule. Minimum-arrows-to-burst-balloons and non-overlapping-interval removal are the very same
+greedy in disguise.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Sorting by the wrong key.** Sorting by start time, by duration, or by "least conflicting" all fail.
+  Only **finish time** carries the exchange-argument guarantee.
+- **Equal counts, unequal value.** This greedy maximizes *count*. If activities carry different profits,
+  it can be badly suboptimal — that is weighted interval scheduling and it needs DP.
+- **Half-open vs closed intervals.** Decide whether an activity ending exactly when the next begins is a
+  conflict. Using `start >= lastEnd` treats touching intervals as compatible; be explicit in interviews.
+- **Same problem, different phrasing.** "Minimum intervals to remove to make the rest non-overlapping" is
+  just `n` minus the number you can keep — recognize the disguise.
+
+## Practice
+
+1. **Easy:** From `(1-3), (2-5), (4-7), (6-8)` select the most non-overlapping activities by hand.
+2. **Easy:** Show that sorting by shortest duration first fails on `(0-5), (4-6), (5-10)`.
+3. **Medium:** Modify the sweep to also return how many activities were *rejected*.
+4. **Medium:** LeetCode 452 — given balloon intervals, find the minimum number of arrows to burst them all
+   (hint: sort by end, shoot at each end).
+5. **Hard:** Extend the algorithm to `k` rooms so you can run `k` activities at once, maximizing total count.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which sort key makes the greedy activity-selection choice provably optimal?',
+      options: ['Earliest start time', 'Shortest duration', 'Earliest finish time', 'Most overlaps'],
+      answer: 2,
+      explain: 'Sorting by finish time means the earliest-finishing compatible activity leaves the most room — the exchange argument shows this choice is always safe.',
+    },
+    {
+      q: 'After sorting by end time, when do we keep activity i?',
+      options: [
+        'When its end is before the last kept end',
+        'When its start is at or after the last kept end',
+        'When it is the shortest remaining',
+        'Always — every activity is kept',
+      ],
+      answer: 1,
+      explain: 'We keep activity i exactly when start[i] >= lastEnd, meaning it does not overlap the most recently committed activity.',
+    },
+    {
+      q: 'Why does this greedy fail when activities have different profits?',
+      options: [
+        'Sorting becomes impossible',
+        'It maximizes the count of activities, not their total value',
+        'The intervals start overlapping',
+        'It would need O(n^2) time',
+      ],
+      answer: 1,
+      explain: 'Earliest-finish maximizes how many activities you fit, ignoring value. With weights you might prefer one lucrative long activity over several cheap ones — that needs DP.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Sort activities by <strong>finish time</strong>, then keep each one whose start is at or after the last kept finish.',
+    'The <strong>earliest-finish</strong> choice is safe by an exchange argument — it leaves maximum room for the rest.',
+    'Runs in <strong>O(n log n)</strong> time (sort) and <strong>O(1)</strong> extra space.',
+    'This maximizes the <strong>count</strong> of activities; different profits require weighted scheduling with <strong>DP</strong>.',
+    'Burst-balloons and non-overlapping-interval removal are the <strong>same greedy</strong> wearing a disguise.',
+  ]}
+/>
+
+Next up: **Fractional Knapsack** — when items are divisible, a different greedy key (value per kilogram)
+wins, and we will contrast it sharply with the 0/1 knapsack that needs dynamic programming.

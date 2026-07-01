@@ -1,0 +1,293 @@
+---
+title: Segment Trees
+track: dsa-advanced-algorithms
+summary: "A recursive tree of ranges answers any associative range query in O(log n) — and lazy propagation makes whole-range updates just as cheap."
+difficulty: advanced
+estMinutes: 22
+prereqs:
+  - dsa-advanced-algorithms/fenwick-tree
+leadsTo:
+  - dsa-advanced-algorithms/math-algorithms
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvSegmentTree from '../../../components/demos/AdvSegmentTree.tsx';
+
+## The hook: the question the Fenwick tree can't answer
+
+The [Fenwick tree](/lessons/dsa-advanced-algorithms/fenwick-tree) gave us cheap prefix sums by leaning
+on one fact: a range sum is `prefix(r) - prefix(l-1)`. But ask it for the **minimum** temperature in
+hours 9 to 17, or to **add 5 degrees to every hour in a maintenance window**, and it falls silent —
+minima can't be subtracted, and it has no notion of touching a whole range at once. The segment tree
+answers all of these. It is the Swiss-army knife of range problems: build it once, and any *associative*
+operation rides along.
+
+<Callout type="intuition" title="The one-sentence idea">
+Store the answer for every halving range in a binary tree; then any query range is covered by O(log n)
+"canonical" nodes, and any range update can be parked as a lazy tag and pushed down only when needed.
+</Callout>
+
+## Intuition: precompute every halving range
+
+Split the array in half, then each half in half, all the way down to single elements. Each node holds
+the aggregate (sum, min, max, GCD, …) of its range. The root covers everything; its children cover the
+two halves; leaves are single cells.
+
+To **query** a range `[l, r]`, walk down from the root and classify each node:
+
+- **No overlap** with `[l, r]` — ignore it.
+- **Fully inside** `[l, r]` — its stored answer is exactly what we need; take it and stop (this is a
+  *canonical* node).
+- **Partial overlap** — recurse into both children and combine.
+
+The magic is that any range decomposes into at most two canonical nodes per level, so a query touches
+only O(log n) nodes. The same recursion handles a **point update**: descend to the one leaf, change it,
+and recombine on the way back up.
+
+**Range updates** (add 5 to everything in `[l, r]`) would be slow if we descended to every leaf. Lazy
+propagation fixes that: when a node is *fully* covered by the update, record the pending change as a
+"lazy" tag on that node and stop. Only if a later query or update must go *through* that node do we
+**push the tag down** to its children. Work is deferred until someone actually needs it.
+
+## Play with it
+
+Pick a query range with the **l** and **r** sliders and play **Range query** to watch the recursion
+light up the canonical nodes that tile your range. Switch to **Range add (lazy)** to see fully-covered
+nodes get a lazy tag while partial nodes push down first.
+
+<AdvSegmentTree client:visible />
+
+<Callout type="tip">
+In query mode, count the green (canonical) nodes for different ranges. You'll never need more than two
+per level — that visual is the O(log n) bound. A range like <code>[0..3]</code> on an 8-leaf tree
+collapses to a single canonical node.
+</Callout>
+
+## How it works
+
+For `arr = [2, 1, 5, 3]`, the sum tree (stored in a flat array, child of node `k` at `2k+1` and `2k+2`)
+looks like:
+
+```
+                 [0-3]: 11
+                /         \
+          [0-1]: 3      [2-3]: 8
+          /     \        /     \
+      [0]: 2  [1]: 1  [2]: 5  [3]: 3
+```
+
+Query **sum[1, 3]** from the root:
+
+```
+[0-3] partial → recurse
+  [0-1] partial → recurse
+     [0] outside [1,3] → skip
+     [1] inside → take 1
+  [2-3] inside [1,3] → take 8   (canonical, stop)
+sum = 1 + 8 = 9   ✓
+```
+
+Now **add +10 to [1, 3]** with lazy propagation: `[0-3]` is partial, so push down and recurse; `[0-1]`
+is partial (only index 1 is covered), recurse; `[1]` covered, add; `[2-3]` fully covered — tag it lazy
+with +10 and stop without touching leaves `[2]` and `[3]`.
+
+<CodeRunner
+  client:visible
+  code={`// Segment tree for range-sum with point update (recursive, flat array)
+function makeSegTree(arr) {
+  const n = arr.length;
+  const tree = new Array(4 * n).fill(0);
+  function build(node, s, e) {
+    if (s === e) { tree[node] = arr[s]; return; }
+    const m = (s + e) >> 1;
+    build(2*node+1, s, m); build(2*node+2, m+1, e);
+    tree[node] = tree[2*node+1] + tree[2*node+2];
+  }
+  function update(node, s, e, i, val) {
+    if (s === e) { tree[node] = val; return; }
+    const m = (s + e) >> 1;
+    if (i <= m) update(2*node+1, s, m, i, val);
+    else update(2*node+2, m+1, e, i, val);
+    tree[node] = tree[2*node+1] + tree[2*node+2];
+  }
+  function query(node, s, e, l, r) {
+    if (r < s || l > e) return 0;            // no overlap
+    if (l <= s && e <= r) return tree[node]; // fully inside
+    const m = (s + e) >> 1;                   // partial: split
+    return query(2*node+1, s, m, l, r) + query(2*node+2, m+1, e, l, r);
+  }
+  build(0, 0, n - 1);
+  return {
+    sum: (l, r) => query(0, 0, n - 1, l, r),
+    set: (i, v) => update(0, 0, n - 1, i, v),
+  };
+}`}
+  tests={[
+    { expr: 'makeSegTree([2,1,5,3,4,6,2,7]).sum(1,4)', label: 'sum[1..4]' },
+    { expr: 'makeSegTree([2,1,5,3]).sum(0,3)', label: 'sum[0..3]' },
+    { expr: '(() => { const t = makeSegTree([2,1,5,3]); t.set(2, 10); return t.sum(1,3); })()', label: 'after set idx2=10, sum[1..3]' },
+  ]}
+/>
+
+## The real implementation
+
+The course file's lazy tree defers range adds and pushes them down on demand:
+
+```ts
+// /dsa/17-advanced-algorithms/segment-tree.ts
+class LazySegmentTree {
+    private tree: number[];
+    private lazy: number[];
+    private n: number;
+
+    private pushDown(node: number, start: number, end: number): void {
+        if (this.lazy[node] !== 0) {
+            const mid = Math.floor((start + end) / 2);
+            const left = 2 * node + 1, right = 2 * node + 2;
+            this.tree[left]  += this.lazy[node] * (mid - start + 1);
+            this.tree[right] += this.lazy[node] * (end - mid);
+            this.lazy[left]  += this.lazy[node];   // propagate the tag
+            this.lazy[right] += this.lazy[node];
+            this.lazy[node] = 0;                   // cleared once pushed
+        }
+    }
+
+    rangeUpdate(node: number, start: number, end: number,
+                left: number, right: number, value: number): void {
+        if (right < start || left > end) return;          // no overlap
+        if (left <= start && end <= right) {               // fully covered
+            this.tree[node] += value * (end - start + 1);  // apply now...
+            this.lazy[node] += value;                      // ...defer children
+            return;
+        }
+        this.pushDown(node, start, end);                   // partial: settle debt
+        const mid = Math.floor((start + end) / 2);
+        this.rangeUpdate(2*node+1, start, mid, left, right, value);
+        this.rangeUpdate(2*node+2, mid+1, end, left, right, value);
+        this.tree[node] = this.tree[2*node+1] + this.tree[2*node+2];
+    }
+}
+```
+
+Run the full file: `npx tsx 17-advanced-algorithms/segment-tree.ts`. It also ships min/max trees and
+`countSmaller` (LeetCode 315).
+
+## Complexity
+
+Every operation visits O(log n) nodes; lazy propagation keeps range updates in the same class:
+
+$$
+T_{\text{query}} = T_{\text{update}} = T_{\text{rangeUpdate}} = O(\log n), \qquad S(n) = O(4n).
+$$
+
+| Structure | Range sum | Range min/max | Range update | Space |
+|-----------|-----------|---------------|--------------|-------|
+| Prefix-sum array | $O(1)$ | — | $O(n)$ | $O(n)$ |
+| Fenwick tree | $O(\log n)$ | — | limited | $O(n)$ |
+| **Segment tree** | $O(\log n)$ | $O(\log n)$ | $O(\log n)$* | $O(4n)$ |
+| Sparse table | $O(1)$ | $O(1)$ | — | $O(n \log n)$ |
+
+<small>*with lazy propagation.</small> The segment tree trades memory and code for the ability to handle
+*any* associative operation and full range updates.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Meteorology" icon="🌡️">
+Hourly temperature logs where you need "the hottest hour between 9 and 17" and can also "raise a whole
+window by a calibration offset". A min/max segment tree with lazy add does both in O(log n).
+</ExampleCard>
+
+<ExampleCard domain="Text editors" icon="✍️">
+A rope/segment structure tracks the length of every text chunk so the editor can jump to "character at
+offset k" and apply "insert here, shift everything after" without rescanning the whole document.
+</ExampleCard>
+
+<ExampleCard domain="Computer graphics" icon="🖼️">
+Interval/segment trees power "which shapes overlap this scanline?" during rasterization and collision
+broad-phase, lighting up only the canonical ranges a sweep line currently crosses.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+Coverage tracks over a chromosome answer "max read depth in this region" and "add one read across this
+interval" — a lazy segment tree over base positions keeps both queries and bulk updates logarithmic.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting to push down.** Before recursing into children on a partial query *or* update, settle any
+  pending lazy tag first — otherwise children return stale aggregates.
+- **Wrong identity for "no overlap".** Return the operation's identity: `0` for sum, `+Infinity` for min,
+  `-Infinity` for max, `0` (the "no change" tag) for lazy add. A wrong identity silently corrupts merges.
+- **Lazy value must scale with range length.** For range-add-sum, a tag of `+v` adds `v * (count of
+  covered leaves)` to a node's sum, not just `+v`.
+- **Allocate 4n, not 2n.** A non-power-of-two length pushes the recursion deeper; `4n` is the safe upper
+  bound for the flat array.
+- **Interview cue:** "range query *and* range update", or any aggregate that is not invertible (min, max,
+  GCD), signals a segment tree — mention lazy propagation if updates hit whole ranges.
+
+## Practice
+
+1. **Easy:** For an 8-leaf tree, which canonical nodes cover the query range `[2, 5]`?
+2. **Easy:** Build a min segment tree over `[5, 2, 6, 1, 4]` and query the minimum of `[1, 3]`.
+3. **Medium:** Convert the sum tree to a max tree — what changes in `build`, `query`, and the no-overlap
+   identity?
+4. **Medium:** Implement range-add + range-sum with lazy propagation and verify against a brute-force
+   loop on random inputs.
+5. **Hard:** Solve "Count of Smaller Numbers After Self" (LeetCode 315) with a segment tree over value
+   ranks and a right-to-left sweep.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'During a range query, what do you do when a node’s range is fully inside [l, r]?',
+      options: [
+        'Recurse into both children',
+        'Return the node’s stored aggregate and stop',
+        'Push the lazy tag down',
+        'Return the identity value',
+      ],
+      answer: 1,
+      explain: 'A fully-covered node is "canonical": its stored answer is exactly the contribution of that sub-range, so you take it and stop descending.',
+    },
+    {
+      q: 'What problem does lazy propagation solve?',
+      options: [
+        'Reducing the tree’s memory to O(n)',
+        'Letting range updates avoid touching every leaf, deferring work until a query needs it',
+        'Making point queries O(1)',
+        'Allowing non-associative operations',
+      ],
+      answer: 1,
+      explain: 'A fully-covered node records the pending change as a tag and stops; the tag is pushed to children only when the recursion later passes through.',
+    },
+    {
+      q: 'Why prefer a segment tree over a Fenwick tree for range-minimum queries?',
+      options: [
+        'It uses less memory',
+        'Minimum is not invertible, so prefix subtraction fails; the tree merges sub-ranges directly',
+        'The Fenwick tree cannot be updated',
+        'Segment trees are always faster',
+      ],
+      answer: 1,
+      explain: 'Sums work in a BIT because range = prefix(r) − prefix(l−1). Minima cannot be subtracted, so you need a structure that merges canonical ranges with min directly.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A segment tree stores the aggregate of <strong>every halving range</strong> in a binary tree.',
+    'Any query range is covered by <strong>O(log n) canonical nodes</strong> — fully-inside nodes you take whole.',
+    'It handles <strong>any associative operation</strong>: sum, min, max, GCD — unlike the sum-only Fenwick tree.',
+    '<strong>Lazy propagation</strong> tags fully-covered nodes and pushes the work down only when needed, keeping range updates O(log n).',
+    'Costs <strong>O(4n) space</strong> and more code than a BIT — the price for range updates and non-invertible aggregates.',
+  ]}
+/>
+
+Next up: **Fast Math Building Blocks** — the O(log n) "halve the problem" idea behind this tree reappears
+in fast exponentiation and the Euclidean GCD, the arithmetic primitives that power modular algorithms.

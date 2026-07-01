@@ -1,0 +1,242 @@
+---
+title: "Sparse Tables"
+track: dsa-advanced-structures
+summary: "O(1) range minimums on static arrays: precompute every power-of-two block, then answer any range with two overlapping blocks."
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - dsa-advanced-structures/bloom-filter
+  - dsa-advanced-algorithms/segment-tree
+leadsTo:
+  - dsa-advanced-structures/suffix-tree
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvDsSparseTable from '../../../components/demos/AdvDsSparseTable.tsx';
+
+## The hook: a cheat sheet for "what's the smallest in this stretch?"
+
+You have a fixed array of elevations and thousands of questions of the form "what is the lowest point
+between mile 12 and mile 47?" Scanning each range is $O(n)$ per query — death by a thousand loops. A
+segment tree gets you to $O(\log n)$, but you can do better when the array never changes. The trick:
+precompute the minimum of every block whose length is a **power of two**. Then *any* range, however
+awkward, is covered by just **two** of those blocks that may overlap in the middle — and because taking
+a minimum twice over the same element changes nothing, the overlap is harmless. Two lookups, one
+`min`, done in $O(1)$.
+
+<Callout type="intuition" title="The one-sentence idea">
+Precompute the answer for every length-$2^j$ block by doubling, then cover any query range with two
+overlapping power-of-two blocks — overlap is free because $\min$ is idempotent.
+
+</Callout>
+
+## Intuition: build by doubling, query by overlapping
+
+The table `table[j][i]` holds the minimum of the block starting at $i$ with length $2^j$. Level 0 is the
+array itself (blocks of length 1). To build level $j$, glue two level-$(j-1)$ blocks side by side:
+`table[j][i] = min(table[j-1][i], table[j-1][i + 2^{j-1}])`. Each level doubles the reach, so after
+$\log n$ levels you have every power-of-two block precomputed — $O(n \log n)$ work and space.
+
+Querying a range $[l, r]$ of length $L$ uses the largest power of two that fits, $k = \lfloor \log_2 L
+\rfloor$. One block of length $2^k$ starts at $l$; another ends at $r$ (it starts at $r - 2^k + 1$).
+Since $2 \cdot 2^k \ge L$, those two blocks **together cover the whole range**, overlapping in the
+middle. For a min (or max, gcd, AND, OR) the overlap double-counts some elements — and that is fine,
+because $\min(x, x) = x$. This is the crucial difference from a **segment tree**: a segment tree handles
+updates and any associative operation, but a sparse table needs a *static* array and an **idempotent**
+operation to get its $O(1)$ punchline.
+
+## Play with it
+
+Watch each table cell fill in from two cells one level down (doubling the range), then run a query and
+see the two overlapping blocks that answer it in $O(1)$.
+
+<AdvDsSparseTable client:visible />
+
+<Callout type="tip">
+In the query phase, the two blue blocks are each a precomputed power-of-two block. They overlap on
+purpose — for $\min$ that is harmless. Try a sum instead in your head and you will see why sums need
+*non*-overlapping pieces (and so only get $O(\log n)$).
+</Callout>
+
+## How it works
+
+For `[5, 2, 7, 4, 8, 1, 6, 3]`, building the min table by doubling:
+
+```
+j=0 (len 1): [5, 2, 7, 4, 8, 1, 6, 3]
+j=1 (len 2): [2, 2, 4, 4, 1, 1, 3]          min of each adjacent pair
+j=2 (len 4): [2, 2, 1, 1, 1]                 min of two len-2 blocks
+j=3 (len 8): [1]                             whole array
+
+query min(1, 6):  L = 6, k = floor(log2 6) = 2  -> blocks of length 4
+  block A = table[2][1]            = 2   (covers 1..4)
+  block B = table[2][6 - 4 + 1=3]  = 1   (covers 3..6)
+  answer  = min(2, 1) = 1          (blocks overlap on 3..4 — harmless)
+```
+
+The whole thing, runnable:
+
+<CodeRunner
+  client:visible
+  code={`function buildSparseMin(arr) {
+  const n = arr.length;
+  const log = new Array(n + 1).fill(0);
+  for (let i = 2; i <= n; i++) log[i] = log[i >> 1] + 1;
+  const K = log[n] + 1;
+  const t = Array.from({ length: K }, () => new Array(n).fill(0));
+  for (let i = 0; i < n; i++) t[0][i] = arr[i];
+  for (let j = 1; j < K; j++)
+    for (let i = 0; i + (1 << j) <= n; i++)
+      t[j][i] = Math.min(t[j - 1][i], t[j - 1][i + (1 << (j - 1))]);
+  return { t, log };
+}
+function query(st, l, r) {
+  const j = st.log[r - l + 1];
+  return Math.min(st.t[j][l], st.t[j][r - (1 << j) + 1]); // two overlapping blocks
+}
+const st = buildSparseMin([5, 2, 7, 4, 8, 1, 6, 3]);`}
+  tests={[
+    { expr: 'query(st, 0, 7)', label: 'min(0..7)' },
+    { expr: 'query(st, 1, 6)', label: 'min(1..6)' },
+    { expr: 'query(st, 2, 4)', label: 'min(2..4)' },
+    { expr: 'query(st, 5, 5)', label: 'min(5..5)' },
+  ]}
+/>
+
+## The real implementation
+
+The course file precomputes a `log` lookup table so the query never calls `Math.log`, and the doubling
+build is exactly the recurrence above:
+
+```ts
+// /dsa/21-advanced-data-structures/sparse-table.ts
+private buildTable(arr: number[]): number[][] {
+  const k = this.log[this.n] + 1;
+  const table = Array.from({ length: k }, () => Array(this.n).fill(0));
+  for (let i = 0; i < this.n; i++) table[0][i] = arr[i];          // length-1 blocks
+  for (let j = 1; j < k; j++)
+    for (let i = 0; i + (1 << j) <= this.n; i++)
+      table[j][i] = Math.min(table[j-1][i], table[j-1][i + (1 << (j-1))]); // double
+  return table;
+}
+
+query(l: number, r: number): number {
+  const j = this.log[r - l + 1];                                  // largest power of two ≤ len
+  return Math.min(this.table[j][l], this.table[j][r - (1 << j) + 1]); // two blocks, O(1)
+}
+```
+
+Run the full file: `npx tsx 21-advanced-data-structures/sparse-table.ts`.
+
+## Complexity
+
+Build fills $O(n \log n)$ cells; each query is two array reads and one combine:
+
+$$
+T_\text{build} = O(n \log n), \qquad T_\text{query} = O(1), \qquad S = O(n \log n).
+$$
+
+| Structure | Preprocess | Query | Updates? | Operation needs |
+|-----------|-----------|-------|----------|-----------------|
+| Prefix sums | $O(n)$ | $O(1)$ | no | invertible (sum) |
+| **Sparse table** | $O(n \log n)$ | $O(1)$ | no | **idempotent** (min/max/gcd) |
+| Segment tree | $O(n)$ | $O(\log n)$ | **yes** $O(\log n)$ | associative |
+
+If the array is static and the operation is idempotent, the sparse table's $O(1)$ query is unbeatable;
+the moment you need updates, reach for a [segment tree](/lessons/dsa-advanced-algorithms/segment-tree)
+instead.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Compilers" icon="⚙️">
+The classic $O(1)$ Lowest-Common-Ancestor algorithm reduces LCA to a range-minimum query on an Euler
+tour of the tree, then answers it with a sparse table — turning ancestor questions into table lookups.
+</ExampleCard>
+
+<ExampleCard domain="Finance" icon="📈">
+A backtester replaying fixed historical prices answers "lowest close in this window" across millions of
+windows. The price series never changes, so a one-time sparse table makes every window query $O(1)$.
+</ExampleCard>
+
+<ExampleCard domain="Computer graphics" icon="🖼️">
+Mipmaps precompute a texture at every halved resolution so a shader can sample the right detail level in
+constant time — the same "store every power-of-two scale, then index" idea, applied to images.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Idempotency is mandatory for $O(1)$.** Min, max, gcd, lcm, bitwise AND/OR survive overlap. **Sum and
+  XOR do not** — overlap double-counts, so for those a sparse table needs *disjoint* blocks and becomes
+  $O(\log n)$ per query (a "disjoint sparse table" restores $O(1)$ for those).
+- **Static only.** One changed element invalidates up to $O(n \log n)$ cells. If the data updates, this
+  is the wrong tool.
+- **Precompute the log table.** Calling `Math.log2` per query is slow and float-imprecise; the
+  `log[i] = log[i>>1] + 1` recurrence gives exact integer logs in $O(n)$.
+- **Watch the second index.** The right block starts at `r - (1 << j) + 1`, not `r - (1 << j)`; an
+  off-by-one here is the most common bug.
+
+## Practice
+
+1. **Easy:** For `[5, 2, 7, 4, 8, 1, 6, 3]`, which $k$ and which two blocks answer `min(2, 7)`?
+2. **Easy:** Why is `min` safe under overlapping blocks but `sum` is not? Give a tiny counterexample.
+3. **Medium:** Build a `SparseTableMax` and a `SparseTableGCD` from the same doubling recurrence.
+4. **Medium:** Return the *index* of the minimum in a range (store positions, compare by value) — useful
+   for LCA.
+5. **Hard:** Implement a 2D sparse table answering submatrix-minimum queries in $O(1)$ after
+   $O(nm \log n \log m)$ preprocessing.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why can a sparse-table range-minimum query use two overlapping blocks?',
+      options: [
+        'Because the blocks are always disjoint',
+        'Because min is idempotent: counting an element twice does not change the minimum',
+        'Because it sorts the range first',
+        'Because overlap is corrected by a second pass',
+      ],
+      answer: 1,
+      explain: 'min(x, x) = x, so the elements in the overlap region contribute the same value whether counted once or twice. Two length-2^k blocks covering [l, r] therefore give the exact minimum.',
+    },
+    {
+      q: 'What are the build and query costs of a sparse table?',
+      options: [
+        'O(n) build, O(log n) query',
+        'O(n log n) build, O(1) query',
+        'O(n log n) build, O(log n) query',
+        'O(n) build, O(1) query',
+      ],
+      answer: 1,
+      explain: 'Filling table[j][i] for all j up to log n and all valid i is O(n log n). A query reads just two cells and combines them, so it is O(1).',
+    },
+    {
+      q: 'When should you prefer a segment tree over a sparse table?',
+      options: [
+        'When the array is static',
+        'When the operation is min or max',
+        'When elements can change between queries',
+        'When you want O(1) queries',
+      ],
+      answer: 2,
+      explain: 'Sparse tables are read-only — one update can invalidate O(n log n) cells. A segment tree supports O(log n) point/range updates, so it wins whenever the data changes.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A sparse table precomputes the answer for <strong>every length-2ʲ block</strong> via the doubling recurrence.',
+    'Any range is covered by <strong>two overlapping power-of-two blocks</strong>, giving <strong>O(1)</strong> queries.',
+    'Overlap is safe only for <strong>idempotent</strong> operations — min, max, gcd, AND, OR — not sum or XOR.',
+    'Costs are <strong>O(n log n)</strong> build and space, <strong>O(1)</strong> query, but <strong>no updates</strong>.',
+    'For changing data use a <strong>segment tree</strong>; sparse tables also power O(1) LCA via Euler-tour RMQ.',
+  ]}
+/>
+
+Next up: **Suffix Trees & Arrays** — indexing every suffix of a string so substring search becomes a
+walk down a tree or a binary search over sorted suffixes.

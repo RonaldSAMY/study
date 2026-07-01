@@ -1,0 +1,323 @@
+---
+title: Longest Common Subsequence
+track: dsa-dynamic-programming
+summary: A 2-D DP table that finds the longest sequence two strings share in order — the engine behind diffs, DNA alignment, and spell-check.
+difficulty: intermediate
+estMinutes: 17
+prereqs:
+  - dsa-dynamic-programming/knapsack
+leadsTo:
+  - dsa-dynamic-programming/lis
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpLcsTable from '../../../components/demos/DpLcsTable.tsx';
+
+## The hook: what does "git diff" actually compute?
+
+When you run `git diff`, the tool has to figure out which lines you kept, which you added, and which you
+deleted — and it wants the smallest, cleanest story. The line it draws is exactly the **longest run of
+lines the two versions still share, in order**. Everything outside that shared run is an insertion or a
+deletion. The same question shows up when biologists line up two DNA strands, when a plagiarism checker
+scores two essays, and when your phone guesses you meant "receive" not "recieve". All of them are asking:
+*what is the longest sequence these two things have in common, keeping the original order?*
+
+<Callout type="intuition" title="The one-sentence idea">
+If the last two characters match, they extend the common subsequence by one; if they don't, drop the last
+character from one string or the other and keep whichever choice leaves more behind.
+</Callout>
+
+## Intuition
+
+A **subsequence** keeps characters in their original order but lets you skip any of them. So `ACE` is a
+subsequence of `ABCDE` (skip `B` and `D`), but it is *not* a contiguous substring. The **longest common
+subsequence** (LCS) of two strings is the longest sequence that is a subsequence of both.
+
+Just like 0/1 Knapsack, this problem has **optimal substructure** (the best answer is built from best
+answers to smaller versions) and **overlapping subproblems** (the same smaller versions come up again and
+again). In Knapsack the state was "first $i$ items, capacity $w$." Here we have *two* sequences to walk
+through, so the state needs *two* indices:
+
+$$
+dp[i][j] = \text{LCS length of the first } i \text{ characters of text1 and the first } j \text{ of text2.}
+$$
+
+Now look at the last characters of those two prefixes, `text1[i-1]` and `text2[j-1]`:
+
+- **They match.** Then this shared character caps a longer common subsequence: take the best answer for
+  the *shorter* prefixes and add one. That is the **diagonal** cell, $dp[i-1][j-1] + 1$.
+- **They don't match.** At least one of these two characters cannot be in the LCS, so throw one away:
+  either drop `text1[i-1]` (look **up**, $dp[i-1][j]$) or drop `text2[j-1]` (look **left**,
+  $dp[i][j-1]$), and keep the better of the two.
+
+That is the whole algorithm. Where Knapsack filled a 2-D table indexed by *item* and *weight*, LCS fills a
+2-D table indexed by *position in text1* and *position in text2*.
+
+## Play with it
+
+Type two strings, press **Load**, then step through. Each cell is decided by looking at three neighbours —
+the diagonal on a match, or up-versus-left on a mismatch. Watch the answer collect in the bottom-right.
+
+<DpLcsTable client:visible />
+
+<Callout type="tip">
+A green diagonal means the characters matched and the count went **up by one**. An outlined up/left pair
+means they didn't match, so the cell just copies the **best score seen so far** from a neighbour — it never
+goes down. The bottom-right cell is the final LCS length.
+</Callout>
+
+## How it works
+
+Row $0$ and column $0$ are the base case: an empty prefix shares nothing, so $dp[0][j] = dp[i][0] = 0$.
+Then fill the rest row by row with the recurrence:
+
+$$
+dp[i][j] =
+\begin{cases}
+dp[i-1][j-1] + 1 & \text{if } \text{text1}[i-1] = \text{text2}[j-1] \\[4pt]
+\max\bigl(dp[i-1][j],\; dp[i][j-1]\bigr) & \text{otherwise.}
+\end{cases}
+$$
+
+A short dry run for `text1 = "ABC"`, `text2 = "AC"`:
+
+```
+      ε  A  C
+  ε   0  0  0
+  A   0  1  1     A==A → dp = diag 0 + 1 = 1
+  B   0  1  1     B≠A, B≠C → copy best neighbour
+  C   0  1  2     C==C → dp = diag 1 + 1 = 2
+```
+
+The bottom-right `2` is the LCS length, and walking the matches backward spells `AC`.
+
+To recover the actual string, **backtrack** from the bottom-right: on a match step diagonally and prepend
+the character; on a mismatch move toward the bigger of up/left. (When up and left tie, either choice gives
+a valid LCS — there can be several of the same length.)
+
+<CodeRunner
+  client:visible
+  code={`// LCS length — fill the (m+1) x (n+1) table
+function longestCommonSubsequence(text1, text2) {
+  const m = text1.length, n = text2.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      if (text1[i - 1] === text2[j - 1]) dp[i][j] = dp[i - 1][j - 1] + 1;
+      else dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+// Recover one LCS string by backtracking through the table
+function getLCS(text1, text2) {
+  const m = text1.length, n = text2.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 1; i <= m; i++)
+    for (let j = 1; j <= n; j++)
+      dp[i][j] = text1[i - 1] === text2[j - 1]
+        ? dp[i - 1][j - 1] + 1
+        : Math.max(dp[i - 1][j], dp[i][j - 1]);
+  let lcs = '', i = m, j = n;
+  while (i > 0 && j > 0) {
+    if (text1[i - 1] === text2[j - 1]) { lcs = text1[i - 1] + lcs; i--; j--; }
+    else if (dp[i - 1][j] > dp[i][j - 1]) i--;
+    else j--;
+  }
+  return lcs;
+}`}
+  tests={[
+    { expr: 'longestCommonSubsequence("ABCBDAB", "BDCABA")', label: 'len of ABCBDAB / BDCABA' },
+    { expr: 'getLCS("ABCBDAB", "BDCABA")', label: 'one LCS of ABCBDAB / BDCABA' },
+    { expr: 'longestCommonSubsequence("ABCDE", "ACE")', label: 'len of ABCDE / ACE' },
+    { expr: 'getLCS("ABCDE", "ACE")', label: 'LCS of ABCDE / ACE' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses the same table-fill, then backtracks to reconstruct the string:
+
+```ts
+// /dsa/13-dynamic-programming/lcs.ts
+function longestCommonSubsequence(text1: string, text2: string): number {
+    const m = text1.length;
+    const n = text2.length;
+
+    // dp[i][j] = LCS length of text1[0...i-1] and text2[0...j-1]
+    const dp: number[][] = Array.from(
+        { length: m + 1 },
+        () => new Array(n + 1).fill(0)
+    );
+
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            if (text1[i - 1] === text2[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1] + 1;          // match → diagonal + 1
+            } else {
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]); // no match → best of up/left
+            }
+        }
+    }
+
+    return dp[m][n];
+}
+
+function getLCS(text1: string, text2: string): string {
+    const m = text1.length;
+    const n = text2.length;
+    const dp: number[][] = Array.from(
+        { length: m + 1 },
+        () => new Array(n + 1).fill(0)
+    );
+
+    for (let i = 1; i <= m; i++) {
+        for (let j = 1; j <= n; j++) {
+            if (text1[i - 1] === text2[j - 1]) {
+                dp[i][j] = dp[i - 1][j - 1] + 1;
+            } else {
+                dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+            }
+        }
+    }
+
+    // Backtrack from the bottom-right corner to rebuild the LCS
+    let lcs = "";
+    let i = m, j = n;
+    while (i > 0 && j > 0) {
+        if (text1[i - 1] === text2[j - 1]) {
+            lcs = text1[i - 1] + lcs;   // matched char belongs to the LCS
+            i--; j--;
+        } else if (dp[i - 1][j] > dp[i][j - 1]) {
+            i--;                        // bigger score came from above
+        } else {
+            j--;                        // bigger (or equal) score came from the left
+        }
+    }
+    return lcs;
+}
+```
+
+Run the full file: `npx tsx 13-dynamic-programming/lcs.ts`.
+
+## Complexity
+
+Each of the $m \times n$ cells is computed once, and each does $O(1)$ work (one comparison, one `max`):
+
+$$
+T(m, n) = O(m \times n), \qquad S(m, n) = O(m \times n).
+$$
+
+Because every cell reads only the previous row and the current row, you can keep just two rows and shrink
+space to $O(\min(m, n))$ — though you then lose the full table needed to reconstruct the string.
+
+| Quantity | Value | Why |
+|----------|-------|-----|
+| States | $m \times n$ | one per (prefix of text1, prefix of text2) |
+| Transition | $O(1)$ | compare two chars, take a `max` |
+| Time | $O(m \times n)$ | states × transition |
+| Space (length only) | $O(\min(m, n))$ | keep two rolling rows |
+| Space (with string) | $O(m \times n)$ | full table needed to backtrack |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Version control" icon="🔀">
+`git diff` and the Unix `diff` tool treat each file as a sequence of lines and compute the LCS of the two
+versions. The shared lines are the LCS; every line outside it is rendered as a `+` insertion or a `−`
+deletion. A bigger LCS means a smaller, more readable patch.
+</ExampleCard>
+
+<ExampleCard domain="Bioinformatics" icon="🧬">
+Aligning two DNA or protein strands is LCS with biology bolted on. The longest shared ordered run of bases
+(`ACGT…`) hints at common ancestry or conserved function; tools like the Needleman–Wunsch aligner are LCS
+generalized with gap and mismatch scores.
+</ExampleCard>
+
+<ExampleCard domain="Academic integrity" icon="📄">
+Plagiarism and similarity checkers score how much two documents share *in order*. A long common subsequence
+of words or sentences survives light paraphrasing and reordering far better than exact substring matching,
+which is why it flags copied passages that a naive search would miss.
+</ExampleCard>
+
+<ExampleCard domain="Autocorrect" icon="⌨️">
+Spell-checkers rank candidate corrections by how close a misspelling is to each dictionary word. A large LCS
+between "recieve" and "receive" means they share almost everything in order, so the fix is cheap — the same
+machinery that powers edit distance, LCS's close cousin.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Subsequence, not substring.** The characters need not be contiguous — only in order. `AC` is a
+  subsequence of `ABDC`, even though it is not a substring. Mixing these up gives the wrong recurrence.
+- **1-based table vs 0-based string.** The table has an extra empty row and column, so `dp[i][j]` compares
+  `text1[i-1]` with `text2[j-1]`. Off-by-one here is the single most common bug.
+- **Length is easy; the string needs backtracking.** The forward pass only gives a number. To recover an
+  actual LCS you must walk the table backward from the bottom-right.
+- **There can be several answers.** When up and left tie during backtracking, different choices yield
+  different (equally long) subsequences — the *length* is unique, the *string* is not.
+- **Know the cousins.** Edit distance, shortest common supersequence, and longest palindromic subsequence
+  are all the same 2-D table with a tweaked recurrence — a favourite way for interviewers to extend the
+  question.
+
+## Practice
+
+1. **Easy:** By hand, find the LCS of `"AB"` and `"BA"`. What length, and which string(s)?
+2. **Easy:** Fill the small table for `"ABC"` and `"AC"` and confirm the bottom-right cell is `2`.
+3. **Medium:** Without rebuilding the whole table, explain why space can drop to two rows when you only need
+   the LCS *length*.
+4. **Medium:** Two equal-length strings have LCS length $k$. How many single-character deletions, total, turn
+   them into the same string? (Hint: it is $m + n - 2k$.)
+5. **Hard:** Compute the longest palindromic subsequence of `"BBABCBCAB"` by running LCS on the string and
+   its reverse. What do you get?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does LCS need a 2-D table while Fibonacci-style DP often needs only 1-D?',
+      options: [
+        'Strings use more memory than numbers',
+        'There are two sequences, so the state needs two independent indices',
+        'It avoids recursion',
+        'Because the answer is a string, not a number',
+      ],
+      answer: 1,
+      explain: 'The subproblem is "first i chars of text1 vs first j chars of text2" — two moving indices, hence a 2-D table dp[i][j].',
+    },
+    {
+      q: 'When the current characters do NOT match, dp[i][j] is set to…',
+      options: [
+        'dp[i-1][j-1] + 1',
+        '0',
+        'max(dp[i-1][j], dp[i][j-1])',
+        'dp[i-1][j] + dp[i][j-1]',
+      ],
+      answer: 2,
+      explain: 'On a mismatch you must drop one character — from text1 (look up) or text2 (look left) — and keep the better of the two, which never decreases the score.',
+    },
+    {
+      q: 'What is the LCS length of "ABCD" and "ACBD"?',
+      options: ['2', '3', '4', '5'],
+      answer: 1,
+      explain: 'Both ABD and ACD are common subsequences of length 3, and no common subsequence of length 4 exists, so the LCS length is 3.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>LCS = longest in-order shared sequence</strong> of two strings — characters need not be contiguous.',
+    'The state is 2-D: <strong>dp[i][j]</strong> = LCS length of the first <em>i</em> and first <em>j</em> characters.',
+    'Match → <strong>diagonal + 1</strong>; mismatch → <strong>max(up, left)</strong>; the base row and column are all 0.',
+    'Time and space are <strong>O(m × n)</strong>; length-only space shrinks to <strong>O(min(m, n))</strong> with two rolling rows.',
+    'It powers <strong>diffs, DNA alignment, plagiarism scoring, and spell-check</strong> — and edit distance is its close cousin.',
+  ]}
+/>
+
+Next up: **Longest Increasing Subsequence** — a one-sequence cousin that starts as an $O(n^2)$ DP and then
+sharpens into a slick $O(n \log n)$ patience-sorting trick.

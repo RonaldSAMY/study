@@ -1,0 +1,223 @@
+---
+title: Interval Scheduling & Merging
+track: dsa-greedy
+summary: "Sort intervals by an endpoint and one linear sweep does the work: merge overlapping ranges, pack non-overlapping ones, or count peak concurrency — all O(n log n)."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-greedy/fractional-knapsack
+leadsTo:
+  - dsa-greedy/job-sequencing
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GreedyIntervalMerge from '../../../components/demos/GreedyIntervalMerge.tsx';
+
+## The hook: tidying a tangled calendar
+
+Open any shared calendar and you will find overlapping blocks — a meeting bleeding into a call bleeding
+into a "do not disturb." To answer "when am I actually busy?" you want to fuse those overlapping blocks
+into clean, non-overlapping stretches. The trick is almost insultingly simple: **sort the blocks by when
+they start, then sweep once**, growing the current block whenever the next one touches it and starting a
+fresh block when there is a gap. One pass, no backtracking.
+
+<Callout type="intuition" title="The one-sentence idea">
+Sort intervals by start time and sweep left to right keeping one open block — extend it on overlap, emit
+it and open a new one on a gap — and you merge the whole set in a single linear pass.
+</Callout>
+
+## Intuition: the sort is the algorithm
+
+Activity selection sorted by *finish* time to maximize a count. Merging is a different goal, so it uses a
+different key: **start time**. Why is one left-to-right pass enough?
+
+Once the intervals are sorted by start, any interval that overlaps the current open block must start at or
+before that block's end. And crucially, no *later* interval can reach back to overlap a block we already
+closed, because later intervals start even further right. That monotonicity is the greedy-choice
+property in disguise: the decision to close a block is permanent and safe. The exchange argument is
+trivial here — there is only one correct merged set, and the sorted sweep produces it.
+
+The same "sort by an endpoint, sweep once" template solves a whole family:
+
+- **Merge** overlapping intervals — sort by start, extend or open.
+- **Maximum non-overlapping count** — sort by *end* (that is activity selection).
+- **Minimum rooms / peak concurrency** — process start and end *events* with a running counter.
+
+## Play with it
+
+Edit intervals as `start-end`. The demo sorts by start and builds the merged result below the raw
+intervals. An amber block means the current block was just stretched by an overlap; green blocks are
+settled.
+
+<GreedyIntervalMerge client:visible />
+
+<Callout type="tip">
+A new interval merges when its start is at or before the open block's end. The instant a start jumps past
+that end, you have found a genuine gap — the old block is final and can never grow again.
+</Callout>
+
+## How it works
+
+Intervals `[1,3] [2,6] [8,10] [15,18] [9,12]`, sorted by start become `[1,3] [2,6] [8,10] [9,12] [15,18]`:
+
+```
+open [1,3]
+[2,6]: 2 ≤ 3 → overlap, extend end to 6  → open [1,6]
+[8,10]: 8 > 6 → gap, emit [1,6], open [8,10]
+[9,12]: 9 ≤ 10 → overlap, extend end to 12 → open [8,12]
+[15,18]: 15 > 12 → gap, emit [8,12], open [15,18]
+result: [1,6], [8,12], [15,18]
+```
+
+<CodeRunner
+  client:visible
+  code={`function merge(intervals) {
+  const s = [...intervals].sort((a, b) => a[0] - b[0]);
+  const out = [s[0].slice()];
+  for (let i = 1; i < s.length; i++) {
+    const last = out[out.length - 1];
+    if (s[i][0] <= last[1]) last[1] = Math.max(last[1], s[i][1]); // overlap → extend
+    else out.push(s[i].slice());                                  // gap → new block
+  }
+  return out;
+}`}
+  tests={[
+    { expr: 'JSON.stringify(merge([[1,3],[2,6],[8,10],[15,18],[9,12]]))', label: 'merged blocks' },
+    { expr: 'merge([[1,4],[4,5]]).length', label: 'touching intervals merge to' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — sort by start, extend the last block on overlap, push a new one otherwise:
+
+```ts
+// /dsa/14-greedy/interval-scheduling.ts
+function mergeIntervals(intervals: Interval[]): Interval[] {
+    if (intervals.length <= 1) return intervals;
+
+    // Sort by start time
+    intervals.sort((a, b) => a[0] - b[0]);
+
+    const result: Interval[] = [intervals[0]];
+
+    for (let i = 1; i < intervals.length; i++) {
+        const last = result[result.length - 1];
+        const current = intervals[i];
+
+        if (current[0] <= last[1]) {
+            last[1] = Math.max(last[1], current[1]);  // overlapping → extend the block
+        } else {
+            result.push(current);                     // gap → start a new block
+        }
+    }
+    return result;
+}
+```
+
+Run the full file: `npx tsx 14-greedy/interval-scheduling.ts`.
+
+## Complexity
+
+Sort, then a single sweep that touches each interval once:
+
+$$
+T(n) = O(n \log n), \qquad S(n) = O(n).
+$$
+
+| Task | Sort by | Pass | Time |
+|------|---------|------|------|
+| Merge overlapping | start | extend or open | $O(n \log n)$ |
+| Max non-overlapping | end | keep if compatible | $O(n \log n)$ |
+| Minimum rooms | events ($+1$ / $-1$) | running max | $O(n \log n)$ |
+
+The $O(n)$ space is just the output list; the sweep itself needs only the last open block.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Genomics" icon="🧬">
+Aligned DNA reads overlapping a reference are merged into contiguous "coverage" regions exactly this way —
+sort the read intervals by position and fuse overlaps to see which stretches of the genome are covered.
+</ExampleCard>
+
+<ExampleCard domain="Operations" icon="🛤️">
+"Minimum platforms at a station" sorts arrival and departure events and tracks how many trains are present
+at once. The peak of that running counter is the answer — the event-sweep cousin of merging.
+</ExampleCard>
+
+<ExampleCard domain="Networking" icon="🌐">
+Consolidating overlapping IP address ranges into the fewest CIDR-style blocks is interval merging on
+integer ranges — fewer rules in a firewall table, same coverage.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Wrong sort key for the goal.** Merging needs *start*; maximizing a count needs *end*; minimum rooms
+  needs *events*. Naming the goal first tells you the key.
+- **Touching endpoints.** Decide whether `[1,4]` and `[4,5]` merge. Using `<=` fuses them; `<` keeps them
+  apart. State your convention out loud.
+- **Mutating shared arrays.** When you extend `last[1]`, make sure `last` is a copy, not a reference into
+  the caller's data — otherwise you silently corrupt the input.
+- **Forgetting to sort.** The sweep is only correct on sorted input; an unsorted pass misses overlaps that
+  appear out of order.
+- **Interview cue:** "merge / insert into / intersect / minimum rooms for intervals" is the tell. Reach for
+  sort-then-sweep and decide the key from the objective.
+
+## Practice
+
+1. **Easy:** Merge `[[1,4],[2,3],[5,7]]` by hand.
+2. **Easy:** Decide whether `[[1,4],[4,5]]` should merge under your chosen convention and justify it.
+3. **Medium:** LeetCode 57 — insert a new interval into an already-sorted, non-overlapping list and merge.
+4. **Medium:** LeetCode 253 — find the minimum number of meeting rooms via the start/end event sweep.
+5. **Hard:** LeetCode 759 — given each employee's busy intervals, find the free time common to everyone.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'To MERGE overlapping intervals, you sort by:',
+      options: ['End time', 'Start time', 'Duration', 'Midpoint'],
+      answer: 1,
+      explain: 'Sorting by start time guarantees that once a block is closed, no later interval can reach back to overlap it — so a single left-to-right sweep merges everything.',
+    },
+    {
+      q: 'During the sweep, when do you extend the current block instead of opening a new one?',
+      options: [
+        'When the next start is greater than the current end',
+        'When the next start is at or before the current end',
+        'When the next interval is shorter',
+        'Always — every interval extends the block',
+      ],
+      answer: 1,
+      explain: 'If the next interval starts at or before the open block ends, they overlap, so you extend the end to the max of the two.',
+    },
+    {
+      q: 'Which interval task is best solved by a +1/-1 event sweep rather than plain merging?',
+      options: [
+        'Merging overlapping ranges',
+        'Counting the minimum rooms (peak concurrency)',
+        'Inserting one interval',
+        'Removing covered intervals',
+      ],
+      answer: 1,
+      explain: 'Minimum rooms asks for the maximum number of intervals overlapping at any instant — treat each start as +1 and each end as -1, sort the events, and track the running maximum.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Sort intervals by <strong>start time</strong>, then a single sweep merges overlaps by extending one open block.',
+    'A closed block can never re-open, because later intervals start further right — the safe greedy choice.',
+    'Pick the sort key from the goal: <strong>start</strong> to merge, <strong>end</strong> to maximize count, <strong>events</strong> for peak concurrency.',
+    'All variants run in <strong>O(n log n)</strong>, dominated by the sort.',
+    'Mind <strong>touching endpoints</strong> and avoid mutating the original arrays when extending blocks.',
+  ]}
+/>
+
+Next up: **Job Sequencing with Deadlines** — intervals give way to deadlines and profits, where placing
+each job as late as legally possible squeezes out the most reward.

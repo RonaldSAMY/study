@@ -1,0 +1,276 @@
+---
+title: Heuristics & Local Search
+track: dsa-advanced-algorithms
+summary: "When optimal is too slow, chase good enough: local search climbs toward better solutions, and a dash of randomness escapes the traps that greed falls into."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-advanced-algorithms/math-algorithms
+leadsTo:
+  - dsa-advanced-trees/red-black-tree
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvLocalSearch from '../../../components/demos/AdvLocalSearch.tsx';
+
+## The hook: there isn't time to be perfect
+
+A delivery van has 30 stops. The number of possible routes is `30!` — more than the number of atoms in
+your body, by a wide margin. No computer will ever enumerate them. Yet the driver needs a *good* route in
+under a second. So we give up on the guaranteed-best answer and instead **search smartly**: start with any
+route and keep nudging it toward something better. That's the whole philosophy of heuristics — trade a
+proof of optimality for an answer that's fast and usually within a few percent of the best.
+
+<Callout type="intuition" title="The one-sentence idea">
+Local search starts at some solution and repeatedly moves to a better neighbour; the art is escaping the
+"local peaks" where every neighbour looks worse but the global best lies across a valley.
+
+</Callout>
+
+## Intuition: climbing a foggy hill
+
+Picture the space of solutions as a landscape: each point is a candidate, its height is how good it is.
+You want the highest peak. **Hill climbing** is the obvious strategy — look at nearby solutions, step to
+the best one that's higher, repeat. It's fast and simple. Its fatal flaw: it stops at the first peak it
+reaches, even if a taller mountain stands just beyond a dip. That trap is a **local maximum**.
+
+The cure is to *sometimes go downhill on purpose*. **Simulated annealing** borrows from metallurgy:
+heat a metal and its atoms jiggle freely; cool it slowly and they settle into a low-energy crystal. The
+algorithm keeps a "temperature" that starts high — early on it readily accepts worse moves, letting it
+cross valleys — and cools over time, so it gradually stops wandering and settles near the best peak it
+found. The acceptance rule is beautifully simple: an improving move is always taken; a worse move by `Δ`
+is accepted with probability `exp(Δ / T)`, which is high when `T` is large and shrinks as it cools.
+
+Other members of the family vary the same theme: **tabu search** keeps a short memory of recent solutions
+so it won't cycle; **genetic algorithms** evolve a whole population with crossover and mutation; **beam
+search** keeps the best `k` partial solutions at each step.
+
+## Play with it
+
+The walker tries to reach the highest point of a bumpy curve. Run **Hill climbing** from `x ≈ 1.5` — it
+charges up the nearest bump and stalls. Switch to **Simulated annealing** from the same start: early
+downhill jumps let it cross the dip and find the true peak. Reseed to see different random walks.
+
+<AdvLocalSearch client:visible />
+
+<Callout type="tip">
+Watch the temperature in annealing mode. While it's high, red "rejected" moves are rare — the walker
+roams freely, even downhill. As <code>T</code> cools, it stops accepting worse moves and locks onto the
+best peak it has seen. That cooling schedule is the whole trick.
+</Callout>
+
+## How it works
+
+Hill climbing on a one-dimensional bump function, maximizing:
+
+```
+current = x0, score = f(x0)
+repeat:
+    neighbours = { x0 - step, x0 + step }
+    best = the highest-scoring neighbour
+    if f(best) <= score:  STOP   ← no neighbour is better: local maximum
+    else: current = best
+```
+
+Simulated annealing changes only the accept rule:
+
+```
+T = T0
+repeat:
+    next = random neighbour of current
+    Δ = f(next) - f(current)
+    if Δ > 0 or random() < exp(Δ / T):   accept → current = next
+    T = T * coolingRate         ← e.g. 0.99 each step
+until T is tiny
+```
+
+When `T` is large, `exp(Δ / T)` is close to 1 even for a bad move, so the walker explores. As `T → 0`, only
+improving moves survive, so it converges.
+
+<CodeRunner
+  client:visible
+  code={`// Simulated annealing maximizing a bumpy 1-D function
+function anneal(f, x0, opts) {
+  const { T0 = 5, cool = 0.97, steps = 400, rng = Math.random } = opts || {};
+  let x = x0, best = x0, T = T0;
+  for (let i = 0; i < steps; i++) {
+    const next = x + (rng() * 2 - 1) * 1.2;       // random neighbour
+    const d = f(next) - f(x);
+    if (d > 0 || rng() < Math.exp(d / T)) x = next; // accept (maybe downhill)
+    if (f(x) > f(best)) best = x;                   // remember the best seen
+    T *= cool;                                       // cool down
+  }
+  return { x: best, value: f(best) };
+}
+
+// deterministic RNG so the demo result is reproducible
+function seeded(s) { return () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff; }
+const f = (x) => Math.sin(1.6 * x) * 2.2 + Math.sin(0.7 * x + 0.6) * 1.6 + x * 0.35;
+const out = anneal(f, 1.5, { rng: seeded(42) });`}
+  tests={[
+    { expr: 'Math.round(out.value * 100) / 100', label: 'best value found (≈ near global peak)' },
+    { expr: 'out.x >= 0 && out.x <= 10', label: 'solution stays in range' },
+    { expr: 'f(out.x) >= f(1.5)', label: 'no worse than the start' },
+  ]}
+/>
+
+## The real implementation
+
+The course file's hill climbing and simulated annealing are generic over any solution type:
+
+```ts
+// /dsa/17-advanced-algorithms/heuristic-algorithms.ts
+function simulatedAnnealing<T>(
+    initial: T,
+    evaluate: (s: T) => number,
+    getRandomNeighbor: (s: T) => T,
+    opts: { initialTemp?: number; coolingRate?: number; minTemp?: number; maximize?: boolean } = {}
+) {
+    const { initialTemp = 1000, coolingRate = 0.995, minTemp = 0.01, maximize = false } = opts;
+    let current = initial, currentScore = evaluate(current);
+    let best = current, bestScore = currentScore;
+    let temperature = initialTemp;
+
+    while (temperature > minTemp) {
+        const neighbor = getRandomNeighbor(current);
+        const neighborScore = evaluate(neighbor);
+        const delta = maximize ? neighborScore - currentScore : currentScore - neighborScore;
+
+        // accept if better, or probabilistically if worse
+        if (delta > 0 || Math.random() < Math.exp(delta / temperature)) {
+            current = neighbor; currentScore = neighborScore;
+            if (maximize ? currentScore > bestScore : currentScore < bestScore) {
+                best = current; bestScore = currentScore;
+            }
+        }
+        temperature *= coolingRate;   // cool down
+    }
+    return { solution: best, score: bestScore };
+}
+```
+
+Run the full file: `npx tsx 17-advanced-algorithms/heuristic-algorithms.ts`. It also includes hill
+climbing, tabu search, genetic algorithms, beam search, and TSP via nearest-neighbour plus 2-opt local
+search.
+
+## Complexity
+
+Heuristics trade the *guarantee* of optimality for a controllable running time. There is no "n" that
+bounds quality — only the iteration budget you choose:
+
+$$
+T = O(\text{iterations} \times \text{cost of evaluating a neighbour}), \qquad \text{quality: approximate}.
+$$
+
+| Method | Escapes local optima? | Memory | Determinism |
+|--------|----------------------|--------|-------------|
+| Hill climbing | no | $O(1)$ | deterministic |
+| Simulated annealing | yes (via randomness) | $O(1)$ | randomized |
+| Tabu search | yes (via memory) | $O(\text{list})$ | mostly deterministic |
+| Genetic algorithm | yes (via population) | $O(\text{pop})$ | randomized |
+
+The headline contrast: hill climbing is fast but gets stuck; annealing spends extra iterations buying the
+ability to cross valleys.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Logistics" icon="🚚">
+Vehicle routing for parcel delivery starts from a quick nearest-neighbour tour, then 2-opt local search
+uncrosses overlapping legs — exactly hill climbing on the space of routes, shaving real fuel cost.
+</ExampleCard>
+
+<ExampleCard domain="Chip design" icon="🔌">
+VLSI placement and routing minimize total wire length over billions of layouts. Simulated annealing has
+been an industry-standard placer for decades because the landscape is riddled with local optima.
+</ExampleCard>
+
+<ExampleCard domain="Sports scheduling" icon="🏟️">
+Building a season fixture with no team playing twice in a row and minimal travel is NP-hard; tabu search
+nudges a draft schedule, its memory stopping it from undoing the swap it just made.
+</ExampleCard>
+
+<ExampleCard domain="Machine learning" icon="🤖">
+Hyperparameter tuning and neural-architecture search wander an expensive, bumpy score landscape; annealing
+and evolutionary strategies explore widely early, then exploit the best region as the "temperature" drops.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Cooling too fast.** Drop the temperature too quickly and annealing degenerates into hill climbing,
+  trapped at the first peak. Too slow and you waste iterations. The schedule is the key tunable.
+- **Forgetting to track the best-so-far.** Annealing's *current* solution can wander downhill at the end;
+  always keep a separate record of the best solution ever seen and return that.
+- **A neighbourhood that's too big or too small.** Tiny steps stall; huge steps turn the search into random
+  guessing. The move operator must make meaningful but local changes.
+- **Expecting reproducibility.** Randomized heuristics give different answers each run unless you fix the
+  seed — essential for debugging and for fair benchmarking.
+- **Interview cue:** if a problem is NP-hard or the input is huge and "approximate is fine", propose a
+  greedy construction *plus* local search, and mention annealing to escape local optima.
+
+## Practice
+
+1. **Easy:** On the demo's landscape, find a start position from which hill climbing *does* reach the
+   global peak.
+2. **Easy:** Explain why `exp(Δ / T)` with `Δ < 0` is between 0 and 1, and what it tends to as `T → 0`.
+3. **Medium:** Implement hill climbing for the 8-queens problem with "number of attacking pairs" as the
+   score to minimize.
+4. **Medium:** Add a simple cooling schedule to a TSP solver: nearest-neighbour tour, then annealed 2-opt
+   swaps. Compare cost against plain 2-opt.
+5. **Hard:** Build a tiny genetic algorithm (population, tournament selection, crossover, mutation) to
+   maximize the number of 1-bits in a length-20 bitstring, and plot best fitness per generation.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does plain hill climbing get stuck at a local maximum?',
+      options: [
+        'It runs out of memory',
+        'It only moves to strictly better neighbours, so it stops when none exist — even if a taller peak is across a valley',
+        'It always moves randomly',
+        'It cannot evaluate the objective',
+      ],
+      answer: 1,
+      explain: 'Hill climbing never accepts a worse move, so the first peak where all neighbours are lower halts it, regardless of better solutions elsewhere.',
+    },
+    {
+      q: 'In simulated annealing, what is the role of the temperature?',
+      options: [
+        'It speeds up neighbour generation',
+        'It sets how willing the search is to accept worse moves — high early (explore), low late (settle)',
+        'It bounds the memory used',
+        'It guarantees the global optimum',
+      ],
+      answer: 1,
+      explain: 'A worse move by Δ is accepted with probability exp(Δ/T). High T accepts many worse moves (exploration); as T cools, only improving moves survive (convergence).',
+    },
+    {
+      q: 'When are heuristic methods the right choice over an exact algorithm?',
+      options: [
+        'When the problem is small and a polynomial exact algorithm exists',
+        'When the problem is NP-hard or huge and an approximate, fast answer is acceptable',
+        'When you need a provably optimal answer',
+        'Whenever recursion is involved',
+      ],
+      answer: 1,
+      explain: 'Heuristics shine on NP-hard or very large instances where exact optimization is infeasible and "good enough, fast" beats "optimal, never".',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Heuristics trade <strong>guaranteed optimality for speed</strong>, essential for NP-hard or huge problems.',
+    '<strong>Hill climbing</strong> always steps to a better neighbour — fast, but trapped at local maxima.',
+    '<strong>Simulated annealing</strong> accepts worse moves with probability exp(Δ/T), escaping valleys while hot and settling as it cools.',
+    'Always <strong>keep the best-so-far</strong> separately, and fix the random seed for reproducible runs.',
+    'The family — tabu search, genetic algorithms, beam search — all answer the same question: <strong>how to explore without getting stuck</strong>.',
+  ]}
+/>
+
+That wraps the Range Structures track. Next up: **Red-Black Trees** — back to exact, worst-case
+guarantees, where careful balancing keeps a search tree's operations logarithmic no matter the input.

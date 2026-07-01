@@ -1,0 +1,248 @@
+---
+title: "Skip Lists"
+track: dsa-advanced-structures
+summary: "A linked list with express lanes: stacked shortcut layers turn O(n) scanning into O(log n) search — no rotations, just a coin flip."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-advanced-trees/centroid-decomposition
+leadsTo:
+  - dsa-advanced-structures/bloom-filter
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvDsSkipListSearch from '../../../components/demos/AdvDsSkipListSearch.tsx';
+
+## The hook: express trains over a sorted list
+
+A sorted linked list is honest but slow: to find a value you walk every node, one local stop at a
+time, $O(n)$. Subway systems solved this physically — they run **express trains** that skip most
+stations, and you only drop to the local line near your destination. A skip list builds those express
+lines *on top of* an ordinary linked list. The top layer skips far; each layer below skips less; the
+bottom layer is the full list. Search rides the expresses down to the right neighborhood in
+$O(\log n)$ — and the whole thing is built with nothing fancier than a coin flip.
+
+<Callout type="intuition" title="The one-sentence idea">
+Stack extra forward pointers on a sorted linked list so search can take long hops on high layers and
+short hops on low ones, dropping down a level whenever the next node would overshoot.
+</Callout>
+
+## Intuition: levels you build by flipping coins
+
+Every node lives on level 0 (the full list). When you insert a node, you flip a coin: heads, it also
+joins level 1; flip again, maybe level 2; and so on. Because each extra level halves how many nodes
+reach it, roughly half the nodes are on level 1, a quarter on level 2, an eighth on level 3 — the same
+geometric thinning that gives a balanced tree its $\log n$ height, but with **no rotations and no
+rebalancing**. The randomness does the balancing for you, *in expectation*.
+
+Searching is then a staircase: start at the head on the highest level, walk right while the next key is
+still smaller than your target, and the moment it would overshoot, **drop down one level** and keep
+going. Each drop lands you in a shorter stretch of the list, so you converge fast. This is the same
+divide-and-narrow instinct behind binary search and the tree decompositions you have already met — only
+here the structure is a humble linked list wearing express lanes.
+
+## Play with it
+
+Type a sorted list of keys and a target, then play the search. Watch the cursor ride the top lane,
+walk right while the next key is smaller, and drop a level whenever it would overshoot.
+
+<AdvDsSkipListSearch client:visible />
+
+<Callout type="tip">
+Count the highlighted nodes versus the list length. On a 13-key list the search usually touches only a
+handful — that gap *is* the $\log n$ speedup. Now search a value that is not present and watch the
+cursor fall off the bottom lane to report "not found".
+</Callout>
+
+## How it works
+
+Search keeps a single rule at every level: *advance while the next key is strictly less than the
+target; otherwise drop.* Here is the search for `60` over a perfect skip list, written so the express
+hops are visible:
+
+```
+L3: HEAD ─────────────────────────────▶ 50 ──────────▶ NIL
+L2: HEAD ─────────▶ 25 ───────────────▶ 50 ──────────▶ NIL
+L1: HEAD ─▶ 12 ──▶ 25 ──▶ 38 ───────▶ 50 ─▶ 60 ─────▶ NIL
+L0: 5 ▶ 12 ▶ 19 ▶ 25 ▶ 31 ▶ 38 ▶ 44 ▶ 50 ▶ 60 ▶ 72 ...
+
+find(60): L3 head→50 (50<60, hop)         then 50's next is NIL, drop
+          L2 from 50: next NIL, drop
+          L1 from 50: 50→60  ✓ found
+```
+
+The express hop to `50` skipped seven local stops in one move. Below is the exact level-walk in plain
+JavaScript — a deterministic "perfect" skip list so you can re-run it and trace the same path:
+
+<CodeRunner
+  client:visible
+  code={`// A sorted skip list with deterministic levels (node i on level = trailing zeros of i+1).
+function makeLevels(keys) {
+  return keys.map((_, i) => { let p = i + 1, l = 0; while ((p & 1) === 0) { p >>= 1; l++; } return l; });
+}
+// search: walk right while next < target, else drop a level. Returns nodes visited.
+function search(keys, target) {
+  const level = makeLevels(keys);
+  const maxL = Math.max(...level);
+  let visited = 0, rank = -1; // -1 = head
+  for (let L = maxL; L >= 0; L--) {
+    let next = keys.findIndex((_, i) => i > rank && level[i] >= L);
+    while (next !== -1 && keys[next] < target) {
+      rank = next; visited++;
+      next = keys.findIndex((_, i) => i > rank && level[i] >= L);
+    }
+    if (next !== -1 && keys[next] === target) return { found: true, visited: visited + 1 };
+  }
+  return { found: false, visited };
+}`}
+  tests={[
+    { expr: 'search([5,12,19,25,31,38,44,50,60,72,80,91,99], 60)', label: 'find 60' },
+    { expr: 'search([5,12,19,25,31,38,44,50,60,72,80,91,99], 55)', label: 'find 55 (absent)' },
+    { expr: 'search([5,12,19,25,31,38,44,50,60,72,80,91,99], 5)', label: 'find 5' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses true randomized levels — a coin flip per node via `randomLevel` — and an `update[]`
+array to remember where the search dropped on each level, so insert and delete can splice the node into
+exactly those layers:
+
+```ts
+// /dsa/21-advanced-data-structures/skip-list.ts
+private randomLevel(): number {
+  let level = 0;
+  while (Math.random() < this.probability && level < this.maxLevel) level++;
+  return level;                                  // ~half stop at 0, a quarter at 1, ...
+}
+
+get(key: K): V | undefined {
+  let current = this.header;
+  for (let i = this.level; i >= 0; i--) {        // top lane down to level 0
+    while (current.forward[i] !== null &&
+           this.compare(current.forward[i]!.key, key) < 0) {
+      current = current.forward[i]!;             // hop right while still smaller
+    }                                            // overshoot? fall through to next i (drop)
+  }
+  current = current.forward[0]!;                 // step onto the candidate at level 0
+  return current !== null && this.compare(current.key, key) === 0
+    ? current.value : undefined;
+}
+```
+
+Run the full file: `npx tsx 21-advanced-data-structures/skip-list.ts`.
+
+## Complexity
+
+With probability $p$ per level, a node's height is geometric, the expected number of levels is
+$O(\log_{1/p} n)$, and the expected work per level is $O(1/(1-p))$, so:
+
+$$
+\mathbb{E}[T_\text{search}] = O\!\left(\frac{\log n}{p\,(1-p)^{-1}}\right) = O(\log n), \qquad
+\mathbb{E}[S] = O(n).
+$$
+
+| Operation | Skip list (expected) | Skip list (worst) | Balanced BST |
+|-----------|----------------------|-------------------|--------------|
+| Search    | $O(\log n)$          | $O(n)$            | $O(\log n)$  |
+| Insert / delete | $O(\log n)$    | $O(n)$            | $O(\log n)$  |
+| Min / next | $O(1)$              | $O(1)$            | $O(1)$–$O(\log n)$ |
+
+The worst case is a degenerate run of unlucky coin flips, but its probability is astronomically small;
+in practice a skip list matches a balanced tree while being far simpler to code and to make concurrent.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Databases" icon="🗄️">
+Redis stores its sorted sets (`ZSET`) as a skip list, so range queries like "give me ranks 10–20 by
+score" and rank lookups run in $O(\log n)$ without the rotation bookkeeping a balanced tree demands.
+</ExampleCard>
+
+<ExampleCard domain="Transit" icon="🚆">
+Express and local subway lines are a physical skip list: ride the express (high level) across town,
+then transfer down to the local (level 0) for the last few stops — exactly drop-when-you-overshoot.
+</ExampleCard>
+
+<ExampleCard domain="Concurrency" icon="🧵">
+Java's `ConcurrentSkipListMap` is the go-to lock-free ordered map. Skip lists are easy to make
+concurrent because an insert only re-points a few forward pointers — there is no whole-subtree rotation
+to coordinate across threads.
+</ExampleCard>
+
+<ExampleCard domain="Memory tables" icon="📒">
+LSM-tree storage engines keep their in-memory write buffer (the memtable) as a skip list, so writes and
+ordered flushes to disk stay $O(\log n)$ while many threads append at once.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The `update[]` array is the whole trick for insert/delete.** As search drops on each level, record
+  the node you dropped *from*; splicing in (or out) only needs those remembered predecessors.
+- **Levels are capped.** A `maxLevel` (often $\lceil \log_{1/p} n \rceil$) stops a freak run of heads
+  from building a useless skyscraper of pointers above a tiny list.
+- **It is probabilistic, not adversarial-proof.** With user-controlled keys an attacker cannot force
+  bad behavior (levels come from your RNG, not the keys), but the worst case is still $O(n)$ — say
+  "expected $O(\log n)$" in interviews.
+- **Don't forget $O(1)$ min.** The level-0 head's first forward pointer is always the minimum; range
+  scans just walk level 0 from there.
+
+## Practice
+
+1. **Easy:** On the perfect skip list above, list every node the search for `38` touches.
+2. **Easy:** If $p = 0.5$, what fraction of nodes do you expect on level 2? On level 3?
+3. **Medium:** Implement `insert` using an `update[]` array: search, record predecessors, flip for a
+   random level, then splice the new node into levels 0..L.
+4. **Medium:** Add a `range(low, high)` that returns all keys in $[low, high]$ in $O(\log n + k)$.
+5. **Hard:** Augment each forward pointer with a `span` (how many level-0 nodes it skips) to support
+   `getByRank(i)` and `getRank(key)` in $O(\log n)$ — an *indexed* skip list.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'During a skip-list search, when do you drop down a level?',
+      options: [
+        'After every single hop, unconditionally',
+        'When the next node on this level would overshoot the target (its key ≥ target)',
+        'Only when you reach the end of level 0',
+        'When a coin flip comes up tails',
+      ],
+      answer: 1,
+      explain: 'You walk right while the next key is strictly less than the target; the moment it would meet or pass the target, you drop a level to take smaller steps.',
+    },
+    {
+      q: 'Why does a skip list achieve O(log n) expected search?',
+      options: [
+        'It keeps the list perfectly balanced with rotations',
+        'Each higher level holds geometrically fewer nodes, so there are O(log n) levels and O(1) work per level',
+        'It sorts the keys on every query',
+        'It uses a hash table under the hood',
+      ],
+      answer: 1,
+      explain: 'With probability p per level the heights are geometric: about half the nodes reach level 1, a quarter level 2, giving O(log n) levels and constant expected hops each.',
+    },
+    {
+      q: 'What is the worst-case search time of a skip list?',
+      options: ['O(1)', 'O(log n) guaranteed', 'O(n)', 'O(n log n)'],
+      answer: 2,
+      explain: 'If the coin flips conspire so every node lands on level 0, the structure degenerates to a plain linked list and search is O(n) — vanishingly unlikely, but possible.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A skip list is a <strong>sorted linked list with stacked express lanes</strong>: high levels hop far, level 0 is the full list.',
+    'Node heights come from a <strong>coin flip</strong>, so balancing is probabilistic — <strong>no rotations</strong> needed.',
+    'Search walks right while the next key is smaller, then <strong>drops a level on overshoot</strong>, giving expected <strong>O(log n)</strong>.',
+    'The <strong>update[] of dropped-from predecessors</strong> is what makes insert and delete simple splices.',
+    'It powers <strong>Redis sorted sets, Java\'s ConcurrentSkipListMap, and LSM memtables</strong> — simple and concurrency-friendly.',
+  ]}
+/>
+
+Next up: **Bloom Filters** — trading exactness for astonishing space savings, answering "definitely not"
+with certainty and "probably yes" with a tunable error rate.

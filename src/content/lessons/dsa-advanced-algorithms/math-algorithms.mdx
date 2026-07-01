@@ -1,0 +1,264 @@
+---
+title: Fast Math Building Blocks
+track: dsa-advanced-algorithms
+summary: "Halving the exponent and the Euclidean swap: two O(log n) tricks turn exponentiation, GCD, and modular inverses into instant operations."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-advanced-algorithms/segment-tree
+leadsTo:
+  - dsa-advanced-algorithms/heuristic-algorithms
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvFastPower from '../../../components/demos/AdvFastPower.tsx';
+
+## The hook: raise 3 to the billionth power before lunch
+
+You need `3` to the power of a billion, modulo a prime, for a hashing or cryptography routine. Multiplying
+`3` a billion times would finish sometime next week. But you can get the same answer in about 30
+multiplications — because the exponent has only 30 binary digits, and each digit lets you *square* what
+you already have. The same "halve it each step" instinct, applied to subtraction instead of squaring,
+gives Euclid's 2,300-year-old GCD algorithm. These two routines are the quiet workhorses under modular
+inverses, combinatorics mod p, polynomial hashing, and RSA.
+
+<Callout type="intuition" title="The one-sentence idea">
+When you can halve the size of a problem each step — square to consume one exponent bit, or replace
+(a, b) with (b, a mod b) — the work drops from linear to logarithmic.
+
+</Callout>
+
+## Intuition: read the exponent in binary
+
+Write the exponent in binary. Then `a` to the power `e` is the product of `a` raised to each power of two
+that appears in `e`. And those powers of two are easy: `a`, then `a²`, then `a⁴`, … each is the square of
+the last. So sweep the bits of `e` from the right:
+
+- keep a running `base`, starting at `a`;
+- whenever the current bit is `1`, fold `base` into the `result`;
+- every step, square `base` (the next power of two) and shift to the next bit.
+
+That's **binary (fast) exponentiation** — O(log e) multiplications. Doing it all `mod m` keeps the numbers
+small and never overflows.
+
+The **Euclidean algorithm** for GCD uses the same shrink-fast idea. Replacing `(a, b)` with `(b, a mod b)`
+preserves the GCD (any common divisor of `a` and `b` divides `a mod b` too), and the remainder shrinks at
+least by half every two steps — so it terminates in O(log min(a, b)) steps. Extend it and you also recover
+`x, y` with `ax + by = gcd(a, b)`, which is exactly how you compute a **modular inverse** when the modulus
+isn't prime. This is the engine room of the [Number Theory track](/lessons/dsa-number-theory/modular-arithmetic).
+
+## Play with it
+
+Try **Fast power**: set a base, exponent, and modulus, then step through. Watch the exponent's bits get
+consumed from the right — a `1` folds the current power into the result, a `0` just squares the base.
+Then switch to **GCD (Euclid)** and watch the pair shrink to the answer.
+
+<AdvFastPower client:visible />
+
+<Callout type="tip">
+In fast-power mode, set the exponent to a power of two like <code>16</code> (binary <code>10000</code>):
+only the top bit is 1, so the result stays at 1 until the very last step, then snaps to the answer in one
+multiply. Now try <code>15</code> (binary <code>1111</code>) — every step multiplies.
+</Callout>
+
+## How it works
+
+Compute `3^13 mod 7`. In binary, `13 = 1101`, so `3^13 = 3^8 · 3^4 · 3^1`:
+
+```
+result=1, base=3, exp=13 (1101)
+bit 0 = 1 → result = 1·3 = 3   ; base = 3² = 2 (mod 7) ; exp=6  (110)
+bit 1 = 0 → (skip)             ; base = 2² = 4 (mod 7) ; exp=3  (11)
+bit 2 = 1 → result = 3·4 = 5   ; base = 4² = 2 (mod 7) ; exp=1  (1)
+bit 3 = 1 → result = 5·2 = 3   ; base = 2² = 4 (mod 7) ; exp=0  (stop)
+3^13 mod 7 = 3   ✓
+```
+
+And `gcd(48, 18)` by repeated remainder:
+
+```
+48 = 18 × 2 + 12   → gcd(18, 12)
+18 = 12 × 1 + 6    → gcd(12, 6)
+12 = 6  × 2 + 0    → remainder 0, gcd = 6
+```
+
+<CodeRunner
+  client:visible
+  code={`// Fast modular exponentiation: base^exp mod m in O(log exp)
+function modPow(base, exp, m) {
+  let result = 1;
+  base = base % m;
+  while (exp > 0) {
+    if (exp & 1) result = (result * base) % m;  // bit is 1: fold in
+    base = (base * base) % m;                    // next power of two
+    exp = Math.floor(exp / 2);                   // shift right
+  }
+  return result;
+}
+
+// Euclidean GCD in O(log min(a,b))
+function gcd(a, b) {
+  a = Math.abs(a); b = Math.abs(b);
+  while (b !== 0) { [a, b] = [b, a % b]; }
+  return a;
+}
+
+// Modular inverse via Fermat (m must be prime): a^(m-2) mod m
+function modInverse(a, m) { return modPow(a, m - 2, m); }`}
+  tests={[
+    { expr: 'modPow(3, 13, 7)', label: '3^13 mod 7' },
+    { expr: 'modPow(2, 10, 1000000007)', label: '2^10 mod 1e9+7' },
+    { expr: 'gcd(48, 18)', label: 'gcd(48, 18)' },
+    { expr: '(modInverse(3, 7) * 3) % 7', label: '3 · inv(3) mod 7 (should be 1)' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — fast power, Euclid, and the Fermat inverse it enables:
+
+```ts
+// /dsa/17-advanced-algorithms/math-algorithms.ts
+function modPow(base: number, exp: number, m: number = 1e9 + 7): number {
+    let result = 1;
+    base = base % m;
+    while (exp > 0) {
+        if (exp % 2 === 1) result = (result * base) % m;  // odd bit → multiply
+        exp = Math.floor(exp / 2);                         // halve the exponent
+        base = (base * base) % m;                          // square the base
+    }
+    return result;
+}
+
+function gcd(a: number, b: number): number {
+    a = Math.abs(a); b = Math.abs(b);
+    while (b !== 0) { const t = b; b = a % b; a = t; }
+    return a;
+}
+
+// a^(-1) ≡ a^(m-2) (mod m) when m is prime (Fermat's Little Theorem)
+function modInverse(a: number, m: number = 1e9 + 7): number {
+    return modPow(a, m - 2, m);
+}
+```
+
+Run the full file: `npx tsx 17-advanced-algorithms/math-algorithms.ts`. It also covers the Sieve of
+Eratosthenes, the extended Euclidean algorithm, `nCr` mod p with precomputed factorials, and Fibonacci by
+matrix exponentiation — the same fast-power trick on 2×2 matrices.
+
+## Complexity
+
+Both primitives are logarithmic in the size of their input:
+
+$$
+T_{\text{modPow}} = O(\log e), \qquad T_{\text{gcd}} = O\!\big(\log \min(a, b)\big).
+$$
+
+| Operation | Naive | Fast | Idea |
+|-----------|-------|------|------|
+| $a^e \bmod m$ | $O(e)$ | $O(\log e)$ | square per exponent bit |
+| $\gcd(a, b)$ | $O(\min(a,b))$ | $O(\log \min(a,b))$ | replace with $(b,\, a \bmod b)$ |
+| $a^{-1} \bmod p$ | — | $O(\log p)$ | Fermat: $a^{p-2}$ |
+| Fibonacci $F_n$ | $O(n)$ | $O(\log n)$ | matrix power |
+
+Taking everything `mod m` along the way is what keeps the intermediate numbers from overflowing.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cryptography" icon="🔐">
+RSA encryption is literally a modular exponentiation: ciphertext is <code>message^e mod n</code> with a
+2048-bit exponent. Without fast power, a single encryption would take longer than the universe has existed.
+</ExampleCard>
+
+<ExampleCard domain="Music / rhythm" icon="🎵">
+To layer a 12-beat and an 8-beat loop, the pattern repeats every LCM(12, 8) = 24 beats — and LCM is
+computed as <code>a·b / gcd(a, b)</code>, so Euclid sets the length of the combined groove.
+</ExampleCard>
+
+<ExampleCard domain="Graphics / tiling" icon="🔲">
+Reducing a fraction like a texture's pixel-aspect ratio to lowest terms divides numerator and denominator
+by their GCD — the same Euclidean swap, run once per asset at import time.
+</ExampleCard>
+
+<ExampleCard domain="Distributed systems" icon="🌐">
+Consistent-hashing and checksum schemes raise a base to large powers in a finite field; fast modular
+exponentiation makes those hashes cheap enough to recompute on every request.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Overflow before the mod.** In languages with fixed-width integers, `base * base` can overflow *before*
+  you take `% m`. Use 64-bit/BigInt intermediates, or modular multiplication, for large moduli.
+- **Fermat needs a prime modulus.** `modInverse` via `a^(m-2)` only works when `m` is prime *and* `a` is not
+  a multiple of `m`. For composite moduli, use the extended Euclidean algorithm.
+- **Negative remainders.** `a % m` can be negative in many languages; normalize with `((a % m) + m) % m`,
+  especially for modular subtraction.
+- **GCD argument order.** `gcd(a, b)` with `a < b` just spends one extra swap step — harmless — but don't
+  forget `gcd(x, 0) = x`, the base case.
+- **Interview cue:** "compute x^n efficiently", "answer queries mod 1e9+7", or "reduce a fraction / find a
+  cycle length" all map to these two primitives. State the O(log n) bound up front.
+
+## Practice
+
+1. **Easy:** Trace `modPow(2, 10, 1000)` bit by bit and confirm the result is `24`.
+2. **Easy:** Compute `gcd(1071, 462)` with the Euclidean algorithm by hand.
+3. **Medium:** Implement `myPow(x, n)` for real `x` and possibly negative `n` (LeetCode 50) using fast
+   exponentiation.
+4. **Medium:** Use the extended Euclidean algorithm to find the modular inverse of `3` mod `11`.
+5. **Hard:** Compute the `n`-th Fibonacci number mod `1e9+7` via 2×2 matrix exponentiation in O(log n).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In fast exponentiation, what happens on a step where the current exponent bit is 0?',
+      options: [
+        'Multiply the result by the base, then square the base',
+        'Only square the base (skip the multiply) and shift to the next bit',
+        'Halve the result',
+        'Stop the loop',
+      ],
+      answer: 1,
+      explain: 'A 0 bit means that power of two is not part of the exponent, so you skip folding base into result — but you still square base to reach the next power of two.',
+    },
+    {
+      q: 'Why does replacing (a, b) with (b, a mod b) preserve the GCD?',
+      options: [
+        'Because a mod b is always smaller',
+        'Any common divisor of a and b also divides a mod b, and vice versa',
+        'Because b is prime',
+        'It does not — it only approximates the GCD',
+      ],
+      answer: 1,
+      explain: 'a mod b = a − ⌊a/b⌋·b, so a divisor of both a and b divides the remainder too; the set of common divisors is unchanged, hence so is the greatest one.',
+    },
+    {
+      q: 'Fermat’s Little Theorem lets you compute a modular inverse as a^(m−2) mod m only when…',
+      options: [
+        'a is even',
+        'm is prime and a is not a multiple of m',
+        'm is a power of two',
+        'always',
+      ],
+      answer: 1,
+      explain: 'Fermat requires a prime modulus m and gcd(a, m) = 1. For composite m, use the extended Euclidean algorithm instead.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Fast exponentiation</strong> reads the exponent in binary: square each step, multiply on a 1-bit — O(log e).',
+    'Doing everything <strong>mod m</strong> keeps intermediates small and prevents overflow.',
+    'The <strong>Euclidean algorithm</strong> replaces (a, b) with (b, a mod b) and finishes in O(log min(a, b)).',
+    'A <strong>modular inverse</strong> is a^(m−2) mod m for prime m (Fermat), or the extended Euclidean algorithm otherwise.',
+    'The same halving idea powers <strong>matrix exponentiation</strong> for linear recurrences like Fibonacci.',
+  ]}
+/>
+
+Next up: **Heuristics & Local Search** — when a problem is too big for any exact O(log n) trick, we trade
+guaranteed optimality for speed and chase "good enough" answers with hill climbing and simulated annealing.

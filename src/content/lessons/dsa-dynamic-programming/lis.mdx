@@ -1,0 +1,283 @@
+---
+title: Longest Increasing Subsequence
+track: dsa-dynamic-programming
+summary: "Build a 1-D DP where dp[i] is the longest increasing run ending at i, then speed it up with the O(n log n) patience-sorting trick."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-dynamic-programming/lcs
+leadsTo:
+  - dsa-greedy/greedy-intro
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpLisTable from '../../../components/demos/DpLisTable.tsx';
+
+## The hook: your longest improving streak
+
+You are tracking a runner's race times across a season: `10, 9, 2, 5, 3, 7, 101, 18`. They are messy — good days
+and bad days mixed together — but buried inside is a story of steady improvement, a stretch of races (not
+necessarily back-to-back) where each was strictly faster than the last. How long is the *longest improving
+streak* you can stitch together by deleting the off-days but keeping the rest in order? That is the **Longest
+Increasing Subsequence**, and it is the gateway to a whole family of "longest ordered chain" problems.
+
+<Callout type="intuition" title="The one-sentence idea">
+The longest increasing run that *ends* at position $i$ is just one more than the best earlier run you are
+allowed to extend — that is, the longest run ending at any $j$ before $i$ whose value is smaller.
+</Callout>
+
+## Intuition
+
+Like every DP we have met, LIS works because it has **optimal substructure** and **overlapping subproblems**.
+In the LCS lesson we indexed subproblems by a *pair* of positions and filled a 2-D grid. Here one index is
+enough. Define
+
+> $dp[i]$ = the length of the longest strictly increasing subsequence that **ends exactly at index $i$**.
+
+Why anchor it at $i$? Because anchoring removes ambiguity: every increasing subsequence has a last element, so
+if we know the best run ending at each position, the overall answer is simply the largest of those numbers.
+
+The recurrence falls right out of the anchor. To build the best run ending at $i$, look at every earlier index
+$j < i$. If $nums[j] < nums[i]$, then $nums[i]$ can legally sit *after* that run, extending it by one — a
+candidate length of $dp[j] + 1$. Take the best such candidate; if none qualifies (everything before is bigger),
+$nums[i]$ stands alone with length $1$. That inner scan over all $j < i$ is the heart of the $O(n^2)$ method,
+and the same subproblems $dp[j]$ get reused by every later $i$, which is exactly why caching them pays off.
+
+There is a faster way hiding here. Instead of asking "how long is the run ending at $i$?", patience sorting asks
+"what is the **smallest possible tail** for an increasing run of each length so far?" Keeping that list of best
+tails sorted lets a **binary search** replace the whole inner scan, dropping the cost to $O(n \log n)$. We will
+build the slow-but-clear table first, then earn the speedup.
+
+## Play with it
+
+Fill the table cell by cell. Watch the inner scan: for each $i$ (sky) the demo walks every earlier $j$ (indigo),
+and whenever $nums[j] < nums[i]$ it considers $dp[j] + 1$. When the scan ends, $dp[i]$ snaps to emerald.
+
+<DpLisTable client:visible />
+
+<Callout type="tip">
+After it finishes, press ⏮ Back through the finalize steps and read off the dp row. The answer is never the
+*last* cell — it is the *largest* cell. Try `3, 1, 8, 2, 5` and watch a later small number reset to a short run
+even though the array is long.
+</Callout>
+
+## How it works
+
+The recurrence and base case in full:
+
+$$
+dp[i] = 1 + \max_{\,j < i,\; nums[j] < nums[i]} dp[j], \qquad dp[i] = 1 \text{ if no such } j.
+$$
+
+The final answer is $\max_i dp[i]$, not $dp[n-1]$ — the longest run can end anywhere.
+
+A quick dry run on `[10, 9, 2, 5, 3, 7]`:
+
+```
+i=0 (10): no earlier values        -> dp = 1
+i=1  (9): 10 >= 9, skip            -> dp = 1
+i=2  (2): 10,9 >= 2, skip          -> dp = 1
+i=3  (5): 2 < 5 -> dp[2]+1 = 2     -> dp = 2     (run 2,5)
+i=4  (3): 2 < 3 -> dp[2]+1 = 2     -> dp = 2     (run 2,3)
+i=5  (7): 2,5,3 < 7 -> best dp+1=3 -> dp = 3     (run 2,5,7 or 2,3,7)
+answer = max(1,1,1,2,2,3) = 3
+```
+
+Here is both algorithms as runnable plain JavaScript — the clear $O(n^2)$ scan and the $O(n \log n)$ tails
+version that binary-searches instead:
+
+<CodeRunner
+  client:visible
+  code={`// O(n^2) DP: dp[i] = longest increasing run ending at i
+function lengthOfLIS(nums) {
+  if (nums.length === 0) return 0;
+  const dp = new Array(nums.length).fill(1);
+  for (let i = 1; i < nums.length; i++) {
+    for (let j = 0; j < i; j++) {
+      if (nums[j] < nums[i]) dp[i] = Math.max(dp[i], dp[j] + 1);
+    }
+  }
+  return Math.max(...dp);
+}
+
+// O(n log n): tails[k] = smallest tail of an increasing run of length k+1
+function lengthOfLISOptimized(nums) {
+  const tails = [];
+  for (const num of nums) {
+    let lo = 0, hi = tails.length;
+    while (lo < hi) {                 // binary search first tail >= num
+      const mid = (lo + hi) >> 1;
+      if (tails[mid] < num) lo = mid + 1;
+      else hi = mid;
+    }
+    if (lo === tails.length) tails.push(num); // extend
+    else tails[lo] = num;                      // overwrite for better future
+  }
+  return tails.length;
+}`}
+  tests={[
+    { expr: 'lengthOfLIS([10,9,2,5,3,7,101,18])', label: 'O(n^2) on the classic array' },
+    { expr: 'lengthOfLISOptimized([10,9,2,5,3,7,101,18])', label: 'O(n log n) on the same' },
+    { expr: 'lengthOfLIS([0,1,0,3,2,3])', label: 'O(n^2) on [0,1,0,3,2,3]' },
+    { expr: 'lengthOfLISOptimized([7,7,7,7])', label: 'all equal -> strict LIS is 1' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — the two cores side by side:
+
+```ts
+// /dsa/13-dynamic-programming/lis.ts
+function lengthOfLIS(nums: number[]): number {
+    if (nums.length === 0) return 0;
+    const n = nums.length;
+    const dp = new Array(n).fill(1);            // every element is an LIS of length 1
+    for (let i = 1; i < n; i++) {
+        for (let j = 0; j < i; j++) {
+            if (nums[j] < nums[i]) {
+                dp[i] = Math.max(dp[i], dp[j] + 1);
+            }
+        }
+    }
+    return Math.max(...dp);
+}
+
+function lengthOfLISOptimized(nums: number[]): number {
+    const tails: number[] = [];                 // tails[i] = smallest tail for length i+1
+    for (const num of nums) {
+        let left = 0, right = tails.length;
+        while (left < right) {                  // binary search insertion point
+            const mid = Math.floor((left + right) / 2);
+            if (tails[mid] < num) left = mid + 1;
+            else right = mid;
+        }
+        if (left === tails.length) tails.push(num);  // extend the longest run
+        else tails[left] = num;                      // keep tails as small as possible
+    }
+    return tails.length;
+}
+```
+
+Run the full file: `npx tsx 13-dynamic-programming/lis.ts`.
+
+## Complexity
+
+The two approaches trade the inner linear scan for a logarithmic search:
+
+$$
+T_{\text{DP}}(n) = O(n^2), \qquad T_{\text{patience}}(n) = O(n \log n), \qquad S(n) = O(n).
+$$
+
+| Approach | Time | Space | Gives the actual subsequence? |
+|----------|------|-------|-------------------------------|
+| $O(n^2)$ DP scan | $O(n^2)$ | $O(n)$ | Yes — add parent pointers |
+| Patience / tails + binary search | $O(n \log n)$ | $O(n)$ | Yes, but you must track indices |
+
+The speedup comes from a single observation: the `tails` array is **always sorted**. The DP scan re-asks "which
+earlier run can I extend?" from scratch for every element — $O(n)$ work each time. Patience sorting keeps the best
+tail for each achievable length, and because longer runs always need a larger tail, that list never decreases.
+A sorted list means we can **binary search** for the slot each new value belongs in — $O(\log n)$ instead of
+$O(n)$ — turning $n$ linear scans into $n$ logarithmic ones.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Logistics / Packing" icon="📦">
+Russian-doll boxes nest only when one is strictly smaller in *both* width and height. Sort by width ascending
+(ties by height descending), then the longest chain of nestable boxes is exactly the LIS of the heights — the
+longest strictly increasing "ordered-by-fit" chain.
+</ExampleCard>
+
+<ExampleCard domain="Aviation / Scheduling" icon="🛫">
+A gate agent processes seat-upgrade requests that must clear in increasing fare order down a standby list. The
+most upgrades that can be honored without ever stepping backward in fare is the longest increasing chain through
+the request stream — a live LIS on prices.
+</ExampleCard>
+
+<ExampleCard domain="Finance / Markets" icon="📈">
+A trader wants the longest stretch of trading days (skipping dips) where each chosen day's close beats the last
+chosen one — the longest *rising* run inside a noisy price series. That is LIS on the daily closes, measuring how
+persistent an uptrend really is beneath the noise.
+</ExampleCard>
+
+<ExampleCard domain="Software / Dependencies" icon="🧩">
+Plugin releases are compatible only with a host version at least as new as the previous link. The longest chain
+of mutually upgradeable releases — each requiring a strictly newer host than the one before — is an LIS over
+version numbers, telling you the deepest safe upgrade path.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Strict vs non-decreasing.** "Increasing" usually means strictly ($<$). If equal values are allowed (a
+  non-decreasing run), flip the comparison to $\le$ — in the tails version that means searching for the first
+  tail strictly greater than the new value.
+- **The tails array is *not* a valid LIS.** Its *length* is correct, but its contents are a patchwork of best
+  tails from different moments and may never have coexisted as a real subsequence. Do not print `tails` and call
+  it the answer.
+- **Reconstructing the sequence** needs **parent pointers**: in the $O(n^2)$ scan, record which $j$ gave each
+  $dp[i]$, then walk backward from the index holding the maximum. The demo lights up exactly one such path.
+- **Russian-doll envelopes** is LIS in disguise — the sort-by-width-then-descending-height trick prevents two
+  equal widths from chaining, so the height LIS stays strictly increasing.
+- **Know the theory link.** Patience sorting and **Dilworth's theorem** connect LIS to partitioning a sequence
+  into the fewest decreasing runs; dropping "Dilworth" or "patience piles" in an interview signals real depth.
+
+## Practice
+
+1. **Easy:** By hand, compute $dp[i]$ for `[3, 4, 1, 2]`. What is the LIS length, and which run achieves it?
+2. **Easy:** What does the LIS of a strictly decreasing array like `[9, 7, 5, 1]` equal, and why?
+3. **Medium:** Modify `lengthOfLIS` to allow equal elements (longest *non-decreasing* subsequence) by changing a
+   single comparison.
+4. **Medium:** Add parent pointers to the $O(n^2)$ version and return the actual subsequence, not just its length.
+5. **Hard:** Given envelopes `[[5,4],[6,4],[6,7],[2,3]]`, sort them correctly and run an LIS on heights to find
+   how many can be Russian-dolled.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the O(n^2) DP, what does dp[i] represent?',
+      options: [
+        'The longest increasing subsequence in nums[0..i] anywhere',
+        'The longest increasing subsequence ending exactly at index i',
+        'The number of increasing subsequences ending at i',
+        'The value nums[i] plus one',
+      ],
+      answer: 1,
+      explain: 'dp[i] is anchored: the longest strictly increasing run whose last element is nums[i]. The overall answer is the max over all dp[i].',
+    },
+    {
+      q: 'What is the LIS length of [10, 9, 2, 5, 3, 7, 101, 18]?',
+      options: ['3', '4', '5', '6'],
+      answer: 1,
+      explain: 'One longest run is 2, 3, 7, 18 (or 2, 5, 7, 101) — length 4.',
+    },
+    {
+      q: 'Why is the patience/tails method O(n log n) instead of O(n^2)?',
+      options: [
+        'It skips elements that are too large',
+        'The tails array stays sorted, so a binary search replaces the linear inner scan',
+        'It sorts the input first',
+        'It uses O(1) memory instead of O(n)',
+      ],
+      answer: 1,
+      explain: 'Because tails is always sorted, each element is placed with an O(log n) binary search rather than an O(n) scan over all earlier dp values.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Anchor the subproblem: <strong>dp[i] = longest increasing run ending at i</strong>, and the answer is the max over all i.',
+    'Recurrence: <strong>dp[i] = 1 + max(dp[j])</strong> over j &lt; i with nums[j] &lt; nums[i], else dp[i] = 1.',
+    'The plain DP is <strong>O(n²)</strong>; patience sorting with a sorted tails array and binary search makes it <strong>O(n log n)</strong>.',
+    'The <strong>tails array gives the length only</strong> — reconstruct the real subsequence with parent pointers.',
+    'LIS is the template for every <strong>longest ordered-by-rule chain</strong>: box stacking, upgrade scheduling, rising stock runs, version chains.',
+  ]}
+/>
+
+Next up: the **Greedy Algorithms** track and **The Greedy Strategy** — where, instead of remembering every
+subproblem, the locally best choice turns out to be globally optimal.

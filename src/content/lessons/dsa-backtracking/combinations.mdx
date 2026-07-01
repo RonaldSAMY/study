@@ -1,0 +1,268 @@
+---
+title: Combinations & Subsets
+track: dsa-backtracking
+summary: "When order stops mattering, a single rule tames the tree: only ever move forward — so each selection is generated exactly once, never as a reshuffle of an earlier one."
+difficulty: intermediate
+estMinutes: 17
+prereqs:
+  - dsa-backtracking/permutations
+leadsTo:
+  - dsa-backtracking/n-queens-sudoku
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BtCombinationTree from '../../../components/demos/BtCombinationTree.tsx';
+
+## The hook: building a pizza, not a queue
+
+A permutation cares who is first in line. A pizza does not: mushroom-then-onion is the same pizza as
+onion-then-mushroom. When you choose 2 toppings from 4, the order of choosing is irrelevant — you want the
+**set**, not the sequence. That is a **combination**.
+
+Because `{onion, mushroom}` and `{mushroom, onion}` must count once, the combination tree is far smaller than
+the permutation tree. The trick that makes it so is delightfully simple: **always pick forward**. Once you
+have used topping 3, you only ever consider toppings 4 and beyond — so you can never rebuild an earlier set
+in a different order.
+
+<Callout type="intuition" title="The one-sentence idea">
+To choose without order, pass a <strong>start index</strong> into the recursion and only pick elements at or
+after it — moving forward only means every selection is produced once, in sorted order.
+</Callout>
+
+## Intuition: forward-only is what kills the duplicates
+
+Recall permutations branched over *all* unused elements at every level. Combinations change one thing: the
+loop starts at `start`, not at `0`, and each recursive call advances `start` to `i + 1`. So the path is always
+increasing, and `{1, 3}` is generated only via "pick 1, then pick 3" — never via "pick 3, then pick 1",
+because 1 lies behind the start index by then.
+
+Two close cousins fall out of the same template:
+
+- **Subsets (the power set):** record the path at *every* node and never stop early — each element is simply
+  in or out, giving $2^{n}$ subsets.
+- **Combinations $C(n,k)$:** record the path only when it reaches length k.
+
+And combinations admit a lovely **prune**: if there are fewer numbers left than you still need, this branch
+can never reach size k, so cut it immediately. That is the red pruning you will see in the demo.
+
+This is the enumeration counterpart of the ML combinatorics track's [counting of
+combinations](/lessons/combinatorics/combinations), where you derived $\binom{n}{k} = \tfrac{n!}{k!\,(n-k)!}$.
+
+## Play with it
+
+Slide n and k below. The indigo path is the partial selection; a full set of k numbers is accepted in
+emerald. Watch the **forward-only** rule keep every branch sorted, and watch branches prune in red the moment
+too few numbers remain to finish.
+
+<BtCombinationTree client:visible />
+
+<Callout type="tip">
+Set k = n and only one leaf survives (you must take everything); set k = 1 and you get n single-element sets.
+The pruned red nodes are exactly the picks the smarter loop bound `i ≤ n − (k − chosen) + 1` would skip
+without even trying.
+</Callout>
+
+## How it works
+
+The combinations template — note `start` and the `i + 1` recursion that enforces forward motion:
+
+```ts
+function combine(n, k) {
+  const result = [];
+  const path = [];
+  function backtrack(start) {
+    if (path.length === k) { result.push([...path]); return; }
+    // prune: not enough numbers remain to reach size k
+    for (let i = start; i <= n - (k - path.length) + 1; i++) {
+      path.push(i);            // choose
+      backtrack(i + 1);        // explore — forward only
+      path.pop();              // un-choose
+    }
+  }
+  backtrack(1);
+  return result;
+}
+```
+
+**Dry run** of `combine(4, 2)`:
+
+```
+start 1: pick 1 → [1] → pick 2,3,4 → [1,2] [1,3] [1,4]
+start 2: pick 2 → [2] → pick 3,4   → [2,3] [2,4]
+start 3: pick 3 → [3] → pick 4     → [3,4]
+start 4: pruned — need 2, only {4} left
+```
+
+Six sets, `C(4,2) = 6`, each in increasing order. Run it, plus the power-set sibling:
+
+<CodeRunner
+  client:visible
+  code={`function combine(n, k) {
+  const result = [], path = [];
+  function backtrack(start) {
+    if (path.length === k) { result.push([...path]); return; }
+    for (let i = start; i <= n - (k - path.length) + 1; i++) {
+      path.push(i);
+      backtrack(i + 1);
+      path.pop();
+    }
+  }
+  backtrack(1);
+  return result;
+}
+
+// Same template, recorded at every node → the power set
+function subsets(nums) {
+  const result = [], path = [];
+  function backtrack(start) {
+    result.push([...path]);              // every node is a subset
+    for (let i = start; i < nums.length; i++) {
+      path.push(nums[i]);
+      backtrack(i + 1);
+      path.pop();
+    }
+  }
+  backtrack(0);
+  return result;
+}`}
+  tests={[
+    { expr: 'combine(4,2).length', label: 'C(4,2) count' },
+    { expr: 'JSON.stringify(combine(4,2))', label: 'all 2-subsets of 1..4' },
+    { expr: 'subsets([1,2,3]).length', label: 'number of subsets of [1,2,3] (2^3)' },
+  ]}
+/>
+
+## The real implementation
+
+The course file applies the same forward-only skeleton to **Combination Sum**, where a single index choice —
+recurse with `i` instead of `i + 1` — lets a number be reused, and sorting unlocks an early break:
+
+```ts
+// /dsa/15-backtracking/combinations.ts
+function combinationSum(candidates: number[], target: number): number[][] {
+    const result: number[][] = [];
+    candidates.sort((a, b) => a - b);                 // sort for the prune
+    function backtrack(start: number, current: number[], remaining: number): void {
+        if (remaining === 0) { result.push([...current]); return; }
+        for (let i = start; i < candidates.length; i++) {
+            if (candidates[i] > remaining) break;     // sorted: rest only bigger → prune
+            current.push(candidates[i]);
+            backtrack(i, current, remaining - candidates[i]);  // i, not i+1 → reuse allowed
+            current.pop();
+        }
+    }
+    backtrack(0, [], target);
+    return result;
+}
+```
+
+Run the full file: `npx tsx 15-backtracking/combinations.ts`.
+
+## Complexity
+
+The number of subsets is $2^{n}$; the number of k-combinations is the binomial coefficient:
+
+$$
+\binom{n}{k} = \frac{n!}{k!\,(n-k)!}, \qquad \sum_{k=0}^{n}\binom{n}{k} = 2^{n}.
+$$
+
+Copying each result of length k gives the time bounds below:
+
+| Problem | Count | Time | Space (stack) |
+|---------|-------|------|---------------|
+| Subsets / power set | $2^{n}$ | $O(n \cdot 2^{n})$ | $O(n)$ |
+| Combinations $C(n,k)$ | $\binom{n}{k}$ | $O(k \cdot \binom{n}{k})$ | $O(k)$ |
+
+Combinations are dramatically cheaper than permutations of the same selection: each k-set corresponds to $k!$
+orderings, so $\binom{n}{k} = P(n,k)/k!$. Dropping order divides the work by $k!$ — the whole reason
+forward-only matters.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Drug trials" icon="💊">
+Testing every pair (or triple) of drugs for interactions is a combinations problem: order is irrelevant, so
+researchers enumerate the C(n, 2) unordered pairs rather than all n² ordered ones, halving the experiments.
+</ExampleCard>
+
+<ExampleCard domain="Lottery" icon="🎰">
+A 6-from-49 draw has C(49, 6) ≈ 14 million equally likely tickets. Because the balls are unordered, the
+combination count — not a permutation count — is what sets your odds at roughly one in fourteen million.
+</ExampleCard>
+
+<ExampleCard domain="Machine learning" icon="🧠">
+Feature subset selection asks which columns to feed a model. The candidate space is the power set of features
+— 2ⁿ subsets — which is why greedy and regularised search replace brute-force enumeration once n grows.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Recursing from 0 instead of `start`.** That reintroduces ordering and floods you with duplicate sets like
+  `[1, 2]` and `[2, 1]`. Forward-only is the entire point.
+- **`i` vs `i + 1`.** Recurse with `i + 1` to use each element once; recurse with `i` to allow reuse
+  (Combination Sum). Mixing them up silently changes the problem.
+- **Handling input duplicates.** Sort, then skip `candidates[i] === candidates[i-1]` *at the same level*
+  (`i > start`) to avoid duplicate combinations — the same level-skip idea as permutations.
+- **Interview cue:** "choose k", "select a team", "all subsets", "pairs that sum to…" mean combinations. If
+  swapping two chosen items would *not* create a new answer, you are counting sets, so move forward only.
+
+## Practice
+
+1. **Easy:** List `C(4, 2)` by hand and confirm there are 6 sets, each sorted.
+2. **Easy:** Adapt the template to print all subsets of `[a, b, c]` (the power set). Expect 8.
+3. **Medium:** Combination Sum III (LeetCode 216): choose k numbers from 1–9 that sum to n, pruning when the
+   running sum exceeds n.
+4. **Medium:** Letter Combinations of a Phone Number (LeetCode 17): map each digit to letters and build every
+   string — a combination over independent choice sets.
+5. **Hard:** Subsets II (LeetCode 90): generate all *distinct* subsets when the input has duplicates, using the
+   sorted same-level skip.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What single change turns the permutation template into a combination template?',
+      options: [
+        'Sorting the input',
+        'Passing a start index and only picking elements at or after it (forward only)',
+        'Using a used[] array',
+        'Stopping at depth 1',
+      ],
+      answer: 1,
+      explain: 'Forward-only selection (start, then i + 1) guarantees increasing paths, so each unordered set is generated exactly once.',
+    },
+    {
+      q: 'How many subsets does a 5-element set have?',
+      options: ['25', '32', '120', '10'],
+      answer: 1,
+      explain: 'Each element is independently in or out: 2^5 = 32 subsets, including the empty set and the full set.',
+    },
+    {
+      q: 'In Combination Sum, why does the recursion use backtrack(i, ...) rather than backtrack(i + 1, ...)?',
+      options: [
+        'To sort the candidates',
+        'To allow the same number to be reused multiple times',
+        'To prune duplicates',
+        'It is a bug; it should be i + 1',
+      ],
+      answer: 1,
+      explain: 'Staying at index i lets the current candidate be chosen again, which is exactly what "elements may be reused" requires.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Combinations are <strong>unordered</strong> selections; the count is the binomial coefficient C(n, k).',
+    'The key rule is <strong>move forward only</strong>: a start index plus i + 1 recursion makes every set appear once.',
+    'The <strong>same template</strong> yields the power set (record every node) or C(n, k) (record at length k).',
+    'Recurse with <strong>i</strong> to allow reuse, with <strong>i + 1</strong> to use each element once.',
+    'Dropping order divides the work by <strong>k!</strong>, so combinations are far cheaper than permutations.',
+  ]}
+/>
+
+Next up: **N-Queens & Sudoku** — backtracking meets hard constraints, where aggressive pruning is the only
+thing that makes the search finish.

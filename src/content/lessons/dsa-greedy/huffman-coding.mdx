@@ -1,0 +1,250 @@
+---
+title: Huffman Coding
+track: dsa-greedy
+summary: "Build the optimal prefix code by repeatedly merging the two least-frequent symbols: rare symbols sink deep for long codes, common ones stay shallow for short ones."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-greedy/job-sequencing
+leadsTo:
+  - dsa-backtracking/backtracking-intro
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GreedyHuffmanTree from '../../../components/demos/GreedyHuffmanTree.tsx';
+
+## The hook: Morse code, done optimally
+
+Samuel Morse gave the common letter "E" a single dot and the rare "Q" a long dash-dash-dot-dash. The
+instinct is right — frequent symbols should be cheap to send — but he tuned it by hand. Huffman coding
+does it *optimally* and automatically: given how often each symbol appears, it produces the variable-length
+binary code that makes the encoded message as short as mathematically possible. The engine is a beautifully
+simple greedy loop: **keep merging the two rarest things you have**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Repeatedly combine the two lowest-frequency symbols (or merged groups) into one node until a single tree
+remains — the deeper a symbol ends up, the longer its code, so the rarest symbols get the longest codes.
+</Callout>
+
+## Intuition: why merging the two rarest is optimal
+
+Huffman builds a binary tree. Each symbol is a leaf, and its code is the path from the root — left is `0`,
+right is `1`. A symbol at depth $d$ costs $d$ bits, so the total encoded length is
+$\sum_i f_i \cdot d_i$, the **weighted path length**, where $f_i$ is the frequency of symbol $i$.
+Because no leaf is an ancestor of another, no code is a prefix of another — the code is **prefix-free** and
+decodes with zero ambiguity.
+
+Two facts make the greedy choice safe:
+
+1. **An optimal tree has the two lowest-frequency symbols as deepest siblings.** If a rarer symbol were
+   shallower than a more common one, swapping them would lower $\sum f_i d_i$. So pushing the two rarest to
+   the deepest level never hurts — the greedy-choice property.
+2. **Optimal substructure.** Replace those two rarest leaves with a single node of their combined frequency
+   and solve the smaller problem; an optimal solution to it extends to an optimal solution to the original.
+
+Together these give an exchange-style proof that merging the two smallest frequencies, over and over, yields
+a minimum-weighted-path tree — the optimal code.
+
+<Callout type="why">
+Huffman is the classical engine inside lossless compressors: DEFLATE (ZIP, gzip, PNG) and the entropy stage
+of JPEG all use Huffman or its canonical variant. You will meet it again in
+<a href="../dsa-compression/compression-basics">How Compression Works</a>.
+</Callout>
+
+## Play with it
+
+Type any text. The demo counts character frequencies, shows them as a priority queue, and merges the two
+smallest at each step until one tree remains — then reveals the codes. Ringed nodes are the pair about to
+merge.
+
+<GreedyHuffmanTree client:visible />
+
+<Callout type="tip">
+Watch a rare letter get merged early: every later merge adds one more edge above it, lengthening its code.
+Common letters join the tree last and sit near the root, so they end up with the shortest codes.
+</Callout>
+
+## How it works
+
+Frequencies `A:5 B:4 C:3 D:2 E:1`. Always pull the two smallest from the queue and merge:
+
+```
+queue: E1 D2 C3 B4 A5
+merge E1 + D2 → 3        queue: C3 (ED)3 B4 A5
+merge C3 + (ED)3 → 6     queue: B4 A5 6
+merge B4 + A5 → 9        queue: 6 9
+merge 6 + 9 → 15 (root)
+codes: A=11, B=10, C=00, D=011, E=010
+```
+
+The two rarest, E and D, sit deepest with 3-bit codes; the common A and B ride near the root with 2 bits.
+
+<CodeRunner
+  client:visible
+  code={`function huffmanCodes(text) {
+  const freq = {};
+  for (const ch of text) freq[ch] = (freq[ch] || 0) + 1;
+  // nodes: { freq, char, left, right }
+  let nodes = Object.entries(freq).map(([char, f]) => ({ freq: f, char, left: null, right: null }));
+  while (nodes.length > 1) {
+    nodes.sort((a, b) => a.freq - b.freq);              // two smallest to the front
+    const a = nodes.shift(), b = nodes.shift();
+    nodes.push({ freq: a.freq + b.freq, char: null, left: a, right: b });
+  }
+  const codes = {};
+  (function walk(n, code) {
+    if (!n) return;
+    if (n.char !== null) { codes[n.char] = code || '0'; return; }
+    walk(n.left, code + '0'); walk(n.right, code + '1');
+  })(nodes[0], '');
+  return codes;
+}`}
+  tests={[
+    { expr: "JSON.stringify(huffmanCodes('AAAAABBBBCCCDDE'))", label: 'codes for AAAAABBBBCCCDDE' },
+    { expr: "huffmanCodes('AAAAABBBBCCCDDE')['A'].length", label: 'A is the shortest code' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — a min-heap drives the merges, then a traversal reads off the codes:
+
+```ts
+// /dsa/14-greedy/huffman-coding.ts
+function buildHuffmanTree(frequencies: Map<string, number>): HuffmanNode | null {
+    if (frequencies.size === 0) return null;
+    const heap = new MinHeap<HuffmanNode>((a, b) => a.freq - b.freq);
+    for (const [char, freq] of frequencies) heap.push({ char, freq, left: null, right: null });
+
+    // Repeatedly merge the two smallest-frequency nodes
+    while (heap.size() > 1) {
+        const left = heap.pop()!;
+        const right = heap.pop()!;
+        heap.push({ char: null, freq: left.freq + right.freq, left, right });
+    }
+    return heap.pop() || null;
+}
+
+function generateCodes(root: HuffmanNode | null): Map<string, string> {
+    const codes = new Map<string, string>();
+    function traverse(node: HuffmanNode | null, code: string): void {
+        if (!node) return;
+        if (node.char !== null) { codes.set(node.char, code || '0'); return; }
+        traverse(node.left, code + '0');   // left edge contributes a 0 bit
+        traverse(node.right, code + '1');  // right edge contributes a 1 bit
+    }
+    traverse(root, '');
+    return codes;
+}
+```
+
+Run the full file: `npx tsx 14-greedy/huffman-coding.ts`.
+
+## Complexity
+
+With $n$ distinct symbols, each of the $n-1$ merges does two heap pops and one push:
+
+$$
+T(n) = O(n \log n), \qquad S(n) = O(n).
+$$
+
+| Step | Cost |
+|------|------|
+| Build the heap of $n$ leaves | $O(n)$ |
+| $n-1$ merges, each $O(\log n)$ | $O(n \log n)$ |
+| Generate codes (tree traversal) | $O(n)$ |
+
+If the frequencies arrive already sorted, two queues (one for leaves, one for merged nodes) give an
+elegant $O(n)$ build with no heap at all.
+
+## The same idea, different worlds
+
+<ExampleCard domain="File compression" icon="🗜️">
+gzip and PNG run DEFLATE, which Huffman-codes the output of its LZ matcher. The "merge the two rarest"
+loop is literally inside the tools that shrink your downloads — the bridge to the
+<a href="../dsa-compression/lz-family">LZ family</a>.
+</ExampleCard>
+
+<ExampleCard domain="Robotics" icon="🤖">
+"Minimum cost to connect ropes/sticks" (LeetCode 1167) is Huffman without the tree: repeatedly join the two
+shortest ropes, paying their combined length, to minimize total joining cost.
+</ExampleCard>
+
+<ExampleCard domain="Information theory" icon="🧠">
+Huffman's average code length lands within one bit of Shannon entropy $H = -\sum p_i \log_2 p_i$, the
+theoretical floor on bits per symbol. It is the practical realization of "rare events carry more information."
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Not using a priority queue.** Re-sorting a list every merge is $O(n^2 \log n)$. A min-heap keeps each
+  merge at $O(\log n)$.
+- **Breaking the prefix-free property.** Codes must come from *leaf* paths only. If an internal node ever
+  gets a code, decoding becomes ambiguous.
+- **The single-symbol edge case.** A text with one distinct character has no branching; assign it the code
+  `0` explicitly or your traversal yields an empty string.
+- **Tie-breaking changes the tree, not the optimum.** Different orderings of equal frequencies produce
+  different (equally optimal) codes — fix a tie-break rule if you need reproducible output (canonical Huffman).
+- **Interview cue:** "optimal prefix code / minimize total encoded length / repeatedly combine the two
+  smallest" all point straight at Huffman and a min-heap.
+
+## Practice
+
+1. **Easy:** Build the Huffman tree for `A:7 B:1 C:1` by hand and give each code.
+2. **Easy:** Verify your codes are prefix-free — no code is the start of another.
+3. **Medium:** LeetCode 1167 — minimum cost to connect sticks, using a min-heap of two-smallest merges.
+4. **Medium:** Compute the compression ratio for `AAAAABBBBCCCDDE` versus a flat 3-bit-per-symbol code.
+5. **Hard:** Implement *canonical* Huffman codes — keep Huffman's code lengths but reassign codes in
+   length-then-alphabetical order so only the lengths need to be transmitted.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'At each step, Huffman coding merges:',
+      options: [
+        'The two highest-frequency nodes',
+        'The two lowest-frequency nodes',
+        'A random pair of nodes',
+        'The deepest two leaves',
+      ],
+      answer: 1,
+      explain: 'Merging the two lowest-frequency nodes pushes the rarest symbols deepest, minimizing the weighted path length — the greedy choice that yields the optimal code.',
+    },
+    {
+      q: 'Why is a Huffman code guaranteed to be decodable without separators?',
+      options: [
+        'All codes have the same length',
+        'It is prefix-free: no code is a prefix of another, because only leaves carry codes',
+        'It uses a checksum',
+        'The decoder knows the frequencies',
+      ],
+      answer: 1,
+      explain: 'Because every symbol is a leaf, no symbol\\u2019s path is a prefix of another\\u2019s, so a left-to-right scan of the bits has exactly one parse.',
+    },
+    {
+      q: 'For A:5 B:4 C:3 D:2 E:1, which symbol gets the longest code?',
+      options: ['A', 'B', 'C', 'E'],
+      answer: 3,
+      explain: 'E is the rarest, so it is merged earliest and sits deepest in the tree, earning the longest code.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Huffman builds the <strong>optimal prefix code</strong> by repeatedly merging the two lowest-frequency nodes.',
+    'A symbol\\u2019s code length equals its <strong>depth</strong>, so rare symbols sink deep and common ones stay shallow.',
+    'Codes are <strong>prefix-free</strong> because only leaves carry codes — decoding is unambiguous.',
+    'A <strong>min-heap</strong> gives O(n log n); pre-sorted frequencies allow an O(n) two-queue build.',
+    'It powers real compressors (<strong>DEFLATE, JPEG</strong>) and lands within one bit of <strong>Shannon entropy</strong>.',
+  ]}
+/>
+
+That completes the greedy track — you can now spot a greedy-choice property, prove it with an exchange
+argument, and apply it to scheduling, packing, and compression. Next up: **The Backtracking Template**,
+where instead of committing forever we explore, undo, and prune a search tree.

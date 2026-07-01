@@ -1,0 +1,227 @@
+---
+title: Fractional Knapsack
+track: dsa-greedy
+summary: "When you can take pieces of an item, fill the bag by value-density: sort by value per kilogram and pour in the densest first, taking a fraction of whatever overflows."
+difficulty: intermediate
+estMinutes: 15
+prereqs:
+  - dsa-greedy/activity-selection
+leadsTo:
+  - dsa-greedy/interval-scheduling
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GreedyFractionalKnapsack from '../../../components/demos/GreedyFractionalKnapsack.tsx';
+
+## The hook: a thief at the spice market
+
+A thief breaks into a warehouse with a sack that holds 50 kilograms. The loot is gold dust, silver
+flakes, and bronze powder — all pourable. Each metal has a price per kilogram. With a fixed sack, the
+greedy move is obvious and provably best: pour in the **most valuable per kilogram** first, then the
+next, and when the last one will not fit whole, take just enough to fill the sack. Divisibility is the
+magic ingredient that makes greed optimal here.
+
+<Callout type="intuition" title="The one-sentence idea">
+Fill the knapsack in order of value-density (value divided by weight), taking each item whole until one
+overflows, then take exactly the fraction that fits — every kilogram ends up carrying the most value it can.
+</Callout>
+
+## Intuition: why value-density is the safe choice
+
+Activity selection sorted by finish time; here the right key is **value per unit weight**,
+$r = v / w$. The greedy-choice property follows from a clean exchange argument.
+
+Suppose an optimal packing uses less than the maximum of the densest item $X$ while including some weight
+of a lower-density item $Y$. Remove a sliver of weight $\Delta$ of $Y$ and add $\Delta$ of $X$. The bag
+weight is unchanged, but value rises by $\Delta \,(r_X - r_Y) > 0$. So we improved a supposedly optimal
+solution — a contradiction unless it already loads $X$ to the brim first. Hence the densest-first choice
+is always safe.
+
+<Callout type="why">
+This swap only works because the item is *divisible* — you can move an arbitrary $\Delta$ between items.
+For indivisible (0/1) items you cannot shave off $\Delta$, the exchange breaks, and greedy fails. That
+single difference is why fractional knapsack is greedy while 0/1 knapsack needs dynamic programming. See
+the contrast in <a href="../dsa-dynamic-programming/knapsack">0/1 Knapsack</a>.
+</Callout>
+
+## Play with it
+
+Edit the items as `weight:value` and set the capacity. The demo sorts by density and pours each item into
+the bar, showing the fraction taken when one overflows. Notice the running value only ever climbs as fast
+as possible per kilogram.
+
+<GreedyFractionalKnapsack client:visible />
+
+<Callout type="tip">
+Try giving a heavy item a huge value so its density jumps to the top — it gets poured first even though it
+is bulky. Greedy cares about value *per kilogram*, never raw value or raw weight alone.
+</Callout>
+
+## How it works
+
+Items `A(10kg, $60)`, `B(20kg, $100)`, `C(30kg, $120)`, capacity 50. Densities are 6.0, 5.0, 4.0 dollars
+per kilogram, so the order is A, B, C:
+
+```
+capacity 50 → take all A (10kg, +$60)   → 40 left, value 60
+capacity 40 → take all B (20kg, +$100)  → 20 left, value 160
+capacity 20 → C needs 30kg, take 20/30  → 0 left, +$80
+total value = $240
+```
+
+<CodeRunner
+  client:visible
+  code={`function fractionalKnapsack(items, capacity) {
+  const sorted = [...items].sort((a, b) => b.value / b.weight - a.value / a.weight);
+  let total = 0, cap = capacity;
+  for (const it of sorted) {
+    if (cap >= it.weight) { total += it.value; cap -= it.weight; }
+    else { total += it.value * (cap / it.weight); break; } // take the fraction that fits
+  }
+  return total;
+}
+
+const items = [
+  { weight: 10, value: 60 }, { weight: 20, value: 100 }, { weight: 30, value: 120 },
+];`}
+  tests={[
+    { expr: 'fractionalKnapsack(items, 50)', label: 'max value, capacity 50' },
+    { expr: 'fractionalKnapsack(items, 25)', label: 'max value, capacity 25' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — sort by ratio, take whole items, then one fractional bite:
+
+```ts
+// /dsa/14-greedy/fractional-knapsack.ts
+function fractionalKnapsack(items: KnapsackItem[], capacity: number): number {
+    if (items.length === 0 || capacity <= 0) return 0;
+
+    // Sort by value/weight ratio (descending)
+    const sorted = [...items].sort(
+        (a, b) => (b.value / b.weight) - (a.value / a.weight)
+    );
+
+    let totalValue = 0;
+    let remainingCapacity = capacity;
+
+    for (const item of sorted) {
+        if (remainingCapacity >= item.weight) {
+            totalValue += item.value;             // take the whole item
+            remainingCapacity -= item.weight;
+        } else {
+            const fraction = remainingCapacity / item.weight;
+            totalValue += item.value * fraction;  // take the slice that fits
+            break;                                // bag is now full
+        }
+    }
+    return totalValue;
+}
+```
+
+Run the full file: `npx tsx 14-greedy/fractional-knapsack.ts`.
+
+## Complexity
+
+Sorting by density is the only expensive step:
+
+$$
+T(n) = O(n \log n), \qquad S(n) = O(n).
+$$
+
+| Problem | Approach | Time | Optimal? |
+|---------|----------|------|----------|
+| Fractional knapsack | Greedy by density | $O(n \log n)$ | Yes |
+| 0/1 knapsack | Dynamic programming | $O(n \cdot W)$ | Yes |
+| 0/1 knapsack | Greedy by density | $O(n \log n)$ | No — can be far off |
+
+The fractional optimum is also an upper bound on the 0/1 optimum, which is exactly why branch-and-bound
+solvers for 0/1 knapsack use it to prune.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Investing" icon="📈">
+Spreading a fixed budget across assets to maximize expected return, when you can buy fractional shares,
+is fractional knapsack: rank by return-per-dollar and fill the budget from the top down.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="🚚">
+A fuel tanker filling from sources of differing purity-per-liter maximizes delivered quality by drawing
+from the richest source first and topping off with whatever fits — value-density over a capacity limit.
+</ExampleCard>
+
+<ExampleCard domain="Cloud computing" icon="☁️">
+Allocating a fixed bandwidth budget among data streams, where each stream can be throttled to any rate,
+maximizes total utility by funding the highest utility-per-megabit streams first.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Indivisible items kill greedy.** With whole-item-only loot, density-first can leave the bag
+  underfilled and miss the optimum. If the prompt says "you cannot split items," switch to 0/1 DP.
+- **Sort descending, not ascending.** A flipped comparator fills the bag with the *worst* density first —
+  a classic silent bug. Double-check the direction.
+- **Only one item is ever fractional.** Once you take a slice, the bag is full and you stop. If your code
+  takes fractions of several items, the loop logic is wrong.
+- **Integer-divide traps.** Compute the ratio in floating point; integer division of `value/weight`
+  collapses distinct densities and corrupts the order.
+- **Interview cue:** "items are divisible / you can take a portion / maximize value under a capacity" almost
+  always means greedy by density — say "sort by value per unit weight" immediately.
+
+## Practice
+
+1. **Easy:** Items `(w=5, v=30)`, `(w=10, v=40)`, capacity 8. What is the max value?
+2. **Easy:** Reorder the same items by density and confirm the greedy order by hand.
+3. **Medium:** LeetCode 1710 — maximize units on a truck given box types `[count, unitsPerBox]` and a box
+   limit (a discrete cousin where greedy by units-per-box still works).
+4. **Medium:** Given a target *value*, find the minimum weight needed to reach it (invert the greedy).
+5. **Hard:** Show with a small example that greedy by density on 0/1 knapsack can be arbitrarily bad, then
+   solve the same instance with DP.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What sort key drives the fractional knapsack greedy?',
+      options: ['Weight ascending', 'Value descending', 'Value-to-weight ratio descending', 'Value-to-weight ratio ascending'],
+      answer: 2,
+      explain: 'Sort by value divided by weight, highest first — each kilogram of capacity should carry the most value possible.',
+    },
+    {
+      q: 'Why is greedy optimal for fractional but NOT for 0/1 knapsack?',
+      options: [
+        'Fractional has fewer items',
+        'You can move an arbitrary fraction of weight between items, so the improving swap always exists',
+        '0/1 knapsack has no optimal substructure',
+        'Sorting is impossible for 0/1 items',
+      ],
+      answer: 1,
+      explain: 'The exchange argument shifts a sliver of weight from a lower-density item to a higher-density one. That sliver requires divisibility — impossible for whole-only 0/1 items.',
+    },
+    {
+      q: 'For items A(10kg,$60), B(20kg,$100), C(30kg,$120) and capacity 50, the max value is:',
+      options: ['$220', '$240', '$260', '$280'],
+      answer: 1,
+      explain: 'All of A ($60) + all of B ($100) + 20/30 of C ($80) = $240.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Sort items by <strong>value-density</strong> (value ÷ weight) and pour in the densest first.',
+    'Take whole items until one overflows, then take exactly the <strong>fraction that fits</strong>.',
+    'Greedy is optimal here because <strong>divisibility</strong> makes the improving exchange always possible.',
+    'Runs in <strong>O(n log n)</strong>, dominated by the sort.',
+    'For <strong>indivisible (0/1)</strong> items the swap breaks — use dynamic programming instead.',
+  ]}
+/>
+
+Next up: **Interval Scheduling & Merging** — back to intervals, where sorting by the right endpoint lets a
+single sweep merge overlapping ranges or pack them tight.

@@ -1,0 +1,254 @@
+---
+title: Digit DP
+track: dsa-dp-optimization
+summary: "Digit DP: count integers in a range with some digit property by building numbers left to right, memoizing on (position, state, tight)."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-dp-optimization/dp-on-trees
+leadsTo:
+  - dsa-dp-optimization/profile-bitmask-dp
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpOptDigitBuilder from '../../../components/demos/DpOptDigitBuilder.tsx';
+
+## The hook: how many numbers up to a trillion have digit sum 50?
+
+"Count the integers in $[1, 10^{12}]$ whose digits add up to 50." You cannot loop a trillion times.
+But you do not have to look at the *numbers* — only at their **digits**, and there are just 13 of
+them. Build a number left to right, one digit per step, tracking only what matters (here, the running
+digit sum). The catch is the upper bound: while your prefix still equals the bound's prefix, the next
+digit is capped; the moment you go strictly lower, you are free to use 0–9. That single boolean — are
+we still **tight**? — is the heart of digit DP.
+
+<Callout type="intuition" title="The one-sentence idea">
+Count numbers by constructing them digit by digit, remembering only a small state plus a "tight" flag
+that says whether the prefix is still pinned to the upper bound.
+</Callout>
+
+## Intuition: positions, not values
+
+Every integer $\le N$ is a string of digits no longer than $N$. Process positions from the most
+significant. At each position you choose a digit, and three things decide what is legal and what to
+remember:
+
+1. **position** — how far along you are (so memoization can reuse work);
+2. **state** — the problem-specific accumulator: a running digit sum, a remainder mod $m$, the last
+   digit placed, a bitmask of digits used…;
+3. **tight** — `true` if every digit so far equals $N$'s digit. While tight, the current digit may
+   only go up to $N$'s digit; once you pick something smaller, tight becomes `false` forever and the
+   rest is unconstrained (any digit 0–9).
+
+The payoff: from a *loose* state, the count of completions depends only on (position, state) — not on
+the specific prefix — so it memoizes. Only the thin sliver of *tight* states (at most one per
+position) is unique. For a range $[L, R]$ you compute $f(R) - f(L-1)$, where $f(x)$ counts valid
+numbers in $[0, x]$.
+
+## Play with it
+
+Set an upper bound $N$ and a target digit sum, then watch the builder explore the decision tree.
+Indigo means the prefix is still **tight** (digits capped by $N$); emerald means it has gone **loose**
+and the next digit is free 0–9. Complete numbers that hit the target turn green and bump the count.
+
+<DpOptDigitBuilder client:visible />
+
+<Callout type="tip">
+Drop the bound to something tiny like 24 and step through. You will see that as soon as you place a
+first digit below 3 (here $N=24$ ⇒ first digit cap is 2), the whole subtree becomes loose — and every
+loose subtree with the same remaining length and the same running sum has an identical count. That
+repetition is exactly what memoization collapses.
+</Callout>
+
+## How it works
+
+Count numbers in $[0, 345]$ with digit sum 5. Digits of the bound are `[3, 4, 5]`.
+
+```
+pos 0, tight, sum 0 → may place 0,1,2,3
+  place 3 (=cap) → still TIGHT, sum 3
+    pos 1, tight → may place 0..4
+      place 2 → loose, sum 5 → pos 2 free: only "0" keeps sum 5 → 320 ✓
+      ...
+  place 0,1,2 (<cap) → LOOSE, then any digit 0..9 the rest of the way
+    loose with 2 digits left and sum s: count = #(two digits summing to 5 - s)
+```
+
+Tight branches are rare (one digit may equal the cap); loose branches repeat, so we cache on
+`(pos, sum, tight)`. Here is the memoized counter:
+
+<CodeRunner
+  client:visible
+  code={`// Count integers in [0, n] whose digits sum to target.
+function countDigitSum(n, target) {
+  const digits = String(n).split('').map(Number);
+  const L = digits.length;
+  const memo = new Map();
+  function solve(pos, sum, tight) {
+    if (sum > target) return 0;
+    if (pos === L) return sum === target ? 1 : 0;
+    const key = pos + '|' + sum + '|' + tight;
+    if (!tight && memo.has(key)) return memo.get(key);
+    const limit = tight ? digits[pos] : 9;
+    let total = 0;
+    for (let d = 0; d <= limit; d++) {
+      total += solve(pos + 1, sum + d, tight && d === limit);
+    }
+    if (!tight) memo.set(key, total);
+    return total;
+  }
+  return solve(0, 0, true);
+}
+function inRange(lo, hi, target) {
+  return countDigitSum(hi, target) - countDigitSum(lo - 1, target);
+}`}
+  tests={[
+    { expr: 'countDigitSum(345, 5)', label: 'digit sum 5 in [0,345]' },
+    { expr: 'countDigitSum(100, 10)', label: 'digit sum 10 in [0,100]' },
+    { expr: 'inRange(100, 345, 5)', label: 'digit sum 5 in [100,345]' },
+  ]}
+/>
+
+## The real implementation
+
+The course file wraps this into a reusable framework — you supply the state, the transition, and the
+validity test, and it handles tight, leading zeros, and the range subtraction:
+
+```ts
+// /dsa/24-dp-optimization/digit-dp.ts
+private solve(pos: number, state: State, tight: boolean, leadingZero: boolean): bigint {
+    if (pos === this.digits.length) return this.isValid(state, true) ? 1n : 0n;
+
+    const key = `${pos}|${this.stateKey(state)}|${tight}|${leadingZero}`;
+    if (this.memo.has(key)) return this.memo.get(key)!;
+
+    const limit = tight ? this.digits[pos] : 9;        // cap only while tight
+    let result = 0n;
+    for (let digit = 0; digit <= limit; digit++) {
+        const newLeadingZero = leadingZero && digit === 0;
+        const newState = newLeadingZero ? this.initialState : this.transition(state, digit);
+        if (this.isValid(newState, false) || newLeadingZero) {
+            result += this.solve(pos + 1, newState, tight && digit === limit, newLeadingZero);
+        }
+    }
+    this.memo.set(key, result);                        // memo keyed by state, incl. tight
+    return result;
+}
+// countRange(low, high) = count(high) - count(low - 1n)
+```
+
+Run the full file: `npx tsx 24-dp-optimization/digit-dp.ts`.
+
+## Complexity
+
+Let $d$ be the number of digits and $S$ the size of the problem state (e.g. max digit sum, or the
+modulus $m$). Each `(pos, state, tight)` is computed once, and each does $O(10)$ work:
+
+$$
+T = O(d \cdot S \cdot 10), \qquad S_{\text{space}} = O(d \cdot S).
+$$
+
+| Approach | Time for $[0, N]$ |
+|----------|-------------------|
+| Brute force enumerate | $O(N \cdot d)$ |
+| **Digit DP** | $O(d \cdot S \cdot 10)$ |
+
+For $N = 10^{12}$ that is roughly $13 \times 50 \times 10 \approx 6500$ operations instead of a
+trillion — the whole point.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Tax & audit" icon="🧾">
+"How many invoice IDs below the cutoff have a checksum digit-sum divisible by 9?" is a divisibility
+digit DP — the state is the running value mod 9, updated as <code>(state*10 + d) % 9</code>.
+</ExampleCard>
+
+<ExampleCard domain="Telecom" icon="📞">
+Counting valid phone or license numbers that never repeat a digit twice in a row is digit DP whose
+state is the previous digit, rejecting a transition when the new digit equals it.
+</ExampleCard>
+
+<ExampleCard domain="Cryptography" icon="🔢">
+Counting binary integers up to $n$ with no two consecutive 1s (Fibonacci-flavored) is digit DP in
+base 2 — exactly LeetCode 600, with state = the previous bit.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Leading zeros are not real digits.** The number 7 is "007" in a 3-digit frame; if your property
+  counts digits (e.g. "contains no 0"), track a `leadingZero` flag and treat those slots as empty.
+- **Do not memoize tight states.** A tight node is reachable only along the unique bound-hugging
+  prefix; caching it by `(pos, state)` would wrongly share it with loose nodes. Either include `tight`
+  in the key or skip caching when tight.
+- **Ranges via subtraction.** Compute $f(R) - f(L-1)$; forgetting the $-1$ off-by-one is the classic
+  bug. Handle $L = 0$ carefully.
+- **Keep the state small.** The whole technique dies if the state space explodes — a digit-sum state
+  is fine ($\le 9d$); a "set of all digits seen" ($2^{10}$) is still okay, but be deliberate.
+- **Interview cue:** "count numbers $\le N$ with property P" where $N$ is astronomically large
+  screams digit DP. Name your three axes — position, state, tight — out loud.
+
+## Practice
+
+1. **Easy:** By hand, count integers in $[0, 20]$ with digit sum 3. Verify against the demo.
+2. **Easy:** Write the transition for "count numbers divisible by 7": what is the state and its update?
+3. **Medium:** Count numbers in $[L, R]$ whose digits are non-decreasing (state = last digit placed).
+4. **Medium:** LeetCode 233 — total count of digit 1 across $[1, n]$ (the state accumulates a running
+   tally, not a yes/no).
+5. **Hard:** LeetCode 1012 — count integers $\le n$ with at least one repeated digit, using a
+   $2^{10}$ bitmask of used digits plus a leading-zero flag.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the "tight" flag track in digit DP?',
+      options: [
+        'Whether the number is even',
+        'Whether the prefix built so far still equals the upper bound’s prefix',
+        'How many digits remain',
+        'Whether memoization is enabled',
+      ],
+      answer: 1,
+      explain: 'Tight means every digit so far matched N. While tight, the next digit is capped by N’s digit; once you go lower it becomes loose.',
+    },
+    {
+      q: 'Why is it usually wrong to memoize a state where tight = true?',
+      options: [
+        'Tight states are slower to compute',
+        'There is exactly one prefix that reaches a tight state, so it cannot be reused like loose states',
+        'BigInt cannot be cached',
+        'Tight states never occur',
+      ],
+      answer: 1,
+      explain: 'Loose states repeat across many prefixes and memoize; a tight state is pinned to the single bound-hugging path, so caching it by (pos,state) is unsafe.',
+    },
+    {
+      q: 'How do you count numbers with a property in the range [L, R]?',
+      options: [
+        'f(R) + f(L)',
+        'f(R) - f(L - 1)',
+        'f(R) / f(L)',
+        'f(R - L)',
+      ],
+      answer: 1,
+      explain: 'Count up to R and subtract the count up to L-1, leaving exactly the numbers in [L, R].',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Digit DP counts numbers by <strong>building digits left to right</strong>, not by enumerating values.',
+    'The state has three parts: <strong>position, a small accumulator, and the tight flag</strong>.',
+    '<strong>Tight</strong> caps the current digit by the bound; going lower flips it to loose (free 0–9) forever.',
+    'Handle <strong>leading zeros</strong> separately and answer ranges with <code>f(R) - f(L-1)</code>.',
+    'Cost is <strong>O(digits × state × 10)</strong> — a trillion-sized range becomes a few thousand steps.',
+  ]}
+/>
+
+Next up: **Bitmask & Profile DP** — when the "state" is itself a set of cells, packed into the bits
+of an integer so a whole column's frontier fits in one number.

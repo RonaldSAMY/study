@@ -1,0 +1,307 @@
+---
+title: LSM Trees
+track: dsa-modern-structures
+summary: "Buffer writes in RAM, flush sorted runs to disk, and merge them in the background: the LSM tree trades a little read effort for enormous write throughput."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-advanced-structures/rope
+leadsTo:
+  - dsa-modern-structures/locality-sensitive-hashing
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import ModLsmTreeFlow from '../../../components/demos/ModLsmTreeFlow.tsx';
+
+## The hook: a database that loves being written to
+
+Imagine a service swallowing a million events a second — sensor pings, chat messages, page views. A
+classic B-tree index would make every write hunt down the right disk page and update it in place, a
+storm of tiny random I/Os that spinning disks and even SSDs hate. The engines behind Cassandra,
+RocksDB, and LevelDB do the opposite: they **never update data in place**. They scribble each write
+into a small in-memory table, and when it fills, dump the whole thing to disk in one clean sorted
+sweep. Old data is tidied up later, in the background, while you keep writing at full speed.
+
+<Callout type="intuition" title="The one-sentence idea">
+An LSM tree batches writes in a sorted in-memory **memtable**, flushes it to an immutable sorted file
+(an **SSTable**) when full, and periodically **compacts** those files by merging them — turning slow
+random writes into fast sequential ones.
+</Callout>
+
+## Intuition: defer the hard work, do it sequentially
+
+You already met the **rope**, where edits stay cheap because you never rewrite the whole string — you
+splice small pieces and reconcile later. The LSM tree applies that same "don't touch what's already
+settled" instinct to durable storage.
+
+Three moving parts do all the work:
+
+- **Memtable** — a small balanced tree (or skip list) in RAM, kept sorted by key. Writes land here
+  instantly. It is paired with a write-ahead log on disk so nothing is lost on a crash.
+- **SSTables** — Sorted String Tables. When the memtable is full, it is flushed wholesale to disk as
+  one immutable, sorted file. Immutable means writes are always a single sequential append — no
+  seeking, no in-place mutation.
+- **Compaction** — a background job that merges several SSTables into fewer, larger sorted ones,
+  discarding overwritten values and deleted keys. This is where the "merge" in *log-structured merge*
+  lives.
+
+Reads pay for this write-friendliness: a key might be in the memtable, or in any SSTable, so a read
+checks the newest data first and works its way down the levels. The newest copy always wins, which is
+how updates and deletes work without ever rewriting an old file.
+
+## Play with it
+
+Stream a list of keys into the store and watch them buffer in the memtable. Every fourth key triggers
+a **flush** to a Level 0 SSTable; once Level 0 holds three SSTables, a **compaction** merges them into
+one sorted run in Level 1. Then a `get` shows the read path: memtable first, then disk, newest to
+oldest.
+
+<ModLsmTreeFlow client:visible />
+
+<Callout type="tip">
+Read a key that lives in the memtable and the search stops immediately — zero disk probes. Read one
+that was flushed long ago and watch the probe walk down the levels. That asymmetry is the whole
+trade: cheap writes, slightly more work per read.
+</Callout>
+
+## How it works
+
+Take a tiny store with a memtable that flushes at 4 keys, writing `42, 17, 88, 23, 9, ...`:
+
+```
+put 42,17,88,23   memtable = [17,23,42,88]   → full!  flush
+                  Level 0   = [ SSTable[17,23,42,88] ]   memtable = []
+put 9,55,31,70    memtable = [9,31,55,70]    → full!  flush
+                  Level 0   = [ SSTable A, SSTable B ]
+put 4,61,12,96    memtable full again → flush → Level 0 has 3 SSTables
+                  → COMPACT: merge all three into one sorted run in Level 1
+get 55            check memtable (miss) → Level 0 (empty) → Level 1 → found
+```
+
+Each flush is one sequential write of an already-sorted block. Compaction is a k-way merge of sorted
+runs — exactly the merge step you know from merge sort, keeping the newest value when a key repeats.
+
+<CodeRunner
+  client:visible
+  code={`// A minimal LSM store: memtable + two levels of SSTables.
+function makeLSM(memCap) {
+  let mem = [];            // [ [key, value] ], kept sorted by key
+  let levels = [[], []];   // L0, L1: each an array of SSTables ([key,value][])
+  function put(k, v) {
+    mem = mem.filter(([kk]) => kk !== k);     // overwrite in place if present
+    mem.push([k, v]);
+    mem.sort((a, b) => a[0] - b[0]);
+    if (mem.length >= memCap) {               // memtable full → flush
+      levels[0].push(mem);
+      mem = [];
+      if (levels[0].length >= 3) {            // L0 full → compaction
+        const all = [...levels[0].flat(), ...levels[1].flat()];
+        const newest = new Map(all);          // later writes overwrite earlier
+        levels = [[], [[...newest].sort((a, b) => a[0] - b[0])]];
+      }
+    }
+  }
+  function get(k) {
+    const m = mem.find(([kk]) => kk === k);   // 1. memtable (newest)
+    if (m) return m[1];
+    for (let i = levels[0].length - 1; i >= 0; i--) {  // 2. L0, newest first
+      const h = levels[0][i].find(([kk]) => kk === k);
+      if (h) return h[1];
+    }
+    for (const sst of levels[1]) {            // 3. L1
+      const h = sst.find(([kk]) => kk === k);
+      if (h) return h[1];
+    }
+    return undefined;
+  }
+  return { put, get };
+}
+
+const lsm = makeLSM(4);
+const writes = [[42,'a'],[17,'b'],[88,'c'],[23,'d'],[9,'e'],[55,'f'],
+                [31,'g'],[70,'h'],[4,'i'],[61,'j'],[12,'k'],[96,'l']];
+for (const [k, v] of writes) lsm.put(k, v);
+lsm.put(55, 'F2');   // update 55 — the newer value lives in the memtable now`}
+  tests={[
+    { expr: "lsm.get(55)", label: 'get(55) — updated, newest wins' },
+    { expr: "lsm.get(9)", label: 'get(9) — from a flushed SSTable' },
+    { expr: "lsm.get(42)", label: 'get(42) — compacted into Level 1' },
+    { expr: "lsm.get(100)", label: 'get(100) — never written' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds a proper memtable (a BST), SSTables with binary search, and a leveled
+compaction loop. Here is the heart of the write and read paths:
+
+```ts
+// /dsa/28-modern-data-structures/lsm-tree.ts
+put(key: K, value: V): void {
+  this.memtable.put(key, value);
+  if (this.memtable.isFull()) this.flush();   // RAM → disk when full
+}
+
+get(key: K): V | undefined {
+  const memValue = this.memtable.get(key);    // 1. newest data first
+  if (memValue !== undefined) return memValue;
+
+  for (let level = 0; level < this.levels.length; level++) {
+    const sstables = this.levels[level];
+    if (level === 0) {                         // L0 ranges overlap → scan newest-first
+      for (let i = sstables.length - 1; i >= 0; i--) {
+        const value = sstables[i].get(key);    // binary search inside the SSTable
+        if (value !== undefined) return value;
+      }
+    } else {                                   // deeper levels are non-overlapping
+      for (const sstable of sstables) {
+        if (sstable.mightContain(key)) {       // cheap key-range check
+          const value = sstable.get(key);
+          if (value !== undefined) return value;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+private compact(level: number): void {        // merge level L into L+1
+  const allEntries = [...this.levels[level], ...this.levels[level + 1]]
+    .flatMap((sst) => sst.getEntries());
+  const merged = this.mergeEntries(allEntries);   // sort, keep newest, drop tombstones
+  this.levels[level] = [];
+  this.levels[level + 1] = [new SSTable(merged, level + 1, this.nextSSTableId++)];
+}
+```
+
+Run the full file: `npx tsx 28-modern-data-structures/lsm-tree.ts`.
+
+## Complexity
+
+Writes are amortized cheap because they hit RAM and only occasionally pay for a sequential flush.
+Reads may have to consult several levels, each searched in logarithmic time:
+
+$$
+T_\text{write} = O(\log n)\ \text{amortized}, \qquad
+T_\text{read} = O(L \cdot \log n), \qquad
+S = O(n).
+$$
+
+Here $n$ is the number of keys and $L$ the number of levels (typically 6 or 7). A Bloom filter per
+SSTable usually collapses the read to one real lookup by skipping levels that cannot hold the key.
+
+| Operation | LSM tree (amortized) | B-tree |
+|-----------|----------------------|--------|
+| Write | $O(\log n)$, sequential I/O | $O(\log n)$, random I/O |
+| Point read | $O(L \cdot \log n)$ | $O(\log n)$ |
+| Range scan | $O(\log n + k)$, sorted runs | $O(\log n + k)$ |
+
+The LSM tree wins decisively on write-heavy workloads and sequential I/O; the B-tree wins on
+read-heavy, point-lookup workloads. That single trade-off — explored in depth in **Databases &
+Storage** — is why modern storage engines let you pick your engine per table.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Observability / Metrics" icon="📈">
+Time-series databases like Prometheus and InfluxDB ingest a relentless firehose of metrics. Buffering
+writes in memory and flushing sorted, compressed blocks to disk is exactly the LSM pattern — and the
+sorted blocks make "give me CPU usage from 2–3pm" a fast range scan.
+</ExampleCard>
+
+<ExampleCard domain="Chat & messaging" icon="💬">
+Discord stores trillions of messages in Cassandra and later ScyllaDB, both LSM-based. A chat channel
+is append-mostly: new messages stream in constantly, edits are rare, and "load the latest 50" is a
+range scan over a sorted run — a perfect match for flush-and-compact storage.
+</ExampleCard>
+
+<ExampleCard domain="Mobile & embedded" icon="📱">
+RocksDB (an LSM engine) is embedded inside browsers, phones, and apps to persist state on flash
+storage. Flash wears out under random rewrites, so the LSM habit of writing big sequential blocks and
+rarely rewriting old data quite literally makes the hardware last longer.
+</ExampleCard>
+
+<ExampleCard domain="Version control" icon="🌿">
+Git is morally an LSM tree: every commit appends new immutable objects, never editing old ones, and
+`git gc` is compaction — repacking loose objects into fewer pack files and dropping unreachable ones.
+Append now, tidy up in the background, later.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Write amplification is the hidden cost.** A single logical write may be rewritten several times as
+  it migrates down the levels during compaction. Leveled compaction minimizes space but amplifies
+  writes; size-tiered compaction does the reverse. Naming this trade-off scores points.
+- **Reads can touch many files.** Without help, a point read probes the memtable plus every level.
+  **Bloom filters** per SSTable are the standard fix — they answer "definitely not here" cheaply so
+  most levels are skipped.
+- **Deletes are not free.** A delete writes a **tombstone** marker; the key only truly disappears once
+  compaction reaches it. Range-deleting and then immediately scanning can surface lots of tombstones.
+- **Level 0 is special.** Its SSTables have overlapping key ranges (they are raw memtable flushes), so
+  a read must check all of them; deeper levels are non-overlapping and binary-searchable by range.
+- **Interview cue:** "design a write-heavy key-value store / a logging or time-series backend" is an
+  LSM prompt. Say "memtable, WAL, flush to SSTables, background compaction, Bloom filters" and you have
+  the skeleton of the answer.
+
+## Practice
+
+1. **Easy:** With a memtable that flushes at 3 keys, list the flushes produced by writing
+   `5, 1, 4, 2, 8, 3, 7`. How many keys remain in the memtable at the end?
+2. **Easy:** A key is written, then written again with a new value, then read. Explain why the read
+   returns the new value even though the old value still sits in an older SSTable.
+3. **Medium:** Why does deleting a key make the *next* compaction do more work, not less, in the short
+   term?
+4. **Medium:** Add a per-SSTable Bloom filter to the `makeLSM` runner above. How does it change the
+   number of SSTables a `get` for a missing key inspects?
+5. **Hard:** Compare leveled vs size-tiered compaction on write amplification, space amplification, and
+   read amplification. For a write-once / read-many analytics table, which would you pick and why?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why are LSM-tree writes faster than in-place B-tree writes on most storage?',
+      options: [
+        'They compress data more aggressively',
+        'They batch in memory and flush sorted blocks as sequential I/O instead of random in-place updates',
+        'They never need to be read back',
+        'They use less total disk space',
+      ],
+      answer: 1,
+      explain: 'Writes accumulate in the in-memory memtable and are flushed as one sorted sequential block — turning many random writes into one sequential write. SSTables are immutable, so nothing is updated in place.',
+    },
+    {
+      q: 'A key was just overwritten. Where does a read find the newest value first?',
+      options: ['In the deepest level', 'In the memtable', 'In a Bloom filter', 'In the write-ahead log'],
+      answer: 1,
+      explain: 'The read path checks the memtable first (newest writes), then Level 0 newest-first, then deeper levels. The newest copy always wins, so an in-memory overwrite shadows any older on-disk copy.',
+    },
+    {
+      q: 'What is the main job of compaction?',
+      options: [
+        'To encrypt SSTables',
+        'To merge overlapping sorted SSTables into fewer larger ones, dropping overwritten values and tombstones',
+        'To move the memtable to RAM',
+        'To split one SSTable into many',
+      ],
+      answer: 1,
+      explain: 'Compaction is a k-way merge of sorted runs that reclaims space (discarding superseded values and deleted keys) and reduces how many files a read must consult.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An LSM tree buffers writes in a sorted in-memory <strong>memtable</strong>, then <strong>flushes</strong> it to an immutable sorted <strong>SSTable</strong> on disk.',
+    'Immutability turns writes into fast <strong>sequential I/O</strong>; old data is reconciled later by background <strong>compaction</strong> (a k-way merge).',
+    'Reads check newest-to-oldest — memtable, then each level — so an overwrite or delete (a <strong>tombstone</strong>) shadows older copies without rewriting them.',
+    'The trade is <strong>cheap writes for more read work</strong>; <strong>Bloom filters</strong> per SSTable cut most reads back down to a single lookup.',
+    'It powers <strong>Cassandra, RocksDB, LevelDB, and time-series stores</strong> — anywhere writes vastly outnumber in-place updates.',
+  ]}
+/>
+
+Next up: **Locality-Sensitive Hashing** — a hash that, unlike the ones guarding your SSTables, is
+*designed* to make similar items collide, turning nearest-neighbor search into a single bucket lookup.

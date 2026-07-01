@@ -1,0 +1,256 @@
+---
+title: Bitmask & Profile DP
+track: dsa-dp-optimization
+summary: "Profile DP: tile or fill a grid column by column, packing the frontier of protruding cells into the bits of one integer as the DP state."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-dp-optimization/digit-dp
+leadsTo:
+  - dsa-dp-optimization/divide-conquer-dp
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpOptProfileTiling from '../../../components/demos/DpOptProfileTiling.tsx';
+
+## The hook: how many ways to tile a floor with dominoes?
+
+You are tiling a $4 \times 100$ bathroom with $1 \times 2$ dominoes. How many distinct tilings exist?
+The number is astronomical, yet you must count them exactly. Brute force over every placement is
+hopeless. The insight: sweep the floor **column by column**, and at the boundary between done and
+not-done, the only thing the future cares about is *which cells stick out* into the next column. Four
+cells, four bits — a number from 0 to 15. That little integer, the **profile**, is your entire DP
+state.
+
+<Callout type="intuition" title="The one-sentence idea">
+When a grid problem only couples adjacent columns, the boundary "profile" of protruding cells fits in
+the bits of one integer — so the DP state is a bitmask, not the whole filled region.
+</Callout>
+
+## Intuition: the frontier is all you need to remember
+
+You already met bitmask DP for the [traveling-salesman trick](/lessons/dsa-bit-manipulation/bitmask-dp),
+where an integer encoded "which cities are visited." Profile DP is the same move applied to a grid: an
+integer encodes "which cells on the frontier are already occupied."
+
+Process cells in column-major order. Standing at cell $(r, c)$, everything to the left is fully tiled,
+everything to the right is empty, and the boundary is a vertical seam. A cell on that seam is either
+flush (bit 0) or has a horizontal domino reaching in from the previous column (bit 1). That $m$-bit
+**profile** is a complete summary — two different histories with the same profile have the *same* set
+of futures, so they share a DP entry.
+
+At each cell, given the incoming profile:
+
+- if its bit is **set**, a horizontal domino already covers it — clear the bit and move on;
+- if its bit is **clear**, you must cover it: either place a **horizontal** domino (set the bit, it
+  protrudes right) or a **vertical** one with the cell below (needs that cell free).
+
+After the last column, the only valid profile is all-zeros — nothing may dangle past the wall. That
+count is the answer.
+
+## Play with it
+
+Pick a grid size and watch one valid tiling get laid cell by cell, column by column. The emerald box
+is the active cell; the bit string on the right is the live **profile** of the current column — which
+rows hold a horizontal domino poking into the next column. The panel also shows the *total* number of
+tilings summed over all profiles.
+
+<DpOptProfileTiling client:visible />
+
+<Callout type="tip">
+Keep the smaller side small: the state space is $2^m$, so you always orient the grid so $m$ (rows) is
+the lesser dimension. A $2 \times 1000$ board is trivial ($2^2 = 4$ profiles); a $20 \times 20$ board
+is already $2^{20}$ — workable but heavy. Beyond ~20 the bitmask explodes.
+</Callout>
+
+## How it works
+
+Profiles for a $2 \times n$ board (only 4 states). Track how many ways reach each profile as the seam
+advances. Here is the column-by-column, row-by-row transition counting all domino tilings:
+
+<CodeRunner
+  client:visible
+  code={`// Count 1x2 domino tilings of an m x n grid via broken-profile DP.
+function countDominoTilings(m, n) {
+  if (m > n) { const t = m; m = n; n = t; }   // keep 2^m small
+  let dp = new Array(1 << m).fill(0);
+  dp[0] = 1;                                   // empty frontier
+  for (let col = 0; col < n; col++) {
+    for (let row = 0; row < m; row++) {
+      const next = new Array(1 << m).fill(0);
+      const bit = 1 << row;
+      for (let p = 0; p < (1 << m); p++) {
+        if (dp[p] === 0) continue;
+        if (p & bit) {
+          next[p ^ bit] += dp[p];              // already covered: clear it
+        } else {
+          next[p | bit] += dp[p];              // place horizontal (protrudes)
+          if (row + 1 < m && !(p & (1 << (row + 1)))) {
+            next[p] += dp[p];                  // place vertical with cell below
+          }
+        }
+      }
+      dp = next;
+    }
+  }
+  return dp[0];                                // nothing may stick past the last wall
+}`}
+  tests={[
+    { expr: 'countDominoTilings(2, 3)', label: '2x3 tilings' },
+    { expr: 'countDominoTilings(3, 4)', label: '3x4 tilings' },
+    { expr: 'countDominoTilings(4, 7)', label: '4x7 tilings' },
+    { expr: 'countDominoTilings(8, 8)', label: '8x8 tilings' },
+  ]}
+/>
+
+The $8 \times 8$ answer is 12,988,816 — counted in a blink because the state is just 8 bits.
+
+## The real implementation
+
+The same broken-profile transition from the course file — note how it advances one *cell* at a time,
+rebuilding `newDp` per row:
+
+```ts
+// /dsa/24-dp-optimization/profile-dp.ts
+function countDominoTilings(m: number, n: number): bigint {
+  if (m > n) [m, n] = [n, m];          // profile size is 2^m, keep m smallest
+  let dp: bigint[] = Array(1 << m).fill(0n);
+  dp[0] = 1n;
+  for (let col = 0; col < n; col++) {
+    for (let row = 0; row < m; row++) {
+      const newDp: bigint[] = Array(1 << m).fill(0n);
+      for (let profile = 0; profile < (1 << m); profile++) {
+        if (dp[profile] === 0n) continue;
+        const bit = 1 << row;
+        if (profile & bit) {
+          newDp[profile ^ bit] += dp[profile];           // covered from the left
+        } else {
+          newDp[profile | bit] += dp[profile];           // horizontal: extend right
+          if (row + 1 < m && !(profile & (1 << (row + 1)))) {
+            newDp[profile] += dp[profile];               // vertical: pair with below
+          }
+        }
+      }
+      dp = newDp;
+    }
+  }
+  return dp[0];
+}
+```
+
+Run the full file: `npx tsx 24-dp-optimization/profile-dp.ts`.
+
+## Complexity
+
+With $m$ the smaller side and $n$ the larger, each of the $n$ columns sweeps $m$ rows over $2^m$
+profiles:
+
+$$
+T = O\bigl(n \cdot m \cdot 2^{m}\bigr), \qquad S = O\bigl(2^{m}\bigr).
+$$
+
+| Approach | Time |
+|----------|------|
+| Enumerate every tiling | exponential in the whole area $m \cdot n$ |
+| **Profile DP** | $O(n \cdot m \cdot 2^{m})$ — linear in $n$ |
+
+The win is enormous: the cost is *linear* in the long dimension $n$ and only exponential in the short
+one $m$. (For huge $n$, matrix exponentiation on the $2^m \times 2^m$ transition gets you
+$O(2^{3m}\log n)$.)
+
+## The same idea, different worlds
+
+<ExampleCard domain="VLSI / chip layout" icon="🔌">
+Counting legal placements of standard cells along a chip row, where each cell may overhang into the
+next track, is profile DP — the profile is the overhang pattern at the track boundary.
+</ExampleCard>
+
+<ExampleCard domain="Statistical physics" icon="🧲">
+The number of ways to pair up spins (the dimer model) on a lattice is literally domino tiling; transfer-matrix
+methods physicists use are profile DP with the column profile as the transfer state.
+</ExampleCard>
+
+<ExampleCard domain="Puzzle games" icon="🧩">
+A Tetris-style "can these pieces exactly fill the board?" solver tiles column by column, carrying the
+silhouette of protruding blocks as a bitmask frontier.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Orient for the small side.** Always swap so $m \le n$; tiling a $2 \times 50$ grid the wrong way
+  costs $2^{50}$ states instead of $2^2$.
+- **Bit order must be consistent.** Decide once whether bit $r$ means "row $r$ protrudes," and never
+  mix conventions between the read and the write — off-by-one bit bugs are brutal to trace.
+- **Vertical needs the cell below free.** Only place a vertical domino when `row + 1 < m` *and* that
+  bit is clear in the incoming profile; otherwise you overlap.
+- **End condition is profile 0.** After the final column, sum only `dp[0]` — any leftover protrusion
+  means a domino hanging off the board.
+- **Interview cue:** grid counting/covering with constraints only between neighboring columns ⇒
+  profile DP. If pieces span more than one column ahead, you need a richer "plug" profile.
+
+## Practice
+
+1. **Easy:** List all 4 profiles of a 2-row board and say what each bit means.
+2. **Easy:** By hand, confirm a $2 \times 3$ grid has 3 domino tilings.
+3. **Medium:** Adapt the recurrence to count tilings of a board with some cells blocked (obstacle ⇒
+   that bit must stay clear/occupied as appropriate).
+4. **Medium:** LeetCode 1411 — paint an $n \times 3$ grid with 3 colors, no adjacent equal; the
+   profile is the row's color pattern.
+5. **Hard:** LeetCode 1659 — Maximize Grid Happiness, where the profile is the *previous row* encoded
+   in base 3 (empty / introvert / extrovert).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In profile DP for domino tiling, what does a set bit in the profile mean?',
+      options: [
+        'That column is fully tiled',
+        'That row’s cell on the frontier is occupied by a domino reaching in from the previous column',
+        'A vertical domino was placed there',
+        'The cell is blocked',
+      ],
+      answer: 1,
+      explain: 'The profile records which frontier cells protrude — i.e. are already covered by a horizontal domino from the left.',
+    },
+    {
+      q: 'Why do we always orient the grid so m (rows) is the smaller dimension?',
+      options: [
+        'It makes the grid square',
+        'The state space is 2^m, so a smaller m keeps it tractable',
+        'Columns must outnumber rows for correctness',
+        'It avoids recursion',
+      ],
+      answer: 1,
+      explain: 'Time and space scale with 2^m. Minimizing m (and letting n be large) keeps the profile count small.',
+    },
+    {
+      q: 'After processing the final column, which profile holds the answer?',
+      options: [
+        'The all-ones profile',
+        'Any profile',
+        'The all-zeros profile (nothing protrudes past the board)',
+        'The profile equal to m',
+      ],
+      answer: 2,
+      explain: 'A valid full tiling leaves no domino hanging off the edge, so only the empty frontier (profile 0) is legal.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Profile DP encodes the <strong>column frontier</strong> — which cells protrude — as the bits of one integer.',
+    'It applies when constraints only couple <strong>adjacent columns</strong>; the profile is a complete summary of the past.',
+    'Process <strong>cell by cell in column-major order</strong>: clear a covered bit, or place a horizontal/vertical piece.',
+    'Cost is <strong>O(n · m · 2^m)</strong> — linear in the long side, exponential only in the short side m.',
+    'Keep $m$ small, fix one <strong>bit convention</strong>, and accept only the all-zero profile at the end.',
+  ]}
+/>
+
+Next up: **Divide & Conquer Optimization** — when a DP's optimal split point only ever moves forward,
+you can shave a quadratic transition down to $O(n \log n)$.

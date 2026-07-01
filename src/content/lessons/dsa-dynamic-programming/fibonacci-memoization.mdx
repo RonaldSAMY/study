@@ -1,0 +1,280 @@
+---
+title: Memoization vs Tabulation
+track: dsa-dynamic-programming
+summary: "Two ways to kill repeated work on Fibonacci: top-down caching (memoization) and bottom-up tables (tabulation), both turning O(2^n) into O(n)."
+difficulty: beginner
+estMinutes: 15
+prereqs:
+  - dsa-dynamic-programming/dp-intro
+  - dsa-recursion/fibonacci-recursion
+leadsTo:
+  - dsa-dynamic-programming/coin-change
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpFibMemoTree from '../../../components/demos/DpFibMemoTree.tsx';
+
+## The hook: the same question, asked a thousand times
+
+Ask a child for `fib(50)` the naive way and they will, without realizing it, recompute `fib(10)`
+millions of times. The recursion that looks so elegant — `fib(n) = fib(n-1) + fib(n-2)` — quietly
+branches into two calls, then four, then eight, doubling at every level. By `fib(50)` you are looking
+at more than a *billion* calls for a number you could write down in a fraction of a second. You saw this
+explosion first-hand in **Fibonacci & the Recursion Tree** (`dsa-recursion/fibonacci-recursion`). The
+fix is almost embarrassingly simple: write the answer down the first time, and never compute it twice.
+
+<Callout type="intuition" title="The one-sentence idea">
+Cache each subproblem's answer the first time you compute it; on every later request you read it back in
+one step, and the exponential tree collapses to a line.
+</Callout>
+
+## Intuition
+
+The naive tree is wasteful because its subproblems **overlap**: `fib(4)` and `fib(5)` both need
+`fib(3)`, which both need `fib(2)`, and so on. The branches recompute identical answers over and over.
+Dynamic programming earns its keep exactly when subproblems overlap like this — store each answer once
+and the repeated work vanishes.
+
+There are two classic ways to store those answers, and they are mirror images of each other:
+
+- **Top-down memoization** is *lazy*. You keep the recursion you already wrote and bolt a cache onto it.
+  Before doing any work, a call checks "have I solved this `n` before?" If yes, it returns the stored
+  value instantly; if no, it computes, *stores*, and returns. Only the subproblems you actually need get
+  touched. This is the recursion from `dsa-recursion/fibonacci-recursion` with a memo attached.
+- **Bottom-up tabulation** is *eager*. You throw away the recursion and fill a table from the smallest
+  subproblem upward: `dp[0]`, `dp[1]`, `dp[2]`, ... up to `dp[n]`. Each entry is built from ones already
+  computed, so no call stack and no repeated work — just one clean loop.
+
+Both turn the same recurrence into linear time. Memoization keeps the intuitive recursive shape;
+tabulation is usually a hair faster and never risks a deep call stack.
+
+## Play with it
+
+Set `n`, then press Play to expand `fib(n)` in call order. With memoization on, the moment a value is
+already in the cache the node turns emerald and its entire subtree is pruned — that is the explosion
+being defused in real time.
+
+<DpFibMemoTree client:visible />
+
+<Callout type="tip">
+Turn **Use memoization** off and rebuild. The very same `fib(n)` now grows into a full binary tree, and
+the "naive calls" counter blows past the "memoized calls" counter — overlapping subproblems, recomputed
+to death.
+</Callout>
+
+## How it works
+
+Both styles solve the same recurrence with the same base cases:
+
+$$
+\text{fib}(n) = \text{fib}(n-1) + \text{fib}(n-2), \qquad \text{fib}(0) = 0, \quad \text{fib}(1) = 1.
+$$
+
+**Top-down dry run for `fib(5)`.** The left spine descends to the base cases first, caching as it
+returns; every right-hand call then hits the cache:
+
+```
+fib(5) → fib(4) → fib(3) → fib(2) → fib(1)=1, fib(0)=0  ⇒ cache fib(2)=1
+                                    fib(1)=1            ⇒ cache fib(3)=2
+                          fib(2) ✓ cached = 1           ⇒ cache fib(4)=3
+                fib(3) ✓ cached = 2                     ⇒ cache fib(5)=5
+```
+
+Five real computations plus a few instant cache reads, instead of fifteen branching calls.
+
+**Bottom-up dry run for `fib(5)`.** Fill a table left to right: `dp = [0, 1, 1, 2, 3, 5]`, and the answer
+is the last cell, `dp[5] = 5`. No recursion at all.
+
+<CodeRunner
+  client:visible
+  code={`// Top-down: recursion + a Map cache (memoization)
+function fibMemo(n) {
+  const memo = new Map();
+  function go(k) {
+    if (k <= 1) return k;                 // base cases
+    if (memo.has(k)) return memo.get(k);  // cache hit — instant
+    const result = go(k - 1) + go(k - 2); // compute once...
+    memo.set(k, result);                  // ...then remember it
+    return result;
+  }
+  return go(n);
+}
+
+// Bottom-up: fill a table from the base cases up (tabulation)
+function fibTab(n) {
+  if (n <= 1) return n;
+  const dp = [0, 1];
+  for (let i = 2; i <= n; i++) dp[i] = dp[i - 1] + dp[i - 2];
+  return dp[n];
+}`}
+  tests={[
+    { expr: 'fibMemo(10)', label: 'fibMemo(10)' },
+    { expr: 'fibTab(10)', label: 'fibTab(10)' },
+    { expr: 'fibMemo(20) === fibTab(20)', label: 'memo and tab agree at 20' },
+    { expr: 'fibTab(50)', label: 'fibTab(50)' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — the top-down memo (here the cache is a `Map` passed along the
+recursion), the bottom-up table, and the space-optimized version that keeps only the last two values:
+
+```ts
+// /dsa/13-dynamic-programming/fibonacci-dp.ts
+
+// Top-Down with Memoization — O(n) time, O(n) space
+function fibMemo(n: number, memo: Map<number, number> = new Map()): number {
+    if (n <= 1) return n;
+    if (memo.has(n)) return memo.get(n)!;          // cache hit
+    const result = fibMemo(n - 1, memo) + fibMemo(n - 2, memo);
+    memo.set(n, result);                           // store before returning
+    return result;
+}
+
+// Bottom-Up Tabulation — O(n) time, O(n) space
+function fibTab(n: number): number {
+    if (n <= 1) return n;
+    const dp = new Array(n + 1);
+    dp[0] = 0;
+    dp[1] = 1;
+    for (let i = 2; i <= n; i++) {
+        dp[i] = dp[i - 1] + dp[i - 2];
+    }
+    return dp[n];
+}
+
+// Space-Optimized — O(n) time, O(1) space (only two slots survive)
+function fibOptimized(n: number): number {
+    if (n <= 1) return n;
+    let prev2 = 0;                                 // dp[i-2]
+    let prev1 = 1;                                 // dp[i-1]
+    for (let i = 2; i <= n; i++) {
+        const current = prev1 + prev2;
+        prev2 = prev1;
+        prev1 = current;
+    }
+    return prev1;
+}
+```
+
+Run the full file: `npx tsx 13-dynamic-programming/fibonacci-dp.ts`.
+
+## Complexity
+
+Every DP cost is the same product: **time = (number of distinct states) × (work per transition)**. For
+Fibonacci there are $n+1$ states ($dp[0]$ through $dp[n]$) and each transition is a single addition,
+so $O(n) \times O(1) = O(n)$. The naive version pays instead for the whole branching tree, whose size
+is proportional to $\text{fib}(n)$ — that is $O(\varphi^n)$, the exponential we are escaping.
+
+$$
+T_{\text{naive}}(n) = O(2^n), \qquad T_{\text{DP}}(n) = \underbrace{(n+1)}_{\text{states}} \times \underbrace{O(1)}_{\text{transition}} = O(n).
+$$
+
+| Approach | Time | Space |
+|----------|------|-------|
+| Naive recursion | $O(2^n)$ | $O(n)$ |
+| Memoization (top-down) | $O(n)$ | $O(n)$ |
+| Tabulation (bottom-up) | $O(n)$ | $O(n)$ |
+| Space-optimized | $O(n)$ | $O(1)$ |
+
+The space-optimized row is the punchline: once you notice each entry needs only its two predecessors,
+the whole table shrinks to two variables.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Web browsers" icon="🌐">
+The browser cache is memoization for the network. The first request for a stylesheet fetches it over the
+wire and stores it on disk; every later page that needs the same file reads the cached copy instantly — a
+"cache hit" instead of a round trip. Compute (download) once, reuse forever after.
+</ExampleCard>
+
+<ExampleCard domain="Spreadsheets" icon="📊">
+When you edit one cell, the spreadsheet does not recompute every formula. It remembers each cell's last
+value and only recalculates the cells that actually depend on what changed. The stored results are the
+memo; the dependency graph decides which cache entries to invalidate.
+</ExampleCard>
+
+<ExampleCard domain="Build systems" icon="🛠️">
+`make` and incremental compilers rebuild only the files whose inputs changed and reuse the cached object
+files for everything else. A clean rebuild is the naive recursion; an incremental build is memoization —
+each target is compiled once and its result is kept until its sources move.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The shared-mutable-default-arg trap.** Writing `function fib(n, memo = {})` is fine, but reusing one
+  module-level cache object across unrelated test cases means stale answers can leak between calls. Create
+  a fresh cache per top-level call, or pass it explicitly like the course code does.
+- **Recursion depth vs. tabulation.** Memoization still recurses, so a large `n` can blow the call stack
+  with a stack-overflow error. Tabulation's plain loop has no such limit — prefer it when `n` is huge or
+  the recursion is deep.
+- **Clear the cache between problems.** In interviews and test suites, a cache that survives from one
+  input to the next will hand back the wrong answer. Reset it (or re-create it) for each new run.
+- **When to prefer each.** Reach for memoization when the recursion is the natural way to express the
+  problem and you only need *some* subproblems; reach for tabulation when you need *all* of them anyway
+  and want the tightest constant factors and optional space savings.
+- **Interview cue.** "This recursion recomputes the same calls" is the tell. Say "overlapping
+  subproblems — I'll add a cache," then mention you can convert top-down to bottom-up to drop the stack.
+
+## Practice
+
+1. **Easy:** By hand, fill the tabulation array `dp` for `fib(6)`. What is `dp[6]`?
+2. **Easy:** In the demo, set `n = 6` with memoization on. How many calls are "cache hits"?
+3. **Medium:** Rewrite `fibTab` to use only two variables (the space-optimized form) and confirm it
+   matches for `n = 0..10`.
+4. **Medium:** Climbing Stairs asks how many ways to climb `n` steps taking 1 or 2 at a time. Show it is
+   Fibonacci in disguise and solve it with tabulation.
+5. **Hard:** Add memoization to a recursive `numDecodings(s)` (count ways to decode a digit string), using
+   the start index as the cache key. What are the states and the transition?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why is naive recursive Fibonacci exponential while the DP versions are linear?',
+      options: [
+        'Recursion is always slower than loops',
+        'The naive version recomputes the same overlapping subproblems many times; DP stores each once',
+        'Addition of big numbers is exponential',
+        'The DP versions skip some Fibonacci numbers',
+      ],
+      answer: 1,
+      explain: 'Both compute the same recurrence; DP just caches each subproblem so it is solved exactly once, turning O(2^n) into O(n).',
+    },
+    {
+      q: 'Which statement best contrasts memoization with tabulation?',
+      options: [
+        'Memoization is bottom-up and iterative; tabulation is top-down and recursive',
+        'Memoization is top-down (lazy recursion + cache); tabulation is bottom-up (eager table fill)',
+        'They produce different answers for the same n',
+        'Tabulation always uses more memory than memoization',
+      ],
+      answer: 1,
+      explain: 'Memoization adds a cache to the recursion and only computes needed subproblems; tabulation fills a table from the base cases upward with no recursion.',
+    },
+    {
+      q: 'Using tabulation, what is dp[6] for Fibonacci with dp[0]=0, dp[1]=1?',
+      options: ['5', '8', '13', '21'],
+      answer: 1,
+      explain: 'The table is [0, 1, 1, 2, 3, 5, 8], so dp[6] = 8.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Overlapping subproblems</strong> are what make naive Fibonacci exponential — the same calls are recomputed again and again.',
+    '<strong>Memoization</strong> is top-down: keep the recursion, add a cache, compute each subproblem once (lazy).',
+    '<strong>Tabulation</strong> is bottom-up: fill a table from the base cases upward with a loop (eager) — no call stack.',
+    'Both run in <strong>O(n) time</strong>; cost = states × transition, here (n+1) states × O(1) work.',
+    'Once each state needs only its last two predecessors, <strong>space drops from O(n) to O(1)</strong>.',
+  ]}
+/>
+
+Next up: **Coin Change** — the same compute-once-reuse idea, but now each state has *many* choices, taking
+you from Fibonacci's two-way branch into the unbounded-knapsack family.

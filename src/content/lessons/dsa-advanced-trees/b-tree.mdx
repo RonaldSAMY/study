@@ -1,0 +1,251 @@
+---
+title: B-Trees
+track: dsa-advanced-trees
+summary: "Wide, shallow trees built for disk and databases: every node holds many keys, so a billion rows sit just a handful of reads deep."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-advanced-trees/red-black-tree
+leadsTo:
+  - dsa-advanced-trees/splay-treap
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvTreeBTreeInsert from '../../../components/demos/AdvTreeBTreeInsert.tsx';
+
+## The hook: when the bottleneck is the disk head, not the CPU
+
+A binary search tree over a billion rows is about 30 levels deep. In RAM that's nothing. But if each node
+lives on a spinning disk or an SSD page, *each level is a separate read* — and a disk read is roughly a
+million times slower than a comparison. The fix is to stop thinking in binary. Pack hundreds of keys into
+one fat node sized to a disk block, and the same billion rows become a tree only **three or four levels
+deep**. That is a B-tree, and it is the data structure inside essentially every database index and file
+system on Earth.
+
+<Callout type="intuition" title="The one-sentence idea">
+Let each node hold many keys (a whole disk block's worth) so the tree is wide and shallow, then keep it
+balanced by splitting any node that overflows and pushing its median key up to the parent.
+</Callout>
+
+## Intuition: trade depth for width
+
+A red-black tree minimizes *comparisons*. A B-tree minimizes *block transfers*. The trick is the
+branching factor. In a binary tree each node sends you down one of two ways, so depth is $\log_2 n$. In a
+B-tree of order $m$, each node sends you down one of up to $m$ ways, so depth is $\log_m n$ — and with
+$m$ in the hundreds, that logarithm is tiny.
+
+Balance is maintained from the **bottom up by splitting**. Insertion always lands in a leaf. If that leaf
+is already full, it splits in two and its middle key floats up into the parent. If the parent is now full,
+*it* splits too, and the split can ripple all the way to the root — which is the only way the tree ever
+grows a new level. Because growth happens at the root, **all leaves always stay at the same depth**. That
+is the B-tree's balance invariant, and it is gloriously simple compared with red-black recoloring.
+
+## Play with it
+
+Insert keys and watch nodes fill up and split. Lower the order to 3 (so each node holds at most two keys)
+to make splits happen often; raise it to see a flatter tree. Each split pushes its median up — follow how
+that ripple occasionally creates a new root.
+
+<AdvTreeBTreeInsert client:visible />
+
+<Callout type="tip">
+Set the order to 3 and insert <code>1, 2, 3, 4, 5, 6, 7, 8</code> in order. Notice the tree never grows a
+new level until the root itself splits — and that every split moves exactly one median key upward.
+</Callout>
+
+## How it works
+
+Insertion is "search down, split on the way, place in a leaf":
+
+```
+1. If the root is full, split it first (this is the only step that adds a level).
+2. Walk down toward the correct leaf.
+3. Before descending into any FULL child, split that child and lift its median into the current node.
+4. Insert the key into the (now guaranteed non-full) leaf, in sorted order.
+```
+
+Splitting a node with `maxKeys = m - 1` keys takes its middle key out, leaves the lower half behind,
+makes a new sibling from the upper half, and inserts the middle key into the parent. Because we split
+*proactively* on the way down, the parent is always guaranteed to have room — no need to back up.
+
+<CodeRunner
+  client:visible
+  code={`// Compact B-tree (order 3): insert + sorted keys + height (plain JS)
+const ORDER = 3, MAXK = ORDER - 1;
+let root = { keys: [], children: [], leaf: true };
+
+function splitChild(parent, i) {
+  const child = parent.children[i];
+  const mid = Math.floor(MAXK / 2);
+  const sib = { keys: child.keys.splice(mid + 1), children: [], leaf: child.leaf };
+  if (!child.leaf) sib.children = child.children.splice(mid + 1);
+  const midKey = child.keys.pop();
+  parent.keys.splice(i, 0, midKey);
+  parent.children.splice(i + 1, 0, sib);
+}
+function insertNonFull(node, key) {
+  let i = node.keys.length - 1;
+  if (node.leaf) {
+    while (i >= 0 && key < node.keys[i]) i--;
+    if (i >= 0 && key === node.keys[i]) return;
+    node.keys.splice(i + 1, 0, key);
+  } else {
+    while (i >= 0 && key < node.keys[i]) i--;
+    i++;
+    if (node.children[i].keys.length === MAXK) { splitChild(node, i); if (key > node.keys[i]) i++; }
+    insertNonFull(node.children[i], key);
+  }
+}
+function insert(key) {
+  if (root.keys.length === MAXK) { const nr = { keys: [], children: [root], leaf: false }; root = nr; splitChild(nr, 0); }
+  insertNonFull(root, key);
+}
+function keys(n = root) {
+  let out = [];
+  for (let i = 0; i < n.keys.length; i++) { if (!n.leaf) out = out.concat(keys(n.children[i])); out.push(n.keys[i]); }
+  if (!n.leaf) out = out.concat(keys(n.children[n.keys.length]));
+  return out;
+}
+function height(n = root) { let h = 0; while (!n.leaf) { h++; n = n.children[0]; } return h; }
+[10, 20, 5, 6, 12, 30, 7, 17].forEach(insert);`}
+  tests={[
+    { expr: 'keys().join(",")', label: 'sorted keys' },
+    { expr: 'height()', label: 'tree height (levels below root)' },
+    { expr: 'root.keys.join(",")', label: 'keys in the root' },
+  ]}
+/>
+
+## The real implementation
+
+The course file is a full B-tree with search, insert (with split), delete (with borrow and merge), and
+range queries — plus a sketch of the B+ tree variant that databases actually use. Here is the splitting
+core that keeps it balanced:
+
+```ts
+// /dsa/20-advanced-trees/b-tree.ts
+private splitChild(parent: BTreeNode<K, V>, index: number): void {
+  const child = parent.children[index];
+  const midIndex = Math.floor(this.maxKeys / 2);
+
+  const sibling = new BTreeNode<K, V>(child.isLeaf);
+  sibling.keys = child.keys.splice(midIndex + 1);        // upper half -> new sibling
+  sibling.values = child.values.splice(midIndex + 1);
+  if (!child.isLeaf) sibling.children = child.children.splice(midIndex + 1);
+
+  const midKey = child.keys.pop()!;                       // median floats up
+  const midValue = child.values.pop()!;
+  parent.keys.splice(index, 0, midKey);
+  parent.values.splice(index, 0, midValue);
+  parent.children.splice(index + 1, 0, sibling);
+}
+```
+
+Run the full file: `npx tsx 20-advanced-trees/b-tree.ts`.
+
+## Complexity
+
+With branching factor $m$ the height is $\log_m n$, and each node visited costs one block read, so the
+number of disk I/Os — the metric that actually matters — is logarithmic in base $m$:
+
+$$
+h = O(\log_m n), \qquad \text{disk I/Os per operation} = O\!\left(\log_m n\right).
+$$
+
+| Operation | Comparisons | Disk reads |
+|-----------|-------------|------------|
+| Search | $O(\log_2 n)$ | $O(\log_m n)$ |
+| Insert | $O(\log_2 n)$ | $O(\log_m n)$ |
+| Range of $k$ results | — | $O(\log_m n + k/m)$ |
+
+For $n = 10^9$ and $m = 256$, $\log_m n \approx 4$ — four reads to find any of a billion keys. That is
+why your database does not slow to a crawl.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Databases" icon="🗄️">
+Every relational database — Postgres, MySQL, SQLite — stores its indexes as B-trees (usually the B+ tree
+variant with all data in linked leaves). A <code>WHERE id = ?</code> lookup is a handful of B-tree page
+reads, and a <code>BETWEEN</code> range scan walks the linked leaves.
+</ExampleCard>
+
+<ExampleCard domain="File systems" icon="💽">
+NTFS, ext4, HFS+, and APFS organize directories and file metadata in B-trees (or B+ trees). Opening a
+file in a folder with a million entries is fast because the directory is a shallow, block-sized tree.
+</ExampleCard>
+
+<ExampleCard domain="Geographic search" icon="🗺️">
+Map and GIS systems index huge coordinate sets in B-tree-derived structures so a "find everything in this
+bounding box" query touches only a few disk pages instead of scanning the planet.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Splitting too late.** This implementation splits a full child *before* descending into it, which
+  guarantees the parent always has room. Splitting only after you arrive forces awkward back-propagation.
+- **Off-by-one on the median.** With an even maximum number of keys you must be consistent about which
+  middle element goes up; mixing conventions corrupts the ordering.
+- **Confusing B-tree with B+ tree.** In a plain B-tree, values live in internal nodes too. In a B+ tree
+  (what databases use) all values live in the leaves, which are linked for fast range scans.
+- **Interview cue:** "Why do databases use B-trees instead of binary search trees?" → "High fan-out makes
+  the tree shallow, so the number of slow disk reads, not comparisons, is minimized."
+
+## Practice
+
+1. **Easy:** In an order-5 B-tree, what are the minimum and maximum number of keys a non-root node may
+   hold?
+2. **Easy:** Why are all leaves of a B-tree guaranteed to be at the same depth?
+3. **Medium:** Insert `1..8` into an order-3 B-tree in the demo. How many times did a split create a new
+   root?
+4. **Medium:** A B-tree of order 256 indexes $10^9$ keys. Estimate its height.
+5. **Hard:** Describe how deletion borrows a key from a sibling, and when it must instead merge two nodes.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why are B-tree nodes made wide (hundreds of keys) instead of binary?',
+      options: [
+        'To use less memory per key',
+        'To make the tree shallow so there are fewer slow block reads',
+        'To avoid storing pointers',
+        'To allow duplicate keys',
+      ],
+      answer: 1,
+      explain: 'A high branching factor m makes height ≈ log_m n, minimizing disk I/O — the real bottleneck for on-disk data.',
+    },
+    {
+      q: 'When does a B-tree grow a new level (increase its height)?',
+      options: [
+        'Whenever any leaf splits',
+        'Only when the root splits',
+        'On every insertion',
+        'When a node underflows',
+      ],
+      answer: 1,
+      explain: 'Splits push a median up; the height only increases when that ripple reaches and splits the root, creating a new root above it.',
+    },
+    {
+      q: 'For n = 10^9 keys and order m = 256, roughly how many node reads does a search take?',
+      options: ['About 30', 'About 10', 'About 4', 'About 1000'],
+      answer: 2,
+      explain: 'log_256(10^9) ≈ 4, so a search touches only about four nodes — four block reads.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A B-tree is a <strong>wide, shallow</strong> balanced tree: each node holds many keys, sized to a disk block.',
+    'Height is <strong>O(log_m n)</strong>, so a billion keys sit only ~4 reads deep — it minimizes <strong>disk I/O</strong>, not comparisons.',
+    'Balance comes from <strong>splitting a full node</strong> and pushing its <strong>median up</strong>; the tree only grows when the root splits.',
+    'All leaves stay at the <strong>same depth</strong>, which is the B-tree balance invariant.',
+    'B-trees (and B+ trees) power <strong>database indexes and file systems</strong> everywhere.',
+  ]}
+/>
+
+Next up: **Splay Trees & Treaps** — two trees that give up rigid balance entirely and instead let
+randomness or recent access shape them, with surprisingly strong guarantees.

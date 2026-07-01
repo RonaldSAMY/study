@@ -1,0 +1,274 @@
+---
+title: Fenwick (Binary Indexed) Tree
+track: dsa-advanced-algorithms
+summary: "One trick powers it all: the lowest set bit lets you jump over an array so prefix sums and point updates both cost O(log n)."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-dp-optimization/sos-dp
+leadsTo:
+  - dsa-advanced-algorithms/segment-tree
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import AdvFenwickTree from '../../../components/demos/AdvFenwickTree.tsx';
+
+## The hook: a running total that won't sit still
+
+You run a live leaderboard. Scores change constantly, and at any moment someone asks "what's the
+combined score of players 1 through k?" A plain prefix-sum array answers that query in one step — but
+the instant a single score changes, you must rebuild every prefix after it, which is O(n) per update.
+A balanced binary tree fixes updates but makes the bookkeeping heavy. The Fenwick tree threads the
+needle: **both** the query and the update touch only about log n cells, and the whole structure is just
+a flat array plus one bit trick.
+
+<Callout type="intuition" title="The one-sentence idea">
+Store partial sums at clever positions so that any prefix is the sum of a few cells, and any update
+reaches a few cells — and let the lowest set bit, `i & (-i)`, tell you exactly which cells to visit.
+</Callout>
+
+## Intuition: let the binary representation carve up the array
+
+Number the cells `1..n`. The Fenwick cell at index `i` is made responsible for a block of the array
+that ends at `i` and has length equal to `lowbit(i) = i & (-i)` — the value of the lowest set bit of
+`i`. So cell `6` (binary `110`) owns a block of length `2`: indices `5..6`. Cell `8` (binary `1000`)
+owns a block of length `8`: indices `1..8`.
+
+Why is that useful? Because every integer is a sum of distinct powers of two — exactly its set bits.
+
+- To get **prefix(k)**, start at `k` and repeatedly strip the lowest set bit (`k -= lowbit(k)`). Each
+  cell you land on contributes one disjoint block, and together they tile `1..k`. The number of jumps
+  equals the number of set bits — at most log n.
+- To **update index k**, start at `k` and repeatedly add the lowest set bit (`k += lowbit(k)`). Those
+  are exactly the cells whose block covers `k`, again at most log n of them.
+
+That `lowbit` move is the same isolate-the-lowest-set-bit trick from
+[Essential Bit Tricks](/lessons/dsa-bit-manipulation/bit-tricks): `i & (-i)` keeps only the rightmost
+1, because two's complement negation flips everything above that bit.
+
+## Play with it
+
+Load an array, choose **prefix query** or **point update**, pick an index, and play. Each bar is a
+Fenwick cell drawn over the range it owns; watch the lowbit jumps skip across the array — downward for
+a query, upward for an update.
+
+<AdvFenwickTree client:visible />
+
+<Callout type="tip">
+Set the index to <code>7</code> (binary <code>1000</code> once we add 1) and run a query — it lands on a
+single wide cell. Then set it to <code>6</code> (binary <code>111</code> after the +1) and watch three
+cells light up. The count of cells is exactly the count of 1-bits.
+</Callout>
+
+## How it works
+
+Take `arr = [1, 2, 3, 4, 5, 6, 7, 8]` (1-indexed). The Fenwick cells store these block sums:
+
+```
+index:   1   2   3    4   5    6   7    8
+binary:  1  10  11  100 101  110 111 1000
+owns:   [1] [1-2][3] [1-4][5][5-6][7][1-8]
+value:   1   3   3   10   5  11   7   36
+```
+
+Query the sum of the first 6 elements — internally that means **start at index `6`** and strip lowest
+set bits:
+
+```
+i = 6 (110): add cell 6  = 11   →  i -= lowbit(6)=2  → 4
+i = 4 (100): add cell 4  = 10   →  i -= lowbit(4)=4  → 0  (stop)
+prefix(6) = 11 + 10 = 21   ✓ (1+2+3+4+5+6)
+```
+
+Two cells, not six. Now **update index 3 by +3** (climb upward):
+
+```
+i = 4 (100): cell 4 += 3   →  i += lowbit(4)=4  → 8
+i = 8 (1000):cell 8 += 3   →  i += lowbit(8)=8  → 16 (past n, stop)
+```
+
+<CodeRunner
+  client:visible
+  code={`// Fenwick / Binary Indexed Tree (0-indexed API, 1-indexed inside)
+function makeBIT(arr) {
+  const n = arr.length;
+  const tree = new Array(n + 1).fill(0);
+  const lowbit = (i) => i & (-i);
+  function update(i, delta) {        // add delta at index i
+    for (i++; i <= n; i += lowbit(i)) tree[i] += delta;
+  }
+  function prefix(i) {               // sum of arr[0..i]
+    let s = 0;
+    for (i++; i > 0; i -= lowbit(i)) s += tree[i];
+    return s;
+  }
+  function range(l, r) {             // sum of arr[l..r]
+    return prefix(r) - (l > 0 ? prefix(l - 1) : 0);
+  }
+  arr.forEach((v, i) => update(i, v));
+  return { update, prefix, range };
+}`}
+  tests={[
+    { expr: 'makeBIT([1,2,3,4,5,6,7,8]).prefix(5)', label: 'prefix(5) = 1..6' },
+    { expr: 'makeBIT([1,2,3,4,5,6,7,8]).range(2,4)', label: 'range[2..4] = 3+4+5' },
+    { expr: '(() => { const b = makeBIT([1,2,3,4,5]); b.update(2, 5); return b.range(1,3); })()', label: 'after +5 at idx 2, range[1..3]' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses the same loop, plus the standard helpers (set-by-value, range query, and a binary
+`lowerBound` that finds the first prefix reaching a target):
+
+```ts
+// /dsa/17-advanced-algorithms/fenwick-tree.ts
+class FenwickTree {
+    private tree: number[];
+    private n: number;
+
+    constructor(arr: number[]) {
+        this.n = arr.length;
+        this.tree = new Array(this.n + 1).fill(0);
+        for (let i = 0; i < arr.length; i++) this.update(i, arr[i]);
+    }
+
+    private lowbit(i: number): number { return i & (-i); }
+
+    update(index: number, delta: number): void {
+        index++;                                  // to 1-indexed
+        while (index <= this.n) {
+            this.tree[index] += delta;
+            index += this.lowbit(index);          // climb
+        }
+    }
+
+    prefixQuery(index: number): number {
+        index++;
+        let sum = 0;
+        while (index > 0) {
+            sum += this.tree[index];
+            index -= this.lowbit(index);          // descend
+        }
+        return sum;
+    }
+
+    rangeQuery(left: number, right: number): number {
+        if (left === 0) return this.prefixQuery(right);
+        return this.prefixQuery(right) - this.prefixQuery(left - 1);
+    }
+}
+```
+
+Run the full file: `npx tsx 17-advanced-algorithms/fenwick-tree.ts`. It also includes a range-update
+variant (two BITs) and `countInversions`, which counts pairs out of order in O(n log n).
+
+## Complexity
+
+Both core operations climb or descend at most one cell per bit of the index:
+
+$$
+T_{\text{update}} = T_{\text{query}} = O(\log n), \qquad S(n) = O(n).
+$$
+
+| Structure | Build | Prefix query | Point update | Space |
+|-----------|-------|--------------|--------------|-------|
+| Prefix-sum array | $O(n)$ | $O(1)$ | $O(n)$ | $O(n)$ |
+| **Fenwick tree** | $O(n)$ | $O(\log n)$ | $O(\log n)$ | $O(n)$ |
+| Segment tree | $O(n)$ | $O(\log n)$ | $O(\log n)$ | $O(4n)$ |
+
+The Fenwick tree matches the segment tree's running time for prefix/range sums while using a quarter of
+the memory and far less code — at the cost of only handling *invertible* aggregates like sums.
+
+## The same idea, different worlds
+
+<ExampleCard domain="E-sports" icon="🎮">
+A live ranking service stores each player's points in a Fenwick tree keyed by player id. A score change
+is a point update; "how many points do the top k players hold?" is a prefix query. Both stay fast even
+with millions of updates per minute.
+</ExampleCard>
+
+<ExampleCard domain="Databases" icon="🗄️">
+Cumulative-frequency tables for query planners need running counts that change as rows are inserted and
+deleted. A BIT keeps the cumulative histogram current in O(log n) per change instead of rebuilding it.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="📦">
+Warehouse bins hold changing stock levels. To answer "total units in aisles 1–k" while pickers
+constantly add and remove items, a Fenwick tree over bins gives instant prefix totals with cheap
+updates.
+</ExampleCard>
+
+<ExampleCard domain="Analytics" icon="📊">
+Counting inversions — how far a list is from sorted — falls out of a BIT: sweep right to left and ask
+"how many smaller values have I already seen?" Each answer is a prefix query, each insertion an update.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Off-by-one indexing.** The tree is 1-indexed internally; forgetting the `index++` (or doing it
+  twice) corrupts every query. Keep a clean 0-indexed public API and convert once at the boundary.
+- **Non-invertible aggregates.** A BIT works for sums and counts because range = `prefix(r) - prefix(l-1)`.
+  That subtraction is meaningless for min or max — reach for a segment tree there.
+- **`lowbit` needs the lowest *set* bit.** `i & (-i)` only works for `i > 0`; that is exactly why the
+  query loop stops at `i == 0` and the update loop guards `i <= n`.
+- **Coordinate compression.** For inversions or "count smaller after self", map values to ranks `0..m-1`
+  first so the tree size is the number of *distinct* values, not the maximum value.
+- **Interview cue:** "prefix sums with updates" or "count smaller elements to the right" almost always
+  means a Fenwick tree. Say "lowbit jumps" and write the two five-line loops.
+
+## Practice
+
+1. **Easy:** For index `13` (binary `1101`), list the cells a prefix query visits and the cells an
+   update visits.
+2. **Easy:** Build a BIT over `[2, 4, 1, 3, 5]` and compute `range(1, 3)` by hand.
+3. **Medium:** Implement `set(i, v)` (assign, not add) using one prefix query plus one update.
+4. **Medium:** Count inversions in `[2, 4, 1, 3, 5]` using a BIT and right-to-left sweep
+   (answer: 3).
+5. **Hard:** Support range-add with point-query using a single BIT over a difference array, then extend
+   to range-add with range-sum using two BITs.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which Fenwick cells does a prefix query for index 13 (binary 1101) visit?',
+      options: ['13, 12, 8', '13, 11, 8', '13, 9, 1', '13, 12, 10, 8'],
+      answer: 0,
+      explain: '13 - lowbit(13)=1 → 12; 12 - lowbit(12)=4 → 8; 8 - 8 → 0. So 13, 12, 8 — three cells, one per set bit of 13.',
+    },
+    {
+      q: 'Why can a standard Fenwick tree answer range-sum but not range-minimum queries?',
+      options: [
+        'Minimum needs floating point',
+        'Range sum uses prefix(r) − prefix(l−1), but minimum is not invertible like that',
+        'The tree is too small for minimums',
+        'Minimum requires 1-indexing',
+      ],
+      answer: 1,
+      explain: 'Subtracting prefixes recovers any sub-range for an invertible operation. Min/max cannot be "subtracted", so you need a segment tree.',
+    },
+    {
+      q: 'What does lowbit(i) = i & (-i) compute?',
+      options: ['The highest set bit', 'The number of set bits', 'The value of the lowest set bit', 'i rounded to a power of two'],
+      answer: 2,
+      explain: 'Two’s-complement negation flips all bits above the lowest 1 and leaves it set, so the AND keeps exactly that lowest set bit’s value.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A Fenwick tree stores block sums so that <strong>both prefix queries and point updates cost O(log n)</strong>.',
+    'Cell <code>i</code> owns a block of length <strong>lowbit(i) = i &amp; (-i)</strong> ending at index <code>i</code>.',
+    '<strong>Query descends</strong> (i -= lowbit) and <strong>update climbs</strong> (i += lowbit); each touches one cell per set bit.',
+    'It only handles <strong>invertible aggregates</strong> (sums, counts) — use a segment tree for min/max.',
+    'Tiny code and <strong>O(n) space</strong> make it the go-to for inversions, order statistics, and live cumulative counts.',
+  ]}
+/>
+
+Next up: **Segment Trees** — when you need range min, max, GCD, or range *updates*, the lowbit trick is
+no longer enough, so we build an explicit recursive tree that any associative operation can ride on.

@@ -1,0 +1,283 @@
+---
+title: The Backtracking Template
+track: dsa-backtracking
+summary: "Backtracking solves a problem the way you explore a maze: walk forward making choices, and the instant a path is hopeless, retreat and try another."
+difficulty: beginner
+estMinutes: 16
+prereqs:
+  - dsa-greedy/huffman-coding
+leadsTo:
+  - dsa-backtracking/permutations
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import BtSubsetSumTree from '../../../components/demos/BtSubsetSumTree.tsx';
+
+## The hook: finding your way out of a maze
+
+Imagine standing in a hedge maze. You pick a corridor, walk until it dead-ends, then back up to the last
+junction and try a different turn. You never teleport; you only ever *undo your last step* and try the next
+option. Keep doing that and you will eventually walk every reachable path — and find every exit.
+
+That is **backtracking**: a disciplined way to explore all possibilities by building a solution one choice
+at a time, and *un-making* a choice the moment it leads nowhere. It is the universal tool for "generate every
+arrangement" and "find every valid configuration" problems, from passwords to Sudoku.
+
+<Callout type="intuition" title="The one-sentence idea">
+Backtracking explores a tree of choices depth-first: at each node you <strong>choose</strong> an option,
+<strong>explore</strong> what it leads to, then <strong>un-choose</strong> it and move on — pruning any
+branch that can no longer succeed.
+</Callout>
+
+## Intuition: choose, explore, un-choose
+
+Every backtracking problem is secretly a **tree**. The root is "nothing decided yet". Each edge is one
+decision, and each leaf is a finished candidate. Backtracking is just a depth-first walk of that tree with
+three moves repeated forever:
+
+1. **Choose** — commit to one option (add it to the current partial solution).
+2. **Explore** — recurse to decide the next thing, given that choice.
+3. **Un-choose** — remove the option so the slot is clean for the next sibling option.
+
+That third step is the soul of the technique. Because you faithfully undo every choice on the way back up,
+the same `path` variable is reused for the entire search — no copying, no leftover state.
+
+The other superpower is **pruning**. If a partial solution already violates a constraint (the running sum
+overshot the target, a queen is attacked, a piece is not a palindrome), there is no reason to explore deeper:
+every descendant inherits the violation. Cutting that branch can turn an impossible search into a fast one.
+
+## Play with it
+
+Below, backtracking hunts for every subset of a small list that sums to a **target**. Watch the search tree
+grow as it chooses numbers, accept a subset in emerald when the sum lands exactly on target, and prune a
+whole branch in red the instant the running sum overshoots.
+
+<BtSubsetSumTree client:visible />
+
+<Callout type="tip">
+Step one click at a time and read the caption. Notice that after a leaf is reached the highlight climbs
+back up the tree — that climb *is* the "un-choose" step happening. Try raising the target above the total
+of all numbers: every branch gets explored and nothing is pruned.
+</Callout>
+
+## How it works
+
+Here is the template every backtracking solution is a variation of. Memorise its shape and most "generate
+all" problems become fill-in-the-blanks:
+
+```ts
+function backtrack(path, choices) {
+  if (isComplete(path)) {            // base case: a finished candidate
+    results.push([...path]);         // copy — path keeps mutating
+    return;
+  }
+  for (const choice of choices) {
+    if (!isValid(choice, path)) continue;  // PRUNE invalid options
+    path.push(choice);               // CHOOSE
+    backtrack(path, nextChoices);    // EXPLORE
+    path.pop();                      // UN-CHOOSE
+  }
+}
+```
+
+**Dry run** of subset-sum on `[2, 3, 5]` with target `5`, starting from the empty set:
+
+```
+{}            sum 0
+ ├ {2}        sum 2
+ │  ├ {2,3}   sum 5  ✓ accept
+ │  └ {2,5}   sum 7  ✗ prune (overshoot)
+ ├ {3}        sum 3
+ │  └ {3,5}   sum 8  ✗ prune
+ └ {5}        sum 5  ✓ accept
+```
+
+Two solutions, and two branches cut before wasting any more work. Run the same logic live:
+
+<CodeRunner
+  client:visible
+  code={`// Subsets that sum to target, via the choose/explore/un-choose template
+function subsetSum(nums, target) {
+  const results = [];
+  const path = [];
+  function backtrack(start, sum) {
+    if (sum === target) { results.push([...path]); return; }
+    if (sum > target) return;            // prune: overshoot can't recover
+    for (let i = start; i < nums.length; i++) {
+      path.push(nums[i]);                // choose
+      backtrack(i + 1, sum + nums[i]);   // explore
+      path.pop();                        // un-choose
+    }
+  }
+  backtrack(0, 0);
+  return results;
+}`}
+  tests={[
+    { expr: 'JSON.stringify(subsetSum([2,3,5], 5))', label: 'subsets of [2,3,5] summing to 5' },
+    { expr: 'subsetSum([2,3,6,7], 7).length', label: 'count summing to 7' },
+    { expr: 'JSON.stringify(subsetSum([1,2,3,4], 5))', label: 'subsets summing to 5' },
+  ]}
+/>
+
+## The real implementation
+
+The course file shows the same skeleton powering the full **power set** (every node is a valid subset) plus
+the sorted, pruned subset-sum:
+
+```ts
+// /dsa/15-backtracking/backtracking-basics.ts
+function subsets<T>(nums: T[]): T[][] {
+    const result: T[][] = [];
+    function backtrack(index: number, current: T[]): void {
+        result.push([...current]);            // every path is a subset
+        for (let i = index; i < nums.length; i++) {
+            current.push(nums[i]);            // choose
+            backtrack(i + 1, current);        // explore
+            current.pop();                    // un-choose
+        }
+    }
+    backtrack(0, []);
+    return result;
+}
+
+function subsetsWithSum(nums: number[], target: number): number[][] {
+    const result: number[][] = [];
+    nums.sort((a, b) => a - b);               // sort enables a clean prune
+    function backtrack(index: number, current: number[], sum: number): void {
+        if (sum === target) { result.push([...current]); return; }
+        for (let i = index; i < nums.length; i++) {
+            if (sum + nums[i] > target) break;  // sorted: rest only bigger
+            current.push(nums[i]);
+            backtrack(i + 1, current, sum + nums[i]);
+            current.pop();
+        }
+    }
+    backtrack(0, [], 0);
+    return result;
+}
+```
+
+Run the full file: `npx tsx 15-backtracking/backtracking-basics.ts`.
+
+## Complexity
+
+Backtracking is **exponential** in general, because the number of candidates is exponential. For the power
+set there are two choices (in or out) for each of the n elements:
+
+$$
+\text{subsets of } n \text{ items} = 2^{n}, \qquad T(n) = O(n \cdot 2^{n}).
+$$
+
+The extra factor of n is the cost of copying each finished path. Recursion depth — and therefore the working
+space beyond the output — is just the height of the tree:
+
+$$
+S(n) = O(n).
+$$
+
+| Problem | Candidates | Time | Space (stack) |
+|---------|-----------|------|---------------|
+| Subsets / power set | $2^{n}$ | $O(n \cdot 2^{n})$ | $O(n)$ |
+| Permutations | $n!$ | $O(n \cdot n!)$ | $O(n)$ |
+| Combinations $C(n,k)$ | $\binom{n}{k}$ | $O(k \cdot \binom{n}{k})$ | $O(k)$ |
+
+Pruning does not change the worst case, but on real inputs it can chop the explored tree from astronomical
+to instant — which is exactly why we always prune as early as possible.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Robot vacuum" icon="🤖">
+A cleaning robot exploring an unknown apartment commits to a direction, rolls until it is blocked, then
+reverses to the last junction and tries another heading — depth-first search with un-choose, the same retreat
+that backtracking performs on its decision tree.
+</ExampleCard>
+
+<ExampleCard domain="Tabletop role-playing" icon="🎲">
+A "choose your own adventure" book is a decision tree. Reading a branch to a bad ending and flipping back to
+the last fork to take the other option is literally choose, explore, un-choose — and skipping a fork whose
+ending you already know is dead is pruning.
+</ExampleCard>
+
+<ExampleCard domain="Chemistry" icon="🧪">
+Enumerating the isomers of a molecule means attaching atoms one bond at a time and rejecting any partial
+structure that breaks valence rules — pruning the branch before building the rest, so impossible molecules
+are never assembled.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting to un-choose.** If you `push` but never `pop`, state leaks into sibling branches and your
+  results turn to garbage. Every `choose` needs a matching `un-choose` on the way back up.
+- **Storing the path by reference.** `results.push(path)` saves a pointer to a still-mutating array; you end
+  up with many copies of the *final* state. Always push a copy: `results.push([...path])`.
+- **Pruning too late — or not at all.** Check validity *before* recursing. A constraint tested only at the
+  leaf still explores the whole doomed subtree.
+- **Interview cue:** the phrases "find **all**", "**every** arrangement", "all valid configurations" almost
+  always mean backtracking. Say "choose, explore, un-choose" aloud and sketch the tree before coding.
+
+## Practice
+
+1. **Easy:** On paper, draw the choice tree for the subsets of `[a, b]`. How many leaves are there?
+2. **Easy:** Modify the subset template so it collects *all* subsets (the power set) instead of only those
+   hitting a target.
+3. **Medium:** Generate every subset of `[1, 2, 3]` whose size is exactly 2 by adding one validity check.
+4. **Medium:** Add a counter that increments once per recursive call, then compare the count with and without
+   the overshoot prune on `[1, 2, 3, 4, 5]`, target `6`.
+5. **Hard:** Combination Sum (LeetCode 39): the same target but each number may be reused — change a single
+   index in the recursion to allow it.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the "un-choose" step (e.g. path.pop()) accomplish?',
+      options: [
+        'It speeds up the base case',
+        'It restores the partial solution so the next sibling option starts clean',
+        'It prunes invalid branches',
+        'It copies the path into the results',
+      ],
+      answer: 1,
+      explain: 'Undoing the last choice on the way back up lets one shared path variable serve the entire search without leftover state.',
+    },
+    {
+      q: 'Why do we write results.push([...path]) instead of results.push(path)?',
+      options: [
+        'To sort the result',
+        'Because path keeps mutating, so a reference would all point to the final state',
+        'To make it run faster',
+        'It is only needed for strings',
+      ],
+      answer: 1,
+      explain: 'path is reused and mutated throughout; you must snapshot a copy at each accepted leaf.',
+    },
+    {
+      q: 'For the subset-sum search on sorted input, when is pruning correct to apply?',
+      options: [
+        'Never — it changes the answer',
+        'Only at the leaves',
+        'As soon as the running sum exceeds the target, because remaining numbers only grow it',
+        'Only when the array has duplicates',
+      ],
+      answer: 2,
+      explain: 'On sorted candidates every later number is at least as large, so once you overshoot, no descendant can come back to the target.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Backtracking is a depth-first walk of a <strong>tree of choices</strong>: choose → explore → un-choose.',
+    'The <strong>un-choose</strong> step restores state so one shared path drives the whole search.',
+    '<strong>Prune</strong> a branch the moment a constraint is violated — every descendant inherits the failure.',
+    'Always store a <strong>copy</strong> of the path at an accepted leaf, never the live reference.',
+    'It is the go-to tool whenever a problem asks for <strong>all</strong> arrangements or valid configurations — at exponential cost.',
+  ]}
+/>
+
+Next up: **Permutations** — the first concrete pattern, where every element must be used exactly once and
+order is everything.

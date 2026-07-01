@@ -1,0 +1,237 @@
+---
+title: Job Sequencing with Deadlines
+track: dsa-greedy
+summary: "Each unit-time job has a profit and a deadline: sort by profit, then place every job in the latest free slot before its deadline to keep early slots open for tighter jobs."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-greedy/interval-scheduling
+leadsTo:
+  - dsa-greedy/huffman-coding
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GreedyJobSequencing from '../../../components/demos/GreedyJobSequencing.tsx';
+
+## The hook: cashing in before the buzzer
+
+You freelance, and each gig pays a fixed fee but must be *delivered* by a certain day. Every gig takes one
+full day, and you can only do one per day. Some gigs pay a fortune but are due tomorrow; others are modest
+but flexible. Which do you take, and in what order, to bank the most money? Two greedy instincts combine:
+**chase the biggest paychecks first**, and **schedule each one as late as its deadline allows** so you
+keep the early days free for whatever urgent-but-lucrative gig appears next.
+
+<Callout type="intuition" title="The one-sentence idea">
+Sort jobs by profit (richest first) and drop each into the latest still-free time slot on or before its
+deadline — taking the most valuable job we can fit, placed as late as legal, never blocks an earlier one.
+</Callout>
+
+## Intuition: two greedy choices, one exchange argument
+
+Earlier lessons sorted by finish time or by density. Job sequencing layers two greedy ideas:
+
+1. **Process jobs in decreasing profit.** The most valuable job deserves first claim on the timeline.
+2. **Place each job in the latest free slot before its deadline.** A job with deadline $d$ can sit in any
+   slot $1 \dots d$; choosing the *latest* free one preserves every earlier slot for jobs that might have
+   tighter deadlines.
+
+The **exchange argument** ties them together. Suppose an optimal schedule skips a high-profit job $J$ that
+*could* have fit. Then some lower-profit job occupies a slot $J$ was eligible for, or a slot is empty.
+Swap that job (or empty slot) for $J$: feasibility is preserved because $J$ fits within its deadline, and
+total profit rises since $J$ pays more. So an optimal schedule must include each profitable job we can
+legally place — which is exactly what the greedy does.
+
+## Play with it
+
+Edit jobs as `profit/deadline`. The demo sorts by profit, then for each job lights up the latest free slot
+within its deadline, or strikes the job out if every eligible slot is full.
+
+<GreedyJobSequencing client:visible />
+
+<Callout type="tip">
+Watch what "latest legal slot" buys you. Placing a deadline-3 job in slot 3 instead of slot 1 leaves slots
+1 and 2 open — precisely where a later, deadline-1 or deadline-2 job will need to go.
+</Callout>
+
+## How it works
+
+Jobs `J1(100,2) J2(19,1) J3(27,2) J4(25,1) J5(15,3)`, sorted by profit: J1, J3, J4, J2, J5. Max deadline 3
+gives three slots:
+
+```
+slots: [ _ , _ , _ ]
+J1(100,d2) → latest free ≤ 2 is slot 2 → [ _ , J1, _ ]
+J3( 27,d2) → latest free ≤ 2 is slot 1 → [ J3, J1, _ ]
+J4( 25,d1) → slot 1 taken, no free ≤ 1 → reject
+J2( 19,d1) → slot 1 taken, no free ≤ 1 → reject
+J5( 15,d3) → latest free ≤ 3 is slot 3 → [ J3, J1, J5 ]
+profit = 100 + 27 + 15 = 142
+```
+
+<CodeRunner
+  client:visible
+  code={`function jobSequencing(jobs) {
+  const sorted = [...jobs].sort((a, b) => b.profit - a.profit);
+  const maxD = Math.max(...jobs.map(j => j.deadline));
+  const slots = new Array(maxD).fill(null);
+  let profit = 0;
+  for (const job of sorted) {
+    for (let s = Math.min(job.deadline, maxD) - 1; s >= 0; s--) {
+      if (slots[s] === null) { slots[s] = job.id; profit += job.profit; break; }
+    }
+  }
+  return { profit, slots };
+}
+
+const jobs = [
+  { id: 'J1', profit: 100, deadline: 2 }, { id: 'J2', profit: 19, deadline: 1 },
+  { id: 'J3', profit: 27, deadline: 2 }, { id: 'J4', profit: 25, deadline: 1 },
+  { id: 'J5', profit: 15, deadline: 3 },
+];`}
+  tests={[
+    { expr: 'jobSequencing(jobs).profit', label: 'max profit' },
+    { expr: "jobSequencing(jobs).slots.join(',')", label: 'slot assignment' },
+  ]}
+/>
+
+## The real implementation
+
+From the course file — sort by profit, then scan backward from the deadline for the latest open slot:
+
+```ts
+// /dsa/14-greedy/job-sequencing.ts
+function jobSequencing(jobs: Job[]): ScheduleResult {
+    // Sort by profit (descending)
+    const sortedJobs = [...jobs].sort((a, b) => b.profit - a.profit);
+    const maxDeadline = Math.max(...jobs.map(j => j.deadline));
+
+    const schedule: (Job | null)[] = new Array(maxDeadline).fill(null);
+    const scheduledJobs: Job[] = [];
+    let totalProfit = 0;
+
+    for (const job of sortedJobs) {
+        // Try the latest slot before the deadline, walking backward
+        for (let slot = Math.min(job.deadline, maxDeadline) - 1; slot >= 0; slot--) {
+            if (schedule[slot] === null) {
+                schedule[slot] = job;
+                scheduledJobs.push(job);
+                totalProfit += job.profit;
+                break;
+            }
+        }
+    }
+    return { jobs: scheduledJobs, totalProfit, schedule };
+}
+```
+
+Run the full file: `npx tsx 14-greedy/job-sequencing.ts`.
+
+## Complexity
+
+Sorting is $O(n \log n)$; the naive backward slot scan is $O(n \cdot d)$ in the worst case:
+
+$$
+T(n) = O(n \log n + n \cdot d), \qquad S(n) = O(d),
+$$
+
+where $d$ is the largest deadline. A **disjoint-set (union-find)** "next free slot" structure shrinks the
+placement step to near-constant amortized time:
+
+| Slot finder | Placement cost | Total time |
+|-------------|----------------|------------|
+| Backward scan | $O(d)$ per job | $O(n \log n + n \cdot d)$ |
+| Union-find | $O(\alpha(d))$ per job | $O(n \log n)$ |
+
+The union-find version points each filled slot at the next free slot below it, so finding the latest open
+slot collapses with path compression.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Advertising" icon="📣">
+Slotting paid ads into a single feed where each campaign bids a price and expires after a date is job
+sequencing: take the highest bids and place each as late as its expiry allows to keep room for late, rich bids.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="⚙️">
+A single CNC machine with rush orders, each worth a fixed margin and due by a date, maximizes margin by
+the same rule — richest order first, scheduled at the last feasible time block.
+</ExampleCard>
+
+<ExampleCard domain="Emergency response" icon="🚑">
+Dispatching one crew to incidents that each carry a severity score and a response-deadline window
+prioritizes by severity and serves each as late as the window permits, freeing earlier minutes for the
+most time-critical calls.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Sorting by deadline instead of profit.** Profit drives the priority; the deadline only bounds *where*
+  a job may go. Swapping them silently lowers the total.
+- **Placing jobs early instead of late.** Filling the earliest free slot wastes the flexibility of loose
+  deadlines and can block tight jobs later. Always scan *backward* from the deadline.
+- **Off-by-one on slots.** A deadline of $d$ means slots $1 \dots d$ (array indices $0 \dots d-1$).
+  Mixing the two is the usual bug.
+- **Assuming non-unit durations work.** This greedy assumes every job takes one slot. Variable durations
+  with profits become weighted interval scheduling — that needs DP, not this.
+- **Interview cue:** "unit-time jobs, each with a deadline and a profit, maximize profit" is the signature.
+  Say "sort by profit, place in the latest free slot before the deadline."
+
+## Practice
+
+1. **Easy:** Schedule `J1(20,1) J2(15,2) J3(10,1)` by hand and report the profit.
+2. **Easy:** Show why placing a deadline-2 job in slot 1 can cost you a deadline-1 job.
+3. **Medium:** Return not just the profit but the ordered sequence of jobs actually run.
+4. **Medium:** Replace the backward scan with a union-find "next free slot" and confirm the same profit.
+5. **Hard:** LeetCode 630 (Course Schedule III) — each course has a duration and a last day; maximize the
+   number taken using a max-heap to evict the longest course when you overrun.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In what order are jobs considered, and where is each placed?',
+      options: [
+        'By deadline ascending, in the earliest free slot',
+        'By profit descending, in the latest free slot before its deadline',
+        'By profit ascending, in any free slot',
+        'By duration, in the latest slot',
+      ],
+      answer: 1,
+      explain: 'Highest-profit jobs get first claim, and each is placed in the latest free slot up to its deadline so earlier slots stay open for tighter jobs.',
+    },
+    {
+      q: 'Why place a job in the LATEST legal slot rather than the earliest?',
+      options: [
+        'It runs faster',
+        'It preserves earlier slots for jobs with tighter deadlines',
+        'Deadlines require it',
+        'It uses less memory',
+      ],
+      answer: 1,
+      explain: 'Loose-deadline jobs can use late slots; reserving the early slots leaves room for jobs that can only run early — the heart of the exchange argument.',
+    },
+    {
+      q: 'For J1(100,2), J2(19,1), J3(27,2), J4(25,1), J5(15,3), the maximum profit is:',
+      options: ['127', '142', '152', '161'],
+      answer: 1,
+      explain: 'Schedule J3 in slot 1, J1 in slot 2, J5 in slot 3 → 27 + 100 + 15 = 142; J2 and J4 cannot fit before their deadlines.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Sort jobs by <strong>profit descending</strong>, then place each in the <strong>latest free slot</strong> on or before its deadline.',
+    'Placing jobs as late as legal keeps <strong>early slots open</strong> for jobs with tighter deadlines.',
+    'An <strong>exchange argument</strong> proves it: swapping in any fitting high-profit job never hurts feasibility.',
+    'Naive placement is <strong>O(n log n + n·d)</strong>; a <strong>union-find</strong> next-free-slot trims it to O(n log n).',
+    'Assumes <strong>unit-time</strong> jobs — variable durations with profits become weighted scheduling and need DP.',
+  ]}
+/>
+
+Next up: **Huffman Coding** — a greedy that builds a tree instead of a schedule, repeatedly merging the
+two rarest symbols to produce the optimal compression code.

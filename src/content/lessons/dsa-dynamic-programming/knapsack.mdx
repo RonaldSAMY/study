@@ -1,0 +1,297 @@
+---
+title: 0/1 Knapsack
+track: dsa-dynamic-programming
+summary: "Maximize value under a single weight limit, taking each item at most once, by filling a 2-D take-or-skip DP table."
+difficulty: intermediate
+estMinutes: 17
+prereqs:
+  - dsa-dynamic-programming/coin-change
+leadsTo:
+  - dsa-dynamic-programming/lcs
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import DpKnapsackTable from '../../../components/demos/DpKnapsackTable.tsx';
+
+## The hook: a thief with one bag
+
+A burglar stands in a vault. Gold bars, paintings, and coins each weigh something and are worth
+something, but the sack on their back holds only so many kilograms. Grab too much and the strap snaps;
+grab the wrong things and they leave a fortune behind. There's no "half a painting" — each object is
+*taken whole or left behind*. Which subset of items maximizes the loot without busting the weight limit?
+
+That is the **0/1 knapsack** problem, and the same shape shows up every time a fixed budget must be
+spent on indivisible, one-of-each choices. Greedily grabbing the most valuable item can be a trap (a
+single heavy treasure may crowd out two lighter ones worth more together), so we need something smarter.
+
+<Callout type="intuition" title="The one-sentence idea">
+For each item, take the better of two futures: skip it, or take it and spend the remaining capacity as
+well as possible on the items you haven't considered yet.
+
+</Callout>
+
+## Intuition
+
+You just met **coin change**, where each coin could be used *unlimited* times. Knapsack is its bounded
+cousin: every item exists exactly once, so the question for each item is binary — in or out. That "0 or
+1" is where the name comes from.
+
+The two ingredients every DP needs are both here. **Optimal substructure:** the best way to pack the
+first $i$ items into capacity $w$ is built from the best way to pack the first $i-1$ items into some
+capacity. **Overlapping subproblems:** the same (items-considered, capacity-left) pair is reached by
+many different sequences of decisions, so we solve each once and store it.
+
+That gives a 2-D state. Let $dp[i][w]$ be the **maximum value using only the first $i$ items with a
+capacity of $w$**. Standing at item $i$ you face exactly two choices:
+
+- **Skip it.** Your value is whatever the first $i-1$ items could manage in the same capacity:
+  $dp[i-1][w]$.
+- **Take it** (only if it fits, i.e. its weight $\le w$). You collect its value and now have
+  $w - \text{weight}$ capacity left for the earlier items: $dp[i-1][w-\text{weight}] + \text{value}$.
+
+Take whichever is larger. Contrast this with coin change: there, taking a coin let you reuse the *same*
+denomination (you stayed on row $i$), giving an *unbounded* count. Here, taking an item moves you up to
+row $i-1$, so each item is consumed at most once — *bounded*.
+
+## Play with it
+
+Edit the items and capacity, then play the fill. The table grows row by row (item by item) and, within
+a row, left to right across capacities. Watch each new cell reach into the row directly above it: once
+straight up for the "skip" value, and once $\text{weight}$ columns to the left for the "take" value.
+
+<DpKnapsackTable client:visible />
+
+<Callout type="tip">
+Every cell looks only at the row *above* it — never at its own row. That's the signature of 0/1
+knapsack: because we read $dp[i-1][\dots]$, each item can be used at most once. (Reading your own row
+instead would let items repeat — that's the unbounded version.)
+
+</Callout>
+
+## How it works
+
+The table has $n+1$ rows (row 0 = "no items") and $W+1$ columns (column 0 = "no capacity"). The base
+cases are all zeros: with no items, or no capacity, you can collect nothing. The recurrence fills the
+rest:
+
+$$
+dp[i][w] =
+\begin{cases}
+dp[i-1][w] & \text{if } \text{weight}_i > w \\[4pt]
+\max\bigl(dp[i-1][w],\; dp[i-1][w-\text{weight}_i] + \text{value}_i\bigr) & \text{otherwise.}
+\end{cases}
+$$
+
+A quick dry run with weights $[2,3,4,5]$, values $[3,4,5,6]$, capacity 5. By the time we reach item 2
+(weight 3, value 4) at capacity 5, the row above holds the answers for item 1 alone. Skipping gives
+$dp[1][5]=3$; taking gives $4 + dp[1][2] = 4 + 3 = 7$. So $dp[2][5]=\max(3,7)=7$ — pick items 1 and 2,
+total weight 5, value 7. Later items are heavier and can't beat it, so the final answer stays 7.
+
+<CodeRunner
+  client:visible
+  code={`// 0/1 knapsack: each item used at most once. Returns the max value.
+function knapsack01(weights, values, capacity) {
+  const n = weights.length;
+  // dp[i][w] = best value using first i items with capacity w
+  const dp = Array.from({ length: n + 1 }, () => new Array(capacity + 1).fill(0));
+
+  for (let i = 1; i <= n; i++) {
+    const weight = weights[i - 1];
+    const value = values[i - 1];
+    for (let w = 0; w <= capacity; w++) {
+      dp[i][w] = dp[i - 1][w];                 // skip item i
+      if (weight <= w) {                        // or take it, if it fits
+        dp[i][w] = Math.max(dp[i][w], dp[i - 1][w - weight] + value);
+      }
+    }
+  }
+  return dp[n][capacity];
+}`}
+  tests={[
+    { expr: 'knapsack01([2,3,4,5],[3,4,5,6],5)', label: 'cap 5 → 7 (items 1+2)' },
+    { expr: 'knapsack01([2,3,4,5],[3,4,5,6],10)', label: 'cap 10 → 13' },
+    { expr: 'knapsack01([1,2,3],[6,10,12],5)', label: 'cap 5 → 22 (items 2+3)' },
+    { expr: 'knapsack01([5],[10],3)', label: 'nothing fits → 0' },
+  ]}
+/>
+
+## The real implementation
+
+The course file keeps the full 2-D table, which makes the "read the row above" logic crystal clear:
+
+```ts
+// /dsa/13-dynamic-programming/knapsack.ts
+function knapsack01(
+    weights: number[],
+    values: number[],
+    capacity: number
+): number {
+    const n = weights.length;
+
+    // dp[i][w] = max value with first i items and capacity w
+    const dp: number[][] = Array.from(
+        { length: n + 1 },
+        () => new Array(capacity + 1).fill(0)
+    );
+
+    for (let i = 1; i <= n; i++) {
+        const weight = weights[i - 1];
+        const value = values[i - 1];
+
+        for (let w = 0; w <= capacity; w++) {
+            dp[i][w] = dp[i - 1][w];                  // don't take item i
+            if (weight <= w) {                         // take item i (if it fits)
+                dp[i][w] = Math.max(dp[i][w], dp[i - 1][w - weight] + value);
+            }
+        }
+    }
+
+    return dp[n][capacity];
+}
+```
+
+Because each row depends only on the one above it, you can collapse the table into a **single row of
+length $W+1$** and reuse it — provided you iterate the capacity **backward**, so a cell isn't
+overwritten before the items above it read it:
+
+```ts
+// /dsa/13-dynamic-programming/knapsack.ts — O(W) space variant
+function knapsack01Optimized(weights, values, capacity) {
+    const dp = new Array(capacity + 1).fill(0);
+    for (let i = 0; i < weights.length; i++) {
+        for (let w = capacity; w >= weights[i]; w--) {     // BACKWARD is essential
+            dp[w] = Math.max(dp[w], dp[w - weights[i]] + values[i]);
+        }
+    }
+    return dp[capacity];
+}
+```
+
+Run the full file: `npx tsx 13-dynamic-programming/knapsack.ts`.
+
+## Complexity
+
+There are $n \times W$ states, and each is computed in constant time from two earlier cells:
+
+$$
+T(n, W) = O(n \times W), \qquad S(n, W) = O(n \times W) \;\to\; O(W).
+$$
+
+| Aspect | Cost |
+|--------|------|
+| States ($i \times w$) | $n \times W$ |
+| Work per state (transition) | $O(1)$ |
+| Time | $O(n \times W)$ |
+| Space (2-D table) | $O(n \times W)$ |
+| Space (rolling row, backward) | $O(W)$ |
+
+<Callout type="warning" title="Pseudo-polynomial, not polynomial">
+$O(n \times W)$ looks polynomial, but $W$ is a *numeric value*, not the size of the input. Writing $W$
+in binary takes only $\log W$ bits, so the runtime is exponential in the input's bit-length. With a
+capacity like $10^9$ the table is hopeless — that's why 0/1 knapsack is famously NP-hard in general and
+only "easy" when $W$ is small.
+
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Shipping / Logistics" icon="🚢">
+A container has a fixed weight allowance and a yard full of pallets, each with a shipping weight and a
+revenue. You can load a given pallet or not (no half-pallets), and want the most revenue per sailing —
+0/1 knapsack with capacity = the container's weight limit.
+</ExampleCard>
+
+<ExampleCard domain="Advertising" icon="📣">
+A campaign has one fixed media budget and a slate of placements, each costing a set amount and projected
+to drive a set number of conversions. Each placement is bought once or skipped — maximize conversions
+under the budget cap.
+</ExampleCard>
+
+<ExampleCard domain="Cloud infrastructure" icon="☁️">
+A physical host offers a fixed pool of RAM, and a queue of VMs each request a fixed amount of memory and
+yield a fixed billing value. Pack the host to maximize billed value without oversubscribing RAM — the
+classic bin item-selection version of knapsack.
+</ExampleCard>
+
+<ExampleCard domain="Nutrition" icon="🥗">
+You have a daily calorie ceiling and a menu of dishes, each with a calorie cost and a "satisfaction"
+score. Eat a dish or don't (you won't order a third of a burrito) — choose the lineup that maximizes
+satisfaction within the calorie budget.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **In the 1-D form, iterate capacity *backward*.** Going forward lets a freshly updated $dp[w-\text{weight}]$
+  feed back into $dp[w]$ in the *same* item's pass, which silently turns 0/1 into the **unbounded** problem
+  (items reused). Backward iteration reads only last item's values — the whole trick.
+- **Watch the off-by-one on rows.** With a "no items" row 0, item $i$ lives at `weights[i-1]`. Mixing up
+  $i$ and $i-1$ is the most common bug; the table's base row exists precisely to make the recurrence clean.
+- **$W$ can be huge.** Because the cost is pseudo-polynomial, a giant capacity (or giant weights) blows up
+  the table. If $W$ is large but values are small, flip the DP to index by *value* instead; otherwise reach
+  for a greedy approximation.
+- **Reconstructing the chosen items** needs a backtrack, not the value alone: from $dp[n][W]$, walk up the
+  rows — if $dp[i][w] \ne dp[i-1][w]$, item $i$ was taken, so record it and drop $w$ by its weight.
+- **Don't confuse it with *fractional* knapsack.** If you *can* take pieces, a greedy by value-to-weight
+  ratio is optimal and no DP is needed. The 0/1 "whole or nothing" rule is exactly what forces the DP.
+
+## Practice
+
+1. **Easy:** With weights $[1,3,4]$, values $[15,20,30]$ and capacity 4, fill the table by hand. What is
+   the best value, and which items are chosen?
+2. **Easy:** Explain in one sentence why row 0 and column 0 of the table are all zeros.
+3. **Medium:** Modify `knapsack01` to also return the *list* of chosen item indices by backtracking the table.
+4. **Medium:** **Subset Sum** — given numbers and a target, decide if some subset sums *exactly* to the
+   target. Show how it's 0/1 knapsack with weight = value and a boolean table.
+5. **Hard:** **Partition Equal Subset Sum** (LeetCode 416) — can an array be split into two equal-sum
+   halves? Reduce it to subset sum for $\text{total}/2$ and explain when it's immediately impossible.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does dp[i][w] represent in the 0/1 knapsack table?',
+      options: [
+        'The weight of the i-th item at capacity w',
+        'The max value using the first i items with capacity w',
+        'The number of items that fit in capacity w',
+        'The min capacity needed to reach value w',
+      ],
+      answer: 1,
+      explain: 'Rows are "items considered so far" and columns are "capacity available"; the cell stores the best achievable value for that subproblem.',
+    },
+    {
+      q: 'Items weights [2,3], values [3,4], capacity 3. What is dp[2][3]?',
+      options: ['3', '4', '7', '0'],
+      answer: 1,
+      explain: 'Item 2 (weight 3, value 4) fits: take it for 4 + dp[1][0] = 4, vs skip for dp[1][3] = 3. max(3, 4) = 4. Both items together weigh 5 > 3, so they cannot both go in.',
+    },
+    {
+      q: 'In the O(W)-space version, why must the capacity loop run backward?',
+      options: [
+        'To visit larger capacities first for speed',
+        'To avoid integer overflow',
+        'So each item is used at most once — forward order would let it be reused',
+        'Backward order is required by JavaScript arrays',
+      ],
+      answer: 2,
+      explain: 'Forward iteration would read an already-updated dp[w-weight] from the current item, effectively taking the item again — the unbounded knapsack. Backward order keeps every read pointing at the previous row.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'For each item the choice is binary — <strong>take or skip</strong> — and you keep the better of the two.',
+    'State is 2-D: <strong>dp[i][w] = best value from the first i items with capacity w</strong>, read from the row above.',
+    'Taking an item moves <strong>up a row</strong> (item consumed once) — that bounded step is what separates it from coin change.',
+    'Time is <strong>O(n×W)</strong> with <strong>O(W)</strong> space if you roll one row and iterate capacity <strong>backward</strong>.',
+    'It is <strong>pseudo-polynomial</strong>: W is a value, not the input size, so huge capacities make the table impractical.',
+  ]}
+/>
+
+Next up: **Longest Common Subsequence** — another 2-D table, but now the two axes are *two sequences*,
+and each cell asks whether their characters match.
