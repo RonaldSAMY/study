@@ -13,3 +13,5 @@ npm-debug.log*
 .DS_Store
 # source book PDF (17MB, copyrighted — not redistributed; site is generated from it)
 mml-book.pdf
+# playwright mcp scratch
+.playwright-mcp/
