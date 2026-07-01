@@ -1,0 +1,229 @@
+---
+title: Diffusion Models
+track: dsa-ml-algorithms
+summary: "Learn to reverse noise: destroy data with Gaussian noise step by step, train a network to undo each step, then generate by denoising pure static."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-ml-algorithms/graph-neural-networks
+  - generative-models/diffusion-models
+leadsTo:
+  - dsa-ml-algorithms/optimizers
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MlADiffusion from '../../../components/demos/MlADiffusion.tsx';
+
+## The hook: sculpting an image out of static
+
+Stable Diffusion, DALL·E, and Midjourney all start from the same unpromising place: a screen of pure
+random noise. Then, step by step, they *remove* noise until a coherent image appears — as if a sculptor
+were chiselling a statue out of TV static. The astonishing part is how the model learned to do this: not
+by studying how to draw, but by learning to **undo destruction**. Show it how images dissolve into noise,
+and it learns to run the film backward.
+
+<Callout type="intuition" title="The one-sentence idea">
+Diffusion adds Gaussian noise to data in many small steps (fixed, easy), trains a network to predict and
+remove that noise, then generates by starting from pure noise and denoising step by step.
+</Callout>
+
+## Intuition: a forward you can't learn, a reverse you can
+
+There are two processes:
+
+- **Forward (fixed, no learning).** Take a clean image $x_0$ and repeatedly sprinkle in a little Gaussian
+  noise. After $T$ steps you have $x_T$ — indistinguishable from pure static. This direction needs no
+  neural network; it's just a known noise schedule.
+- **Reverse (learned).** Train a network to look at a noisy $x_t$ and predict the noise that was added.
+  Subtract that prediction and you've taken one step back toward clean data. Chain $T$ of these and you
+  walk from noise all the way to a fresh sample.
+
+The clever shortcut: you never have to run the forward process one slow step at a time during training.
+A closed form jumps straight to any step $t$:
+$x_t = \sqrt{\bar{\alpha}_t}\,x_0 + \sqrt{1 - \bar{\alpha}_t}\,\varepsilon$, where $\bar{\alpha}_t$ is the
+cumulative product of "how much signal survives." Sample a random $t$, noise the image, and ask the
+network to recover $\varepsilon$. That's the entire training loop.
+
+## Play with it
+
+Pick a shape and press Play. The first half of the timeline noises the point cloud into static; the
+second half is the learned denoiser recovering the shape.
+
+<MlADiffusion client:visible />
+
+<Callout type="tip">
+The forward pass is pure fixed math — anyone can noise an image. All the model's intelligence lives in
+the <strong>reverse</strong> pass: predicting exactly what noise to remove at each step. That asymmetry
+is why diffusion trains so stably compared to GANs.
+</Callout>
+
+## How it works: the dry run
+
+Training minimizes a shockingly simple objective — the mean-squared error between the true noise and the
+network's prediction: $\mathcal{L} = \lVert \varepsilon - \varepsilon_\theta(x_t, t) \rVert^2$.
+
+```
+one training step:
+  1. x0  ← a real example
+  2. t   ← random step in 1..T
+  3. ε   ← Gaussian noise, same shape as x0
+  4. xt  = √ᾱ_t · x0 + √(1-ᾱ_t) · ε        # jump straight to step t
+  5. predict ε̂ = model(xt, t)
+  6. loss = mean( (ε - ε̂)² )               # just predict the noise!
+```
+
+<CodeRunner
+  client:visible
+  code={`// Forward noising with a linear beta schedule (plain JS)
+const T = 12;
+const betas = Array.from({length:T}, (_,t) => 0.05 + (0.6-0.05)*(t/(T-1)));
+const alphas = betas.map((b)=>1-b);
+const alphaBar = [];                       // cumulative product
+let cp = 1;
+for (const a of alphas){ cp *= a; alphaBar.push(cp); }
+function noise(x0, t, eps) {               // xt = √ᾱ·x0 + √(1-ᾱ)·ε
+  const sa = Math.sqrt(alphaBar[t]), sn = Math.sqrt(1 - alphaBar[t]);
+  return sa * x0 + sn * eps;
+}`}
+  tests={[
+    { expr: '+alphaBar[0].toFixed(3)', label: 'signal kept after step 0' },
+    { expr: '+alphaBar[T-1].toFixed(3)', label: 'signal kept after last step (≈0)' },
+    { expr: '+noise(1.0, 0, 0.5).toFixed(3)', label: 'x at step 0 (mostly signal)' },
+    { expr: '+noise(1.0, T-1, 0.5).toFixed(3)', label: 'x at last step (mostly noise)' },
+  ]}
+/>
+
+## The real implementation
+
+The course file precomputes the schedule so any step is one lookup, then noises with the closed form:
+
+```ts
+// /dsa/27-ml-algorithms/04-diffusion-models/diffusion-basics.ts
+// forward: q(x_t | x_0) = √ᾱ_t · x_0 + √(1-ᾱ_t) · ε
+qSample(x0: number[], t: number, noise?: number[]): number[] {
+  noise = noise ?? GaussianUtils.randn([x0.length]);
+  const a  = this.schedule.sqrtAlphasCumProd[t];         // √ᾱ_t
+  const om = this.schedule.sqrtOneMinusAlphasCumProd[t]; // √(1-ᾱ_t)
+  return x0.map((v, i) => a * v + om * noise![i]);
+}
+```
+
+Run it with `npx tsx 27-ml-algorithms/04-diffusion-models/diffusion-basics.ts`. The sibling `ddim.ts`
+shows how to *skip* steps at sampling time — turning 1000 denoising passes into ~50 without retraining.
+
+## Complexity
+
+Sampling is the bottleneck: each of $T$ steps is a full network pass.
+
+$$
+T_{\text{sample}} = O(T \cdot C), \qquad T_{\text{train per step}} = O(C),
+$$
+
+where $C$ is the cost of one model forward pass.
+
+| Method | Steps to sample | Trade-off |
+|--------|-----------------|-----------|
+| DDPM | ~1000 | Highest quality, slowest |
+| DDIM | ~20–50 | Nearly as good, ~20× faster |
+| Distilled | 1–4 | Fastest, some quality loss |
+
+<Callout type="why">
+Unlike a GAN or a transformer that generates in one shot, diffusion trades compute for quality: more
+denoising steps means sharper samples. Cutting that step count (DDIM, distillation, consistency models)
+is the central research race in fast image generation.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Photo restoration" icon="🖼️">
+Denoising an old, grainy photograph is literally one reverse-diffusion step: estimate the noise
+corrupting the image and subtract it. Diffusion generalizes this to removing *all* the noise, from pure
+static.
+</ExampleCard>
+
+<ExampleCard domain="Audio & music" icon="🎵">
+The same recipe generates speech and music: noise a waveform (or spectrogram), learn to denoise it.
+Models like AudioLDM produce sound effects and songs by denoising exactly as image models denoise
+pixels.
+</ExampleCard>
+
+<ExampleCard domain="Molecule design" icon="⚗️">
+Diffusion runs on 3D atom coordinates: noise a molecule's structure, then denoise to sample new,
+physically plausible shapes. Tools like RFdiffusion design novel proteins this way.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Thinking the forward process is learned.** It isn't — noising is fixed math. Only the reverse
+  denoiser has parameters.
+- **Confusing what the network predicts.** Standard DDPM predicts the *noise* $\varepsilon$, not the clean
+  image directly (though the two are equivalent via the closed form).
+- **Too few sampling steps in plain DDPM.** Skipping steps naively degrades quality; use DDIM's
+  deterministic sampler if you want speed.
+- **Interview cue:** "Why do diffusion models train more stably than GANs?" No adversarial min-max game —
+  it's a plain regression (predict the noise) with a well-behaved MSE loss.
+
+## Practice
+
+1. **Easy:** In the forward process, what is $x_T$ (the final step) approximately equal to?
+2. **Easy:** Does the forward noising process have learnable parameters? Why not?
+3. **Medium:** Write the training loss for a diffusion model in one line.
+4. **Medium:** Using $x_t = \sqrt{\bar{\alpha}_t}x_0 + \sqrt{1-\bar{\alpha}_t}\varepsilon$, what happens as
+   $\bar{\alpha}_t \to 0$?
+5. **Hard:** Explain how DDIM samples in far fewer steps than DDPM without retraining the network.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a standard DDPM network learn to predict?',
+      options: [
+        'The clean image in one shot',
+        'The noise that was added to a noisy input',
+        'The class label of the image',
+        'The optimal learning rate',
+      ],
+      answer: 1,
+      explain: 'The network predicts the noise ε added at step t; subtracting it denoises one step. The clean image follows from the closed-form relation.',
+    },
+    {
+      q: 'Which part of a diffusion model is fixed (not learned)?',
+      options: [
+        'The reverse denoising process',
+        'The forward noising process',
+        'The loss function only',
+        'Nothing — everything is learned',
+      ],
+      answer: 1,
+      explain: 'Forward noising follows a fixed schedule with a closed form. Only the reverse denoiser has trainable parameters.',
+    },
+    {
+      q: 'Why is sampling from a plain DDPM slow?',
+      options: [
+        'It solves a large matrix inverse',
+        'It runs a full network pass at each of ~1000 denoising steps',
+        'It retrains the model each time',
+        'Softmax is expensive',
+      ],
+      answer: 1,
+      explain: 'Generation walks the reverse chain step by step, one forward pass per step — hence ~T passes. DDIM reduces the step count dramatically.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Diffusion has a <strong>fixed forward noising</strong> process and a <strong>learned reverse denoiser</strong>.',
+    'A closed form <strong>x_t = √ᾱ_t·x0 + √(1-ᾱ_t)·ε</strong> jumps to any noise level in one shot.',
+    'Training is a simple regression: <strong>predict the added noise</strong>, minimize MSE — very stable.',
+    'Generation <strong>denoises pure static over T steps</strong>; more steps means higher quality.',
+    '<strong>DDIM and distillation</strong> cut sampling from ~1000 steps to a handful.',
+  ]}
+/>
+
+Next up: **Optimizers** — the algorithms that actually train all of these networks by turning gradients
+into weight updates.

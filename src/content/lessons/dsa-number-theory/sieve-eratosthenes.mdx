@@ -1,0 +1,247 @@
+---
+title: Sieves
+track: dsa-number-theory
+summary: "Listing every prime up to n by crossing out multiples: the classic Sieve of Eratosthenes in O(n log log n), and the linear sieve that visits each composite exactly once."
+difficulty: intermediate
+estMinutes: 17
+prereqs:
+  - dsa-number-theory/primality-tests
+leadsTo:
+  - dsa-number-theory/euler-totient
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NTSieveGrid from '../../../components/demos/NTSieveGrid.tsx';
+
+## The hook: cross out the multiples, keep what survives
+
+Write the numbers 2 to 100 on a grid. Circle 2, then cross out every second number after it. Circle the
+next survivor, 3, and cross out every third. Then 5, then 7 — and stop, because once you pass
+$\sqrt{100}$ everything still standing is prime. Eratosthenes described this around 240 BC, and it is
+still the fastest simple way to list *all* primes up to a bound. The last lesson tested one number at a
+time; a sieve hands you millions at once.
+
+<Callout type="intuition" title="The one-sentence idea">
+A number is prime exactly when no smaller prime crosses it out, so sweep the primes in order and strike
+every multiple — whatever is never struck is prime.
+</Callout>
+
+## Intuition
+
+Testing each number with trial division wastes work: you rediscover that 2 divides every even number over
+and over. The sieve flips it around. Rather than asking "who divides $n$?", it *pushes* each prime's
+multiples out to be marked. Every composite $c$ has a smallest prime factor $p$, and $c$ gets crossed out
+when we process $p$ — so nothing is missed and the survivors are precisely the primes.
+
+Two refinements make it fast:
+
+- **Start at $p^2$.** Smaller multiples of $p$ (like $2p, 3p$) were already crossed by smaller primes, so
+  begin striking at $p \cdot p$.
+- **Stop the outer loop at $\sqrt n$.** Any composite $\le n$ has a factor $\le \sqrt n$, so after that
+  everything remaining is prime.
+
+The classic sieve crosses some composites *several* times (12 is hit by 2 and by 3). The **linear sieve**
+fixes that: it arranges for every composite to be marked exactly once — by its smallest prime factor —
+giving true $O(n)$ time and, as a bonus, the smallest prime factor of every number.
+
+## Play with it
+
+Set $n$ and step through the crossing-out. Toggle "Color by smallest prime factor" to see the idea behind
+the linear sieve: each composite is owned by the *first* prime that reaches it.
+
+<NTSieveGrid client:visible />
+
+<Callout type="tip">
+Watch how 12 is crossed by 2 first, so its smallest prime factor is 2 — never re-owned by 3. That
+single-owner rule is exactly what the linear sieve enforces to hit $O(n)$.
+</Callout>
+
+## How it works
+
+The classic sieve on $n = 30$:
+
+```
+2 prime -> cross 4,6,8,10,...,30
+3 prime -> cross 9,15,21,27   (6,12,... already gone)
+5 prime -> cross 25            (10,15,20 already gone)
+sqrt(30) ≈ 5.5, so stop crossing
+survivors: 2 3 5 7 11 13 17 19 23 29
+```
+
+Only the primes up to $\sqrt n$ ever do any crossing, and each starts at its square — which is why the
+total number of strike operations is so small.
+
+<CodeRunner
+  client:visible
+  code={`// Classic Sieve of Eratosthenes: primes up to n
+function sieve(n) {
+  const isPrime = new Array(n + 1).fill(true);
+  isPrime[0] = isPrime[1] = false;
+  for (let i = 2; i * i <= n; i++) {
+    if (isPrime[i]) {
+      for (let j = i * i; j <= n; j += i) isPrime[j] = false; // start at i*i
+    }
+  }
+  const primes = [];
+  for (let i = 2; i <= n; i++) if (isPrime[i]) primes.push(i);
+  return primes;
+}
+
+// Linear sieve: also returns spf[i] = smallest prime factor of i
+function linearSieve(n) {
+  const spf = new Array(n + 1).fill(0);
+  const primes = [];
+  for (let i = 2; i <= n; i++) {
+    if (spf[i] === 0) { spf[i] = i; primes.push(i); }
+    for (const p of primes) {
+      if (i * p > n) break;
+      spf[i * p] = p;
+      if (i % p === 0) break;   // key: stop at i's smallest prime factor
+    }
+  }
+  return { primes, spf };
+}`}
+  tests={[
+    { expr: 'sieve(30)', label: 'primes up to 30' },
+    { expr: 'sieve(100).length', label: 'count of primes below 100' },
+    { expr: 'linearSieve(20).spf.slice(2)', label: 'smallest prime factor of 2..20' },
+    { expr: 'linearSieve(50).primes.length', label: 'primes up to 50' },
+  ]}
+/>
+
+## The real implementation
+
+The linear sieve from the course file — the `if (i % p === 0) break` is the whole trick, guaranteeing
+each composite is marked once:
+
+```ts
+// /dsa/22-number-theory/linear-sieve.ts
+export function linearSieveWithSPF(n: number): { primes: number[]; spf: number[] } {
+  const spf = new Array(n + 1).fill(0);
+  const primes: number[] = [];
+  for (let i = 2; i <= n; i++) {
+    if (spf[i] === 0) {          // i survived -> prime
+      spf[i] = i;
+      primes.push(i);
+    }
+    for (const p of primes) {
+      if (i * p > n) break;
+      spf[i * p] = p;            // i*p is marked by its smallest prime factor p
+      if (i % p === 0) break;    // once p | i, larger p would double-mark
+    }
+  }
+  return { primes, spf };
+}
+```
+
+With `spf` in hand you can factorize any $k \le n$ in $O(\log k)$ by dividing out `spf[k]` repeatedly.
+The same file also has the classic sieve and a segmented sieve for ranges far from 0. Run the full file:
+`npx tsx 22-number-theory/linear-sieve.ts`.
+
+## Complexity
+
+The classic sieve does $n/2 + n/3 + n/5 + \dots$ strikes over the primes, which sums to
+$O(n \log \log n)$; the linear sieve does exactly $n$:
+
+$$
+T_{\text{Eratosthenes}}(n) = O(n \log \log n), \qquad T_{\text{linear}}(n) = O(n).
+$$
+
+| Sieve | Time | Space | Extra output |
+|-------|------|-------|--------------|
+| Eratosthenes | $O(n \log \log n)$ | $O(n)$ | primes |
+| Bit-packed Eratosthenes | $O(n \log \log n)$ | $O(n/8)$ bytes | primes |
+| Linear (Euler) | $O(n)$ | $O(n)$ | primes **and** smallest prime factor |
+| Segmented | $O((R-L)\log\log R)$ | $O(\sqrt R)$ | primes in $[L, R]$ |
+
+In practice $\log \log n$ is below 5 for any $n$ you will ever sieve, so the classic version's small
+constant often beats the linear sieve unless you also need the smallest-prime-factor table.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cryptography & hashing" icon="🔐">
+Precomputing small primes accelerates trial-factoring and lets hash libraries pick prime table sizes
+quickly. A sieve of the first few million primes is a standard piece of a number-theory toolkit.
+</ExampleCard>
+
+<ExampleCard domain="Databases & scheduling" icon="🗂️">
+"Mark everything divisible by $k$" is the sieve pattern behind bitmap indexes and periodic-task
+schedulers — stride through an array with a fixed step instead of testing each slot.
+</ExampleCard>
+
+<ExampleCard domain="Signal processing" icon="📉">
+The Sieve of Eratosthenes is the archetype of a *stride* memory pattern (`j += i`); GPU and SIMD kernels
+that touch every $k$-th element — downsampling, strided convolutions — share its cache behavior.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Start the inner loop at $i \cdot i$, not $2i$.** Starting lower still works but wastes time
+  re-crossing already-struck numbers.
+- **Watch memory.** A boolean array for $n = 10^9$ is a gigabyte. Bit-pack it, or use a **segmented
+  sieve** to handle ranges far from zero without allocating up to $R$.
+- **The linear sieve is not always faster in practice.** Its $O(n)$ is real, but the classic sieve's tiny
+  constant and cache-friendliness often win — reach for linear when you also want `spf` or a
+  multiplicative function.
+- **Interview cue:** LeetCode 204 "Count Primes" is the canonical sieve question; "smallest prime factor
+  of each number" or "factorize many queries fast" points at the linear sieve.
+
+## Practice
+
+1. **Easy:** Run the sieve up to 20 on paper and list the primes.
+2. **Easy:** Why can the outer loop stop at $\sqrt n$? Give the one-line reason.
+3. **Medium:** Modify the sieve to also record the *count* of distinct prime factors of each number.
+4. **Medium:** Use a smallest-prime-factor table to factorize 84 and 100 in $O(\log n)$ steps each.
+5. **Hard:** Implement a segmented sieve to list all primes in $[10^9, 10^9 + 1000]$ using only
+   $O(\sqrt{R})$ memory.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does the inner crossing loop start at i·i?',
+      options: [
+        'To save memory',
+        'Smaller multiples of i were already crossed by smaller primes',
+        'Because i·i is always prime',
+        'To avoid overflow',
+      ],
+      answer: 1,
+      explain: 'Multiples 2i, 3i, ... up to (i-1)·i share a smaller prime factor and were already struck, so i·i is the first new one.',
+    },
+    {
+      q: 'What is the time complexity of the classic Sieve of Eratosthenes?',
+      options: ['O(n)', 'O(n log log n)', 'O(n log n)', 'O(n sqrt n)'],
+      answer: 1,
+      explain: 'Summing n/p over primes p gives O(n log log n); the linear sieve trims this to O(n).',
+    },
+    {
+      q: 'What does the linear sieve compute for free besides the primes?',
+      options: [
+        'The number of primes',
+        'The smallest prime factor of every number',
+        'The prime gaps',
+        'The nth prime directly',
+      ],
+      answer: 1,
+      explain: 'Because each composite is marked by its smallest prime factor, spf[i] falls out of the same pass.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A sieve lists <strong>all primes up to n</strong> by crossing out multiples — far cheaper than testing each.',
+    'Start crossing at <strong>i·i</strong> and stop the outer loop at <strong>√n</strong>.',
+    'The classic sieve runs in <strong>O(n log log n)</strong>; the linear sieve in true <strong>O(n)</strong>.',
+    'The <strong>linear sieve</strong> marks each composite once — by its smallest prime factor — giving an spf table.',
+    'Use a <strong>segmented sieve</strong> for ranges far from zero to keep memory at O(√R).',
+  ]}
+/>
+
+Next up: **Euler's Totient & Theorem** — counting how many numbers below $n$ are coprime to it, the count
+that makes modular inverses (and RSA) tick.

@@ -1,0 +1,229 @@
+---
+title: How Compression Works
+track: dsa-compression
+summary: "Compression buys back two kinds of waste: redundancy (repeats you can point to) and skew (common symbols deserve short codes) — and entropy sets the floor."
+difficulty: beginner
+estMinutes: 14
+prereqs:
+  - dsa-geometry/line-sweep
+leadsTo:
+  - dsa-compression/lz-family
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import CompEntropyExplorer from '../../../components/demos/CompEntropyExplorer.tsx';
+
+## The hook: why does a screenshot of a blank wall weigh almost nothing?
+
+Save a photo of a plain white wall and it is a few kilobytes; save a photo of a bustling market and it is megabytes — same pixel count. A text file of one letter repeated a million times zips down to a whisper, while a million random bytes barely shrink at all. Compression is not magic ink that makes bytes smaller; it is a hunt for the two things real data is full of and random data is not: **repetition** and **imbalance**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Compression removes two kinds of waste — **redundancy** (patterns that repeat, which you can replace with a pointer) and **skew** (some symbols are far more common than others, so they deserve shorter codes) — down to a hard limit called entropy.
+</Callout>
+
+## Intuition: two levers, one floor
+
+Every lossless compressor pulls on the same two levers:
+
+1. **Redundancy.** If the string `abcabcabc` appears, you do not need to store `abc` three times — store it once and say "repeat that." This is what run-length and LZ methods exploit, and it is the subject of the next three lessons.
+2. **Skew.** In English text, `e` and space are everywhere while `q` and `z` are rare. Giving `e` a 3-bit code and `z` a 10-bit code beats giving everything a flat 8 bits. This is **entropy coding** (Huffman, arithmetic, FSE), which you met in [Huffman coding](/lessons/dsa-greedy/huffman-coding).
+
+Both levers have a shared limit. The **entropy** of a source — the same quantity from [Information and Entropy](/lessons/information-theory/entropy) — is the average number of bits per symbol that no lossless coder can beat. Redundancy and skew are just the gaps between your data's size and that floor.
+
+And there is a line you must not cross carelessly: **lossless** compression reconstructs the original bit-for-bit (text, code, executables), while **lossy** compression throws away detail humans barely notice (JPEG, MP3) to shrink far more. This track is about lossless.
+
+## Play with it
+
+The visualizer below run-length encodes your text — it scans left to right, groups equal characters into runs, and turns each run into a `(char, count)` token. Watch the live ratio, and compare it against the **entropy floor** it prints alongside.
+
+<CompEntropyExplorer client:visible />
+
+<Callout type="tip">
+Type a long run like `aaaaaaaa` and RLE crushes it. Now type `abcdefgh` — RLE actually makes it *bigger*, because there are no runs to fold. That is the whole story: a method only helps on the kind of waste it targets. The entropy floor, though, never lies about how small the data can ever get.
+</Callout>
+
+## How it works
+
+Run-length encoding is the simplest redundancy remover. Fold `WWWWWWBWWWWWW`:
+
+```
+scan:  W W W W W W  B  W W W W W W
+runs:  (W,6)        (B,1) (W,6)
+out:   W6 B1 W6      →  6 bytes for 13 characters
+```
+
+Entropy is the other half. For a source where symbol i has probability p_i, the average bits per symbol is
+
+$$
+H = -\sum_i p_i \log_2 p_i .
+$$
+
+A file of `n` symbols cannot be squeezed below about `n · H / 8` bytes without losing information — that is Shannon's limit, and it is why already-random or already-compressed data will not shrink.
+
+<CodeRunner
+  client:visible
+  code={`// Run-length encoding: fold repeats into (char, count) tokens
+function rle(s) {
+  let out = '';
+  for (let i = 0; i < s.length; ) {
+    let j = i;
+    while (j < s.length && s[j] === s[i]) j++;
+    out += s[i] + (j - i);
+    i = j;
+  }
+  return out;
+}
+
+// Shannon entropy in bits per symbol
+function entropy(s) {
+  const freq = {};
+  for (const c of s) freq[c] = (freq[c] || 0) + 1;
+  let h = 0;
+  for (const k in freq) {
+    const p = freq[k] / s.length;
+    h -= p * Math.log2(p);
+  }
+  return h;
+}`}
+  tests={[
+    { expr: 'rle("WWWWWWBWWWWWW")', label: 'RLE of a runny string' },
+    { expr: 'rle("abcdefgh")', label: 'RLE with no runs (expands!)' },
+    { expr: 'entropy("aaaaaaaa").toFixed(3)', label: 'entropy of all-same (bits/sym)' },
+    { expr: 'entropy("abcd").toFixed(3)', label: 'entropy of 4 equal symbols' },
+  ]}
+/>
+
+## The real implementation
+
+Before compressing anything, real systems decide *whether it is worth it* — small files, already-compressed formats, and encrypted blobs have no exploitable waste. And they guard against **compression bombs**, tiny files that explode on decompression. Straight from the course file:
+
+```ts
+// /dsa/30-compression/compression-practice.ts
+export function shouldCompress(file: { name: string; size: number; type: string }): boolean {
+  // Already-compressed formats have no redundancy left to remove
+  const compressed = ['.jpg', '.png', '.webp', '.mp4', '.mp3', '.zip', '.gz'];
+  if (compressed.some((ext) => file.name.endsWith(ext))) return false;
+  // Too small: header/overhead outweighs any savings
+  if (file.size < 1024) return false;
+  return true;
+}
+
+// Defend against zip bombs: a 42 KB file that expands to 4.5 PB
+export function compressionBombDetection(
+  compressedSize: number,
+  decompressedSize: number,
+  maxRatio = 1000
+): boolean {
+  const ratio = decompressedSize / compressedSize;
+  return ratio > maxRatio; // true = suspiciously explosive
+}
+```
+
+Run the full file: `npx tsx 30-compression/compression-practice.ts`.
+
+## Complexity
+
+RLE and a single entropy pass both scan the data once:
+
+$$
+T(n) = O(n), \qquad S(n) = O(1)\text{–}O(k),
+$$
+
+where `k` is the alphabet size. The deep result is the *lower bound*: no lossless coder averages fewer than `H` bits per symbol.
+
+| Method | Exploits | Time | Best on |
+|--------|----------|------|---------|
+| Run-length (RLE) | runs of one symbol | $O(n)$ | scanned images, silence |
+| Entropy coding | symbol skew | $O(n \log k)$ | text, any skewed source |
+| LZ (next lesson) | repeated substrings | $O(n)$–$O(nw)$ | logs, code, natural text |
+
+The trade-off that runs through this whole track: **ratio versus speed**. Cheap methods (RLE, LZ4) are blazing but leave bits on the table; heavy methods (Brotli, LZMA) approach the entropy floor but cost far more CPU.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Fax & scanned documents" icon="📠">
+A fax page is mostly white with thin black text. Group 3 fax encoding run-length codes each scan line — long white runs become a couple of bytes — which is why a mostly-blank page transmits in seconds while a dense one takes far longer.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+DNA uses a 4-letter alphabet (A, C, G, T). Its entropy is at most 2 bits per base, so genome tools pack each base into 2 bits instead of a full 8-bit character — a 4x win before any fancier modeling of repeats even begins.
+</ExampleCard>
+
+<ExampleCard domain="Analytics databases" icon="🗄️">
+Column stores (Parquet, ClickHouse) keep one column together, so a "country" column reads `US US US US FR FR ...`. Run-length and dictionary encoding on that sorted column turns millions of rows into a handful of run tokens — the reason columnar scans are so fast.
+</ExampleCard>
+
+<ExampleCard domain="Music streaming" icon="🎵">
+Silence and sustained notes are low-entropy stretches. Lossless audio codecs (FLAC) predict each sample from the last few and store only the tiny surprise, spending almost no bits on quiet passages and more on busy ones — entropy in action.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Compressing twice does not help.** Once data is near its entropy floor it looks random; a second pass usually *grows* it by a few header bytes. Never gzip a JPEG.
+- **RLE can expand data.** With no runs, `(char, count)` doubles the size. Real formats add an escape/flag so worst case is bounded — always cap your output at "store raw."
+- **Entropy is a floor, not a promise.** `H` tells you the best *possible* size; a specific coder may not reach it, and reaching it needs a good model of the data.
+- **Lossless vs lossy is a correctness decision, not a tuning knob.** You can lossy-compress a photo; you cannot lossy-compress a bank ledger or a binary.
+- **Interview cue:** if asked "how small can this get?", compute the entropy first. If asked "why won't this file shrink?", the answer is almost always "it is already near its entropy — no redundancy or skew left."
+
+## Practice
+
+1. **Easy:** Run-length encode `AAAABBBCCD` by hand. How many tokens, how many bytes at 2 bytes each?
+2. **Easy:** A source emits `A` half the time and `B`, `C`, `D` a sixth each. Is its entropy above or below 2 bits per symbol? (Estimate.)
+3. **Medium:** Give a 10-character string where RLE *expands* the data, and one where it more than halves it.
+4. **Medium:** Explain why encrypting a file before compressing it defeats the compressor, but compressing before encrypting works fine.
+5. **Hard:** You have 1000 near-identical JSON API responses. Which lever — redundancy or skew — helps most, and what mechanism (from later lessons) would you reach for?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does a photo of a blank wall compress far more than a photo of a crowd?',
+      options: [
+        'It has fewer pixels',
+        'It has low entropy — huge redundancy and skew to remove',
+        'Cameras store walls in a special format',
+        'It is already lossy',
+      ],
+      answer: 1,
+      explain: 'Same pixel count, but the blank wall is highly redundant and skewed (low entropy), so there is far more waste to squeeze out.',
+    },
+    {
+      q: 'What does the entropy H = -sum p log2 p tell you about a file?',
+      options: [
+        'How fast it will compress',
+        'The exact compressed size',
+        'A lower bound on bits per symbol no lossless coder can beat',
+        'Whether it is text or binary',
+      ],
+      answer: 2,
+      explain: 'Entropy is the theoretical floor on average bits per symbol; real coders aim to approach it but can never beat it losslessly.',
+    },
+    {
+      q: 'When can run-length encoding make a file BIGGER?',
+      options: [
+        'When the file is already sorted',
+        'When there are no repeated runs, so each symbol becomes (char, count)',
+        'When the alphabet is small',
+        'It can never grow a file',
+      ],
+      answer: 1,
+      explain: 'With no runs, RLE replaces every single symbol with a 2-byte token, doubling the size — which is why formats bound the worst case with a raw fallback.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Compression exploits two kinds of waste: <strong>redundancy</strong> (repeats) and <strong>skew</strong> (uneven symbol frequencies).',
+    '<strong>Entropy</strong> H = -&sum; p log&#8322; p is the floor — the fewest bits per symbol any lossless coder can average.',
+    '<strong>Redundancy removers</strong> (RLE, LZ) point back at repeats; <strong>entropy coders</strong> (Huffman, FSE) give common symbols short codes.',
+    'Already-compressed, tiny, or encrypted data has almost no waste left — it will not shrink, and double-compressing can even grow it.',
+    'The track-long trade-off is <strong>ratio vs speed</strong>: cheap methods run fast and loose, heavy methods chase the entropy floor.',
+  ]}
+/>
+
+Next up: **LZ77 & LZ4** — the sliding window that finds repeated substrings and replaces them with `(offset, length)` back-references, the redundancy lever at industrial scale.

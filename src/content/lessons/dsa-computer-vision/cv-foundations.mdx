@@ -1,0 +1,298 @@
+---
+title: Detection Foundations
+track: dsa-computer-vision
+summary: "Two boxes, one ratio: IoU scores overlap, and greedy NMS uses it to collapse a swarm of detections into clean objects."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-ml-algorithms/embeddings
+leadsTo:
+  - dsa-computer-vision/backbones-fpn
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import CvDetectionFoundations from '../../../components/demos/CvDetectionFoundations.tsx';
+
+## The hook: one dog, ten boxes
+
+Point a modern detector at a photo of a dog and, before any cleanup, it does not draw one box — it
+draws *dozens*. Every location near the animal fires "dog here!" with slightly different corners and
+confidences. Raw object detection is a swarm. Two tiny pieces of geometry turn that swarm into a clean
+answer: a way to **measure overlap** between two boxes, and a **greedy rule** that keeps the best box
+and deletes its duplicates. Master these two and you understand the last stage of nearly every detector
+ever shipped.
+
+<Callout type="intuition" title="The one-sentence idea">
+Intersection-over-Union scores how much two boxes overlap as a single number in the range zero to one,
+and Non-Max Suppression repeatedly keeps the highest-scoring box while deleting every box that overlaps
+it too much.
+</Callout>
+
+## Intuition
+
+A bounding box is just a **set of pixels** — an axis-aligned rectangle. To ask "are these two boxes
+describing the same object?" is to ask "how much do these two sets overlap?" The natural answer is the
+**Jaccard index**: the area they share divided by the area they jointly cover. Share nothing and you get
+zero; sit exactly on top of each other and you get one. That ratio is called **Intersection-over-Union**
+(IoU), and it is the single most-used number in all of detection.
+
+Once you can score overlap, deduplication is a greedy algorithm — the same "keep the best, discard the
+dominated" pattern you met in [greedy graph algorithms](/lesson/dsa-graphs/greedy-intro). Sort the raw
+boxes by confidence, take the most confident one as a definite keeper, then throw away every remaining
+box whose IoU with it exceeds a threshold (they must be duplicates of the same object). Repeat on what
+survives. That is **Non-Max Suppression**.
+
+## Play with it
+
+Drag the boxes, set the IoU threshold, and step **greedy NMS**. Watch it pick the highest score, shade
+the intersection against each competitor, and suppress the ones that overlap too much.
+
+<CvDetectionFoundations client:visible />
+
+<Callout type="tip">
+Slide the threshold up toward 0.9 and almost nothing gets suppressed — every box is treated as its own
+object, so duplicates leak through. Slide it down toward 0.2 and NMS becomes aggressive, sometimes
+deleting a genuinely separate object that merely sits close. Choosing that threshold is a real
+precision-versus-recall decision.
+</Callout>
+
+## How it works
+
+Take four raw detections and run greedy NMS with a threshold of 0.5. Boxes are `[x1, y1, x2, y2]`:
+
+```
+b0 = [100,100,210,210]  score 0.90
+b1 = [105,105,215,215]  score 0.80   IoU(b0,b1) = 0.837
+b2 = [300,300,400,400]  score 0.70   IoU(b0,b2) = 0.000
+b3 = [305,305,395,395]  score 0.60   IoU(b2,b3) = 0.810
+
+pick b0 (0.90)  ->  IoU(b0,b1)=0.837 >= 0.5  suppress b1;  IoU(b0,b2)=0  keep
+pick b2 (0.70)  ->  IoU(b2,b3)=0.810 >= 0.5  suppress b3
+KEEP = [b0, b2]
+```
+
+Two objects, two survivors — the low-confidence near-duplicates vanish. Run it yourself:
+
+<CodeRunner
+  client:visible
+  code={`// Intersection-over-Union of two [x1,y1,x2,y2] boxes
+function iou(a, b) {
+  const xi1 = Math.max(a[0], b[0]), yi1 = Math.max(a[1], b[1]);
+  const xi2 = Math.min(a[2], b[2]), yi2 = Math.min(a[3], b[3]);
+  const inter = Math.max(0, xi2 - xi1) * Math.max(0, yi2 - yi1);
+  const areaA = (a[2]-a[0]) * (a[3]-a[1]);
+  const areaB = (b[2]-b[0]) * (b[3]-b[1]);
+  const union = areaA + areaB - inter;
+  return union <= 0 ? 0 : inter / union;
+}
+
+// Greedy Non-Max Suppression: keep best, kill overlaps >= threshold
+function greedyNMS(boxes, scores, nt) {
+  const order = boxes.map((_, i) => i).sort((a, b) => scores[b] - scores[a]);
+  const suppressed = new Array(boxes.length).fill(false);
+  const keep = [];
+  for (const i of order) {
+    if (suppressed[i]) continue;
+    keep.push(i);
+    for (const j of order) {
+      if (j === i || suppressed[j]) continue;
+      if (iou(boxes[i], boxes[j]) >= nt) suppressed[j] = true;
+    }
+  }
+  return keep;
+}
+
+const boxes = [[100,100,210,210],[105,105,215,215],[300,300,400,400],[305,305,395,395]];
+const scores = [0.9, 0.8, 0.7, 0.6];`}
+  tests={[
+    { expr: 'iou([0,0,4,4],[2,1,6,5]).toFixed(4)', label: 'IoU of two 4x4 boxes' },
+    { expr: 'iou([0,0,2,2],[5,5,7,7])', label: 'IoU of disjoint boxes' },
+    { expr: 'JSON.stringify(greedyNMS(boxes, scores, 0.5))', label: 'kept indices, Nt=0.5' },
+  ]}
+/>
+
+## The real implementation
+
+The course file computes the intersection rectangle with four `max`/`min` calls and clamps negative
+sides to zero — that clamp is what makes disjoint boxes return exactly zero instead of a spurious
+negative area:
+
+```ts
+// /dsa/32-computer-vision/01-foundations/iou.ts
+export function intersectionArea(a: Box, b: Box): number {
+  const xi1 = Math.max(a[0], b[0]);
+  const yi1 = Math.max(a[1], b[1]);
+  const xi2 = Math.min(a[2], b[2]);
+  const yi2 = Math.min(a[3], b[3]);
+  const iw = Math.max(0, xi2 - xi1);   // a width can't be negative
+  const ih = Math.max(0, yi2 - yi1);
+  return iw * ih;
+}
+export function iou(a: Box, b: Box): number {
+  const I = intersectionArea(a, b);
+  const U = area(a) + area(b) - I;      // inclusion-exclusion
+  return U <= 0 ? 0 : I / U;
+}
+```
+
+And the greedy suppressor, keeping indices highest-score-first:
+
+```ts
+// /dsa/32-computer-vision/01-foundations/non-max-suppression.ts
+export function greedyNMS(dets: Detection[], iouThresh = 0.5): number[] {
+  const order = dets.map((_, i) => i).sort((a, b) => dets[b].score - dets[a].score);
+  const keep: number[] = [];
+  const suppressed = new Array(dets.length).fill(false);
+  for (const i of order) {
+    if (suppressed[i]) continue;
+    keep.push(i);
+    for (const j of order) {
+      if (j === i || suppressed[j]) continue;
+      if (iou(dets[i].box, dets[j].box) >= iouThresh) suppressed[j] = true;
+    }
+  }
+  return keep;
+}
+```
+
+Study the full derivation — including GIoU/DIoU/CIoU losses and Soft-NMS — at
+`/dsa/32-computer-vision/01-foundations/iou.ts` and `.../non-max-suppression.ts`.
+
+## Formulas and complexity
+
+Intersection-over-Union as a set ratio, resolved to areas via inclusion-exclusion:
+
+$$
+\text{IoU}(A, B) = \frac{|A \cap B|}{|A \cup B|} = \frac{I}{\text{area}(A) + \text{area}(B) - I}.
+$$
+
+The greedy re-scoring rule is a hard step function on each competing box's score:
+
+$$
+s_i \leftarrow s_i \cdot \mathbf{1}\!\left[\text{IoU}(M, b_i) < N_t\right],
+$$
+
+so any box overlapping the current max box $M$ by at least $N_t$ is zeroed out. Plain IoU has **zero
+gradient** when boxes are disjoint, so as a *training loss* detectors use Generalized IoU, which adds a
+penalty from the smallest enclosing box $C$:
+
+$$
+\text{GIoU} = \text{IoU} - \frac{|C| - |A \cup B|}{|C|} \in [-1, 1].
+$$
+
+The same imbalance that motivates careful post-processing also motivates a special classification loss,
+**focal loss**, which you will meet in full with RetinaNet:
+
+$$
+\text{FL}(p_t) = -\alpha_t\,(1 - p_t)^{\gamma}\,\log(p_t).
+$$
+
+| Operation | Time | Space |
+|-----------|------|-------|
+| IoU of one pair | $O(1)$ | $O(1)$ |
+| Greedy NMS (n boxes) | $O(n \log n)$ sort $+\ O(n^2)$ pairwise | $O(n)$ |
+| Soft-NMS | $O(n^2)$ | $O(n)$ |
+| Pairwise IoU matrix | $O(nm)$ | $O(nm)$ |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Autonomous driving" icon="🚗">
+A self-driving stack fuses camera and lidar detections of the same pedestrian. IoU (or its 3D cousin)
+links a camera box to a lidar box across sensors and across frames, so the tracker follows one person
+instead of flickering between duplicate ghosts.
+</ExampleCard>
+
+<ExampleCard domain="Medical imaging" icon="🩺">
+When a radiology model proposes many overlapping boxes around one suspicious nodule, NMS collapses them
+to a single finding. The IoU threshold is tuned toward high recall here — missing a tumour is far worse
+than showing a few extra candidate boxes for a doctor to dismiss.
+</ExampleCard>
+
+<ExampleCard domain="Retail analytics" icon="🛒">
+A shelf-audit camera counts products by detecting each package. Set the NMS threshold too low and two
+tightly-packed cans merge into one count; too high and a single can is counted twice. The store's
+inventory number is literally an IoU-threshold decision.
+</ExampleCard>
+
+<ExampleCard domain="Wildlife monitoring" icon="🦌">
+Drone surveys of a herd produce clustered detections. Soft-NMS — which *decays* scores by overlap
+instead of hard-deleting — is preferred so that two animals standing shoulder to shoulder both survive
+rather than one being erased as a "duplicate".
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Corner order matters.** IoU assumes `x2 > x1` and `y2 > y1`. Feed it a box with swapped or negative
+  sides and the `max(0, ...)` clamp silently returns zero overlap — a classic source of "why is my mAP
+  zero?" bugs.
+- **NMS must be class-aware.** A person box should never suppress an overlapping handbag box. Run NMS
+  per class (or offset each class's coordinates so different classes can't overlap), or you will delete
+  real objects of other categories.
+- **Greedy NMS deletes crowds.** Two genuinely distinct objects whose overlap just exceeds $N_t$ lose
+  one box. Soft-NMS fixes this by decaying rather than deleting.
+- **Interview cue:** if asked for the complexity of NMS, say $O(n \log n)$ to sort plus $O(n^2)$ pairwise
+  in the worst case, and note that a score pre-threshold is what keeps $n$ small in practice.
+
+## Practice
+
+1. **Easy:** By hand, compute IoU of `[0,0,2,2]` and `[1,1,3,3]`. (Intersection is a 1×1 square.)
+2. **Easy:** Two identical boxes have IoU 1. What is the IoU of a box with a copy of itself shifted so
+   they share exactly half their area?
+3. **Medium:** Run greedy NMS on three boxes that pairwise overlap at IoU 0.4 with threshold 0.5. How
+   many survive, and why?
+4. **Medium:** Modify the NMS code to be class-aware by only comparing boxes with the same class id.
+5. **Hard:** Implement linear Soft-NMS: instead of deleting a box with IoU above $N_t$, multiply its
+   score by `(1 - IoU)` and re-sort. Which of the four demo boxes now survives that greedy deleted?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Two boxes are completely disjoint. What is their IoU?',
+      options: ['1', '0.5', '0', 'undefined'],
+      answer: 2,
+      explain: 'No shared area means the intersection is 0, so IoU = 0 / union = 0. The max(0, ...) clamp guarantees this.',
+    },
+    {
+      q: 'Why does greedy NMS process boxes in descending score order?',
+      options: [
+        'To make it run in O(n) time',
+        'So the most confident box is chosen as the keeper and its lower-confidence duplicates are the ones suppressed',
+        'Because IoU is only defined for sorted boxes',
+        'To avoid floating-point error',
+      ],
+      answer: 1,
+      explain: 'Greedy keeps the highest score first and suppresses everything overlapping it — so the best box of each cluster is the survivor.',
+    },
+    {
+      q: 'Raising the NMS IoU threshold from 0.3 to 0.8 tends to...',
+      options: [
+        'suppress more boxes, risking merged objects',
+        'suppress fewer boxes, risking duplicate detections',
+        'have no effect on the output',
+        'make IoU exceed 1',
+      ],
+      answer: 1,
+      explain: 'A higher threshold means boxes must overlap more to be deleted, so fewer are suppressed and duplicates can slip through.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A bounding box is a <strong>set of pixels</strong>; IoU is the Jaccard index of two such sets, in the range 0 to 1.',
+    'Compute the intersection rectangle with <strong>max of the top-left, min of the bottom-right</strong>, and clamp negative sides to zero.',
+    '<strong>Greedy NMS</strong> = sort by score, keep the best, suppress every box with IoU above a threshold — the greedy pattern from graphs.',
+    'The IoU threshold is a real <strong>precision-versus-recall knob</strong>: high keeps duplicates, low merges neighbours.',
+    'Plain IoU has <strong>zero gradient when disjoint</strong>, so training uses GIoU/DIoU/CIoU, and crowds prefer Soft-NMS over hard deletion.',
+  ]}
+/>
+
+These two primitives run on raw boxes — but where do the boxes come from? Next: **Backbones & Feature
+Pyramids**, the convolutional machinery (a cousin of the
+[convolutional networks](/lesson/neural-networks/convolutional-networks) you may already know) that
+turns pixels into multi-scale features a detector can read.

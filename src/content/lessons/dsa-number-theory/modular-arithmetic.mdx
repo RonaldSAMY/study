@@ -1,0 +1,230 @@
+---
+title: Modular Arithmetic
+track: dsa-number-theory
+summary: "Clock math: numbers wrap around a modulus, and one trick — repeated squaring — raises them to huge powers in a handful of steps."
+difficulty: beginner
+estMinutes: 16
+prereqs:
+  - dsa-misc-algorithms/reservoir-sampling
+leadsTo:
+  - dsa-number-theory/gcd-euclidean
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NTModularClock from '../../../components/demos/NTModularClock.tsx';
+
+## The hook: it is 10 o'clock, what time is it in 5 hours?
+
+You answer "3 o'clock" without thinking — not 15. You just did modular arithmetic. A clock only has
+twelve labels, so when the hour hand passes 12 it *wraps back around* to the start. Computers wrap the
+same way: an unsigned byte rolls from 255 back to 0, a hash bucket index wraps past the table size, and
+a cryptographic key is a number living on an enormous clock with billions of positions. Once you can
+think on a circle instead of a line, a whole branch of algorithms opens up.
+
+<Callout type="intuition" title="The one-sentence idea">
+Modular arithmetic keeps only the remainder after dividing by a fixed modulus $m$, so every number
+collapses onto one of the $m$ positions $0, 1, \dots, m-1$ on a circular clock.
+</Callout>
+
+## Intuition
+
+Write $a \equiv b \pmod{m}$ when $a$ and $b$ leave the *same remainder* when divided by $m$ — they land
+on the same clock position. So $15 \equiv 3 \pmod{12}$ and $27 \equiv 3 \pmod{12}$, because all three
+sit at position 3.
+
+The beautiful part is that arithmetic *survives the wrap*. You can add, subtract, and multiply first and
+take the remainder at the end, or take remainders early and often — you get the same answer:
+
+- $(a + b) \bmod m = ((a \bmod m) + (b \bmod m)) \bmod m$
+- $(a \times b) \bmod m = ((a \bmod m) \times (b \bmod m)) \bmod m$
+
+That "reduce early" freedom is what keeps numbers small enough to fit in a machine word even when the
+true product would overflow. One caution the demo will make concrete: in most languages `-5 % 3` gives
+`-2`, not the clock answer `1`. The fix is a *floored* mod: `((a % m) + m) % m`.
+
+## Play with it
+
+The centerpiece is **fast modular exponentiation** — raising a base to a big power on the clock. Instead
+of multiplying the base by itself the exponent's number of times, we repeatedly *square* the base and
+multiply the squares selected by the exponent's binary digits. Set a base, an exponent, and a modulus,
+then step through it.
+
+<NTModularClock client:visible />
+
+<Callout type="tip">
+Try base 3, exponent 13, modulus 12. Thirteen in binary is `1101`, so only three "multiply" steps ever
+fire — yet you have effectively computed $3^{13}$. Doubling the exponent adds just *one* squaring.
+</Callout>
+
+## How it works
+
+Fast exponentiation reads the exponent bit by bit. Keep a running `result` and a `b` that you square each
+round; whenever the current bit is 1, fold `b` into `result`. Here is $3^{13} \bmod 12$:
+
+```
+result = 1, b = 3        (13 = 1101 in binary)
+bit 1 (=1): result = 1·3   = 3    b -> 9        (=3^2  mod 12)
+bit 0 (=0): skip           = 3    b -> 9·9=81≡9 (=3^4  mod 12)
+bit 1 (=1): result = 3·9   = 27≡3 b -> 9        (=3^8  mod 12)
+bit 1 (=1): result = 3·9   = 27≡3 exponent done
+3^13 mod 12 = 3
+```
+
+Thirteen multiplications became four squarings plus three multiplies — the cost is the number of *bits*
+in the exponent, not the exponent itself.
+
+<CodeRunner
+  client:visible
+  code={`// Floored mod that handles negatives like a clock
+function mod(a, m) { return ((a % m) + m) % m; }
+
+// (base^exp) mod m in O(log exp) via binary exponentiation
+function modPow(base, exp, m) {
+  let result = 1;
+  base = mod(base, m);
+  while (exp > 0) {
+    if (exp & 1) result = mod(result * base, m); // bit is 1 -> multiply
+    base = mod(base * base, m);                   // square the base
+    exp = Math.floor(exp / 2);                    // shift to next bit
+  }
+  return result;
+}`}
+  tests={[
+    { expr: 'mod(-5, 3)', label: '(-5) mod 3, the clock answer' },
+    { expr: 'modPow(3, 13, 12)', label: '3^13 mod 12' },
+    { expr: 'modPow(2, 10, 1000)', label: '2^10 mod 1000' },
+    { expr: 'modPow(7, 256, 13)', label: '7^256 mod 13' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — the safe mod, the multiply, and the logarithmic power:
+
+```ts
+// /dsa/22-number-theory/modular-arithmetic.ts
+export function mod(a: number, m: number): number {
+  return ((a % m) + m) % m;                       // never returns a negative
+}
+
+export function modMul(a: number, b: number, m: number): number {
+  return mod(mod(a, m) * mod(b, m), m);
+}
+
+export function modPow(base: number, exp: number, m: number): number {
+  let result = 1;
+  base = mod(base, m);
+  while (exp > 0) {
+    if (exp & 1) result = modMul(result, base, m); // fold in this bit
+    exp >>= 1;
+    base = modMul(base, base, m);                   // square for next bit
+  }
+  return result;
+}
+```
+
+For truly gigantic moduli the same file ships `modPowBigInt`, identical in shape but on `bigint` so the
+squared products never overflow. Run the full file: `npx tsx 22-number-theory/modular-arithmetic.ts`.
+
+## Complexity
+
+The exponent is consumed one binary digit at a time, so the work scales with the number of digits:
+
+$$
+T_{\text{modPow}}(e) = O(\log e), \qquad T_{\text{mod}} = T_{\text{modMul}} = O(1).
+$$
+
+| Operation | Naive | This approach |
+|-----------|-------|---------------|
+| $a \bmod m$ | $O(1)$ | $O(1)$ |
+| $a^{e} \bmod m$ | $O(e)$ multiplies | $O(\log e)$ multiplies |
+| Keeping products small | overflow risk | reduce after every step |
+
+Going from $O(e)$ to $O(\log e)$ is the difference between a billion multiplications and about thirty.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cryptography" icon="🔐">
+RSA and Diffie-Hellman are *built* on $a^e \bmod m$ with $m$ hundreds of digits long. Repeated squaring
+is the only reason encrypting or signing a message finishes in milliseconds instead of geologic time.
+</ExampleCard>
+
+<ExampleCard domain="Hashing" icon="🧮">
+A rolling hash such as Rabin-Karp treats a string as a base-$p$ number taken $\bmod m$. Wrapping keeps
+the hash inside a machine word, and modular multiplication slides the window forward in $O(1)$.
+</ExampleCard>
+
+<ExampleCard domain="Scheduling & calendars" icon="📅">
+"What weekday is day $n$?" is just $n \bmod 7$. Round-robin load balancers pick server
+`request_id % server_count`, and repeating UI carousels wrap with the same operation.
+</ExampleCard>
+
+<ExampleCard domain="Music & audio" icon="🎵">
+Pitch classes live $\bmod 12$: raise any note by twelve semitones and it maps to itself an octave up.
+Phase in an oscillator wraps $\bmod 2\pi$ for the same reason — the circle is the natural home.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Negative remainders.** `a % m` can be negative in JavaScript, C, and Java. Guard every subtraction
+  with the floored `((a % m) + m) % m`, or off-by-a-modulus bugs will haunt you.
+- **Overflow before you reduce.** `a * b` can overflow a 64-bit integer *before* you take the mod. Reduce
+  the operands first, and reach for `bigint` (or 128-bit) once the modulus exceeds a few billion.
+- **Do not divide.** There is no plain "mod division" — you multiply by a modular *inverse*, which only
+  exists when the divisor is coprime to $m$. That is the very next lesson.
+- **Interview cue:** any problem that says "return the answer modulo $10^9+7$" is inviting you to reduce
+  at every step and to use `modPow` for powers and inverses.
+
+## Practice
+
+1. **Easy:** Compute $(17 + 25) \bmod 11$ and $(13 \times 17) \bmod 19$ by reducing each operand first.
+2. **Easy:** Explain why `-8 % 5` differs between the machine answer and the clock answer, and fix it.
+3. **Medium:** Trace `modPow(2, 10, 1000)` and count how many squarings and multiplies actually run.
+4. **Medium:** Given $m = 10^9 + 7$, compute $2^{50} \bmod m$ and argue why 32-bit products would overflow.
+5. **Hard:** Implement `modPowBigInt` and use it to find the last 6 digits of $7^{1000000}$.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is (10 + 5) mod 12?',
+      options: ['15', '3', '5', '0'],
+      answer: 1,
+      explain: '15 wraps once around a 12-hour clock: 15 - 12 = 3. Ten o\'clock plus five hours is three o\'clock.',
+    },
+    {
+      q: 'Roughly how many modular multiplications does modPow(a, e, m) perform?',
+      options: ['About e', 'About e squared', 'About log2(e)', 'Exactly m'],
+      answer: 2,
+      explain: 'It processes one binary digit of e per loop, so the count is proportional to the number of bits, log2(e).',
+    },
+    {
+      q: 'Why wrap subtraction as ((a - b) % m + m) % m instead of just (a - b) % m?',
+      options: [
+        'It is faster',
+        'The % operator can return a negative remainder for negative inputs',
+        'It avoids overflow',
+        'It makes the result larger',
+      ],
+      answer: 1,
+      explain: 'In most languages % follows the sign of the dividend, so a - b can yield a negative remainder; adding m then reducing puts it back on the clock.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>a ≡ b (mod m)</strong> means a and b share a remainder — they land on the same clock position.',
+    'You may <strong>reduce early and often</strong>: add or multiply first or last, the mod result is identical.',
+    'Guard negatives with the <strong>floored mod</strong> <code>((a % m) + m) % m</code>.',
+    '<strong>Fast exponentiation</strong> squares the base and reads the exponent in binary — O(log e), not O(e).',
+    'This one operation underpins <strong>RSA, rolling hashes, calendars, and pitch classes</strong>.',
+  ]}
+/>
+
+Next up: **GCD & Extended Euclidean** — the ancient algorithm that not only finds common divisors but
+also builds the *modular inverse* that lets you finally "divide" on the clock.

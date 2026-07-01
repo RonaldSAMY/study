@@ -1,0 +1,259 @@
+---
+title: System Design Fundamentals
+track: dsa-system-design
+summary: "The building blocks of scale: latency numbers, throughput, and the back-of-envelope math that turns a vague feature into a sized system."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-3d-graphics/curves-animation
+leadsTo:
+  - dsa-system-design/caching-load-balancing
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SysLatencyTraversal from '../../../components/demos/SysLatencyTraversal.tsx';
+
+## The hook: why does the same button feel instant here and slow there?
+
+Click "like" and it lands in a blink. Load a friend's holiday album and you wait. Same app, wildly
+different feel — and the difference is almost never the code. It is *where the data lives*. Reading a
+value already sitting in CPU cache takes about half a nanosecond. Fetching it from a spinning disk on
+another continent takes 150 milliseconds — three hundred **million** times longer. System design is,
+at its heart, the craft of keeping the data a request needs as close as physically possible, and
+knowing — before you write a line — roughly how big and how fast the thing you are building has to be.
+
+<Callout type="intuition" title="The one-sentence idea">
+Every system-design decision is a bet about latency and load: how long one request takes, and how many
+arrive per second — so you learn the raw numbers and do the back-of-envelope math *before* you draw a
+single box.
+</Callout>
+
+## Intuition: two numbers rule everything
+
+Two quantities describe any system, and they are not the same thing:
+
+- **Latency** — how long *one* request takes end to end (a response time, measured in ms).
+- **Throughput** — how many requests you finish *per second* (measured in QPS, queries per second).
+
+A highway makes the distinction concrete. **Latency** is how long your car takes to drive the length of
+the road; **throughput** is how many cars exit per minute. Adding lanes raises throughput without making
+any single trip faster. That gap is why "make it faster" is an ambiguous request — faster *per request*
+and *more requests per second* are solved by completely different moves.
+
+The two are linked by **Little's Law**. If you want a target throughput and you know how long each
+request occupies a worker, the law tells you exactly how many workers must be busy at once. And underneath
+both sits the hardware reality from the hook: a memory reference is ~100 ns, an SSD read ~150 µs, a
+cross-continent round trip ~150 ms. Design is choosing which of those tiers each request is allowed to
+touch. You already reason like this in algorithms — big-O counts *operations*; here we also weigh what
+each operation *costs in real time*, because touching disk is not the same as touching RAM.
+
+## Play with it
+
+Pick a scenario and step a single request through the storage and network tiers it has to cross. Watch the
+running total, and flip on **human scale** (1 ns stretched to 1 second) to feel just how far apart the
+tiers really are.
+
+<SysLatencyTraversal client:visible />
+
+<Callout type="tip">
+On human scale, an L1 cache hit is half a second, main memory is under two minutes — but a cross-continent
+round trip becomes almost five years. That is the intuition to burn in: every step *down* the hierarchy is
+roughly 100× slower than the step above it. Caching exists to keep requests near the top.
+</Callout>
+
+## How it works: sizing a system on the back of an envelope
+
+Before architecture, you *estimate*. The process is always the same four moves: clarify requirements,
+estimate scale, sketch a high-level design, then deep-dive the bottleneck. The estimation step is pure
+arithmetic with two constants worth memorizing: **86,400 seconds in a day** (round to 100,000 for mental
+math) and a **peak factor** of 2–3× over the average.
+
+Say a product has 200 million daily active users, each doing 10 write-ish actions a day, with a 10:1
+read-to-write ratio:
+
+```
+daily actions   = 200,000,000 × 10        = 2,000,000,000
+avg write QPS    = 2e9 / 11 / 86,400       ≈ 2,100 writes/sec
+avg read QPS     = 2e9 × 10/11 / 86,400    ≈ 21,000 reads/sec
+peak read QPS    ≈ 21,000 × 2.5            ≈ 52,000 reads/sec
+```
+
+Now Little's Law converts a latency target into a worker count. To serve 52,000 QPS when each request ties
+up a worker for 20 ms:
+
+<CodeRunner
+  client:visible
+  code={`// Little's Law: L = lambda * W  (items in system = arrival rate * time in system)
+function requiredConcurrency(targetQps, latencySeconds) {
+  return Math.ceil(targetQps * latencySeconds);
+}
+function maxThroughput(concurrency, latencySeconds) {
+  return concurrency / latencySeconds;
+}
+
+// Back-of-envelope QPS from daily active users.
+function estimateQps(dau, actionsPerUser, readWriteRatio) {
+  const daily = dau * actionsPerUser;
+  const writeQps = Math.round(daily / (readWriteRatio + 1) / 86400);
+  const readQps = Math.round(daily * readWriteRatio / (readWriteRatio + 1) / 86400);
+  return { writeQps, readQps, peakReadQps: readQps * 3 };
+}`}
+  tests={[
+    { expr: 'requiredConcurrency(52000, 0.02)', label: 'workers for 52k QPS @ 20ms' },
+    { expr: 'maxThroughput(200, 0.02)', label: 'max QPS from 200 workers @ 20ms' },
+    { expr: 'JSON.stringify(estimateQps(200000000, 10, 10))', label: 'QPS for 200M DAU, 10:1 reads' },
+  ]}
+/>
+
+The first line says you need ~1,040 concurrent workers — which immediately tells you a single box will not
+do, so you already know you are building a horizontally-scaled, load-balanced fleet. That conclusion fell
+out of arithmetic, before any diagram.
+
+## The real implementation
+
+The course ships these as tiny, testable helpers — the same formulas, just named:
+
+```ts
+// /dsa/system-design/00-fundamentals/latency-throughput.ts
+static calculateRequiredConcurrency(targetQps: number, averageLatencySeconds: number): number {
+  return Math.ceil(targetQps * averageLatencySeconds);   // Little's Law: L = lambda * W
+}
+static calculateMaxThroughput(concurrency: number, averageLatencySeconds: number): number {
+  return concurrency / averageLatencySeconds;
+}
+
+// /dsa/system-design/00-fundamentals/system-design-process.ts
+static calculate(params: { dailyActiveUsers: number; actionsPerUser: number; readWriteRatio: number; }) {
+  const secondsPerDay = 86400;
+  const totalDailyActions = params.dailyActiveUsers * params.actionsPerUser;
+  const writeQps = Math.round(totalDailyActions / (params.readWriteRatio + 1) / secondsPerDay);
+  const readQps  = Math.round(totalDailyActions * params.readWriteRatio / (params.readWriteRatio + 1) / secondsPerDay);
+  return { writeQps, readQps };
+}
+```
+
+Study them at `/dsa/system-design/00-fundamentals/` — `latency-throughput.ts`, `scalability-basics.ts`,
+and `system-design-process.ts` walk the whole four-step interview framework with worked numbers.
+
+## The numbers worth memorizing
+
+The "latency numbers every programmer should know", as ratios you can recall under pressure:
+
+$$
+\text{memory} \approx 100\,\text{ns} \;\ll\; \text{SSD} \approx 150\,\mu s \;\ll\; \text{disk seek} \approx 10\,\text{ms} \;\ll\; \text{CA} \leftrightarrow \text{EU} \approx 150\,\text{ms}
+$$
+
+| Operation | Latency | Rule of thumb |
+|-----------|---------|---------------|
+| L1 cache reference | 0.5 ns | baseline |
+| Main memory reference | 100 ns | ~200× L1 |
+| Read 4 KB random from SSD | 150 µs | ~1,500× memory |
+| Round trip, same datacenter | 0.5 ms | cross the room |
+| Disk (HDD) seek | 10 ms | ~100× a datacenter RTT |
+| Packet CA → Netherlands → CA | 150 ms | cross the planet |
+
+And Little's Law, the one formula that ties latency to a worker count:
+
+$$
+L = \lambda \times W
+$$
+
+where $L$ is the number of in-flight requests, $\lambda$ the arrival rate (QPS), and $W$ the average time
+a request spends in the system. Read it backwards and it also caps throughput: with fixed concurrency,
+$\lambda_{\max} = L / W$ — the only way to push more QPS through a saturated pool is to cut $W$ or add workers.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Live sports streaming" icon="📺">
+A goal in a World Cup final sends millions of viewers to the same stream in seconds. Engineers size for the
+*peak*, not the average: with 8 million concurrent viewers at 5 Mbps that is 40 Tbps — so the design leans
+almost entirely on edge caches, because serving that from one origin is physically impossible.
+</ExampleCard>
+
+<ExampleCard domain="Ride-hailing" icon="🚕">
+An Uber-style app estimates writes from GPS pings: 5 million active drivers pinging every 4 seconds is
+~1.25 million writes/sec — a throughput number that instantly rules out a single database and forces
+sharding by city, long before any code is written.
+</ExampleCard>
+
+<ExampleCard domain="Emergency dispatch" icon="🚑">
+A 911 system is judged on *tail* latency, not average. A p50 of 20 ms is irrelevant if p99.9 is 4 seconds,
+because the worst 0.1% are real emergencies. Here latency, not throughput, is the metric that defines the
+whole architecture.
+</ExampleCard>
+
+<ExampleCard domain="Retail checkout" icon="🛒">
+Amazon measured that every extra 100 ms of latency cost about 1% of sales. That single ratio reframes
+performance work as revenue work — and justifies the caches, CDNs, and read replicas the rest of this
+course is about.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Confusing latency with throughput.** Adding servers raises throughput but does nothing for a single
+  slow request. State which one you are improving.
+- **Designing for the average.** Peak traffic runs 2–10× the mean, and users feel the **p99**, not the
+  median. Always size for peak and quote tail percentiles.
+- **Skipping the estimation step.** In an interview, jumping to boxes before you have a QPS and storage
+  number is the classic red flag. Do the arithmetic out loud — it *justifies* every later choice.
+- **Forgetting the memory hierarchy.** "Just add an index" or "just cache it" only helps if it moves data
+  to a faster tier. Know which tier you are trading for which.
+- **Interview cue:** open with *requirements → estimate → high-level design → deep dive*. Interviewers are
+  scoring the process as much as the answer.
+
+## Practice
+
+1. **Easy:** A photo app has 50M DAU uploading 2 photos/day. What is the average write QPS? (Use 86,400 s/day.)
+2. **Easy:** Order these by latency: disk seek, L1 cache, same-datacenter round trip, main memory.
+3. **Medium:** You must serve 30,000 QPS and each request holds a worker for 15 ms. How many concurrent
+   workers does Little's Law demand?
+4. **Medium:** Reads are 100× writes and total daily actions are 4 billion. Give average read QPS and a
+   peak estimate.
+5. **Hard:** Sketch a back-of-envelope design for a URL shortener at 100M new URLs/month with a 100:1
+   read:write ratio: estimate write QPS, read QPS, and 5-year storage at ~500 bytes/record.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A system finishes 10,000 requests per second, and each request takes 50 ms. Which statement is right?',
+      options: [
+        'Latency is 10,000 and throughput is 50 ms',
+        'Throughput is 10,000 QPS and latency is 50 ms',
+        'They are the same measurement',
+        'Latency is 10,000 QPS',
+      ],
+      answer: 1,
+      explain: 'Throughput counts requests finished per second (10,000 QPS); latency is the time for one request (50 ms).',
+    },
+    {
+      q: 'By Little\'s Law, how many concurrent workers are needed to sustain 4,000 QPS when each request occupies a worker for 25 ms?',
+      options: ['40', '100', '160', '1,000'],
+      answer: 1,
+      explain: 'L = lambda * W = 4000 * 0.025 = 100 workers in flight at once.',
+    },
+    {
+      q: 'Roughly how much slower is a cross-continent round trip (~150 ms) than a main-memory reference (~100 ns)?',
+      options: ['About 1,500×', 'About 150,000×', 'About 1.5 million×', 'About 1.5 billion×'],
+      answer: 2,
+      explain: '150 ms is 150,000,000 ns; divided by 100 ns is about 1.5 million times slower.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Latency</strong> (time per request) and <strong>throughput</strong> (requests per second) are different axes — always say which one you are optimizing.',
+    'The memory hierarchy spans ~9 orders of magnitude: <strong>memory ~100 ns, SSD ~150 µs, disk seek ~10 ms, cross-continent ~150 ms</strong>. Each tier down is ~100× slower.',
+    '<strong>Little\'s Law</strong>, <code>L = λ × W</code>, converts a QPS target and a latency into the number of concurrent workers — and caps throughput at L / W.',
+    'Estimate before you architect: <strong>86,400 s/day</strong>, a <strong>2–3× peak factor</strong>, and a read:write ratio turn DAU into QPS and storage numbers.',
+    'Size for <strong>peak load</strong> and judge by <strong>tail latency (p99)</strong>, not the average — that is what users actually feel.',
+  ]}
+/>
+
+Next up: **Caching & Load Balancing** — the two moves that keep requests near the top of that hierarchy and
+spread them across a fleet, including the consistent-hashing ring that makes both possible.

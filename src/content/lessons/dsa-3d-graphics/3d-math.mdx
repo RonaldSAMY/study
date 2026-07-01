@@ -1,0 +1,329 @@
+---
+title: 3D Math
+track: dsa-3d-graphics
+summary: "Matrices, quaternions and the model-view-projection pipeline: how a point in object space becomes a pixel on screen."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-computer-vision/segmentation-pose
+leadsTo:
+  - dsa-3d-graphics/rendering-pipeline
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import G3dTransformPipeline from '../../../components/demos/G3dTransformPipeline.tsx';
+
+## The hook: from a corner of a cube to a dot on your screen
+
+A cube in a game lives at the origin, made of eight corners like $(1, 1, -1)$. But you never
+see those numbers — you see pixels. Between the model and the monitor sits a short, fixed
+assembly line: **rotate the object into the world, look at it from a camera, squash the view
+into a flat image, and divide by depth so far things shrink**. Every 3D engine ever written
+runs that same line, and it is almost entirely built from two ideas: a $4 \times 4$ matrix and
+a four-number quaternion. Learn those two and the whole pipeline opens up.
+
+<Callout type="intuition" title="The one-sentence idea">
+A single $4 \times 4$ matrix moves, turns, and scales a point in one multiply, and chaining
+three of them — model, view, projection — plus a final divide-by-$w$ carries any 3D point all
+the way to a 2D pixel.
+</Callout>
+
+## Intuition: why 3D needs a fourth number
+
+A $3 \times 3$ matrix can rotate and scale, but it can **never** move a point, because a linear
+map always sends the origin to itself. Translation isn't linear — so we cheat with a fourth
+coordinate. Write a point as $(x, y, z, 1)$ and a direction as $(x, y, z, 0)$. That last slot,
+called $w$, is the whole trick:
+
+- A **point** carries $w = 1$, so a translation column gets added in.
+- A **direction** carries $w = 0$, so translation is ignored (a "north" arrow doesn't move when you walk).
+
+Now translation, rotation, and scale all become honest $4 \times 4$ matrix multiplies, and you
+can **compose** them by multiplying. The order matters: to scale, then rotate, then move an
+object, you build $M = T \cdot R \cdot S$ and read it right-to-left, because it acts on a vertex
+as $v' = T \cdot (R \cdot (S \cdot v))$. Swap two of them and you get a different object — matrices
+don't commute. This is exactly the [matrices & transforms](/lessons/game-math/matrices-transforms)
+story from the Game Dev course, now aimed at the full render path.
+
+For rotation there is a second, better tool. Euler angles (yaw/pitch/roll) suffer **gimbal lock**:
+at certain angles two axes line up and you lose a degree of freedom. A **quaternion** —
+four numbers $q = (w, x, y, z)$ with length 1 — stores a rotation as a single point on a
+4D sphere, with no lock and buttery interpolation. We'll meet it below and again in
+[quaternions](/lessons/game-math/quaternions).
+
+## Play with it
+
+The cube below is being carried through the real pipeline: model rotation, then a view matrix
+that pushes it away from the camera, then a perspective projection, then the perspective divide
+that turns 4D clip coordinates into screen pixels. Spin it and watch the near face swell while
+the far face shrinks.
+
+<G3dTransformPipeline client:visible />
+
+<Callout type="tip">
+Slide **field of view** down toward 20° and the cube flattens — parallel edges stop converging,
+like a telephoto lens. Crank it to 120° and depth exaggerates into a fish-eye. That single knob
+only changes the projection matrix; the cube's own geometry never moves.
+</Callout>
+
+## How it works
+
+Take one corner of the cube and walk it through the chain by hand. Put the cube at the origin,
+rotate it, push the world 5 units down $-z$ so the camera can see it, then project. Using a
+90° vertical field of view (so $t = 1/\tan(45°) = 1$), aspect 1, near 1, far 100, follow the
+corner $(1, 1, 0)$ after it has landed at view-space depth $z = -5$:
+
+```
+local corner        = (1,  1,  0)
+after model+view    = (1,  1, -5)      ← pushed down -z, in front of camera
+apply projection P:
+  x_clip = t/aspect · 1 = 1
+  y_clip = t · 1        = 1
+  z_clip = -(f+n)/(f-n)·(-5) - 2fn/(f-n) ≈ 3.0808
+  w_clip = -(-5)        = 5            ← row 4 of P copies -z into w
+perspective divide (÷w):
+  ndc = (1/5, 1/5, 3.0808/5) = (0.2, 0.2, 0.616)
+viewport (800×600):
+  x_pix = (0.2·0.5 + 0.5)·800 = 480
+  y_pix = (1 - (0.2·0.5 + 0.5))·600 = 240   ← flip Y (screens count down)
+screen = (480, 240)
+```
+
+The magic is row 4 of the projection matrix, $(0, 0, -1, 0)$: it copies $-z$ into $w$, so the
+final divide-by-$w$ divides $x$ and $y$ by depth. That one division is the entire reason far
+things look small.
+
+<CodeRunner
+  client:visible
+  code={`// Column-major 4x4 (OpenGL/Three.js layout): m[col*4 + row].
+// Multiply a 4x4 by a homogeneous point (x,y,z,1) -> clip (x,y,z,w).
+function multiplyMat4Vec4(m, v) {
+  const [x, y, z, w] = v;
+  return [
+    m[0]*x + m[4]*y + m[8]*z  + m[12]*w,
+    m[1]*x + m[5]*y + m[9]*z  + m[13]*w,
+    m[2]*x + m[6]*y + m[10]*z + m[14]*w,
+    m[3]*x + m[7]*y + m[11]*z + m[15]*w,
+  ];
+}
+
+// Project a 3D point through an MVP matrix: transform, then divide by w.
+function project(point, mvp) {
+  const [x, y, z, w] = multiplyMat4Vec4(mvp, [point[0], point[1], point[2], 1]);
+  return [x / w, y / w]; // NDC x,y in [-1,1]
+}
+
+// Perspective P for fovy=90, aspect=1, near=1, far=100 (column-major).
+const t = 1 / Math.tan((90 * Math.PI / 180) / 2); // = 1
+const nf = 1 / (1 - 100);
+const P = [
+  t, 0, 0, 0,
+  0, t, 0, 0,
+  0, 0, (100 + 1) * nf, -1,
+  0, 0, 2 * 100 * 1 * nf, 0,
+];
+
+// A point already at view depth z = -5 (in front of the camera).
+function ndcOfCorner() {
+  const p = project([1, 1, -5], P);
+  return [Math.round(p[0] * 1000) / 1000, Math.round(p[1] * 1000) / 1000];
+}`}
+  tests={[
+    { expr: 'ndcOfCorner()[0]', label: 'NDC x of corner (expect 0.2)' },
+    { expr: 'ndcOfCorner()[1]', label: 'NDC y of corner (expect 0.2)' },
+    { expr: 'multiplyMat4Vec4([1,0,0,0, 0,1,0,0, 0,0,1,0, 3,4,5,1], [1,1,1,1])[0]', label: 'translate x by 3 -> 4' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds a proper `Matrix4` (column-major, right-handed, exactly like
+`THREE.Matrix4`). Here is the heart of it — the rotation factories, the $4 \times 4$ multiply,
+and applying a matrix to a point with the perspective divide baked in:
+
+```ts
+// /dsa/33-3d-graphics/01-3d-math/matrices-transforms.ts
+makeRotationY(theta: number): this {
+  const c = Math.cos(theta), s = Math.sin(theta);
+  return this.set(c, 0, s, 0,  0, 1, 0, 0,  -s, 0, c, 0,  0, 0, 0, 1);
+}
+
+// this = a · b  (column-major: elements[col*4 + row])
+multiplyMatrices(a: Matrix4, b: Matrix4): this {
+  const ae = a.elements, be = b.elements;
+  const out = new Array(16).fill(0);
+  for (let col = 0; col < 4; col++)
+    for (let row = 0; row < 4; row++) {
+      let sum = 0;
+      for (let k = 0; k < 4; k++) sum += ae[k * 4 + row] * be[col * 4 + k];
+      out[col * 4 + row] = sum;
+    }
+  this.elements = out;
+  return this;
+}
+
+// Transform a point (w=1), then perspective-divide by w'.
+function applyMatrix4(v, m) {
+  const e = m.elements, { x, y, z } = v;
+  const w = e[3]*x + e[7]*y + e[11]*z + e[15];
+  const invW = w === 0 ? 1 : 1 / w;
+  return new Vector3(
+    (e[0]*x + e[4]*y + e[8]*z  + e[12]) * invW,
+    (e[1]*x + e[5]*y + e[9]*z  + e[13]) * invW,
+    (e[2]*x + e[6]*y + e[10]*z + e[14]) * invW,
+  );
+}
+```
+
+Quaternions live next door. A unit quaternion $q = (\sin(\theta/2)\,\hat{n},\ \cos(\theta/2))$
+rotates a vector by the **sandwich** $v' = q\, v\, q^{*}$, where $q^{*} = (-x, -y, -z, w)$ is
+the conjugate (and, for a unit quaternion, the inverse). Study or run the two files at
+`33-3d-graphics/01-3d-math/matrices-transforms.ts` and
+`33-3d-graphics/01-3d-math/quaternions.ts`.
+
+## Complexity & math
+
+Each matrix build, multiply, and apply is constant work — but the GPU runs the vertex stage
+once per vertex, in parallel, every frame. The perspective projection matrix (vertical FOV
+$\phi$, aspect $a$, near $n$, far $f$, with $t = 1/\tan(\phi/2)$) is:
+
+$$
+P = \begin{bmatrix}
+\dfrac{t}{a} & 0 & 0 & 0 \\[4pt]
+0 & t & 0 & 0 \\[4pt]
+0 & 0 & \dfrac{f+n}{n-f} & \dfrac{2fn}{n-f} \\[4pt]
+0 & 0 & -1 & 0
+\end{bmatrix}
+$$
+
+The full journey of one vertex is a product of matrices followed by a divide:
+
+$$
+p_{\text{clip}} = P \cdot V \cdot M \cdot p_{\text{local}}, \qquad
+\text{ndc} = \frac{p_{\text{clip}}}{w_{\text{clip}}}.
+$$
+
+A quaternion holds a rotation in 4 floats versus 9–16 for a matrix, and interpolates smoothly
+via **slerp**, which walks the shortest great-circle arc at constant angular speed:
+
+$$
+\mathrm{slerp}(q_0, q_1, \tau) =
+\frac{\sin((1-\tau)\Omega)}{\sin\Omega}\, q_0 +
+\frac{\sin(\tau\Omega)}{\sin\Omega}\, q_1, \qquad \cos\Omega = q_0 \cdot q_1.
+$$
+
+| Operation | Time | Space |
+|-----------|------|-------|
+| Build $T$ / $R$ / $S$ / $P$ | $O(1)$ (16 slots) | $O(1)$ |
+| Multiply two $4 \times 4$ | $O(1)$ (64 mul, 48 add) | $O(1)$ |
+| Apply matrix to a point | $O(1)$ (16 mul, 12 add) | $O(1)$ |
+| Quaternion multiply (Hamilton) | $O(1)$ (16 mul) | $O(1)$ |
+| Rotate vector via $q\,v\,q^{*}$ | $O(1)$ (~30 flops) | $O(1)$ |
+| Project a mesh of $V$ vertices | $O(V)$ | $O(1)$ extra |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Games" icon="🎮">
+Every object in a game scene owns a model matrix $M = T \cdot R \cdot S$; the engine composes
+each frame's $P \cdot V \cdot M$ and the GPU vertex shader runs it over millions of vertices in
+parallel. Character orientations are stored as quaternions so animations blend with slerp.
+</ExampleCard>
+
+<ExampleCard domain="VR / AR" icon="🥽">
+A headset's IMU streams orientation as a quaternion because it must integrate thousands of tiny
+rotations per second with zero gimbal lock and no drift-inducing angle wrap. The projection
+matrix is calibrated per-eye to the real lens, then AR content is drawn through the same
+model-view-projection chain onto the world.
+</ExampleCard>
+
+<ExampleCard domain="CAD / Robotics" icon="🤖">
+CAD tools favor an **orthographic** projection (parallel lines stay parallel — no foreshortening)
+so measurements read true on a blueprint. In robotics, forward kinematics chains $4 \times 4$
+transforms down the arm ($M_{\text{world}} = M_1 M_2 \cdots M_k$) to place the end-effector.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Order of composition.** $T \cdot R \cdot S$ scales, then rotates, then translates. Writing
+  $R \cdot T$ instead rotates an already-moved object *around the world origin* — a classic bug
+  that sends objects swinging in orbits.
+- **Point vs direction.** Transform a surface normal or a "forward" vector with $w = 0$, or the
+  translation column will corrupt it. And under **non-uniform scale**, normals need the
+  inverse-transpose of the upper-left $3 \times 3$, not $M$ itself.
+- **Row-major vs column-major.** Three.js/OpenGL store column-major ($m[12,13,14]$ = translation);
+  DirectX-style code is often row-major and transposed. Mixing them silently produces garbage.
+- **Forgetting the divide.** Perspective only happens at the $\div w$ step. Skip it and everything
+  renders orthographically (no foreshortening).
+- **Interview cue.** "Why quaternions over Euler angles?" → say **gimbal lock** and **smooth
+  slerp interpolation**, and note $q$ and $-q$ are the same rotation (so slerp negates one to take
+  the short arc).
+
+## Practice
+
+1. **Easy:** By hand, apply $T = \text{translate}(3, 4, 5)$ to the point $(1, 1, 1, 1)$. What is
+   the result? Now apply it to the *direction* $(1, 1, 1, 0)$ — what changes?
+2. **Easy:** Build $R_z(90°)$ and multiply it by $(1, 0, 0)$. Which axis does $+x$ land on?
+3. **Medium:** Given a cube corner at view depth $z = -10$ under the 90° FOV projection above,
+   compute its NDC $x$ for local $x = 2$. Then move it to $z = -20$ and confirm it shrinks toward
+   center.
+4. **Medium:** Write $q$ for a 90° rotation about $+z$, then use $q\,v\,q^{*}$ to rotate $(1,0,0)$.
+   Verify you land on $(0, 1, 0)$.
+5. **Hard:** Slerp from the identity quaternion to that 90°-about-$z$ quaternion at $\tau = 0.5$.
+   Show the result is a 45° rotation, and explain why linear-interpolating the two quaternions
+   instead would *not* give constant angular speed.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why do 3D engines use 4×4 matrices and homogeneous coordinates instead of 3×3?',
+      options: [
+        'To store RGBA colors alongside positions',
+        'Because a 3×3 linear map cannot translate — the extra w row/column lets translation be a matrix multiply',
+        'Because GPUs only accept 16-element arrays',
+        'To make the matrix invertible',
+      ],
+      answer: 1,
+      explain: 'A linear map fixes the origin, so it can rotate and scale but never translate. Lifting a point to (x,y,z,1) turns translation into an honest matrix multiply.',
+    },
+    {
+      q: 'In the pipeline P · V · M applied to a vertex, which step actually makes distant objects appear smaller?',
+      options: [
+        'The model matrix M',
+        'The view matrix V',
+        'The perspective divide (dividing clip coords by w)',
+        'The viewport flip of the Y axis',
+      ],
+      answer: 2,
+      explain: 'Row 4 of P copies -z into w; dividing x and y by that w is what shrinks far things. Without the ÷w step you get an orthographic image.',
+    },
+    {
+      q: 'What is the main reason quaternions are preferred over Euler angles for storing orientation?',
+      options: [
+        'They use less memory than a single float',
+        'They avoid gimbal lock and interpolate smoothly via slerp',
+        'They can also encode translation and scale',
+        'They are always faster to render on a GPU',
+      ],
+      answer: 1,
+      explain: 'Euler angles collapse two axes at certain orientations (gimbal lock). A unit quaternion sits on a smooth 4D sphere with no such singularity, and slerp blends two orientations along the shortest constant-speed arc.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Homogeneous coordinates add a <strong>w slot</strong>: points carry <strong>w = 1</strong> (translation applies), directions carry <strong>w = 0</strong> (it doesn\'t).',
+    'A model matrix is <strong>M = T · R · S</strong>, read right-to-left; matrices don\'t commute, so composition order is load-bearing.',
+    'The render chain is <strong>p_clip = P · V · M · p_local</strong>, then the <strong>perspective divide ÷w</strong> gives NDC — that divide is why far things shrink.',
+    'The projection matrix\'s row <strong>(0, 0, −1, 0)</strong> copies −z into w so the divide foreshortens for free.',
+    'A unit quaternion <strong>q = (w, x, y, z)</strong> rotates via <strong>q v q*</strong>, dodges gimbal lock, and interpolates smoothly with <strong>slerp</strong>.',
+  ]}
+/>
+
+Next up: **[The Rendering Pipeline](/lessons/dsa-3d-graphics/rendering-pipeline)** — from these
+projected vertices to filled triangles, depth testing, and shaded pixels on the screen.

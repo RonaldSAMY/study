@@ -1,0 +1,233 @@
+---
+title: Embeddings & Vector Search
+track: dsa-ml-algorithms
+summary: "Meaning as geometry: map items to vectors so that similar things sit close together, then answer queries by finding nearest neighbors."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-ml-algorithms/optimizers
+  - transformers/embeddings
+leadsTo:
+  - dsa-computer-vision/cv-foundations
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MlAEmbeddingSearch from '../../../components/demos/MlAEmbeddingSearch.tsx';
+
+## The hook: "find me more like this"
+
+Spotify suggests a song that *feels* like the one you're playing. A support bot finds the help article
+that *means* the same thing as your question, even with zero words in common. Google Photos groups every
+picture of your dog without you tagging a thing. None of these match keywords — they compare **meaning**.
+The trick is to turn every item into a point in a high-dimensional space so that similar items land near
+each other. Then "find me more like this" becomes a geometry problem: **find the nearest points**.
+
+<Callout type="intuition" title="The one-sentence idea">
+An embedding maps each item to a vector so that semantic similarity becomes geometric closeness, and
+search becomes a nearest-neighbor lookup — usually by cosine similarity.
+</Callout>
+
+## Intuition: direction is meaning
+
+An embedding model (word2vec, a sentence transformer, CLIP) is trained so that related items point in
+similar directions. The magic property is that **directions carry meaning**: the classic
+$\text{king} - \text{man} + \text{woman} \approx \text{queen}$ works because gender and royalty are
+consistent directions in the space.
+
+To compare two vectors we usually use **cosine similarity** — the cosine of the angle between them:
+
+$$
+\cos(\mathbf{a}, \mathbf{b}) = \frac{\mathbf{a} \cdot \mathbf{b}}{\lVert \mathbf{a}\rVert\, \lVert \mathbf{b}\rVert}.
+$$
+
+Cosine ignores length and looks only at *direction*, so a long document and a short query can still match
+if they're about the same thing. A score near 1 means "very similar"; near 0 means "unrelated." Searching
+is then: embed the query, score it against every item, and return the top-$k$.
+
+## Play with it
+
+Drag the query vector and press Play. The demo ranks every item by cosine similarity — the angle to your
+query — and highlights the top-$k$ nearest neighbors.
+
+<MlAEmbeddingSearch client:visible />
+
+<Callout type="tip">
+Point the query between two clusters and watch the ranking flip as the angle shifts. Because cosine only
+cares about direction, a nearby-but-differently-angled item can score *lower* than a far-but-aligned one.
+</Callout>
+
+## How it works: the dry run
+
+Score the query against each item, then sort:
+
+```
+query q, items A B C:
+  cos(q, A) = 0.98   ← tiny angle, most similar
+  cos(q, B) = 0.10   ← nearly perpendicular
+  cos(q, C) = -0.85  ← opposite direction
+
+  sort descending → [A, B, C];  top-1 = A
+```
+
+<CodeRunner
+  client:visible
+  code={`// Cosine similarity + nearest-neighbor search (plain JS)
+function cosine(a, b) {
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) { dot += a[i]*b[i]; na += a[i]*a[i]; nb += b[i]*b[i]; }
+  return dot / (Math.sqrt(na)*Math.sqrt(nb) + 1e-9);
+}
+function search(query, items, k) {
+  return items
+    .map((it) => ({ label: it.label, score: cosine(query, it.vec) }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, k);
+}
+const items = [
+  { label: 'dog',    vec: [0.9, 0.4, 0.1] },
+  { label: 'puppy',  vec: [0.8, 0.5, 0.2] },
+  { label: 'car',    vec: [-0.6, 0.7, 0.3] },
+  { label: 'banana', vec: [0.1, -0.9, 0.4] },
+];`}
+  tests={[
+    { expr: 'search([0.85,0.45,0.15], items, 2).map((r)=>r.label)', label: 'top-2 neighbors of a dog-like query' },
+    { expr: '+cosine([1,0,0],[0,1,0]).toFixed(2)', label: 'cosine of perpendicular vectors' },
+  ]}
+/>
+
+## The real implementation
+
+The course file indexes documents by their embedding, then scores a query against all of them —
+brute-force nearest neighbor:
+
+```ts
+// /dsa/27-ml-algorithms/09-embeddings/sentence-embeddings.ts
+search(query: string, topK = 5): Array<{ text: string; score: number }> {
+  const q = this.encoder.encode(query);
+  return this.documents
+    .map((doc) => ({ text: doc.text, score: this.cosineSimilarity(q, doc.embedding) }))
+    .sort((a, b) => b.score - a.score)   // rank by similarity
+    .slice(0, topK);                     // return the nearest
+}
+```
+
+Run it with `npx tsx 27-ml-algorithms/09-embeddings/sentence-embeddings.ts`. The sibling
+`word2vec.ts` trains the embeddings themselves, and `contrastive-learning.ts` shows the InfoNCE loss that
+pulls matching pairs together and pushes mismatches apart (the recipe behind CLIP).
+
+## Complexity
+
+A brute-force scan compares the query to every item:
+
+$$
+T_{\text{search}} = O(N d), \qquad T_{\text{one comparison}} = O(d),
+$$
+
+for $N$ items of dimension $d$.
+
+| Approach | Query time | Trade-off |
+|----------|-----------|-----------|
+| Brute force | $O(N d)$ | Exact, but slow at scale |
+| LSH | ~$O(d)$ expected | Approximate, hashes similar items together |
+| HNSW graph | ~$O(d \log N)$ | Approximate, state-of-the-art recall/speed |
+
+<Callout type="why">
+At billions of vectors, $O(Nd)$ per query is far too slow, so production systems use an
+<strong>approximate nearest-neighbor index</strong>. Locality-sensitive hashing buckets similar vectors
+together so a query only scans a handful of candidates instead of the whole database.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Music discovery" icon="🎧">
+Spotify embeds songs from audio and listening patterns; "radio" for a track is a nearest-neighbor query
+in that space. Two songs with no shared metadata can still sit next to each other if they *sound* alike.
+</ExampleCard>
+
+<ExampleCard domain="Face recognition" icon="🧑">
+A face is embedded into a vector; unlocking your phone compares it to the stored embedding by distance.
+Same person → tiny distance; different person → large distance — verification is a threshold on
+similarity.
+</ExampleCard>
+
+<ExampleCard domain="RAG for chatbots" icon="🤖">
+Retrieval-augmented generation embeds a user's question, finds the nearest document chunks in a vector
+database, and feeds them to an LLM as context — grounding answers in real, up-to-date sources.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting to normalize.** If you use cosine similarity, either normalize vectors up front or divide
+  by the norms — raw dot products let long vectors dominate.
+- **Wrong metric.** Cosine (angle) vs Euclidean (distance) vs dot product can give different rankings;
+  match the metric to how the embeddings were trained.
+- **Brute force at scale.** Fine for thousands of items, hopeless for billions — reach for an ANN index
+  (LSH, HNSW, IVF).
+- **Interview cue:** "How would you build semantic search?" Embed items and query with the same model,
+  store vectors in an ANN index, retrieve top-$k$ by cosine similarity.
+
+## Practice
+
+1. **Easy:** What does a cosine similarity of 0 tell you about two vectors?
+2. **Easy:** Why does cosine similarity ignore vector length?
+3. **Medium:** Given three item vectors and a query, rank them by cosine by hand.
+4. **Medium:** Why is brute-force search $O(Nd)$, and when does that become a problem?
+5. **Hard:** Sketch how locality-sensitive hashing turns nearest-neighbor search into near-constant time,
+   and what you trade away.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What makes an embedding useful for semantic search?',
+      options: [
+        'It compresses items to save disk space',
+        'Similar items map to nearby vectors, so meaning becomes geometric closeness',
+        'It sorts items alphabetically',
+        'It removes duplicate items',
+      ],
+      answer: 1,
+      explain: 'An embedding places semantically related items close together, turning "find similar" into a nearest-neighbor geometry problem.',
+    },
+    {
+      q: 'Why is cosine similarity a common choice for comparing embeddings?',
+      options: [
+        'It is the fastest possible metric',
+        'It compares direction while ignoring magnitude, so length differences don’t distort similarity',
+        'It always returns an integer',
+        'It requires no normalization ever',
+      ],
+      answer: 1,
+      explain: 'Cosine measures the angle between vectors, so a short query and a long document can still match if they point the same way.',
+    },
+    {
+      q: 'Why do large-scale systems avoid brute-force nearest-neighbor search?',
+      options: [
+        'It gives wrong answers',
+        'Its O(N·d) cost per query is too slow across billions of vectors',
+        'It cannot use cosine similarity',
+        'It needs a GPU',
+      ],
+      answer: 1,
+      explain: 'Scanning every vector is O(N·d); at billions of items that’s infeasible, so approximate indexes like LSH or HNSW are used instead.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>embedding</strong> maps items to vectors so semantic similarity becomes geometric closeness.',
+    '<strong>Cosine similarity</strong> compares direction, ignoring magnitude — ideal for matching meaning.',
+    'Search = embed the query, score against items, return the <strong>top-k nearest</strong> neighbors.',
+    'Brute force is <strong>O(N·d)</strong>; at scale use an <strong>approximate index</strong> (LSH, HNSW).',
+    'Embeddings power <strong>recommendations, face ID, and RAG</strong> — the same nearest-neighbor idea everywhere.',
+  ]}
+/>
+
+You've reached the end of the ML Algorithms track — from attention to vector search, you've seen the
+core algorithms inside modern AI. Next up: **Computer Vision** and the geometry of detecting objects in
+images.

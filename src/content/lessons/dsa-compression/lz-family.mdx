@@ -1,0 +1,240 @@
+---
+title: LZ77 & LZ4
+track: dsa-compression
+summary: "LZ replaces a repeated substring with a back-reference: a pair (offset, length) that says 'copy what you already saw' — and LZ4 makes that so cheap it runs at gigabytes per second."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-compression/compression-basics
+leadsTo:
+  - dsa-compression/zstandard
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import CompLzSlidingWindow from '../../../components/demos/CompLzSlidingWindow.tsx';
+
+## The hook: the note-taker who writes "same as above"
+
+Imagine transcribing a meeting where a phrase keeps recurring. After the first time, you stop writing it out — you jot "see line 3, next 5 words." Anyone reading can reconstruct the full text by copying from where you point. That single trick — **replace a repeat with a pointer to its earlier copy** — is the Lempel-Ziv idea, and it is the engine inside zip, gzip, PNG, and the fastest compressors on Earth.
+
+<Callout type="intuition" title="The one-sentence idea">
+LZ compression slides a window over the data and, whenever the bytes ahead already appeared behind, emits a back-reference `(offset, length)` — "copy `length` bytes from `offset` back" — instead of the bytes themselves.
+</Callout>
+
+## Intuition: literals and matches
+
+In the [previous lesson](/lessons/dsa-compression/compression-basics) you saw run-length encoding fold repeats of a *single* symbol. LZ generalizes that to repeats of *any substring*, no matter how long. It walks the input producing two kinds of output:
+
+- **Literals** — raw bytes, emitted when the lookahead has never been seen (there is nothing to point at yet).
+- **Matches** — a `(offset, length)` pair, emitted when the upcoming bytes duplicate a stretch that occurred within the sliding **window** of recent history.
+
+The window is why it is called a *sliding* window: only the last `W` bytes are searchable (64 KB in LZ4), so memory stays bounded no matter how big the file is. **LZ77** (Lempel & Ziv, 1977) is the original scheme; **LZ4** (Yann Collet, 2011) is a byte-oriented descendant that drops entropy coding entirely to hit absurd speeds — it is pure redundancy removal, nothing else.
+
+## Play with it
+
+Type text with repeated substrings and step through the encoder. The canvas highlights the **match source** (indigo, the earlier copy) and the **match target** (sky, the bytes being replaced), with an arrow between them; lone bytes with no match are **literals** (emerald). Watch the ratio drop each time a repeat collapses into a token.
+
+<CompLzSlidingWindow client:visible />
+
+<Callout type="tip">
+Notice the *first* occurrence of any pattern is always literals — there is nothing behind to point at yet. LZ only pays off from the *second* copy onward. That is why LZ shines on logs and natural text (endless repetition) and does nothing for random data.
+</Callout>
+
+## How it works
+
+Encode `TOBEORNOTTOBEORTOBEORNOT`. The first nine bytes are all new, so they are literals. Then `TOBEOR` reappears:
+
+```
+T O B E O R N O T | T O B E O R | T O B E O R N O T
+literals (9)        match          match
+                    offset 9        offset 6 (or 9)
+                    length 6        length 9
+```
+
+Each match replaces six or nine bytes with a tiny token. LZ4 packs this efficiently: a 1-byte **token** splits into a 4-bit literal-run length and a 4-bit match length, followed by the literals, then a 2-byte offset. Lengths of 15+ spill into extra bytes. The minimum match is **4 bytes** — shorter matches cost more to encode than they save.
+
+<CodeRunner
+  client:visible
+  code={`// Minimal LZ77: emit literals and (offset, length) back-references
+function lz77(s, minMatch = 4) {
+  const tokens = [];
+  let pos = 0;
+  while (pos < s.length) {
+    let bestLen = 0, bestStart = -1;
+    for (let start = 0; start < pos; start++) {
+      let len = 0;
+      while (pos + len < s.length && s[start + len] === s[pos + len]) len++;
+      if (len > bestLen) { bestLen = len; bestStart = start; }
+    }
+    if (bestLen >= minMatch) {
+      tokens.push([pos - bestStart, bestLen]);   // (offset, length)
+      pos += bestLen;
+    } else {
+      tokens.push(s[pos]);                        // literal
+      pos += 1;
+    }
+  }
+  return tokens;
+}
+
+// crude size: literal ~1 byte, match ~3 bytes (2-byte offset + length)
+function encodedSize(tokens) {
+  return tokens.reduce((n, t) => n + (Array.isArray(t) ? 3 : 1), 0);
+}`}
+  tests={[
+    { expr: 'JSON.stringify(lz77("TOBEORNOTTOBEORTOBEORNOT"))', label: 'tokens' },
+    { expr: 'encodedSize(lz77("TOBEORNOTTOBEORTOBEORNOT")) + " of 24 bytes"', label: 'compressed size' },
+    { expr: 'encodedSize(lz77("the cat the cat the cat")) + " bytes"', label: 'repeated phrase' },
+  ]}
+/>
+
+## The real implementation
+
+The speed secret is that LZ4 never does the quadratic search above. It keeps a **hash table** mapping a 4-byte fingerprint to the last position that hash was seen, so finding a candidate match is O(1). From the course file:
+
+```ts
+// /dsa/30-compression/lz4.ts
+function findMatch(data: Uint8Array, pos: number, hashTable: Int32Array): LZ4Match {
+  const h = hash4(data, pos);            // fast 4-byte hash of the lookahead
+  const matchPos = hashTable[h];         // last place we saw this fingerprint
+  if (matchPos < 0 || pos - matchPos > MAX_DISTANCE) return { offset: 0, length: 0 };
+
+  let length = 0;
+  const maxLen = Math.min(data.length - pos, 65535);
+  while (length < maxLen && data[matchPos + length] === data[pos + length]) length++;
+
+  return length >= MIN_MATCH ? { offset: pos - matchPos, length } : { offset: 0, length: 0 };
+}
+
+export function lz4Compress(input: string): Uint8Array {
+  const data = new TextEncoder().encode(input);
+  const hashTable = new Int32Array(HASH_TABLE_SIZE).fill(-1);
+  const output: number[] = [];
+  let pos = 0, anchor = 0;               // anchor = start of the pending literal run
+
+  while (pos < data.length - MIN_MATCH) {
+    const match = findMatch(data, pos, hashTable);
+    hashTable[hash4(data, pos)] = pos;   // record current position for future matches
+    if (match.length > 0) {
+      writeToken(output, pos - anchor, match.length - MIN_MATCH);
+      for (let i = anchor; i < pos; i++) output.push(data[i]);   // literals
+      output.push(match.offset & 0xff, (match.offset >> 8) & 0xff);
+      pos += match.length;
+      anchor = pos;
+    } else {
+      pos++;
+    }
+  }
+  // trailing literals omitted for brevity
+  return new Uint8Array(output);
+}
+```
+
+Run the full file: `npx tsx 30-compression/lz4.ts`.
+
+## Complexity
+
+The hash-table match finder makes a single pass with O(1) lookups:
+
+$$
+T_{\text{LZ4}}(n) = O(n), \qquad S(n) = O(1)\ \text{(a fixed 64 KB hash table)}.
+$$
+
+Decompression is even simpler — just follow the offsets and copy — and runs at over 2 GB/s.
+
+| Algorithm | Ratio (vs gzip) | Comp speed | Decomp speed | Entropy stage? |
+|-----------|-----------------|------------|--------------|----------------|
+| LZ4 | ~0.9x | ~10x | ~15x | none |
+| LZ77 (naive search) | ~1.0x | slow, $O(nw)$ | fast | none |
+| gzip (LZ77 + Huffman) | 1.0x | 1x | 1x | Huffman |
+
+The trade-off in sharp focus: LZ4 deliberately **skips entropy coding** to be the fastest thing going, accepting a worse ratio. The next lesson adds that entropy stage back in.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Real-time game engines" icon="🎮">
+Unity and Unreal stream texture and mesh assets compressed with LZ4. Decompression at multiple GB/s means an asset can be unpacked well within a single 16 ms frame, so levels load without a stutter — ratio matters less than never dropping a frame.
+</ExampleCard>
+
+<ExampleCard domain="Databases & big data" icon="🗄️">
+Cassandra, RocksDB, and ClickHouse compress internal blocks and inter-node traffic with LZ4. On the hot path of a query, the CPU cost of a heavier codec would outweigh the bytes saved — LZ4's near-free decompression is the point.
+</ExampleCard>
+
+<ExampleCard domain="Operating systems" icon="🐧">
+Linux's zram puts a compressed block device in RAM: pages are LZ4-compressed on the way in and out, effectively giving a low-memory phone or server more usable memory. It only works because compression is faster than a page fault to disk.
+</ExampleCard>
+
+<ExampleCard domain="High-frequency logging" icon="📜">
+Log lines are wildly repetitive — the same timestamps, levels, and messages over and over. rsyslog and fluentd LZ4-compress streams so that ingesting millions of lines a second stays CPU-cheap, the second copy of every phrase shrinking to a back-reference.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **First occurrence is never compressed.** LZ needs history; a unique string is pure literals. Compressing many tiny independent messages wastes this — which is what dictionaries (next two lessons) fix.
+- **Minimum match length matters.** Encoding a 2-byte match as a 3-byte token *loses*. LZ4's 4-byte floor is deliberate; below it, emit literals.
+- **The window bounds what you can find.** A repeat 100 KB back is invisible to a 64 KB window. Bigger windows find more but cost memory and search time.
+- **Greedy is not optimal.** Taking the longest match right now can beat a better parse that starts one byte later. "Lazy matching" and LZ4HC spend more time to parse better — the classic ratio-vs-speed dial.
+- **Interview cue:** "compress repeated substrings with bounded memory" is LZ. Say "sliding window + hash table for O(1) match finding" and mention the `(offset, length)` token.
+
+## Practice
+
+1. **Easy:** Tokenize `abcabcabc` with a minimum match of 3. How many literals and how many matches?
+2. **Easy:** Why does LZ4 store the offset in 2 bytes? What window size does that imply?
+3. **Medium:** Give a string where a greedy longest-match parse is worse than a lazy one that defers by a byte.
+4. **Medium:** Add a hash table to the naive `lz77` above so match finding is O(1) instead of O(pos). What changes in the ratio, and why?
+5. **Hard:** Extend the token size model so matches cost 3 bytes and literals cost 1, then find the input length at which `"ab".repeat(k)` first beats storing it raw.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What exactly does an LZ back-reference token encode?',
+      options: [
+        'The frequency of a symbol',
+        'An (offset, length): copy length bytes from offset positions back',
+        'A Huffman code for the next byte',
+        'The entropy of the window',
+      ],
+      answer: 1,
+      explain: 'A match is (offset, length): go back offset bytes and copy length of them, reconstructing the repeat without storing it again.',
+    },
+    {
+      q: 'Why is LZ4 so much faster than a naive LZ77 search?',
+      options: [
+        'It uses a smaller alphabet',
+        'It adds Huffman coding',
+        'A hash table gives O(1) candidate lookup instead of scanning all past positions',
+        'It compresses less data',
+      ],
+      answer: 2,
+      explain: 'LZ4 hashes the 4-byte lookahead into a table of last-seen positions, turning the O(pos) inner search into an O(1) lookup — a single linear pass overall.',
+    },
+    {
+      q: 'What does LZ4 give up to reach its extreme speed?',
+      options: [
+        'Lossless reconstruction',
+        'The sliding window',
+        'The entropy-coding stage (so its ratio is weaker)',
+        'Back-references',
+      ],
+      answer: 2,
+      explain: 'LZ4 is pure LZ with no Huffman/FSE stage. Skipping entropy coding costs ratio but buys blistering, predictable speed.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'LZ replaces a repeated substring with a <strong>(offset, length)</strong> back-reference into a bounded sliding window.',
+    'Output is a stream of <strong>literals</strong> (new bytes) and <strong>matches</strong> (pointers to earlier copies); the first occurrence is always literal.',
+    'LZ4 finds matches in <strong>O(1)</strong> with a 4-byte <strong>hash table</strong>, giving O(n) compression and 2+ GB/s decompression.',
+    'A <strong>minimum match length</strong> (4 in LZ4) ensures a token never costs more than the bytes it replaces.',
+    'LZ4 <strong>skips entropy coding</strong> for raw speed — the deliberate ratio-vs-speed trade this whole track keeps revisiting.',
+  ]}
+/>
+
+Next up: **Zstandard** — keep LZ's back-references, then bolt on the entropy coder LZ4 left out (plus a trainable dictionary) to win back ratio without losing much speed.

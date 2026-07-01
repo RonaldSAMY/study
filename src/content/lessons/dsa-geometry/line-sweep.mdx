@@ -1,0 +1,271 @@
+---
+title: Line Sweep
+track: dsa-geometry
+summary: "Drag one imaginary line across the plane and 2-D problems dissolve into a sorted stream of 1-D events over a small active set."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-geometry/closest-pair
+leadsTo:
+  - dsa-compression/compression-basics
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GeoLineSweep from '../../../components/demos/GeoLineSweep.tsx';
+
+## The hook: the skyline of a city, in one pass
+
+Look at a city skyline: a jagged silhouette formed by overlapping buildings. Computing that outline —
+or the union area of overlapping rectangles, or every crossing among thousands of wire segments —
+sounds like it needs to compare everything with everything. It does not. Imagine a vertical line
+sweeping left to right across the plane. At any instant only a **few** objects touch it, and the outline
+only changes at the moments a building starts or ends. Sort those moments, process them in order, and a
+2-D problem becomes a 1-D stream of **events** over a tiny **active set**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Move one line across the plane and handle geometry only at **event points** (where objects begin, end,
+or meet); at each event you touch just the small set of objects currently crossing the line.
+
+</Callout>
+
+## Intuition: sort the events, keep an active set
+
+The line sweep (or plane sweep) has three moving parts:
+
+1. **Events** — the interesting x-positions: each object's start and end (and sometimes intersections).
+   Sort them once by x. That sort is the $O(n \log n)$ backbone.
+2. **The sweep line** — a conceptual vertical line that stops at each event in order. Nothing happens
+   *between* events, so we skip straight from one to the next.
+3. **The active set** — the objects the line currently touches. Objects join at their start event and
+   leave at their end event, so the set stays small; you only ever compare a newcomer against its
+   current neighbours, never against the whole input.
+
+For **segment intersection**, when a segment starts you test it against the segments already active
+(neighbours in the sweep-line order) and record any crossings; when it ends you remove it. For
+**rectangle union area** you keep the covered y-length as the line moves and multiply by the horizontal
+distance between events. For the **skyline**, a max-heap of active heights gives the current roofline.
+Same skeleton, different bookkeeping — that reuse is the whole point.
+
+## Play with it
+
+Drag any segment endpoint. Play to send the sweep line across: segments join the active set at their
+left end, get tested only against current members, and leave at their right end. Intersections light up.
+
+<GeoLineSweep client:visible />
+
+<Callout type="tip">
+Slide one segment fully to the right of another so their x-ranges no longer overlap. They are never in
+the active set at the same time, so the sweep never even compares them — that avoided comparison is
+exactly where the speedup comes from.
+</Callout>
+
+## How it works
+
+Three segments; sort their endpoints into start/end events and sweep. Only segments alive at the same
+time are ever compared:
+
+```
+events (by x):  0:start s0   0:start s1   4:start s2   4:end s0   4:end s1   ...
+x=0  start s0 → active {s0}
+x=0  start s1 → test s1 vs s0 → they cross → record (s0,s1); active {s0,s1}
+x=4  start s2 → test s2 vs {s0,s1} (still active) → record any crossings; active {s0,s1,s2}
+x=4  end s0   → active {s1,s2}
+x=4  end s1   → active {s2}
+...            → sweep ends, all crossings found
+```
+
+A simplified sweep that tests each starting segment against the current active set:
+
+<CodeRunner
+  client:visible
+  code={`function cross(o, a, b) {
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+function intersect(s, t) {
+  const d1 = cross(t[0], t[1], s[0]), d2 = cross(t[0], t[1], s[1]);
+  const d3 = cross(s[0], s[1], t[0]), d4 = cross(s[0], s[1], t[1]);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+         ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+function sweepIntersections(segs) {
+  const ev = [];
+  segs.forEach((s, i) => {
+    const lx = Math.min(s[0].x, s[1].x), rx = Math.max(s[0].x, s[1].x);
+    ev.push({ x: lx, start: true, i }, { x: rx, start: false, i });
+  });
+  ev.sort((a, b) => a.x - b.x || (a.start ? -1 : 1));
+  const active = [];
+  const found = [];
+  for (const e of ev) {
+    if (e.start) {
+      for (const j of active) if (intersect(segs[e.i], segs[j])) found.push([Math.min(e.i, j), Math.max(e.i, j)]);
+      active.push(e.i);
+    } else {
+      active.splice(active.indexOf(e.i), 1);
+    }
+  }
+  return found;
+}
+const S = [
+  [{x:0,y:0},{x:4,y:4}],
+  [{x:0,y:4},{x:4,y:0}],
+  [{x:5,y:0},{x:5,y:4}],
+];`}
+  tests={[
+    { expr: 'JSON.stringify(sweepIntersections(S))', label: 'crossing segment index pairs' },
+    { expr: 'sweepIntersections(S).length', label: 'number of intersections' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds start/end events, sorts them, and only compares a newly started segment against
+the currently active ones:
+
+```ts
+// /dsa/23-geometry/line-sweep.ts
+export function findSegmentIntersections(segments: Segment[]): [number, number][] {
+  const events: SegmentEvent[] = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i]; seg.id = i;
+    const [left, right] = seg.p1.x <= seg.p2.x ? [seg.p1, seg.p2] : [seg.p2, seg.p1];
+    events.push({ x: left.x, type: "start", segment: seg });
+    events.push({ x: right.x, type: "end", segment: seg });
+  }
+  events.sort((a, b) => a.x - b.x || (a.type === "start" ? -1 : 1));
+
+  const active: Segment[] = [];
+  const intersections: [number, number][] = [];
+  for (const event of events) {
+    if (event.type === "start") {
+      for (const other of active) {
+        if (segmentsIntersect(event.segment, other)) {
+          intersections.push([Math.min(event.segment.id!, other.id!),
+                              Math.max(event.segment.id!, other.id!)]);
+        }
+      }
+      active.push(event.segment);
+    } else {
+      const idx = active.findIndex((s) => s.id === event.segment.id);
+      if (idx !== -1) active.splice(idx, 1);
+    }
+  }
+  return intersections;
+}
+```
+
+Run the full file: `npx tsx 23-geometry/line-sweep.ts`. The same file sweeps for **rectangle union
+area**, the **skyline problem**, **merge intervals**, and **meeting rooms** — all the same event loop.
+
+## Complexity
+
+Sorting the events dominates; a balanced structure keeps the active set cheap:
+
+$$
+T(n) = O(n \log n) + O(k), \qquad T_{\text{Bentley–Ottmann}} = O((n + k)\log n),
+$$
+
+where $k$ is the number of reported intersections.
+
+| Problem | Sweep time | Active-set structure |
+|---------|-----------|----------------------|
+| Rectangle union area | $O(n \log n)$ | counts over compressed y |
+| Skyline | $O(n \log n)$ | max-heap of heights |
+| Segment intersections | $O((n+k)\log n)$ | balanced BST by y |
+| Closest pair | $O(n \log n)$ | active window by y |
+
+The simplified "test against all active" version can degrade to $O(n^2)$ when many segments overlap in
+x; the full Bentley–Ottmann keeps the active set in a balanced BST and only tests **adjacent** segments,
+recovering $O((n+k)\log n)$.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Computer graphics" icon="🖼️">
+Scanline polygon fill is a horizontal line sweep: at each raster row it tracks which edges are active and
+fills the spans between them — the rendering workhorse behind filled shapes for decades.
+</ExampleCard>
+
+<ExampleCard domain="EDA / chip verification" icon="🔧">
+Design-rule and layout-versus-schematic checks sweep across millions of rectangles to find overlaps and
+spacing violations, where the active set makes an otherwise impossible all-pairs check tractable.
+</ExampleCard>
+
+<ExampleCard domain="Calendars & scheduling" icon="📅">
+"How many meeting rooms do we need?" is a 1-D sweep over start/end times: a running count of active
+meetings whose peak is the answer — the same event loop, collapsed to one dimension.
+</ExampleCard>
+
+<ExampleCard domain="Genomics" icon="🧬">
+Interval problems on the genome — overlapping gene annotations, read pile-up depth, coverage tracks —
+are sweeps over sorted start/end coordinates maintaining an active count of features.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Event tie-breaking is not optional.** When two events share an x, the order (starts before ends? or
+  ends before starts?) changes the answer for touching intervals — decide it deliberately per problem.
+- **"Test against all active" can still be $O(n^2)$.** If most segments overlap in x, the naive active
+  scan degrades; the real Bentley–Ottmann tests only vertically adjacent segments in a balanced BST.
+- **Vertical segments and duplicate x** are classic edge cases; normalise each segment to left→right and
+  handle equal x-coordinates in the comparator.
+- **Coordinate compression** keeps the active structure small for rectangle-area sweeps — map the sparse
+  y-values to indices before counting coverage.
+- **Interview cue:** overlaps, unions, skylines, "meeting rooms," or "any intersection among $n$" all
+  signal a sweep — say "sort events, maintain an active set, act only at event points."
+
+## Practice
+
+1. **Easy:** Sort the endpoints of two crossing segments into events and trace the active set by hand.
+2. **Easy:** Solve "minimum meeting rooms" as a 1-D sweep over start/end times.
+3. **Medium:** Compute the total covered length of a set of 1-D intervals with a sweep.
+4. **Medium:** Compute the union area of axis-aligned rectangles using a vertical sweep with y-coordinate
+   compression.
+5. **Hard:** Implement Bentley–Ottmann so segment intersection runs in $O((n+k)\log n)$ by keeping the
+   active segments in a balanced BST and testing only adjacent pairs.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In a line sweep, when does the geometry actually get processed?',
+      options: ['Continuously as the line moves', 'Only at event points (starts, ends, intersections)', 'Once at the end', 'At fixed pixel intervals'],
+      answer: 1,
+      explain: 'Nothing changes between events, so the sweep jumps from one sorted event to the next and acts only there.',
+    },
+    {
+      q: 'What is the role of the active set?',
+      options: [
+        'It stores every object in the input',
+        'It holds only the objects currently crossing the sweep line, so comparisons stay local',
+        'It sorts the events',
+        'It records the final answer',
+      ],
+      answer: 1,
+      explain: 'Keeping only the objects touching the line means a newcomer is compared against a few neighbours, not the whole set.',
+    },
+    {
+      q: 'For reporting all k segment intersections, what does Bentley–Ottmann achieve?',
+      options: ['O(n²)', 'O(n log n) independent of k', 'O((n + k) log n)', 'O(k²)'],
+      answer: 2,
+      explain: 'By testing only adjacent segments in a balanced BST, it runs in O((n + k) log n), output-sensitive in k.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A line sweep moves one line across the plane and acts only at <strong>sorted event points</strong>.',
+    'The <strong>active set</strong> holds just the objects touching the line, so comparisons stay local and cheap.',
+    'One event-loop skeleton solves <strong>union area, skyline, intersections, and intervals</strong> — only the bookkeeping changes.',
+    'Sorting events is the <strong>O(n log n)</strong> backbone; a balanced BST keeps active-set operations logarithmic.',
+    '<strong>Bentley–Ottmann</strong> reports all k crossings in <strong>O((n + k) log n)</strong> by testing only adjacent segments.',
+  ]}
+/>
+
+That completes Computational Geometry — from the single cross product to hulls, polygon tests, and
+sweeps. Next you head into **Compression**: how entropy and redundancy let zip, PNG, and modern codecs
+squeeze data down without losing a bit.

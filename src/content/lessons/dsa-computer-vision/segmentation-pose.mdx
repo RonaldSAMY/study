@@ -1,0 +1,257 @@
+---
+title: Segmentation & Pose
+track: dsa-computer-vision
+summary: "Beyond the box: per-object masks assemble from shared prototypes through a sigmoid, and keypoints decode from heatmaps by soft-argmax."
+difficulty: advanced
+estMinutes: 19
+prereqs:
+  - dsa-computer-vision/yolo-family
+leadsTo:
+  - dsa-3d-graphics/3d-math
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import CvPrototypeMasks from '../../../components/demos/CvPrototypeMasks.tsx';
+
+## The hook: which pixels, not just which box
+
+A box around a person is a coarse answer. A self-driving car wants the exact drivable road *outline*; a
+fitness app wants the *skeleton* of a squat; a surgeon wants the precise *boundary* of a tumour. These
+are the two tasks past detection: **instance segmentation** (which pixels belong to each object) and
+**pose estimation** (where each named keypoint sits). Both build directly on the detector you have —
+they just add a small head — and both hinge on a lovely piece of math: a mask is a weighted sum of a few
+shared basis images, squashed by a sigmoid.
+
+<Callout type="intuition" title="The one-sentence idea">
+An instance mask is the sigmoid of a linear combination of a handful of shared "prototype" masks, and a
+keypoint is the soft-argmax (probability-weighted average location) of a predicted heatmap.
+</Callout>
+
+## Intuition
+
+Segmentation comes in three flavours, and confusing them is a classic slip. **Semantic** segmentation
+labels every pixel with a class (all dogs share the label "dog"). **Instance** segmentation gives each
+object its *own* mask (two overlapping dogs, two masks). **Panoptic** does both. Detection roles care
+about instance masks.
+
+The real-time way to produce them (YOLACT, YOLO-seg) is beautiful. The network predicts, **once** per
+image, a small set of full-resolution **prototype masks** — think "left blob", "vertical stripe", "ring".
+For each detected object it also predicts a short vector of **coefficients**. The object's mask is just
+$\sigma(\sum_i c_i \cdot \text{proto}_i)$: a linear combination of the shared bases, squashed to (0, 1)
+by the sigmoid, thresholded at 0.5, and cropped by the box. One cheap matrix multiply turns a few shared
+prototypes into *any number* of instance masks.
+
+Pose flips the trick to points. Instead of regressing (x, y) directly, the network predicts a **heatmap**
+per joint — a blurry Gaussian blob peaking at the joint. To read out a sub-pixel coordinate you take the
+**soft-argmax**: softmax the heatmap into a probability map, then compute its expected location. Because
+every step is differentiable, you can train end-to-end on coordinate error.
+
+## Play with it
+
+Edit the three coefficients and step the assembly: multiply each shared prototype by its coefficient,
+sum them into a logit, apply the sigmoid, then threshold and crop into the final mask.
+
+<CvPrototypeMasks client:visible />
+
+<Callout type="tip">
+Set every coefficient to zero and the sigmoid outputs 0.5 everywhere — a mask of pure uncertainty. Push
+one coefficient strongly positive and its prototype's shape "switches on". A whole object's silhouette is
+steered by just those few numbers, which is why the per-object head can be tiny and fast.
+</Callout>
+
+## How it works
+
+Three prototypes on an H×W grid, one instance with coefficients (2, -1, 1). The raw logit at each pixel
+is $2\,\text{proto}_1 - \text{proto}_2 + \text{proto}_3$; the sigmoid maps it to a probability, and 0.5
+is the decision boundary (which is exactly where the logit crosses zero). Assemble a mask and score a
+pose with OKS:
+
+<CodeRunner
+  client:visible
+  code={`const sigmoid = (x) => 1 / (1 + Math.exp(-x));
+
+// assemble one instance mask from prototypes + coefficients
+function assembleMask(protos, coeffs, thresh = 0.5) {
+  const H = protos[0].length, W = protos[0][0].length, mask = [];
+  for (let i = 0; i < H; i++) {
+    mask.push([]);
+    for (let j = 0; j < W; j++) {
+      let logit = 0;
+      for (let k = 0; k < protos.length; k++) logit += coeffs[k] * protos[k][i][j];
+      mask[i].push(sigmoid(logit) >= thresh ? 1 : 0);
+    }
+  }
+  return mask;
+}
+
+// Object Keypoint Similarity for one joint: exp(-d^2 / (2 s^2 k^2))
+const oks = (d, s, k) => Math.exp(-(d*d) / (2 * s*s * k*k));
+
+const protos = [
+  [[1,0],[1,0]],   // vertical-ish
+  [[1,1],[0,0]],   // horizontal-ish
+  [[0,1],[1,0]],   // diagonal
+];
+const coeffs = [2, -1, 1];`}
+  tests={[
+    { expr: 'JSON.stringify(assembleMask(protos, coeffs))', label: 'binary mask (>=0.5)' },
+    { expr: 'oks(0, 50, 0.05).toFixed(3)', label: 'OKS at perfect match (d=0)' },
+    { expr: 'oks(10, 50, 0.05).toFixed(3)', label: 'OKS at 10px error' },
+  ]}
+/>
+
+## The real implementation
+
+The mask head's per-pixel binary cross-entropy has a famously clean gradient — prediction minus target,
+with no vanishing factor:
+
+```
+// /dsa/32-computer-vision/05-segmentation-pose/instance-segmentation.ts
+p = sigmoid(z);                                  // mask probability
+loss(t, p) = -( t*ln(p) + (1-t)*ln(1-p) );       // per-pixel BCE
+d loss / d z = (p - t);                          // clean: just the residual
+// Mask R-CNN applies BCE only to the GROUND-TRUTH class channel (decoupled from classification)
+```
+
+Pose decodes a coordinate as the expectation over the softmaxed heatmap — the differentiable
+soft-argmax:
+
+```
+// /dsa/32-computer-vision/05-segmentation-pose/pose-estimation.ts
+p(x,y) = exp(beta * H(x,y)) / sum_xy exp(beta * H);   // softmax the heatmap
+x_hat = sum_xy p(x,y) * x;                            // expected coordinate (sub-pixel)
+y_hat = sum_xy p(x,y) * y;
+```
+
+Study the derivations — prototype assembly, the BCE gradient, Gaussian heatmap targets, PAF grouping,
+and the OKS metric — at `/dsa/32-computer-vision/05-segmentation-pose/instance-segmentation.ts` and
+`.../pose-estimation.ts`.
+
+## Formulas and complexity
+
+An instance mask is a sigmoid of a linear combination of shared prototypes:
+
+$$
+\text{mask}(x, y) = \sigma\!\left(\sum_{i=1}^{k} c_i \, \text{proto}_i(x, y)\right), \qquad
+\sigma(z) = \frac{1}{1 + e^{-z}}.
+$$
+
+Its per-pixel loss and gradient reduce to the residual:
+
+$$
+\ell(t, p) = -\big[t\log p + (1 - t)\log(1 - p)\big], \qquad
+\frac{\partial \ell}{\partial z} = p - t.
+$$
+
+A keypoint decodes by soft-argmax over the heatmap probability map, and pose quality is scored by
+**Object Keypoint Similarity**, the pose analogue of IoU:
+
+$$
+\hat{x} = \sum_{x, y} p(x, y)\,x, \qquad
+\text{OKS}_k = \exp\!\left(-\frac{d_k^2}{2 s^2 k_k^2}\right).
+$$
+
+| Operation | Time | Space |
+|-----------|------|-------|
+| Prototype mask assemble ($k$ protos, $H \times W$) | $O(kHW)$ | $O(HW)$ |
+| Per-pixel BCE mask loss | $O(m^2)$ | $O(m^2)$ |
+| Heatmap soft-argmax (per joint) | $O(HW)$ | $O(HW)$ |
+| OKS over $J$ visible joints | $O(J)$ | $O(1)$ |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Medical imaging" icon="🫁">
+Organ and tumour segmentation traces exact boundaries so a surgeon or radiotherapy plan knows precisely
+which voxels to treat. Here a per-pixel mask, not a box, is the entire deliverable.
+</ExampleCard>
+
+<ExampleCard domain="Fitness & AR" icon="🤸">
+A workout app estimates your 17-keypoint skeleton from the phone camera and checks your squat depth.
+Soft-argmax gives the sub-pixel joint accuracy needed to judge form frame by frame.
+</ExampleCard>
+
+<ExampleCard domain="Autonomous driving" icon="🛣️">
+Drivable-area and lane segmentation outputs a dense mask of where the car may go — a shape no bounding
+box could express — fused with box detections of other agents.
+</ExampleCard>
+
+<ExampleCard domain="Wildlife behaviour" icon="🐆">
+Animal pose estimation tracks limb keypoints to quantify gait and behaviour in the field. OKS, with
+per-joint tolerances, scores these poses just as IoU scores boxes.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Don't confuse the three segmentations.** Semantic labels pixels by class; instance separates
+  objects; panoptic does both. Detection heads produce *instance* masks.
+- **Mask BCE is per-class, decoupled.** Mask R-CNN computes the loss only on the ground-truth class's
+  mask channel, not a softmax over classes — that decoupling markedly improved accuracy.
+- **argmax is not differentiable; soft-argmax is.** Plain argmax gives integer coordinates and blocks
+  gradient flow. Soft-argmax yields sub-pixel positions and trains end-to-end.
+- **OKS needs the scale term.** A 5-pixel error is trivial on a huge person and severe on a tiny one;
+  dividing by object scale $s$ makes the metric scale-invariant. Forgetting $s$ breaks pose mAP.
+- **Interview cue:** "why is a prototype mask fast?" — because prototypes are computed once per image and
+  each instance is just a linear combination, so masks for N objects cost one matmul, not N forward passes.
+
+## Practice
+
+1. **Easy:** With all coefficients zero, what value does the sigmoid output at every pixel, and what does
+   that mask mean?
+2. **Easy:** At what logit value does the 0.5 mask threshold fall?
+3. **Medium:** Show that the gradient of per-pixel BCE with a sigmoid is exactly (p − t).
+4. **Medium:** A heatmap has probability 0.5 at x=2 and 0.5 at x=3. What sub-pixel x does soft-argmax
+   return, and why can argmax never output it?
+5. **Hard:** Compute OKS for a joint 12 pixels off on a person of scale 60 with per-joint constant
+   k=0.05, then explain how the same 12-pixel error scores on a person of scale 120.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How does a prototype-based head produce an instance mask?',
+      options: [
+        'By running a separate CNN per object',
+        'As the sigmoid of a linear combination of shared prototype masks weighted by per-object coefficients',
+        'By thresholding the bounding box',
+        'By averaging all class masks',
+      ],
+      answer: 1,
+      explain: 'Prototypes are shared and computed once; each object supplies coefficients, and mask = sigmoid(sum c_i * proto_i), then cropped by its box.',
+    },
+    {
+      q: 'Why do pose models predict heatmaps and use soft-argmax instead of regressing (x,y) directly?',
+      options: [
+        'Heatmaps are smaller to store',
+        'Soft-argmax gives a differentiable, sub-pixel coordinate from dense, stable supervision',
+        'Regression is impossible for images',
+        'To avoid using a CNN',
+      ],
+      answer: 1,
+      explain: 'A Gaussian heatmap gives dense local supervision, and soft-argmax reads a differentiable sub-pixel location the network can train on end-to-end.',
+    },
+    {
+      q: 'What is OKS the pose analogue of?',
+      options: ['Focal loss', 'IoU for boxes', 'The softmax', 'Cross-entropy'],
+      answer: 1,
+      explain: 'Object Keypoint Similarity plays the role IoU plays for boxes: a normalized match score used to compute pose mAP over thresholds.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Instance segmentation gives each object its <strong>own pixel mask</strong>; semantic and panoptic are different tasks.',
+    'A prototype head builds a mask as <strong>σ(Σ cᵢ·protoᵢ)</strong> — shared bases plus a few per-object coefficients, one cheap matmul.',
+    'Per-pixel <strong>mask BCE has gradient p − t</strong>, and Mask R-CNN applies it only to the ground-truth class channel.',
+    'Pose predicts <strong>Gaussian heatmaps</strong> and decodes joints by differentiable <strong>soft-argmax</strong> for sub-pixel accuracy.',
+    '<strong>OKS</strong> is the IoU of pose — a scale-normalized, per-joint similarity used for keypoint mAP.',
+  ]}
+/>
+
+You have taken pixels all the way to boxes, masks, and skeletons in the image plane. The next journey
+leaves the plane entirely: **3D Math** — the matrices, quaternions, and transforms that let machines
+reason about, and render, a three-dimensional world.

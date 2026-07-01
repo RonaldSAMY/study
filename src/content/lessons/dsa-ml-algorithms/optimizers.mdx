@@ -1,0 +1,239 @@
+---
+title: Optimizers
+track: dsa-ml-algorithms
+summary: "From SGD to Adam: how gradient-based optimizers turn a loss gradient into weight updates, using momentum and per-parameter scaling to descend faster."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-ml-algorithms/diffusion-models
+  - neural-networks/optimizers
+leadsTo:
+  - dsa-ml-algorithms/embeddings
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MlAOptimizerDescent from '../../../components/demos/MlAOptimizerDescent.tsx';
+
+## The hook: finding the valley in the fog
+
+Training a neural network means rolling a ball down a loss surface you can't see — you only feel the
+*slope* under your feet (the gradient). Step downhill, feel again, repeat. Simple enough, but the terrain
+is treacherous: steep, narrow ravines where a naive step overshoots and bounces off the walls, and long
+shallow plateaus where progress crawls. The **optimizer** is the strategy for choosing each step — and
+the difference between plain gradient descent and Adam can be the difference between a model that trains
+in hours and one that never converges.
+
+<Callout type="intuition" title="The one-sentence idea">
+An optimizer turns the loss gradient into a weight update; momentum smooths the direction, and adaptive
+methods like Adam scale the step per-parameter so every dimension descends at a sensible rate.
+</Callout>
+
+## Intuition: three steps up the sophistication ladder
+
+- **SGD.** The baseline: $\theta \leftarrow \theta - \eta\, g$. Just step opposite the gradient $g$ by a
+  fixed learning rate $\eta$. Simple, but it zig-zags across narrow valleys and crawls on flat ground.
+- **Momentum.** Accumulate a velocity: $v \leftarrow \beta v + g$, then $\theta \leftarrow \theta - \eta v$.
+  Like a heavy ball, it builds speed in consistent directions and damps the side-to-side bouncing. This
+  is what carries you across plateaus.
+- **Adam.** Keep a running average of the gradient (first moment, like momentum) *and* of its square
+  (second moment, a per-parameter variance). Divide the step by the square root of that variance, so
+  parameters with large, noisy gradients take *smaller* steps and quiet parameters take *larger* ones.
+  Every dimension gets its own adaptive learning rate.
+
+Adam is the default for ~90% of deep learning because it "just works" across wildly different problems
+with little tuning.
+
+## Play with it
+
+Three optimizers descend the same steep, narrow valley. Watch SGD zig-zag, momentum build speed, and
+Adam march straight down. Push the learning rate up until SGD diverges while Adam stays stable.
+
+<MlAOptimizerDescent client:visible />
+
+<Callout type="tip">
+Crank the learning rate high: SGD shoots off and diverges, but Adam's per-parameter normalization keeps
+it stable. That robustness to the learning rate is exactly why practitioners reach for Adam first.
+</Callout>
+
+## How it works: the dry run
+
+Adam's full update, given gradient $g_t$ at step $t$ (defaults $\beta_1{=}0.9$, $\beta_2{=}0.999$):
+
+$$
+\begin{aligned}
+m_t &= \beta_1 m_{t-1} + (1-\beta_1) g_t & \hat{m}_t &= m_t / (1 - \beta_1^t) \\
+v_t &= \beta_2 v_{t-1} + (1-\beta_2) g_t^2 & \hat{v}_t &= v_t / (1 - \beta_2^t)
+\end{aligned}
+$$
+
+$$
+\theta_t = \theta_{t-1} - \eta\, \frac{\hat{m}_t}{\sqrt{\hat{v}_t} + \epsilon}.
+$$
+
+The bias-correction terms $1 - \beta^t$ fix the fact that $m$ and $v$ start at zero and are underestimates
+early on.
+
+<CodeRunner
+  client:visible
+  code={`// One Adam update step (plain JS)
+function adamStep(theta, g, state, lr=0.1, b1=0.9, b2=0.999, eps=1e-8) {
+  state.t += 1;
+  return theta.map((p, i) => {
+    state.m[i] = b1*state.m[i] + (1-b1)*g[i];        // 1st moment (momentum)
+    state.v[i] = b2*state.v[i] + (1-b2)*g[i]*g[i];   // 2nd moment (variance)
+    const mHat = state.m[i] / (1 - b1**state.t);     // bias correction
+    const vHat = state.v[i] / (1 - b2**state.t);
+    return p - lr * mHat / (Math.sqrt(vHat) + eps);
+  });
+}
+let theta = [1.0, 1.0];
+const state = { m:[0,0], v:[0,0], t:0 };
+const g = [10.0, 0.1];      // one axis has a huge gradient, one tiny`}
+  tests={[
+    { expr: 'adamStep(theta, g, state).map((x)=>+x.toFixed(3))', label: 'params after 1 Adam step' },
+    { expr: '(function(){let th=[1,1];const s={m:[0,0],v:[0,0],t:0};for(let i=0;i<5;i++)th=adamStep(th,[10,0.1],s);return th.map((x)=>+x.toFixed(3));})()', label: 'both axes move similarly after 5 steps' },
+  ]}
+/>
+
+Notice both axes move by a *similar* amount despite gradients differing 100×: the $\sqrt{\hat v}$ divisor
+equalizes them. Plain SGD would have moved the first axis 100× more than the second.
+
+## The real implementation
+
+The course file is the update above, verbatim:
+
+```ts
+// /dsa/27-ml-algorithms/05-optimizers/adam.ts
+update(name: string, params: number[], grads: number[]): number[] {
+  this.state.step++;
+  const bc1 = 1 - Math.pow(this.beta1, this.state.step); // bias corrections
+  const bc2 = 1 - Math.pow(this.beta2, this.state.step);
+  return params.map((p, i) => {
+    m[i] = this.beta1 * m[i] + (1 - this.beta1) * grads[i];           // 1st moment
+    v[i] = this.beta2 * v[i] + (1 - this.beta2) * grads[i] * grads[i]; // 2nd moment
+    const mHat = m[i] / bc1, vHat = v[i] / bc2;
+    return p - (this.learningRate * mHat) / (Math.sqrt(vHat) + this.epsilon);
+  });
+}
+```
+
+Run it with `npx tsx 27-ml-algorithms/05-optimizers/adam.ts`, and compare against `sgd-momentum.ts` and
+`optimizer-comparison.ts`. The `adamw.ts` variant (decoupled weight decay) is the one that actually
+trains transformers.
+
+## Complexity
+
+All three cost the same per step — linear in the number of parameters — differing only in how much state
+they carry:
+
+$$
+T(p) = O(p) \text{ per step}, \qquad S(p) = O(p).
+$$
+
+| Optimizer | Extra state per parameter | Memory |
+|-----------|---------------------------|--------|
+| SGD | none | $1\times$ params |
+| Momentum | velocity | $2\times$ |
+| Adam | first + second moment | $3\times$ |
+
+<Callout type="why">
+Adam's $3\times$ memory footprint is a real cost at scale: for a model with billions of parameters, the
+optimizer state can dominate GPU memory — which is why memory-efficient optimizers (Adafactor, 8-bit
+Adam, Lion) exist to trim it.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Hiking in fog" icon="⛰️">
+Descending a mountain in thick fog, you feel the slope and step downhill. Momentum is the tendency to
+keep going the way you were heading; Adam is taking cautious small steps where the ground is jagged and
+bold strides where it's smooth.
+</ExampleCard>
+
+<ExampleCard domain="Thermostat control" icon="🌡️">
+A controller nudges the temperature toward a target, but overshoots if it reacts too hard. Adaptive
+step-sizing — big corrections when far off, gentle when close — mirrors how Adam scales updates by the
+gradient's recent variance.
+</ExampleCard>
+
+<ExampleCard domain="Portfolio rebalancing" icon="📈">
+An investor moving toward a target allocation smooths noisy daily signals (momentum) and takes smaller
+positions in volatile assets, larger ones in stable assets — the same variance-aware sizing Adam applies
+per parameter.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Learning rate too high.** The single most common failure: the loss diverges to NaN. Adam is forgiving
+  but not immune.
+- **Forgetting bias correction.** Without the $1-\beta^t$ terms, Adam's early steps are far too small
+  because $m$ and $v$ start at zero.
+- **Adam ≠ AdamW.** Plain Adam mishandles L2 weight decay; AdamW *decouples* it and is the correct choice
+  for transformers.
+- **Interview cue:** "What are Adam's two moments?" First moment = mean of gradients (momentum); second
+  moment = mean of squared gradients (per-parameter variance) used to scale the step.
+
+## Practice
+
+1. **Easy:** Write the plain SGD update rule.
+2. **Easy:** What does the momentum term $v \leftarrow \beta v + g$ accumulate?
+3. **Medium:** In Adam, why divide by $\sqrt{\hat{v}_t}$? What problem does it solve?
+4. **Medium:** Why does Adam need bias correction in its first few steps?
+5. **Hard:** Adam stores two extra values per parameter. Estimate the optimizer memory for a
+   1-billion-parameter model in float32, and name one way to reduce it.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does momentum add over plain SGD?',
+      options: [
+        'A per-parameter learning rate',
+        'A velocity that accumulates consistent gradient directions and damps oscillation',
+        'Bias correction',
+        'A second-order Hessian estimate',
+      ],
+      answer: 1,
+      explain: 'Momentum keeps a running velocity, building speed along consistent directions and smoothing the zig-zag across narrow valleys.',
+    },
+    {
+      q: 'Why does Adam divide the step by the square root of the second moment?',
+      options: [
+        'To make training deterministic',
+        'To give each parameter an adaptive step: large/noisy gradients take smaller steps',
+        'To add momentum',
+        'To normalize the loss',
+      ],
+      answer: 1,
+      explain: 'The second moment estimates each parameter’s gradient variance; dividing by its square root shrinks steps for noisy dimensions and enlarges them for quiet ones.',
+    },
+    {
+      q: 'Roughly how much optimizer state does Adam keep per parameter?',
+      options: [
+        'None',
+        'One value (velocity)',
+        'Two values (first and second moment)',
+        'The full Hessian matrix',
+      ],
+      answer: 2,
+      explain: 'Adam stores a first moment (m) and a second moment (v) per parameter — about 3× the parameter memory in total.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An optimizer maps the <strong>gradient to a weight update</strong>; SGD is the fixed-step baseline.',
+    '<strong>Momentum</strong> accumulates a velocity to accelerate consistent directions and damp oscillation.',
+    '<strong>Adam</strong> tracks first and second moments to give each parameter an <strong>adaptive step size</strong>.',
+    '<strong>Bias correction</strong> (1−βᵗ) fixes the zero-initialized moments in early steps.',
+    'Adam trades <strong>~3× memory</strong> for robustness; use <strong>AdamW</strong> for transformers.',
+  ]}
+/>
+
+Next up: **Embeddings & Vector Search** — turning items into vectors whose geometry encodes meaning, and
+finding nearest neighbors fast.

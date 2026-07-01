@@ -1,0 +1,261 @@
+---
+title: Designing for Scale
+track: dsa-system-design
+summary: "The capstone: size a system with back-of-envelope math, scale it out with stateless services and queues, and protect it with rate limiting that absorbs bursts."
+difficulty: advanced
+estMinutes: 22
+prereqs:
+  - dsa-system-design/distributed-systems
+leadsTo: []
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SysTokenBucket from '../../../components/demos/SysTokenBucket.tsx';
+
+## The hook: the launch that fell over
+
+A startup ships a feature to the front page. Traffic goes from 10,000 to 500,000 requests per second in
+minutes — a 50× spike — and the site dies. Not because the code was wrong, but because nothing *absorbed*
+the surge. The teams that survive launches did the arithmetic ahead of time, made their services
+**stateless** so they could add machines in seconds, put a **queue** in front of slow work to soak up
+bursts, and a **rate limiter** at the edge to keep a stampede from taking everything down. This final
+lesson assembles every earlier idea — latency, caching, sharding, replication, CAP — into a system that
+scales on purpose.
+
+<Callout type="intuition" title="The one-sentence idea">
+Scaling is three disciplines at once: estimate the load before you build, scale out with stateless services
+behind a load balancer, and smooth the spikes with queues and rate limiters so no burst can topple you.
+</Callout>
+
+## Intuition: estimate, scale out, smooth
+
+**Estimate first.** Every design starts with back-of-envelope numbers (the fundamentals lesson): daily
+active users × actions ÷ 86,400 seconds gives average QPS, a 2–3× peak factor gives the surge, and dividing
+by per-server capacity (web ~1–10k QPS, cache ~100k–1M QPS) gives a machine count. These numbers *justify*
+every later choice — you shard because one database's ~10k TPS is not enough, you cache because reads
+outnumber writes 10:1.
+
+**Scale out, not just up.** Vertical scaling (a bigger box) is simple but hits a hardware ceiling and stays
+a single point of failure. Horizontal scaling (more boxes) is unbounded and fault-tolerant — *if* your
+services are **stateless**, so any server can handle any request. Session state moves out to Redis; the
+database, not the app tier, becomes the bottleneck, which is why the earlier moves (read replicas, caching,
+sharding) all target it. Netflix runs 100,000+ instances this way.
+
+**Smooth the spikes.** A **message queue** decouples producers from consumers: the web tier enqueues work
+instantly and a pool of workers drains it at its own pace, turning a 50× spike into a longer queue instead
+of a meltdown (Uber pushes 1+ trillion Kafka messages/day this way). And a **rate limiter** — the
+**token bucket** from the algorithms folder — caps how fast any client can hit you: tokens refill at a
+sustained rate, and the bucket's capacity sets how big a *burst* you tolerate before returning 429. A
+**CDN** finishes the job by serving static bytes from the edge (5–50 ms) and offloading 60–95% of traffic
+from your origin.
+
+## Play with it
+
+The token bucket below is the workhorse rate limiter. Tokens drip in at the refill rate; each request spends
+one, and when the bucket is empty, requests are rejected. Feed it a bursty arrival pattern and watch it
+absorb spikes up to its capacity, then throttle the rest.
+
+<SysTokenBucket client:visible />
+
+<Callout type="tip">
+Send a burst of 8 into a 6-token bucket: the first 6 are allowed, 2 are rejected, and then the bucket only
+recovers at the refill rate. That is the design lever in one picture — **capacity is your burst size,
+refill rate is your sustained rate**. Widen capacity for spiky-but-legitimate traffic; lower refill to
+protect a fragile backend.
+</Callout>
+
+## How it works: sizing and shielding in code
+
+Two pieces of arithmetic run the show: estimating the fleet, and the token-bucket check that guards it.
+
+<CodeRunner
+  client:visible
+  code={`// Back-of-envelope: turn DAU into a server count.
+function sizeFleet(dau, actionsPerUser, qpsPerServer, peakFactor = 2.5) {
+  const avgQps = (dau * actionsPerUser) / 86400;
+  const peakQps = avgQps * peakFactor;
+  const servers = Math.ceil(peakQps / qpsPerServer);
+  return { avgQps: Math.round(avgQps), peakQps: Math.round(peakQps), servers };
+}
+
+// Token bucket: allow controlled bursts, enforce an average rate.
+function makeBucket(capacity, refillPerSec) {
+  let tokens = capacity, last = 0;
+  return function allow(nowSec) {
+    tokens = Math.min(capacity, tokens + (nowSec - last) * refillPerSec);
+    last = nowSec;
+    if (tokens >= 1) { tokens -= 1; return true; }   // allowed
+    return false;                                     // 429 Too Many Requests
+  };
+}
+const limit = makeBucket(5, 1); // burst 5, then 1/sec`}
+  tests={[
+    { expr: 'JSON.stringify(sizeFleet(200000000, 10, 8000))', label: 'fleet for 200M DAU @ 8k QPS/server' },
+    { expr: '[0,0,0,0,0,0].map((_,i) => limit(0)).join(",")', label: '6 requests at t=0 (burst of 5)' },
+    { expr: 'limit(3)', label: 'one request 3s later (refilled)' },
+  ]}
+/>
+
+The first line sizes a real fleet in one step; the burst test shows five `true`s then a `false` — the sixth
+request at the same instant is throttled, and three seconds later the bucket has refilled enough to allow
+one more. Estimation tells you how big to build; the limiter keeps any single client from breaking it.
+
+## The real implementation
+
+The production token bucket refills lazily on each request and caps at capacity:
+
+```ts
+// /dsa/system-design/algorithms/01-rate-limiting/token-bucket.ts
+consume(clientId: string, tokens = 1): RateLimitResult {
+  const now = Date.now();
+  const state = this.buckets.get(clientId) ?? { tokens: this.capacity, lastRefillTime: now };
+  const elapsed = Math.max(0, now - state.lastRefillTime);
+  state.tokens = Math.min(this.capacity, state.tokens + (elapsed / 1000) * this.refillRate); // refill
+  state.lastRefillTime = now;
+  if (state.tokens >= tokens) { state.tokens -= tokens; return { allowed: true, remaining: Math.floor(state.tokens) }; }
+  const retryAfter = Math.ceil((tokens - state.tokens) / this.refillRate);
+  return { allowed: false, remaining: 0, retryAfter };
+}
+```
+
+And the capacity math that sizes the fleet it protects:
+
+```ts
+// /dsa/system-design/10-estimation/capacity-estimation.ts
+const minServers      = Math.ceil(input.peakQPS / input.qpsPerServer);
+const withReplication = minServers * replicationFactor;              // e.g. 3x
+const withHeadroom    = Math.ceil(withReplication * (1 + headroom)); // e.g. +30%
+```
+
+Study them at `/dsa/system-design/algorithms/01-rate-limiting/` (token bucket, leaky bucket, sliding window),
+`/dsa/system-design/10-estimation/` (capacity, bandwidth, storage), and
+`/dsa/system-design/01-building-blocks/message-queues.ts` and `cdn.ts` for the queue and edge patterns.
+
+## Numbers that decide the design
+
+The two formulas that size a system, plus the burst identity of the token bucket:
+
+$$
+\text{peak QPS} = \frac{\text{DAU} \times \text{actions}}{86{,}400}\times \text{peak factor}, \qquad \text{max burst} = \frac{\text{capacity}}{\text{refill rate}}.
+$$
+
+| Lever | Rule of thumb | Effect |
+|-------|---------------|--------|
+| Peak factor | 2–3× average | size for the surge, not the mean |
+| Web server | ~1,000–10,000 QPS | app-tier machine count |
+| Cache server | ~100,000–1,000,000 ops/s | absorbs read spikes |
+| Read:write ratio | ~10:1 | justifies read replicas + cache |
+| Replication + headroom | ×3, then +30% | survive failures and growth |
+| CDN offload | 60–95% of traffic | origin load and egress cost |
+| Queue | buffers a 50× spike | trades latency for survival |
+
+Worked example — a Twitter-like read path: 200M DAU, ~20 billion reads/day is ~230k average read QPS, ~500k
+at peak. No single database serves that, so the design is forced: a CDN and cache absorb most of it, the rest
+fans across sharded, replicated stores, and a queue handles fan-out writes asynchronously. The arithmetic
+wrote the architecture.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Flash sales" icon="🏷️">
+An e-commerce flash sale is a deliberate 50× spike. The team pre-warms CDN caches, puts checkout behind a
+queue so the payment service drains orders at a safe rate, and rate-limits per-user "add to cart" so bots
+cannot exhaust inventory. The database never sees the raw surge.
+</ExampleCard>
+
+<ExampleCard domain="Public APIs" icon="🔌">
+Stripe and GitHub hand every API key a token bucket — GitHub allows 5,000 requests/hour authenticated,
+Stripe ~100/sec with a burst. The bucket lets a client batch-sync in a burst, then settle to the sustained
+rate, and a 429 with `Retry-After` tells well-behaved clients exactly when to come back.
+</ExampleCard>
+
+<ExampleCard domain="Live streaming" icon="📡">
+A concert stream to millions leans almost entirely on CDN edge nodes (Netflix serves 95%+ from the edge),
+because 1M viewers at 5 Mbps is 5 Tbps no origin can push. Stateless edge servers scale out per region, and
+the origin only ever feeds the caches.
+</ExampleCard>
+
+<ExampleCard domain="Ride-hailing" icon="🚗">
+An Uber-style backend shards by city (so a surge in one city cannot swamp another), streams location pings
+through Kafka partitioned by city, and rate-limits driver apps to keep the ingest pipeline from drowning —
+all sized from a back-of-envelope writes-per-second estimate.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Designing for the average.** Peak is 2–10× the mean and launches are 50×. Size for peak and prove you
+  can add capacity fast.
+- **Hidden state.** One in-memory session or local cache and you can no longer add servers freely. Push all
+  state to a shared store to stay horizontally scalable.
+- **No back-pressure.** An unbounded queue just moves the failure downstream; cap it, shed load, and return
+  429s rather than collapsing.
+- **Rate-limiting the wrong dimension.** Limit per API key or per user, not globally, or one noisy neighbor
+  starves everyone. Token bucket per client is the default.
+- **Premature sharding.** Sharding taxes every query forever; exhaust caching and read replicas first, and
+  only shard when a single node truly cannot cope.
+- **Interview cue:** open with an estimate, name the bottleneck (almost always the database), then reach for
+  caching → replicas → queue → shard in that order, and mention a rate limiter at the edge.
+
+## Practice
+
+1. **Easy:** A service has 30M DAU doing 20 actions/day. What is the average QPS? (Use 86,400.)
+2. **Easy:** With a token bucket of capacity 10 refilling 2/sec, how many requests can arrive in one instant
+   before any are rejected?
+3. **Medium:** Peak QPS is 60,000 and each web server handles 5,000 QPS. With 3× replication and 30%
+   headroom, how many servers do you provision?
+4. **Medium:** Explain how a queue lets a system survive a 50× spike that its workers could never process in
+   real time.
+5. **Hard:** Design a scalable image-upload service for 10M uploads/day: estimate write QPS and bandwidth,
+   choose where bytes vs metadata live, and place a queue, a cache/CDN, and a rate limiter. Justify each
+   number and cite the bottleneck.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What property must services have to scale horizontally with ease?',
+      options: [
+        'They must store session state locally for speed',
+        'They must be stateless, so any server can handle any request',
+        'They must run on a single powerful machine',
+        'They must use synchronous replication',
+      ],
+      answer: 1,
+      explain: 'Stateless services keep no per-request state on the box, so a load balancer can send any request to any server and you can add machines freely.',
+    },
+    {
+      q: 'In a token-bucket limiter, what does the bucket capacity control?',
+      options: [
+        'The sustained long-term request rate',
+        'The maximum burst size allowed before throttling',
+        'The number of servers',
+        'The replication factor',
+      ],
+      answer: 1,
+      explain: 'Capacity is the burst size — how many requests can arrive at once before the bucket empties. The refill rate sets the sustained average rate.',
+    },
+    {
+      q: 'Peak QPS is 40,000 and each server handles 8,000 QPS. Ignoring replication and headroom, the minimum server count is:',
+      options: ['3', '5', '8', '40'],
+      answer: 1,
+      explain: '40,000 / 8,000 = 5 servers at minimum before adding replication and headroom.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Start with <strong>back-of-envelope math</strong>: DAU × actions ÷ 86,400 × peak factor gives peak QPS, and ÷ per-server capacity gives the fleet size — the numbers justify the architecture.',
+    'Scale <strong>out</strong> with <strong>stateless services</strong> behind a load balancer (state in Redis); the <strong>database is the usual bottleneck</strong>, so cache and replicate before you shard.',
+    '<strong>Message queues</strong> decouple and smooth: they turn a 50× spike into a longer queue instead of a crash, with back-pressure to shed load safely.',
+    'A <strong>token-bucket rate limiter</strong> guards the edge — <strong>capacity = burst size, refill rate = sustained rate</strong> — applied per client with a 429 + Retry-After.',
+    'A <strong>CDN</strong> serves static bytes from the edge and offloads 60–95% of traffic; put it all together and size everything for <strong>peak</strong>, not average.',
+  ]}
+/>
+
+That completes the Data Structures & Algorithms system-design track — you can now take a vague feature,
+size it on an envelope, and assemble caching, sharding, replication, consensus, and rate limiting into a
+system that scales on purpose.

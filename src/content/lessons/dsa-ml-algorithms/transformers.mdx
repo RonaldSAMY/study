@@ -1,0 +1,231 @@
+---
+title: Transformers
+track: dsa-ml-algorithms
+summary: "The transformer block: wrap attention and a feed-forward network in residual connections and normalization, then stack it deep."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-ml-algorithms/attention
+  - transformers/transformer-block
+leadsTo:
+  - dsa-ml-algorithms/graph-neural-networks
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MlATransformerBlock from '../../../components/demos/MlATransformerBlock.tsx';
+
+## The hook: the block that ate deep learning
+
+In 2017 one architecture quietly replaced almost everything — recurrent nets for language, and soon
+convolutional nets for vision too. The transformer's secret isn't a single clever trick; it's a
+**repeatable block** you can stack a hundred times without the training collapsing. Attention lets tokens
+talk to each other; a feed-forward network lets each token think on its own; residual connections and
+normalization keep the whole tower stable as it grows. Assemble those four pieces and you get GPT, BERT,
+ViT, and the rest.
+
+<Callout type="intuition" title="The one-sentence idea">
+A transformer block is attention (tokens mix information) followed by a per-token MLP (each token
+transforms itself), each wrapped in a residual connection and layer normalization so you can stack the
+block deep.
+
+</Callout>
+
+## Intuition: mix, then think, on rails
+
+You already know **attention** — the operation that lets every token pull in a weighted blend of the
+others. A transformer wraps it in three supporting parts:
+
+- **Positional encoding.** Attention alone is order-blind: shuffle the tokens and the outputs just
+  shuffle too. Adding a position signal to each embedding tells the model *where* each token sits.
+- **Feed-forward network (FFN).** After tokens exchange information, each one passes *independently*
+  through a small two-layer MLP with a ReLU/GELU nonlinearity. This is where much of the model's raw
+  capacity lives.
+- **Residuals + normalization.** Each sub-layer computes $x + \text{Sublayer}(x)$ — a skip connection —
+  then a LayerNorm rescales the result. The residual gives gradients a highway to flow down; the norm
+  keeps activations from exploding or vanishing. Together they make 96-layer stacks trainable.
+
+So one block is: **attention → add & norm → feed-forward → add & norm**. Stack $N$ of them, add an
+embedding layer at the bottom and a prediction head at the top, and you have a transformer.
+
+## Play with it
+
+Feed one token's vector through a single block and step stage by stage. Watch positional info get added,
+context mix in at attention, and the add-and-norm steps pull the vector back to a stable scale.
+
+<MlATransformerBlock client:visible />
+
+<Callout type="tip">
+Notice how every "Add & Norm" step tames the vector's magnitude. That renormalization is exactly what
+lets you stack dozens of blocks: without it, small scale changes compound and the tower blows up.
+</Callout>
+
+## How it works: the dry run
+
+The FFN is the same little function applied to every position: $\text{FFN}(x) = \text{ReLU}(xW_1 + b_1)W_2 + b_2$,
+usually with a hidden size $4\times$ the model dimension. The residual wrapper is what makes it safe:
+
+```
+sub-layer:  y = LayerNorm(x + Sublayer(x))
+  x + Sublayer(x)   ← residual: keep the input, add the update
+  LayerNorm(...)    ← rescale to mean 0, variance 1 (per token)
+
+one block:  a = LayerNorm(x + Attention(x))     # tokens mix
+            z = LayerNorm(a + FFN(a))            # tokens think
+```
+
+<CodeRunner
+  client:visible
+  code={`// One transformer sub-layer: residual + LayerNorm (plain JS)
+function layerNorm(v, eps = 1e-6) {
+  const m = v.reduce((a, b) => a + b, 0) / v.length;
+  const varr = v.reduce((a, b) => a + (b - m) ** 2, 0) / v.length;
+  const sd = Math.sqrt(varr + eps);
+  return v.map((x) => (x - m) / sd);
+}
+function relu(x) { return Math.max(0, x); }
+// tiny FFN: hidden then back, plus residual + norm
+function ffnBlock(x) {
+  const hidden = x.map((v) => relu(v * 1.5 + 0.2));
+  const out = hidden.map((h, i) => h * 0.8 - 0.1 + x[i]); // + residual
+  return layerNorm(out);
+}
+const token = [0.8, -0.4, 0.5, 0.2];`}
+  tests={[
+    { expr: 'layerNorm([2, 4, 6, 8]).map((x)=>+x.toFixed(2))', label: 'layerNorm output (mean 0)' },
+    { expr: 'ffnBlock(token).map((x)=>+x.toFixed(2))', label: 'FFN sub-layer output' },
+  ]}
+/>
+
+## The real implementation
+
+The course file assembles exactly this block — multi-head attention and FFN, each with a residual and a
+LayerNorm:
+
+```ts
+// /dsa/27-ml-algorithms/02-transformers/transformer-basics.ts
+class TransformerEncoderLayer {
+  forward(X: Matrix, mask?: Matrix): Matrix {
+    // 1. self-attention + residual + norm
+    const attnOutput = this.multiHeadAttn.forward(X, X, X, mask);
+    const norm1Output = this.norm1.forward(addMatrices(X, attnOutput));
+    // 2. feed-forward + residual + norm
+    const ffOutput = this.feedForward.forward(norm1Output);
+    return this.norm2.forward(addMatrices(norm1Output, ffOutput));
+  }
+}
+```
+
+Run it with `npx tsx 27-ml-algorithms/02-transformers/transformer-basics.ts`. The sibling file
+`positional-encoding.ts` shows the sinusoidal $PE(pos, 2i) = \sin(pos / 10000^{2i/d})$ that injects order.
+
+## Complexity
+
+For one block over a length-$n$ sequence with model dimension $d$:
+
+$$
+T(n) = O(\underbrace{n^2 d}_{\text{attention}} + \underbrace{n d^2}_{\text{FFN}}), \qquad S(n) = O(n^2 + nd).
+$$
+
+| Sub-layer | Time | Dominates when |
+|-----------|------|----------------|
+| Attention | $O(n^2 d)$ | long sequences ($n > d$) |
+| Feed-forward | $O(n d^2)$ | short sequences ($n < d$) |
+
+<Callout type="why">
+Both terms matter in practice: for long documents the $n^2 d$ attention cost dominates, but for short
+prompts the $n d^2$ feed-forward cost does — which is why FFN layers hold most of a model's parameters.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Assembly line" icon="🏭">
+Each station (block) does one refinement and passes the part along. A conveyor belt underneath (the
+residual stream) carries the part forward untouched, so a station only needs to add its small change —
+not rebuild the whole product.
+</ExampleCard>
+
+<ExampleCard domain="Orchestra rehearsal" icon="🎻">
+First the musicians listen to each other and adjust (attention); then each practices their own part
+(feed-forward). Repeat the listen-then-refine cycle many times and a coherent performance emerges.
+</ExampleCard>
+
+<ExampleCard domain="Vision (ViT)" icon="🖼️">
+Split an image into patches, treat each patch as a "token," and run the exact same block. The Vision
+Transformer shows the architecture isn't about language at all — it's a general-purpose sequence mixer.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Dropping positional encoding.** Pure attention is permutation-equivariant, so "dog bites man" and
+  "man bites dog" look identical without it.
+- **Pre-norm vs post-norm.** Modern LLMs put LayerNorm *before* each sub-layer (pre-norm) for more stable
+  deep training; the original paper used post-norm. Know the difference.
+- **Residuals are not optional.** Remove the skip connections and gradients decay through the depth — the
+  network becomes nearly untrainable past a handful of layers.
+- **Interview cue:** "What are the four ingredients of a transformer block?" Attention, FFN, residual
+  connections, and normalization — plus positional encoding at the input.
+
+## Practice
+
+1. **Easy:** Write out the residual-plus-norm formula for a sub-layer.
+2. **Easy:** Which sub-layer mixes information *between* tokens, and which processes each token alone?
+3. **Medium:** Given $d = 512$, what is the typical FFN hidden dimension, and why that size?
+4. **Medium:** Explain when attention cost dominates FFN cost and vice versa.
+5. **Hard:** Sketch how you'd turn an image into transformer inputs (the ViT patch trick), and what the
+   "tokens" are.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the feed-forward sub-layer do that attention does not?',
+      options: [
+        'Mix information across all tokens',
+        'Transform each token independently through a nonlinear MLP',
+        'Add positional information',
+        'Compute query-key scores',
+      ],
+      answer: 1,
+      explain: 'Attention mixes tokens together; the FFN applies the same little MLP to each position independently, adding per-token nonlinear capacity.',
+    },
+    {
+      q: 'Why are residual connections critical in deep transformers?',
+      options: [
+        'They reduce the parameter count',
+        'They give gradients a direct path so very deep stacks stay trainable',
+        'They replace the softmax',
+        'They encode word order',
+      ],
+      answer: 1,
+      explain: 'The skip connection x + Sublayer(x) lets gradients flow straight down the depth, preventing them from vanishing and enabling dozens of stacked blocks.',
+    },
+    {
+      q: 'Without positional encoding, a transformer treats the input as…',
+      options: [
+        'A causal sequence',
+        'An unordered set — shuffling tokens shuffles the outputs identically',
+        'A single vector',
+        'A grid of pixels',
+      ],
+      answer: 1,
+      explain: 'Attention is permutation-equivariant, so order is invisible unless you inject positional information into the embeddings.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A transformer block = <strong>attention → add & norm → feed-forward → add & norm</strong>, stacked N times.',
+    '<strong>Attention mixes tokens; the FFN transforms each token</strong> independently with a nonlinear MLP.',
+    '<strong>Residual connections + LayerNorm</strong> are what make deep stacks trainable and stable.',
+    '<strong>Positional encoding</strong> breaks permutation-equivariance so word order matters.',
+    'Cost splits into <strong>O(n²d) attention + O(nd²) feed-forward</strong>; the FFN holds most parameters.',
+  ]}
+/>
+
+Next up: **Graph Neural Networks** — the same idea of aggregating information from neighbors, but on
+arbitrary graphs instead of a sequence.

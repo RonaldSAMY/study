@@ -1,0 +1,252 @@
+---
+title: Euler’s Totient & Theorem
+track: dsa-number-theory
+summary: "Euler's totient φ(n) counts the integers below n that are coprime to it, and Euler's theorem — a^φ(n) ≡ 1 — is the engine that powers modular inverses and RSA."
+difficulty: advanced
+estMinutes: 19
+prereqs:
+  - dsa-number-theory/sieve-eratosthenes
+leadsTo:
+  - dsa-number-theory/fft-ntt
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NTTotientWheel from '../../../components/demos/NTTotientWheel.tsx';
+
+## The hook: how many gears mesh cleanly?
+
+Put $n$ evenly spaced pegs around a circle and connect every $k$-th peg with a chord. For some steps $k$
+the chord pattern visits *all* the pegs (a single star); for others it closes early into a smaller
+polygon. The steps that visit every peg are exactly those *coprime* to $n$ — sharing no factor with it.
+Count them and you have Euler's totient $\varphi(n)$. This unassuming count turns out to be the hinge of
+public-key cryptography: it tells you the exponent that makes modular exponentiation loop back to 1.
+
+<Callout type="intuition" title="The one-sentence idea">
+$\varphi(n)$ counts the integers in $1 \dots n$ that are coprime to $n$, and Euler's theorem says raising
+any such number to the $\varphi(n)$ power returns 1 modulo $n$.
+</Callout>
+
+## Intuition
+
+Two numbers are coprime when their GCD is 1. So $\varphi(12)$ counts which of $1..12$ share no factor with
+12: the survivors are $\lbrace 1, 5, 7, 11 \rbrace$, giving $\varphi(12) = 4$. Counting by hand is $O(n)$
+GCD tests, but there is a shortcut through the prime factorization. Each distinct prime $p$ dividing $n$
+removes a $1/p$ fraction of the numbers:
+
+$$
+\varphi(n) = n \prod_{p \mid n} \left(1 - \frac{1}{p}\right).
+$$
+
+For $12 = 2^2 \cdot 3$ that is $12 \cdot \tfrac{1}{2} \cdot \tfrac{2}{3} = 4$ — no listing required. Two
+facts make it composable: $\varphi(p) = p - 1$ for a prime, and $\varphi$ is *multiplicative*,
+$\varphi(mn) = \varphi(m)\varphi(n)$ when $m, n$ are coprime, which is why the sieve can compute all
+totients in one pass.
+
+**Euler's theorem** is the payoff: if $\gcd(a, n) = 1$ then $a^{\varphi(n)} \equiv 1 \pmod n$. This
+generalizes Fermat's little theorem (take $n$ prime, so $\varphi(n) = n - 1$) and immediately gives a
+modular inverse, $a^{-1} \equiv a^{\varphi(n) - 1} \pmod n$.
+
+## Play with it
+
+Set $n$ and step $k$ from 1 to $n$, testing $\gcd(k, n)$. Coprimes light up and increment the count; the
+demo then confirms the total against the product formula.
+
+<NTTotientWheel client:visible />
+
+<Callout type="tip">
+Try a prime like 13: every smaller number is coprime, so $\varphi(13) = 12$. Then try $12 = 2^2 \cdot 3$
+and watch the multiples of 2 and 3 get skipped, landing on $\varphi(12) = 4$.
+</Callout>
+
+## How it works
+
+Compute $\varphi(36)$ from $36 = 2^2 \cdot 3^2$ using the formula, folding one prime at a time:
+
+```
+start result = 36
+prime 2 divides 36 -> result -= result/2 -> 36 - 18 = 18
+prime 3 divides 36 -> result -= result/3 -> 18 -  6 = 12
+φ(36) = 12
+```
+
+Only the *distinct* primes 2 and 3 matter; their exponents affect the leading $n$, not the fractions.
+Verify with a direct count and you also get $12$.
+
+<CodeRunner
+  client:visible
+  code={`function gcd(a, b) { while (b) { [a, b] = [b, a % b]; } return a; }
+
+// φ(n) in O(sqrt n) via the product formula
+function totient(n) {
+  let result = n;
+  for (let p = 2; p * p <= n; p++) {
+    if (n % p === 0) {
+      while (n % p === 0) n = n / p;    // strip all copies of p
+      result -= result / p;             // multiply by (1 - 1/p)
+    }
+  }
+  if (n > 1) result -= result / n;      // a leftover prime factor
+  return result;
+}
+
+// a^(-1) mod n via Euler: a^(φ(n) - 1)
+function modPow(b, e, m) { let r = 1; b %= m; while (e > 0) { if (e & 1) r = (r*b)%m; b=(b*b)%m; e=Math.floor(e/2);} return r; }
+function inverseEuler(a, n) { return gcd(a, n) === 1 ? modPow(a, totient(n) - 1, n) : null; }`}
+  tests={[
+    { expr: 'totient(12)', label: 'φ(12)' },
+    { expr: 'totient(36)', label: 'φ(36)' },
+    { expr: 'totient(13)', label: 'φ(13) for a prime' },
+    { expr: 'inverseEuler(3, 11)', label: '3^-1 mod 11 via Euler' },
+    { expr: 'modPow(7, totient(10), 10)', label: '7^φ(10) mod 10 (Euler = 1)' },
+  ]}
+/>
+
+## The real implementation
+
+The $O(\sqrt n)$ single-value totient and the $O(n)$ linear sieve that computes *all* totients, both from
+the course file:
+
+```ts
+// /dsa/22-number-theory/euler-totient.ts
+export function totient(n: number): number {
+  let result = n;
+  for (let p = 2; p * p <= n; p++) {
+    if (n % p === 0) {
+      while (n % p === 0) n /= p;
+      result -= result / p;          // apply (1 - 1/p)
+    }
+  }
+  if (n > 1) result -= result / n;   // last prime factor > sqrt(original n)
+  return result;
+}
+
+export function linearSieveTotient(n: number): { primes: number[]; phi: number[] } {
+  const phi = new Array(n + 1).fill(0);
+  const primes: number[] = [];
+  const isComposite = new Array(n + 1).fill(false);
+  phi[1] = 1;
+  for (let i = 2; i <= n; i++) {
+    if (!isComposite[i]) { primes.push(i); phi[i] = i - 1; }   // prime: φ(p) = p - 1
+    for (const p of primes) {
+      if (i * p > n) break;
+      isComposite[i * p] = true;
+      if (i % p === 0) { phi[i * p] = phi[i] * p; break; }      // p already divides i
+      phi[i * p] = phi[i] * (p - 1);                            // coprime -> multiplicative
+    }
+  }
+  return { primes, phi };
+}
+```
+
+The same file uses `totient` to verify Euler's theorem, count primitive roots, and measure Farey-sequence
+lengths. Run the full file: `npx tsx 22-number-theory/euler-totient.ts`.
+
+## Complexity
+
+Factorization dominates the single-value cost; the sieve amortizes it across all $n$:
+
+$$
+T_{\text{totient}}(n) = O(\sqrt n), \qquad T_{\text{sieve for } 1..n} = O(n).
+$$
+
+| Task | Method | Time |
+|------|--------|------|
+| $\varphi(n)$ for one $n$ | Product formula | $O(\sqrt n)$ |
+| $\varphi(k)$ for all $k \le n$ | Linear sieve | $O(n)$ |
+| Modular inverse (prime $m$) | Fermat $a^{m-2}$ | $O(\log m)$ |
+| Modular inverse (any $m$) | Euler $a^{\varphi(m)-1}$ | $O(\sqrt m + \log m)$ |
+
+Note that Euler's inverse needs $\varphi(m)$, so extended Euclid (last lesson) is usually preferred when
+you do not already know the factorization — but Euler's theorem is what *explains why* the inverse exists.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cryptography — RSA" icon="🔐">
+RSA picks $n = pq$, then chooses a public exponent $e$ and computes the private exponent
+$d \equiv e^{-1} \pmod{\varphi(n)}$ with $\varphi(n) = (p-1)(q-1)$. Euler's theorem guarantees that
+decrypting undoes encrypting: $m^{ed} \equiv m \pmod n$. Knowing $\varphi(n)$ *is* the secret — which is
+why factoring $n$ breaks RSA.
+</ExampleCard>
+
+<ExampleCard domain="Modular arithmetic" icon="🕐">
+Euler's theorem tells you the *period* of $a$ on the clock: powers of $a$ cycle with a length dividing
+$\varphi(n)$. That is exactly the wrap-around behavior you animated back in the modular-arithmetic lesson,
+now given a precise length.
+</ExampleCard>
+
+<ExampleCard domain="Music & geometry" icon="🎼">
+A regular $n$-pointed star polygon $\lbrace n/k \rbrace$ is drawable in one stroke only when
+$\gcd(n, k) = 1$, so there are $\varphi(n)/2$ distinct stars on $n$ points — the same coprime count,
+showing up as visual symmetry and as rhythmic cycles in music.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Only distinct primes appear in the product.** Repeated factors change the leading $n$, not the
+  $(1 - 1/p)$ terms. $\varphi(2^k) = 2^{k-1}$, not $2^k(1 - 1/2)^k$.
+- **Euler's inverse needs coprimality *and* $\varphi(n)$.** If you do not know the factorization, extended
+  Euclid finds the inverse without $\varphi$; do not compute $\varphi$ of a hard-to-factor $n$.
+- **Integer division order.** Write `result -= result / p` (after ensuring $p \mid \text{result}$), not
+  `result *= (1 - 1/p)` in floating point, or rounding will bite.
+- **Interview cue:** "count fractions in lowest terms," "size of the multiplicative group mod $n$," or
+  anything about RSA key math is a totient question.
+
+## Practice
+
+1. **Easy:** List the numbers coprime to 10 and confirm $\varphi(10) = 4$.
+2. **Easy:** Use the formula to get $\varphi(18)$ from $18 = 2 \cdot 3^2$.
+3. **Medium:** Verify Euler's theorem for $a = 7$, $n = 10$: compute $7^{\varphi(10)} \bmod 10$.
+4. **Medium:** Given primes $p = 61$, $q = 53$, compute $\varphi(pq)$ and a valid RSA private exponent for
+   $e = 17$.
+5. **Hard:** Prove that $\sum_{d \mid n} \varphi(d) = n$, and use it to sieve totients a second way.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does φ(n) count?',
+      options: [
+        'The number of divisors of n',
+        'The integers in 1..n that are coprime to n',
+        'The prime factors of n',
+        'The number of primes below n',
+      ],
+      answer: 1,
+      explain: 'φ(n) is the count of k in 1..n with gcd(k, n) = 1 — the coprime residues.',
+    },
+    {
+      q: 'Using φ(n) = n · ∏(1 − 1/p), what is φ(12)?',
+      options: ['6', '4', '11', '2'],
+      answer: 1,
+      explain: '12 = 2^2·3, so φ(12) = 12 · (1/2) · (2/3) = 4, matching the coprimes {1,5,7,11}.',
+    },
+    {
+      q: 'Euler\'s theorem states that for gcd(a, n) = 1:',
+      options: [
+        'a^n ≡ 1 (mod n)',
+        'a^φ(n) ≡ 1 (mod n)',
+        'a^(n-1) ≡ 0 (mod n)',
+        'φ(a) ≡ n (mod a)',
+      ],
+      answer: 1,
+      explain: 'a^φ(n) ≡ 1 (mod n); for prime n this reduces to Fermat\'s a^(n-1) ≡ 1.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>φ(n)</strong> counts integers in 1..n coprime to n; for a prime, φ(p) = p − 1.',
+    'The product formula <strong>φ(n) = n·∏(1 − 1/p)</strong> uses only the distinct prime factors — O(√n).',
+    'φ is <strong>multiplicative</strong>, so a linear sieve computes every φ(k) up to n in O(n).',
+    '<strong>Euler\'s theorem</strong> a^φ(n) ≡ 1 gives modular inverses and the period of powers.',
+    'φ(n) = (p−1)(q−1) is the <strong>secret behind RSA</strong> — knowing it (or factoring n) breaks the key.',
+  ]}
+/>
+
+Next up: **FFT & NTT** — the divide-and-conquer transform that multiplies polynomials and giant integers
+in $O(n \log n)$, closing the number-theory track on a high note.

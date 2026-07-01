@@ -1,0 +1,271 @@
+---
+title: Quantum Gates & Circuits
+track: dsa-quantum
+summary: "Quantum gates are reversible rotations of the amplitude vector: unitary matrices that stack into circuits, with CNOT weaving qubits into entanglement."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-quantum/qubits-superposition
+leadsTo:
+  - dsa-quantum/grover-shor
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import QbitCircuitSimulator from '../../../components/demos/QbitCircuitSimulator.tsx';
+
+## The hook: a computer with no delete key
+
+Classical logic throws information away constantly: an AND gate turns two input bits into one, and you can
+never reconstruct the inputs from the output. Quantum gates are forbidden from doing that. Every quantum
+operation must be **reversible** — run it backwards and you recover exactly what you started with. That
+single constraint, born from physics, means quantum "gates" are not truth tables but **rotations of the
+amplitude vector**, and it is why a two-qubit gate called CNOT can do something no classical gate can:
+tie two qubits together so tightly they lose their separate identities.
+
+<Callout type="intuition" title="The one-sentence idea">
+A quantum gate is a unitary matrix $U$ (one that preserves length and is reversible, $U^\dagger U = I$)
+applied to the amplitude vector; circuits are just products of these matrices, and CNOT is the one that
+creates entanglement.
+</Callout>
+
+## Intuition
+
+From the last lesson a state is a vector of amplitudes. A gate transforms that vector by a matrix — and to
+keep probabilities summing to one, the matrix must preserve length. Length-preserving invertible matrices
+are exactly the **unitary** ones. Three single-qubit gates carry most of the load:
+
+$$
+X = \begin{bmatrix} 0 & 1 \\ 1 & 0 \end{bmatrix}, \qquad
+Z = \begin{bmatrix} 1 & 0 \\ 0 & -1 \end{bmatrix}, \qquad
+H = \frac{1}{\sqrt2}\begin{bmatrix} 1 & 1 \\ 1 & -1 \end{bmatrix}.
+$$
+
+- **X** is the quantum NOT: it swaps the amplitudes of $|0\rangle$ and $|1\rangle$.
+- **Z** flips the *sign* of the $|1\rangle$ amplitude — invisible to an immediate measurement, but it steers
+  later interference.
+- **H** (Hadamard) is the superposition-maker: it turns $|0\rangle$ into an equal blend and, applied twice,
+  undoes itself because $H^2 = I$.
+
+Every one of these is its own inverse here ($X^2 = Z^2 = H^2 = I$), which is reversibility made concrete.
+
+The leap to two qubits is **CNOT** (controlled-NOT). It looks at a *control* qubit and flips a *target*
+only when the control is $|1\rangle$:
+
+$$
+\text{CNOT} = \begin{bmatrix} 1 & 0 & 0 & 0 \\ 0 & 1 & 0 & 0 \\ 0 & 0 & 0 & 1 \\ 0 & 0 & 1 & 0 \end{bmatrix}.
+$$
+
+Feed CNOT a control that is *already in superposition* and something remarkable happens — the two qubits
+become **entangled**, sharing a single fate that no pair of separate qubits could reproduce.
+
+## Play with it
+
+Build a circuit gate by gate. The preset is the famous **Bell circuit**: H on qubit 0, then CNOT(0→1). Step
+through and watch the four basis-state bars: after H you have $|00\rangle$ and $|10\rangle$; after CNOT they
+become $|00\rangle$ and $|11\rangle$ — the entangled Bell state. Red amplitude labels flag negative signs.
+
+<QbitCircuitSimulator client:visible />
+
+<Callout type="tip">
+After the Bell circuit only $|00\rangle$ and $|11\rangle$ survive — never $|01\rangle$ or $|10\rangle$. That
+means the two qubits always agree, yet neither one alone has a definite value. You cannot factor that state
+into "(something for q0) and (something for q1)"; that impossibility *is* entanglement.
+</Callout>
+
+## How it works
+
+Trace the Bell circuit as matrix-vector products on the 4-vector over $|00\rangle, |01\rangle, |10\rangle,
+|11\rangle$ (qubit 0 is the low bit):
+
+```
+start        |00>          = [ 1,     0, 0, 0     ]
+H on qubit 0               = [ 0.707, 0, 0.707, 0 ]   -> (|00> + |10>)/√2
+CNOT(0 -> 1)               = [ 0.707, 0, 0, 0.707 ]   -> (|00> + |11>)/√2   ENTANGLED
+```
+
+CNOT left $|00\rangle$ alone (control is 0) but rewrote $|10\rangle$ as $|11\rangle$ (control is 1, so flip
+the target). The result cannot be separated into two independent qubits — measure one and the other is
+instantly decided.
+
+<CodeRunner
+  client:visible
+  code={`// Two-qubit state over |00>,|01>,|10>,|11>. Qubit q is bit (i>>q)&1.
+const SQRT2 = Math.sqrt(2);
+function H(a, q) {
+  const out = a.slice();
+  for (let i = 0; i < 4; i++) if (!((i >> q) & 1)) {
+    const j = i | (1 << q);
+    out[i] = (a[i] + a[j]) / SQRT2;
+    out[j] = (a[i] - a[j]) / SQRT2;
+  }
+  return out;
+}
+function CNOT(a, c, t) {
+  const out = a.slice();
+  for (let i = 0; i < 4; i++) if (((i >> c) & 1) && !((i >> t) & 1)) {
+    const j = i | (1 << t);
+    out[i] = a[j]; out[j] = a[i];
+  }
+  return out;
+}
+const bell = CNOT(H([1, 0, 0, 0], 0), 0, 1);
+const probs = bell.map(x => +(x * x).toFixed(3));`}
+  tests={[
+    { expr: 'bell.map(x => +x.toFixed(3))', label: 'Bell amplitudes' },
+    { expr: 'probs', label: 'probabilities of |00>,|01>,|10>,|11>' },
+  ]}
+/>
+
+## The real implementation
+
+The course file applies each gate by walking the $2^n$ amplitudes and pairing the basis states that differ
+in the target qubit. Here are H and CNOT verbatim:
+
+```ts
+// /dsa/31-quantum-algorithms/quantum-basics.ts
+static H(state: QuantumState, qubit: number): void {
+  const size = 1 << state.getNumQubits();
+  const sqrt2 = Math.sqrt(2);
+  const out = new Array(size);
+  for (let i = 0; i < size; i++) {
+    const bit0 = i & ~(1 << qubit);       // partner with target = 0
+    const bit1 = i | (1 << qubit);        // partner with target = 1
+    const a0 = state.getAmplitude(bit0), a1 = state.getAmplitude(bit1);
+    out[i] = ((i >> qubit) & 1)
+      ? new Complex((a0.real - a1.real) / sqrt2, (a0.imag - a1.imag) / sqrt2)
+      : new Complex((a0.real + a1.real) / sqrt2, (a0.imag + a1.imag) / sqrt2);
+  }
+  for (let i = 0; i < size; i++) state.setAmplitude(i, out[i]);
+}
+
+static CNOT(state: QuantumState, control: number, target: number): void {
+  const size = 1 << state.getNumQubits();
+  for (let i = 0; i < size; i++) {
+    if ((i & (1 << control)) !== 0 && (i & (1 << target)) === 0) {
+      const flipped = i | (1 << target);   // swap the paired amplitudes
+      const temp = state.getAmplitude(i);
+      state.setAmplitude(i, state.getAmplitude(flipped));
+      state.setAmplitude(flipped, temp);
+    }
+  }
+}
+```
+
+Run the full file: `npx tsx 31-quantum-algorithms/quantum-basics.ts`.
+
+## Complexity
+
+A single-qubit gate touches every amplitude once, and there are $2^n$ of them. Classically, that is the
+cost per gate; a circuit of $g$ gates costs $O(g \cdot 2^n)$ to simulate:
+
+$$
+\text{per gate} = O(2^n), \qquad \text{full circuit of } g \text{ gates} = O(g \cdot 2^n).
+$$
+
+| Operation | On real hardware | Classical simulation |
+|-----------|------------------|----------------------|
+| One single-qubit gate | one physical pulse | $O(2^n)$ amplitude updates |
+| One CNOT | one two-qubit interaction | $O(2^n)$ |
+| Circuit depth $d$ | $O(d)$ wall-clock | $O(d \cdot 2^n)$ |
+
+On hardware a gate is one physical operation regardless of $n$ — the exponential only bites the classical
+*simulator*. That gap is precisely the promise the algorithms lesson cashes in.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Robotics" icon="🤖">
+A robot arm's orientation is a rotation in 3-D, and rotations compose by multiplying matrices — never
+losing information, always reversible. Quantum gates are unitary rotations of the amplitude vector in the
+same way: stack them and you have steered the state to a new orientation you can always rotate back.
+</ExampleCard>
+
+<ExampleCard domain="Choreography" icon="💃">
+Entanglement is a pair of dancers who have rehearsed a mirror routine: ask one dancer's move and you
+instantly know the other's, even across the stage, yet neither has a "solo" you could describe alone. The
+Bell state's perfect $|00\rangle/|11\rangle$ correlation is exactly that shared script.
+</ExampleCard>
+
+<ExampleCard domain="Audio engineering" icon="🎛️">
+A reversible mixing desk that can perfectly un-mix any blend is a unitary transform on the signal vector.
+Hadamard is that ideal 50/50 splitter: send one channel in and it fans out to two equal outputs, and the
+same box run backwards recombines them without loss.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Gates must be unitary, so they are reversible.** There is no quantum AND that discards a bit; you build
+  irreversible logic with reversible gates plus extra "ancilla" qubits.
+- **Z has no effect on an immediate measurement — but it is not a no-op.** It flips a phase that changes how
+  later gates interfere. "Phase does nothing" is a classic wrong answer.
+- **CNOT alone does not entangle.** With a definite control ($|0\rangle$ or $|1\rangle$) it is just a
+  conditional flip. You need the control in *superposition* first — that is why the Bell circuit starts with
+  H.
+- **Entangled means non-factorable.** If you can write the state as (q0 part) ⊗ (q1 part), it is *not*
+  entangled. The test is whether the coefficient determinant $a_{00}a_{11} - a_{01}a_{10}$ is nonzero.
+
+## Practice
+
+1. **Easy:** Apply X then X to $|0\rangle$. What do you get, and what does that say about $X^2$?
+2. **Easy:** Compute $H|1\rangle$. How does it differ from $H|0\rangle$?
+3. **Medium:** Start from $|10\rangle$ (qubit 0 = 0, qubit 1 = 1) and apply CNOT(0→1). Does anything change?
+   Explain using the control rule.
+4. **Medium:** Build the state $\tfrac{1}{\sqrt2}(|01\rangle + |10\rangle)$ from $|00\rangle$. Which gates,
+   in what order? (Hint: you will need an X.)
+5. **Hard:** Show that H, applied to the second qubit of a Bell state, moves the correlation from "agree on
+   value" to "agree on parity". Trace the amplitudes.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why must every quantum gate be represented by a unitary matrix?',
+      options: [
+        'To make the code shorter',
+        'To preserve total probability (length 1) and stay reversible',
+        'Because unitary matrices are always diagonal',
+        'To force all amplitudes to be positive',
+      ],
+      answer: 1,
+      explain: 'Unitary matrices preserve vector length (so probabilities keep summing to 1) and are invertible, which is exactly the reversibility quantum mechanics demands.',
+    },
+    {
+      q: 'Starting from |00⟩, which circuit produces the entangled Bell state (|00⟩ + |11⟩)/√2?',
+      options: [
+        'X on qubit 0, then Z on qubit 1',
+        'H on qubit 0, then CNOT(0→1)',
+        'H on qubit 0, then H on qubit 1',
+        'CNOT(0→1) alone',
+      ],
+      answer: 1,
+      explain: 'H puts qubit 0 into superposition; CNOT then flips qubit 1 in the |1⟩ branch only, correlating the two into (|00⟩ + |11⟩)/√2.',
+    },
+    {
+      q: 'A student says "the Z gate does nothing because it never changes measurement probabilities." What is wrong?',
+      options: [
+        'Z actually swaps |0⟩ and |1⟩',
+        'Z flips the sign of the |1⟩ amplitude, which changes how later gates interfere',
+        'Z is not a valid gate',
+        'Nothing — Z truly is a no-op',
+      ],
+      answer: 1,
+      explain: 'Z changes the relative phase. Measured immediately it looks inert, but that phase steers subsequent interference (e.g. it turns H|0⟩ into H|1⟩).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Quantum gates are <strong>unitary matrices</strong> — length-preserving and reversible; there is no information-destroying AND.',
+    'The workhorses: <strong>X</strong> (bit flip), <strong>Z</strong> (phase flip), <strong>H</strong> (superposition), each its own inverse.',
+    '<strong>CNOT</strong> flips a target when its control is |1⟩ — and with the control in superposition it creates <strong>entanglement</strong>.',
+    'A circuit is a <strong>product of gate matrices</strong>; the Bell circuit H then CNOT yields (|00⟩ + |11⟩)/√2.',
+    'Classical simulation costs <strong>O(2ⁿ) per gate</strong>, but hardware runs each gate as one physical operation.',
+  ]}
+/>
+
+Next up: **Grover & Shor** — turning gates and interference into real speed-ups: quadratically faster search
+and the polynomial-time factoring that would break RSA.

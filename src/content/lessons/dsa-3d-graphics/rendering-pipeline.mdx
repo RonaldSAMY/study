@@ -1,0 +1,282 @@
+---
+title: The Rendering Pipeline
+track: dsa-3d-graphics
+summary: "From vertices to pixels: the fixed sequence of stages that turns triangles into a shaded image, and how rasterization fills them in."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-3d-graphics/3d-math
+leadsTo:
+  - dsa-3d-graphics/spatial-acceleration
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import G3dRasterizer from '../../../components/demos/G3dRasterizer.tsx';
+
+## The hook: how does a triangle become a picture?
+
+You hand the GPU three points and a color for each. A sixteenth of a second later, millions of glowing
+pixels form a shaded, solid-looking surface — and if a nearer triangle overlaps this one, the nearer one
+wins, automatically. There is no magic here, only a **fixed conveyor belt of stages** that every frame
+runs the same way: transform each vertex, cut away what is off-screen, divide by depth, map to pixels,
+then ask, for every pixel, *"are you inside this triangle, and what color are you?"* That last question —
+rasterization — is where geometry finally turns into an image.
+
+<Callout type="intuition" title="The one-sentence idea">
+The pipeline marches vertices through a fixed sequence of transforms into screen space, then rasterization
+uses three **edge-function sign tests** per pixel both to decide coverage and to blend the vertex
+attributes with **barycentric weights**.
+</Callout>
+
+## Intuition: a conveyor belt from vertices to pixels
+
+Think of the pipeline as a factory line. Geometry enters as 3D vertices and leaves as colored pixels, and
+each station does exactly one job before passing work on:
+
+1. **Vertex processing** — multiply each vertex by the combined **MVP** matrix from
+   [3D Math](/lessons/dsa-3d-graphics/3d-math), landing it in *clip space* (a 4D homogeneous coordinate).
+2. **Clipping** — discard or cut triangles that fall outside the view frustum, which in clip space is the
+   simple box test $-w \le x,y,z \le w$.
+3. **Perspective divide** — divide $x, y, z$ by $w$. This single step is what makes far things small,
+   producing *normalized device coordinates* (NDC), a cube from $-1$ to $+1$.
+4. **Viewport transform** — map NDC to pixel coordinates (the $y$ axis flips, since NDC points up but
+   pixels count down).
+5. **Triangle assembly** — group every three vertices into a triangle (optionally culling back-faces).
+6. **Rasterization** — for each pixel the triangle might cover, test whether it is inside and, if so,
+   interpolate depth and color.
+7. **Depth test** — keep the fragment only if it is nearer than whatever the *z-buffer* already stored at
+   that pixel, solving occlusion for free.
+8. **Fragment shading & framebuffer** — compute the final color and write it to the image.
+
+The genius is the division of labor: vertex work is $O(V)$, rasterization is $O(\text{pixels})$, and the
+z-buffer lets triangles arrive in **any order** yet produce the same image.
+
+## Play with it
+
+Drag the three vertices and press Play. The demo sweeps a coarse pixel grid one scanline at a time; each
+cell's center is tested against the three edge functions, and cells that land inside get a barycentric
+blend of the indigo, sky, and emerald vertex colors.
+
+<G3dRasterizer client:visible />
+
+<Callout type="tip">
+Shrink the pixel size and the same triangle covers many more cells — that is exactly the resolution vs.
+cost trade-off a real rasterizer faces. Notice the smooth color gradient: those are barycentric weights,
+the *same* numbers that decide inside-vs-outside, reused to interpolate the attributes.
+</Callout>
+
+## How it works
+
+Rasterization rests on the **edge function**: for a directed edge from $A$ to $B$ and a query point $P$,
+
+$$
+E_{AB}(P) = (B_x - A_x)(P_y - A_y) - (B_y - A_y)(P_x - A_x).
+$$
+
+This is the 2D cross product of $B-A$ and $P-A$. Its **sign** says which side of line $AB$ the point sits
+on; its **magnitude** is twice the area of triangle $ABP$. A point is inside triangle $(V_0, V_1, V_2)$
+exactly when all three edge functions share the triangle's winding sign. Dividing each by the whole
+triangle's signed area gives the barycentric weights $\alpha, \beta, \gamma$, which sum to 1 and act as
+the interpolation coefficients for every attribute.
+
+Let us dry-run one pixel. Take the triangle $V_0=(1,1)$, $V_1=(6,2)$, $V_2=(2,6)$ and test $P=(3,3)$:
+
+```
+area2 = edge(V0,V1,V2) = (6-1)(6-1) - (2-1)(2-1) = 25 - 1 = 24
+
+E0 = edge(V1,V2,P) = (2-6)(3-2) - (6-2)(3-6) = -4 + 12 =  8   (opposite V0)
+E1 = edge(V2,V0,P) = (1-2)(3-6) - (1-6)(3-2) =  3 +  5 =  8   (opposite V1)
+E2 = edge(V0,V1,P) = (6-1)(3-1) - (2-1)(3-1) = 10 -  2 =  8   (opposite V2)
+
+all >= 0  =>  P is INSIDE
+alpha = 8/24 = 0.333   beta = 8/24 = 0.333   gamma = 8/24 = 0.333   (sum = 1)
+
+depth z(P)  = a*z0 + b*z1 + g*z2
+color(P)    = a*C0 + b*C1 + g*C2   (a neutral blend at the centroid)
+```
+
+<CodeRunner
+  client:visible
+  code={`// Edge function: 2D cross product of (B-A) and (P-A).
+function edge(ax, ay, bx, by, px, py) {
+  return (bx - ax) * (py - ay) - (by - ay) * (px - ax);
+}
+
+// Barycentric weights [alpha, beta, gamma] of P wrt triangle (a,b,c).
+function bary(ax, ay, bx, by, cx, cy, px, py) {
+  const area2 = edge(ax, ay, bx, by, cx, cy);       // 2 * signed area
+  const a = edge(bx, by, cx, cy, px, py) / area2;   // opposite A
+  const b = edge(cx, cy, ax, ay, px, py) / area2;   // opposite B
+  const g = edge(ax, ay, bx, by, px, py) / area2;   // opposite C
+  return [a, b, g];
+}
+
+// Inside iff all three weights are non-negative.
+function inside(ax, ay, bx, by, cx, cy, px, py) {
+  const [a, b, g] = bary(ax, ay, bx, by, cx, cy, px, py);
+  return a >= 0 && b >= 0 && g >= 0;
+}`}
+  tests={[
+    { expr: 'inside(1,1, 6,2, 2,6, 3,3)', label: 'P=(3,3) inside the triangle?' },
+    { expr: 'inside(1,1, 6,2, 2,6, 0,0)', label: 'P=(0,0) inside?' },
+    { expr: 'bary(1,1, 6,2, 2,6, 3,3).map(x => +x.toFixed(3)).join(",")', label: 'weights at (3,3)' },
+    { expr: 'bary(1,1, 6,2, 2,6, 1,1).join(",")', label: 'weights at vertex V0' },
+  ]}
+/>
+
+## The real implementation
+
+The course rasterizer scans the triangle's bounding box, samples each pixel center, and uses the exact
+edge/barycentric core above — then interpolates depth linearly and runs the z-buffer depth test:
+
+```ts
+// /dsa/33-3d-graphics/02-rendering-pipeline/rasterization.ts
+export function rasterizeTriangle(fb, v0, v1, v2, perspectiveCorrect, stats) {
+  // Bounding box, clamped to the framebuffer.
+  const minX = Math.max(0, Math.floor(Math.min(v0.x, v1.x, v2.x)));
+  const maxX = Math.min(fb.width - 1, Math.ceil(Math.max(v0.x, v1.x, v2.x)));
+  const minY = Math.max(0, Math.floor(Math.min(v0.y, v1.y, v2.y)));
+  const maxY = Math.min(fb.height - 1, Math.ceil(Math.max(v0.y, v1.y, v2.y)));
+
+  for (let y = minY; y <= maxY; y++) {
+    for (let x = minX; x <= maxX; x++) {
+      const b = barycentric(v0, v1, v2, x + 0.5, y + 0.5); // sample pixel CENTER
+      if (!b.inside) continue;
+
+      // z_ndc is affine in screen space => plain linear interpolation is exact.
+      const z = b.w0 * v0.z + b.w1 * v1.z + b.w2 * v2.z;
+
+      const color = perspectiveCorrect
+        ? lerpColorPerspective(b, v0, v1, v2)          // interpolate attr/w, 1/w, then divide
+        : lerpColorLinear(b, v0.color, v1.color, v2.color);
+
+      fb.writeFragment(x, y, z, color); // depth test: keep only if z is nearer
+    }
+  }
+}
+```
+
+Depth is interpolated linearly because post-divide $z_{ndc}$ is already affine in screen space. **Color
+and texture coordinates are not** — under perspective they must be interpolated *perspective-correctly*:
+blend $\text{attr}/w$ and $1/w$ linearly, then divide, or textures visibly "swim". Study and run it at
+`33-3d-graphics/02-rendering-pipeline/rasterization.ts`.
+
+## Complexity & math
+
+Let $V$ vertices, $T$ triangles, $P$ covered fragments, at resolution $W \times H$:
+
+| Stage | Cost | Notes |
+|-------|------|-------|
+| Vertex processing | $O(V)$ | one $4\times4$ matmul per vertex; embarrassingly parallel |
+| Clipping | $O(T)$ | a few cuts may add triangles |
+| Perspective divide + viewport | $O(V)$ | one divide + affine map per vertex |
+| Rasterization | $O(\sum \text{bbox})$ | $O(1)$ edge tests per pixel scanned |
+| Fragment shading | $O(P \cdot \text{shaderCost})$ | usually the dominant cost |
+| Depth test | $O(P)$ | one compare + conditional write |
+
+Overall $\approx O(V + T + P)$, with fragment shading dominating in real scenes. Space is $O(V+T)$ for
+geometry plus $O(W \cdot H)$ for the color buffer and another $O(W \cdot H)$ for the z-buffer — at
+1080p the depth buffer alone is roughly 8 MB, the price of order-independent occlusion.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Real-time games" icon="🎮">
+A game GPU rasterizes billions of triangles per second with fixed-function hardware doing exactly edge
+functions, perspective-correct barycentrics, and early depth testing. It mirrors
+[the rendering pipeline](/lessons/rendering/rendering-pipeline) in the Game Dev course, where the same
+stages appear in engine terms.
+</ExampleCard>
+
+<ExampleCard domain="Film / offline rendering" icon="🎬">
+Path tracers for film replace rasterization's per-pixel coverage test with ray-triangle intersection, but
+the **barycentric weights of the hit point** are reused verbatim to interpolate normals and UVs for
+shading — the same $\alpha, \beta, \gamma$, computed for a ray instead of a pixel grid.
+</ExampleCard>
+
+<ExampleCard domain="Medical imaging" icon="🩻">
+Volume and surface renderers for CT/MRI march the same pipeline: iso-surface triangles are projected and
+rasterized, and the z-buffer resolves which anatomical layer is visible from the chosen viewpoint —
+occlusion handled by the exact "nearest depth wins" rule.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Interpolating color linearly under perspective.** Screen-space linear interpolation is correct for
+  $z_{ndc}$ but *wrong* for colors and UVs on an angled triangle. Interpolate $\text{attr}/w$ and $1/w$,
+  then divide. Forgetting this makes textures warp.
+- **Testing pixel corners instead of centers.** Sampling at $(x+0.5, y+0.5)$ is the convention that makes
+  coverage consistent and gap-free between adjacent triangles.
+- **Assuming a fixed winding.** A point is inside when all edge functions share *the triangle's* sign;
+  normalize by the signed area so both clockwise and counter-clockwise triangles work.
+- **Depth test cannot blend transparency.** The z-buffer keeps only the nearest opaque surface, so
+  semi-transparent layers still need back-to-front sorting.
+- **Interview cue:** if asked "how does a GPU know a pixel is inside a triangle?", say *"three edge-function
+  sign tests, and the same numbers give barycentric weights for interpolation."*
+
+## Practice
+
+1. **Easy:** By hand, compute $\text{area2} = \text{edge}(V_0,V_1,V_2)$ for $V_0=(0,0)$, $V_1=(4,0)$,
+   $V_2=(0,4)$. What is the triangle's actual area?
+2. **Easy:** Using that triangle, is the point $(1,1)$ inside? Show the three edge-function signs.
+3. **Medium:** Compute the barycentric weights of $(1,1)$ in the same triangle and confirm they sum to 1.
+4. **Medium:** Given per-vertex depths $z_0=0.1$, $z_1=0.9$, $z_2=0.5$, interpolate the depth at $(1,1)$
+   using those weights.
+5. **Hard:** Two vertices have clip $w$ of $1$ and $4$. Explain why the screen-space midpoint of that edge
+   should be pulled toward the near ($w=1$) vertex, and write the perspective-correct blend for one
+   attribute.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the SIGN of an edge function tell you?',
+      options: [
+        'The depth of the pixel',
+        'Which side of the edge line the point lies on',
+        'The color of the triangle',
+        'Whether the triangle is back-facing',
+      ],
+      answer: 1,
+      explain: 'The edge function is a 2D cross product; its sign says which side of the line the point is on, and its magnitude is twice the area of the sub-triangle.',
+    },
+    {
+      q: 'Why is z (NDC depth) interpolated linearly across a triangle, but color is not?',
+      options: [
+        'Depth is stored at higher precision',
+        'Color has three channels',
+        'Post-divide z_ndc is affine in screen space, while attributes need perspective-correct (attr/w, 1/w) interpolation',
+        'The z-buffer rounds depth anyway',
+      ],
+      answer: 2,
+      explain: 'z_ndc is already affine in screen space so linear interpolation is exact; general attributes are linear only in attr/w and 1/w, so you interpolate those and divide.',
+    },
+    {
+      q: 'What problem does the z-buffer solve, and what is its cost?',
+      options: [
+        'Anti-aliasing, at the cost of extra samples',
+        'Visibility / occlusion, at the cost of a full-resolution depth buffer',
+        'Clipping, at the cost of extra triangles',
+        'Lighting, at the cost of shader time',
+      ],
+      answer: 1,
+      explain: 'It resolves which surface is visible per pixel (order-independently) by storing the nearest depth seen — costing an O(W*H) depth buffer alongside the color buffer.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The pipeline is a fixed conveyor: <strong>vertex → clip → perspective divide → viewport → rasterize → depth test → shade → framebuffer</strong>.',
+    'The <strong>edge function</strong> is a 2D cross product; three sign tests decide whether a pixel is <strong>inside</strong> a triangle.',
+    'Barycentric weights <code>alpha, beta, gamma</code> fall out of the same edge functions and <strong>interpolate every attribute</strong> (depth, color, UV).',
+    'The <strong>z-buffer</strong> solves occlusion order-independently by keeping the nearest depth per pixel — costing an O(W·H) buffer.',
+    'Depth interpolates linearly, but colors/UVs need <strong>perspective-correct interpolation</strong> (blend attr/w and 1/w, then divide).',
+  ]}
+/>
+
+Next up: **[Spatial Acceleration](/lessons/dsa-3d-graphics/spatial-acceleration)** — how BVHs and grids
+let you skip the triangles a ray or camera can never touch, so the pipeline only pays for what it can see.

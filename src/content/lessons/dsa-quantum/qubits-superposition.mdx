@@ -1,0 +1,259 @@
+---
+title: Qubits & Superposition
+track: dsa-quantum
+summary: "A qubit is not a 0 or a 1: it is a length-1 vector of amplitudes, and only measurement forces it to choose."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-compression/brotli
+leadsTo:
+  - dsa-quantum/quantum-gates
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import QbitSuperposition from '../../../components/demos/QbitSuperposition.tsx';
+
+## The hook: a coin still spinning in the air
+
+A classical bit is a coin lying flat on the table — heads or tails, 0 or 1, already decided. A **qubit**
+is the coin *while it is still spinning*: not secretly heads-or-tails, but genuinely a blend of both, and
+the blend itself carries information. Only when the coin lands — when you **measure** — does it snap to a
+single face. Everything strange and powerful about quantum computing starts here: a bit that holds a mix
+of 0 and 1, and a measurement that destroys the mix to give you one answer.
+
+<Callout type="intuition" title="The one-sentence idea">
+A qubit is a unit vector $\alpha|0\rangle + \beta|1\rangle$ whose two amplitudes encode "how much 0" and
+"how much 1"; measuring returns 0 with probability $|\alpha|^2$ and 1 with probability $|\beta|^2$, then
+collapses the qubit to that outcome forever.
+</Callout>
+
+## Intuition
+
+You already trust that data can be a **vector**: a Brotli context, an embedding, a colour. A qubit is just
+a vector too — a very small one. Write its two coordinates as amplitudes on the basis states $|0\rangle$
+and $|1\rangle$ (the "ket" $|\cdot\rangle$ is physicist notation for a column vector):
+
+$$
+|0\rangle = \begin{bmatrix} 1 \\ 0 \end{bmatrix}, \qquad
+|1\rangle = \begin{bmatrix} 0 \\ 1 \end{bmatrix}, \qquad
+|\psi\rangle = \alpha|0\rangle + \beta|1\rangle = \begin{bmatrix} \alpha \\ \beta \end{bmatrix}.
+$$
+
+Three ideas make it quantum rather than "just a probability":
+
+1. **Amplitudes, not probabilities.** $\alpha$ and $\beta$ are (complex) numbers that can be negative or
+   imaginary. You only square them to get a probability. Negative amplitudes are the secret ingredient —
+   they let possibilities *cancel*, which classical probabilities can never do.
+2. **Normalisation.** Probabilities must sum to one, so $|\alpha|^2 + |\beta|^2 = 1$. Every legal qubit is a
+   point on the unit circle (in the complex case, the surface of a sphere).
+3. **Measurement is destructive.** Reading the qubit yields a single bit and *replaces* the superposition
+   with that definite state. You cannot peek at $\alpha$ and $\beta$ directly — one measurement, one bit.
+
+The equal blend $\tfrac{1}{\sqrt2}|0\rangle + \tfrac{1}{\sqrt2}|1\rangle$ is the spinning coin: each
+amplitude is $\tfrac{1}{\sqrt2} \approx 0.707$, and $0.707^2 = 0.5$, a fair 50/50.
+
+## Play with it
+
+Start from $|0\rangle$ and add gates. The **H** (Hadamard) button spreads the amplitude into an equal
+superposition; press it a second time and watch the two halves *interfere back* to a certain $|0\rangle$.
+Toggle "measure at end" to collapse the bars to a single outcome.
+
+<QbitSuperposition client:visible />
+
+<Callout type="tip">
+Add H then H with "measure" off. After the first H you have a 50/50 blend; after the second, you are back
+at 100% $|0\rangle$. Two coin-flips did not give you random noise — the amplitudes cancelled. That
+cancellation is impossible with ordinary probabilities and is the whole reason quantum algorithms work.
+</Callout>
+
+## How it works
+
+Fold a single Hadamard onto $|0\rangle$ by hand. Hadamard sends $|0\rangle \mapsto
+\tfrac{1}{\sqrt2}(|0\rangle + |1\rangle)$, so the amplitude vector becomes:
+
+```
+|0>            = [ 1     , 0     ]   -> measure 0 with p = 1
+H|0>           = [ 0.707 , 0.707 ]   -> 50% |0>, 50% |1>   (superposition)
+H(H|0>)        = [ 1     , 0     ]   -> back to |0>          (interference)
+```
+
+The second H recombines the halves: the $|0\rangle$ paths add ($0.707 \cdot 0.707$ twice) while the
+$|1\rangle$ paths *cancel* ($+0.707 \cdot 0.707$ against $-0.707 \cdot 0.707$). Squaring amplitudes only at
+the very end is what separates a qubit from a random coin.
+
+<CodeRunner
+  client:visible
+  code={`// A qubit as a 2-vector of real amplitudes [a0, a1].
+const SQRT2 = Math.sqrt(2);
+function hadamard([a0, a1]) {
+  return [(a0 + a1) / SQRT2, (a0 - a1) / SQRT2];
+}
+function probs([a0, a1]) {
+  return { p0: a0 * a0, p1: a1 * a1 };
+}
+
+const zero = [1, 0];
+const sup = hadamard(zero);        // equal superposition
+const back = hadamard(sup);        // H applied twice = identity`}
+  tests={[
+    { expr: 'sup.map(x => +x.toFixed(3))', label: 'H|0> amplitudes' },
+    { expr: 'probs(sup)', label: 'measurement probabilities' },
+    { expr: 'back.map(x => +x.toFixed(3))', label: 'H(H|0>) — interference' },
+  ]}
+/>
+
+## The real implementation
+
+The course file stores $n$ qubits as a $2^n$-dimensional vector of complex amplitudes and measures by
+sampling from the squared magnitudes — exactly the rules above.
+
+```ts
+// /dsa/31-quantum-algorithms/quantum-basics.ts
+export class QuantumState {
+  private amplitudes: Complex[];          // length 2^numQubits
+  private numQubits: number;
+
+  constructor(numQubits: number) {
+    this.numQubits = numQubits;
+    const size = 1 << numQubits;          // 2^n basis states
+    this.amplitudes = new Array(size);
+    for (let i = 0; i < size; i++)        // initialise to |0...0>
+      this.amplitudes[i] = new Complex(i === 0 ? 1 : 0, 0);
+  }
+
+  getProbability(state: number): number {
+    return this.amplitudes[state].magnitude() ** 2;   // |amplitude|^2
+  }
+
+  measure(): number {                     // collapse to one basis state
+    const random = Math.random();
+    let cumulative = 0;
+    for (let i = 0; i < this.amplitudes.length; i++) {
+      cumulative += this.getProbability(i);
+      if (random < cumulative) {
+        this.amplitudes.fill(new Complex(0, 0));
+        this.amplitudes[i] = new Complex(1, 0);   // definite afterwards
+        return i;
+      }
+    }
+    return this.amplitudes.length - 1;
+  }
+}
+```
+
+Run the full file: `npx tsx 31-quantum-algorithms/quantum-basics.ts`.
+
+## Complexity
+
+Simulating a quantum state on a classical machine is where the pain lives. Because $n$ qubits span
+$2^n$ basis states, the amplitude vector — and the cost of every gate — grows exponentially:
+
+$$
+\text{memory} = O(2^n), \qquad \text{cost of one gate} = O(2^n).
+$$
+
+| Qubits $n$ | Classical amplitudes to store | Feels like |
+|-----------|-------------------------------|-----------|
+| 10 | $1{,}024$ | trivial |
+| 30 | $\sim 10^9$ | a few GB |
+| 50 | $\sim 10^{15}$ | a supercomputer |
+| 300 | $2^{300}$ | more states than atoms in the universe |
+
+A real quantum computer holds those $2^n$ amplitudes "for free" in physical qubits — that exponential
+capacity is the resource the next lessons learn to exploit.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Music" icon="🎵">
+Pluck a guitar string and it vibrates as a sum of harmonics at once — a superposition of pure tones. Touch
+it at the twelfth fret and you "measure" it onto a single harmonic; the others vanish. A qubit is that
+chord of possibilities collapsing to one note when you listen.
+</ExampleCard>
+
+<ExampleCard domain="Polling & surveys" icon="🗳️">
+Before you open the ballot box, the result is a *distribution* over outcomes — but each squared amplitude
+here behaves like a probability that can also cancel. Opening the box is the measurement: one definite
+tally, and the "what it might have been" is gone.
+</ExampleCard>
+
+<ExampleCard domain="Photography" icon="📷">
+Light passing two slits arrives as overlapping waves whose crests and troughs add and cancel, painting
+interference fringes on the film. Each photon is in a superposition of "through slit A" and "through slit
+B"; the negative amplitudes are literally the dark bands.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **A superposition is not "we just don't know yet."** It is not a hidden 0-or-1. The interference in the
+  H-then-H demo proves the qubit really was *both* — a secret fixed value could never cancel.
+- **You never read $\alpha$ and $\beta$.** One measurement gives one classical bit and destroys the state.
+  To estimate the amplitudes you must prepare and measure many identical copies.
+- **Amplitudes can be negative (or complex); probabilities cannot.** Forgetting the sign is the classic
+  error — the sign is exactly what makes quantum algorithms beat classical ones.
+- **Global phase is invisible.** $|\psi\rangle$ and $-|\psi\rangle$ measure identically; only *relative*
+  phase between $|0\rangle$ and $|1\rangle$ matters. Interviewers love this distinction.
+
+## Practice
+
+1. **Easy:** Write $\tfrac{1}{\sqrt2}(|0\rangle + |1\rangle)$ as an amplitude vector and confirm it is
+   normalised.
+2. **Easy:** A qubit is $\tfrac{3}{5}|0\rangle + \tfrac{4}{5}|1\rangle$. What are the probabilities of
+   measuring 0 and 1?
+3. **Medium:** Apply X (which swaps the two amplitudes) to $\tfrac{1}{\sqrt2}(|0\rangle + |1\rangle)$. Did
+   anything observable change? Why or why not?
+4. **Medium:** Show that $-|1\rangle$ and $|1\rangle$ give identical measurement statistics, but that
+   $\tfrac{1}{\sqrt2}(|0\rangle - |1\rangle)$ and $\tfrac{1}{\sqrt2}(|0\rangle + |1\rangle)$ do not once you
+   apply H to each.
+5. **Hard:** Two qubits give four basis states $|00\rangle, |01\rangle, |10\rangle, |11\rangle$. How many
+   real numbers describe $n$ qubits, and why does that doom classical simulation?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A qubit is in the state (1/√2)|0⟩ + (1/√2)|1⟩. What is the probability of measuring 1?',
+      options: ['0.707', '0.5', '1', '0'],
+      answer: 1,
+      explain: 'Probability is the amplitude squared: (1/√2)² = 1/2 = 0.5. The amplitude 0.707 is not itself a probability.',
+    },
+    {
+      q: 'Why is a qubit in superposition fundamentally different from a coin whose value we simply have not looked at?',
+      options: [
+        'It is stored in more bits',
+        'Its amplitudes can be negative and interfere, cancelling possibilities — a hidden fixed value cannot',
+        'It is always exactly 50/50',
+        'Measurement never changes it',
+      ],
+      answer: 1,
+      explain: 'Applying H twice returns |0⟩ with certainty because the |1⟩ paths cancel. Cancellation is impossible for a secretly-fixed classical value.',
+    },
+    {
+      q: 'What happens to a qubit the instant you measure it?',
+      options: [
+        'You read both amplitudes α and β directly',
+        'It collapses to a single basis state and the superposition is gone',
+        'Nothing — measurement is passive',
+        'It doubles the number of amplitudes',
+      ],
+      answer: 1,
+      explain: 'Measurement returns one classical bit and replaces the state with that definite outcome; the previous superposition is destroyed.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A qubit is a unit vector <strong>α|0⟩ + β|1⟩</strong> of amplitudes, not a hidden 0-or-1.',
+    'Measurement returns 0 with probability <strong>|α|²</strong> and 1 with <strong>|β|²</strong>, then <strong>collapses</strong> the state.',
+    'Amplitudes can be <strong>negative or complex</strong>; squaring them (only at the end) gives probabilities that can <strong>interfere and cancel</strong>.',
+    'Legal states are <strong>normalised</strong>: |α|² + |β|² = 1, so a qubit lives on the unit circle/sphere.',
+    'Classically simulating n qubits needs <strong>2ⁿ amplitudes</strong> — the exponential resource real hardware supplies for free.',
+  ]}
+/>
+
+Next up: **Quantum Gates & Circuits** — the reversible operations that rotate these amplitude vectors, and
+how CNOT wires two qubits together into an inseparable, entangled whole.

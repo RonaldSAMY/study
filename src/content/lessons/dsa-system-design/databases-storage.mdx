@@ -1,0 +1,253 @@
+---
+title: Databases & Storage
+track: dsa-system-design
+summary: "Outgrowing one machine: shard data across nodes, replicate each shard for durability and read scale, and pick the index and store that fit the workload."
+difficulty: intermediate
+estMinutes: 20
+prereqs:
+  - dsa-system-design/caching-load-balancing
+leadsTo:
+  - dsa-system-design/distributed-systems
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SysShardedReplication from '../../../components/demos/SysShardedReplication.tsx';
+
+## The hook: when one database is no longer enough
+
+You cached everything you could (last lesson), yet writes and data keep climbing. A single PostgreSQL box
+tops out around 10,000 transactions per second and holds only as much data as one machine's disks. When
+your working set outgrows that ceiling, you have two independent moves. **Sharding** splits the data across
+many machines so each holds a slice — more total capacity and write throughput. **Replication** copies each
+slice onto several machines so a failure loses nothing and reads can spread out. Instagram runs 12,000
+shards on PostgreSQL; every large system you use is some blend of these two ideas.
+
+<Callout type="intuition" title="The one-sentence idea">
+Sharding partitions data across nodes to scale *writes and size*; replication copies each partition across
+nodes to scale *reads and survive failures* — and the shard key and index you pick decide whether it all
+holds up.
+</Callout>
+
+## Intuition: split it, then copy it
+
+**Sharding** answers "which machine holds this row?" The strategies mirror ideas you already know:
+
+- **Range-based** — user IDs 1–1000 on shard 1, 1001–2000 on shard 2. Great for range scans, but prone to
+  **hotspots** if activity clusters (all new users hit the newest shard).
+- **Hash-based** — `shard = hash(key) % n`. Even spread, no hotspots, but range queries must scatter-gather
+  across every shard.
+- **Consistent hashing** — the ring from last lesson, so adding a shard moves only ~1/n of the data instead
+  of reshuffling everything.
+
+The make-or-break decision is the **shard key**. A bad one creates the **celebrity problem**: a single
+mega-popular user lands all their traffic on one shard while others idle. And any query that needs data
+from many shards becomes a **scatter-gather** — hit them all, merge the results — which is far costlier than
+a single lookup.
+
+**Replication** answers "how do we not lose it, and how do we serve more reads?" The common shape is
+**single-leader**: one **primary** takes writes, several **followers** copy them. Replication can be
+**synchronous** (the write waits for followers to acknowledge — safe, slower) or **asynchronous** (the
+primary returns immediately, followers catch up — fast, but with **replication lag** that makes follower
+reads briefly stale). Push all writes to the primary and fan reads across followers and you scale reads for
+free — as long as your workload is read-heavy (a 10:1 read:write ratio is the rule of thumb).
+
+Finally, **indexes** decide how fast a query finds its rows. A **B-tree** (Postgres, MySQL default) keeps
+data sorted for $O(\log n)$ lookups and range scans — you will study it in
+[B-Trees](/lessons/dsa-advanced-trees/b-tree). An **LSM-tree** (Cassandra, RocksDB) batches writes in memory
+and flushes sorted files, trading some read cost for enormous write throughput — the subject of
+[LSM Trees](/lessons/dsa-modern-structures/lsm-tree). Read-heavy? B-tree. Write-heavy? LSM-tree.
+
+## Play with it
+
+Type a key and route a write. Watch it hash to a shard, land on that shard's **primary**, then replicate to
+the followers. Flip **sync replication** to change *when* the client's write is acknowledged.
+
+<SysShardedReplication client:visible />
+
+<Callout type="tip">
+Step to the moment the primary has the value but a follower does not yet — that gap is **replication lag**.
+In async mode a read routed to that follower returns *stale* data. This is exactly why "read your own
+writes" often forces reads back to the primary: the follower has not caught up.
+</Callout>
+
+## How it works: the shard key decides everything
+
+Routing a key to a shard is just a hash and a modulo — but choosing *what* to hash (the shard key) is the
+real design work. Here is the routing, plus a demonstration of the celebrity hotspot:
+
+<CodeRunner
+  client:visible
+  code={`function hash(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return h >>> 0; }
+
+// Hash-based sharding: which shard holds this key?
+function getShard(key, numShards) { return hash(key) % numShards; }
+
+// Simulate load with a "celebrity" who gets 50% of all traffic.
+function shardLoad(numShards) {
+  const load = new Array(numShards).fill(0);
+  for (let i = 0; i < 5000; i++) load[getShard('user:' + i, numShards)]++;      // normal users
+  for (let i = 0; i < 5000; i++) load[getShard('user:celebrity', numShards)]++; // one hot key
+  return load;
+}`}
+  tests={[
+    { expr: 'getShard("user:42", 4)', label: 'shard for user:42 across 4' },
+    { expr: 'getShard("user:42", 5)', label: 'shard for user:42 across 5 (moved!)' },
+    { expr: 'JSON.stringify(shardLoad(4))', label: 'per-shard load with one celebrity' },
+  ]}
+/>
+
+Two lessons fall out. First, changing the shard count (`% 4` → `% 5`) moves the key — the modulo
+resharding problem consistent hashing avoids. Second, the celebrity's 5,000 hits all pile onto one shard:
+the load array is badly lopsided. Fixing it means a better key, splitting the hot shard, or caching that
+one user.
+
+## The real implementation
+
+The course's routing and single-leader write path, condensed:
+
+```ts
+// /dsa/system-design/02-databases/sharding.ts
+getShard(key: string): ShardConfig {
+  const hash = this.hash(key);
+  const index = hash % this.shards.length;
+  return this.shards[index];
+}
+
+// /dsa/system-design/02-databases/replication.ts — all writes go through the leader
+async write(key: string, value: unknown): Promise<WriteResult> {
+  const op = { key, value, timestamp: Date.now(), version: ++this.logPosition, nodeId: this.leader.id };
+  this.leader.applyOperation(op);
+  this.writeLog.push(op);
+  if (this.syncMode === 'sync')            await this.replicateToAllSync(op);   // wait for followers
+  else if (this.syncMode === 'semi-sync')  await this.replicateToMinSync(op);   // wait for some
+  else                                     this.replicateAsync(op);            // fire and forget
+  return { success: true, version: op.version, timestamp: op.timestamp };
+}
+```
+
+Study them at `/dsa/system-design/02-databases/` — `sharding.ts`, `replication.ts`, `indexing.ts` (B-tree
+range scans), and `database-scaling.ts` (read replicas, connection pooling, CQRS). Object storage for large
+blobs lives at `/dsa/system-design/05-storage/blob-storage.ts`.
+
+## Numbers that decide the design
+
+Single-node ceilings you should recall, and the consistency the topology buys:
+
+$$
+\text{quorum consistency:} \quad W + R > N \quad\Rightarrow\quad \text{a read always overlaps the latest write.}
+$$
+
+| Store / topology | Rough ceiling | Consistency | Best for |
+|------------------|---------------|-------------|----------|
+| Single PostgreSQL | ~10,000 TPS | strong (ACID) | complex queries, transactions |
+| Single Redis | ~100,000 ops/s | tunable | cache, sessions, counters |
+| Cassandra node | ~10,000 writes/s | eventual (BASE) | write-heavy, time-series |
+| Object storage (S3) | ~unlimited, \$0.02/GB | read-after-write | media, backups, data lakes |
+| Sync replication | lower throughput | strong | can't lose a write |
+| Async replication | higher throughput | eventual (lag) | read scaling |
+
+The general path to scale: start on one relational database, add **read replicas** and a cache when reads
+bottleneck (expecting ~10:1 reads), add **connection pooling**, and only **shard** when a single node truly
+cannot hold the data or absorb the writes — because sharding taxes every cross-shard query forever after.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Instant messaging" icon="💬">
+A chat app shards messages by conversation ID, so an entire thread lives on one shard and loads with a
+single query — no scatter-gather. Messages replicate asynchronously to a follower in another zone, so a
+datacenter loss costs at most a few milliseconds of the newest messages.
+</ExampleCard>
+
+<ExampleCard domain="E-commerce catalog" icon="🛍️">
+Orders go in a relational database (ACID: you cannot half-charge a card), while the flexible product catalog
+lives in a document store and sessions in Redis — **polyglot persistence**, one store per job. The catalog
+is read-replicated heavily because browsing dwarfs buying.
+</ExampleCard>
+
+<ExampleCard domain="IoT / sensors" icon="🌡️">
+Millions of sensors firing readings every few seconds is a brutally write-heavy workload, so the data lands
+in a wide-column, LSM-tree store (Cassandra) that turns writes into fast sequential flushes. Sharding by
+device ID spreads the firehose across nodes.
+</ExampleCard>
+
+<ExampleCard domain="Video platform" icon="🎬">
+Video *files* never go in the database — they live in object storage, and the database holds only the URL,
+title, and metadata. A 4K master is hundreds of megabytes; storing pointers keeps the database small and
+lets a CDN serve the bytes.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **A skewed shard key.** Sharding by something lopsided (country, or a celebrity user) recreates the
+  single-machine bottleneck on one shard. Pick a high-cardinality, evenly-distributed key.
+- **Ignoring cross-shard queries.** Joins and aggregates across shards become scatter-gather; design so the
+  common queries stay within one shard.
+- **Reading your own writes off a lagging replica.** Async replication means a follower can be stale; route
+  read-after-write to the primary, or track the write version.
+- **Modulo resharding.** `hash % n` reshuffles nearly everything when n changes. Use consistent hashing if
+  the shard count will grow.
+- **Storing big blobs in the database.** Files bloat backups and slow everything. Put them in object storage
+  and keep a URL in the row.
+- **Interview cue:** separate the axes out loud — "sharding scales writes and storage; replication scales
+  reads and gives durability" — then justify sync vs async with the consistency requirement.
+
+## Practice
+
+1. **Easy:** With `shard = hash(key) % 4`, if `hash("cart:9") = 4611686018`, which shard holds it?
+2. **Easy:** Which topology lets you serve more *reads* without touching write capacity, and why?
+3. **Medium:** A quorum system has N = 5 replicas with W = 3. What is the smallest R that guarantees a read
+   sees the latest write?
+4. **Medium:** Explain why range-based sharding by signup date creates a hotspot, and one fix.
+5. **Hard:** Design storage for a photo-sharing app: where do the image bytes go, where does metadata go,
+   how do you shard it, and which replication mode do you choose for the feed? Justify each with a number.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What problem does sharding primarily solve that replication does not?',
+      options: [
+        'Surviving a node failure',
+        'Scaling writes and total data size beyond one machine',
+        'Serving more reads from copies',
+        'Reducing replication lag',
+      ],
+      answer: 1,
+      explain: 'Sharding partitions data so writes and storage scale past a single node. Replication copies data for read scaling and durability, but every replica still holds the whole (unsharded) dataset.',
+    },
+    {
+      q: 'In a quorum system with N = 5 replicas and W = 3, which read quorum R guarantees you always read the latest write?',
+      options: ['R = 1', 'R = 2', 'R = 3', 'R = 5 only'],
+      answer: 2,
+      explain: 'You need W + R > N, i.e. 3 + R > 5, so R ≥ 3 guarantees the read set overlaps the write set.',
+    },
+    {
+      q: 'A workload is extremely write-heavy (millions of sensor writes per second). Which index/store fits best?',
+      options: [
+        'A single B-tree on PostgreSQL',
+        'An LSM-tree store like Cassandra',
+        'A graph database',
+        'Object storage only',
+      ],
+      answer: 1,
+      explain: 'LSM-trees batch writes in memory and flush sorted files sequentially, giving huge write throughput — ideal for write-heavy, time-series data.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>Sharding</strong> partitions data across nodes to scale writes and size; <strong>replication</strong> copies each partition for read scaling and durability — two independent axes.',
+    'The <strong>shard key</strong> makes or breaks it: a skewed key (the <strong>celebrity problem</strong>) recreates a single-machine bottleneck, and cross-shard queries become scatter-gather.',
+    'Single-leader replication is <strong>sync</strong> (safe, slower) or <strong>async</strong> (fast, with <strong>replication lag</strong> and stale follower reads); quorum needs <code>W + R > N</code>.',
+    'Match the index to the workload: <strong>B-tree</strong> for read-heavy and range scans, <strong>LSM-tree</strong> for write-heavy — and use <strong>ACID</strong> vs <strong>BASE</strong> stores per job (polyglot persistence).',
+    'Keep large blobs in <strong>object storage</strong> and only a URL in the database; shard only when one node truly cannot cope.',
+  ]}
+/>
+
+Next up: **Distributed Systems** — what happens when the network between these nodes *breaks*, and the CAP
+theorem forces you to choose between consistency and availability.

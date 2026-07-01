@@ -1,0 +1,256 @@
+---
+title: The YOLO Family
+track: dsa-computer-vision
+summary: "You only look once: a single network splits the image into a grid and regresses every box in one pass — the real-time dynasty from v1 to v12."
+difficulty: advanced
+estMinutes: 19
+prereqs:
+  - dsa-computer-vision/rcnn-detectors
+leadsTo:
+  - dsa-computer-vision/segmentation-pose
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import CvYoloGrid from '../../../components/demos/CvYoloGrid.tsx';
+
+## The hook: detection at 45 frames per second
+
+Two-stage detectors propose, pool, and classify — accurate, but far too slow for a drone dodging
+branches or a car reading a crossing. In 2015 YOLO ("You Only Look Once") reframed the whole problem:
+what if a **single** convolutional network looks at the entire image *once* and directly regresses every
+box and class in one forward pass? No proposals, no per-region classifier — just pixels in, a fixed-size
+grid of predictions out. That reframing runs at video frame rates and seeded every real-time detector
+since, all the way to today's v12.
+
+<Callout type="intuition" title="The one-sentence idea">
+YOLO divides the image into an S×S grid and makes the single cell containing an object's center
+responsible for predicting that object's box and class — turning detection into one fixed-size
+regression the network solves in a single pass.
+</Callout>
+
+## Intuition
+
+A CNN needs a fixed-size output, but images contain a variable number of objects. YOLO's answer is a
+**grid**: split the image into S×S cells and emit exactly $S^2 \cdot (B \cdot 5 + C)$ numbers regardless
+of how many objects there are. Each cell predicts B boxes — each with a center (x, y) *relative to the
+cell*, a size (w, h) *relative to the whole image*, and a **confidence** — plus one class-probability
+vector.
+
+The elegant rule that makes the targets unambiguous: the cell that contains an object's **center** is
+the one "responsible" for it. That single-owner assignment forces spatial diversity and gives every
+object exactly one training target. Confidence is defined as $\Pr(\text{object}) \cdot \text{IoU}$ — a
+single scalar that is high only when something is there *and* the box is drawn well. Later versions swap
+grid-from-scratch boxes for **anchors** (v2), fuse scales like FPN (v3), add better necks and training
+tricks (v4–v7), go **anchor-free** (v8+), and even drop [NMS](/lesson/dsa-computer-vision/cv-foundations)
+entirely (v10) — but the grid idea never leaves.
+
+## Play with it
+
+Drag the object and step the scan. Each cell is checked; the one under the object's center dot lights up
+as **responsible** and decodes its (x, y, w, h) back to a pixel box.
+
+<CvYoloGrid client:visible />
+
+<Callout type="tip">
+Shrink the grid to 3×3 and drag two thoughts to mind: a coarse grid gives large localization error, and
+if two objects share a cell, only one can be predicted. Those exact failures — poor localization and
+missed crowds — are what YOLOv2's anchors and finer, multi-scale grids were invented to fix.
+</Callout>
+
+## How it works
+
+A 448×448 image with S=7 gives 64-pixel cells. An object's center falls in cell (col 2, row 2), and the
+responsible cell predicts x=0.5, y=0.5, w=0.40, h=0.30:
+
+```
+px_center = (col + x)/S * W = (2 + 0.5)/7 * 448 = 160.0
+py_center = (row + y)/S * H = (2 + 0.5)/7 * 448 = 160.0
+px_w = w * W = 0.40 * 448 = 179.2
+px_h = h * H = 0.30 * 448 = 134.4
+```
+
+Decode a cell's prediction and compute its confidence:
+
+<CodeRunner
+  client:visible
+  code={`// decode one YOLO cell's (x,y,w,h) into a pixel-space box
+function decodeCell(col, row, x, y, w, h, S, W, H) {
+  const cx = (col + x) / S * W;
+  const cy = (row + y) / S * H;
+  const pw = w * W, ph = h * H;
+  return [cx - pw/2, cy - ph/2, cx + pw/2, cy + ph/2]; // [x1,y1,x2,y2]
+}
+
+// confidence target = Pr(object) * IoU(pred, truth)
+const confidence = (prObj, iou) => prObj * iou;
+
+// final class-specific score = class prob * box confidence
+const classScore = (pClass, conf) => pClass * conf;
+
+const box = decodeCell(2, 2, 0.5, 0.5, 0.40, 0.30, 7, 448, 448);`}
+  tests={[
+    { expr: 'box.map(v => +v.toFixed(1))', label: 'decoded [x1,y1,x2,y2]' },
+    { expr: 'confidence(1.0, 0.85).toFixed(3)', label: 'confidence, Pr=1, IoU=0.85' },
+    { expr: 'classScore(0.9, 0.85).toFixed(3)', label: 'class-specific score' },
+  ]}
+/>
+
+## The real implementation
+
+YOLOv1 is trained with one sum-squared-error loss in five parts. Two design choices carry most of the
+insight — the square root on sizes, and the two balancing weights:
+
+```
+// /dsa/32-computer-vision/04-yolo-family/yolo-v1.ts  (loss, schematic)
+L =  lambda_coord * Σ 1_obj_ij [ (x - x̂)^2 + (y - ŷ)^2 ]            // center
+  +  lambda_coord * Σ 1_obj_ij [ (√w - √ŵ)^2 + (√h - √ĥ)^2 ]        // size (note √)
+  +               Σ 1_obj_ij (C - Ĉ)^2                              // object confidence
+  +  lambda_noobj * Σ 1_noobj_ij (C - 0)^2                          // no-object confidence
+  +               Σ 1_obj_i Σ_c (p(c) - p̂(c))^2                     // class (cells with an object)
+// paper: lambda_coord = 5, lambda_noobj = 0.5
+```
+
+The square root compresses large widths so the *same* absolute error costs more on a small box than a
+large one — because `d(√w)/dw = 1/(2√w)` is larger for small w. The weights rebalance a loss where
+background boxes outnumber foreground by roughly fifty to one. Later versions summarize their trade-offs
+with an efficiency score over the accuracy–speed plane:
+
+```ts
+// /dsa/32-computer-vision/04-yolo-family/yolo-evolution.ts
+eff(model) = (mAP / mAP_max) * (fps / fps_max);   // in (0,1], higher is a better joint point
+```
+
+Study the derivation — the responsible-cell assignment, the full five-term loss, and the v1→v12 recap —
+at `/dsa/32-computer-vision/04-yolo-family/yolo-v1.ts` and `.../yolo-evolution.ts`.
+
+## Formulas and the family
+
+The network output is a fixed-size tensor, and each box decodes to pixels via the cell offset:
+
+$$
+\text{output} \in \mathbb{R}^{\,S \times S \times (B \cdot 5 + C)}, \qquad
+p_{x} = \frac{\text{col} + x}{S}\,W, \quad p_{y} = \frac{\text{row} + y}{S}\,H.
+$$
+
+The confidence target fuses presence and localization into one number:
+
+$$
+\hat{C} = \Pr(\text{object}) \cdot \text{IoU}(\text{pred}, \text{truth}).
+$$
+
+One-stage detectors close the accuracy gap to two-stage with **focal loss**, which down-weights the
+flood of easy background examples:
+
+$$
+\text{FL}(p_t) = -\alpha_t\,(1 - p_t)^{\gamma}\,\log(p_t), \qquad \gamma = 2,\ \alpha = 0.25.
+$$
+
+| Detector | Year | Anchor-free? | NMS-free? | COCO mAP |
+|----------|------|--------------|-----------|----------|
+| YOLOv1 | 2015 | yes (grid) | no | ~21 (VOC) |
+| YOLOv3 | 2018 | no | no | ~33 |
+| YOLOv5-L | 2020 | no | no | ~49 |
+| YOLOv8-X | 2023 | **yes** | no | ~54 |
+| YOLOv10-X | 2024 | yes | **yes** | ~54 |
+| YOLOv12-X | 2025 | yes | no | ~55+ |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Autonomous driving" icon="🚦">
+A perception stack runs a YOLO-style head per frame to place vehicles, pedestrians, and signs in real
+time, feeding a tracker. The whole point is latency: a car cannot wait 200 ms of proposal-then-classify
+per frame.
+</ExampleCard>
+
+<ExampleCard domain="Precision agriculture" icon="🌾">
+A crop-scouting drone counts weeds and diseased plants on-device. Quantized YOLO variants (like YOLO-NAS)
+run on the drone's small chip, so the grid detector must be both fast and INT8-friendly.
+</ExampleCard>
+
+<ExampleCard domain="Retail checkout" icon="🏪">
+A cashierless store detects and tracks every item a shopper picks up, live. YOLOv8 counting pipelines
+are the de-facto standard because a single fast pass keeps the tally in sync with the shopper's hands.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="⚽">
+Broadcast systems detect ball and players every frame to draw offside lines and heatmaps. Real-time
+one-stage detection is what lets the overlay update without visibly lagging the play.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **One cell, one owner.** In v1 each cell predicts a single class and one responsible box, so tightly
+  packed objects (a flock of birds) collapse into one detection. Finer grids and anchors mitigate this.
+- **Confidence is not class probability.** Confidence is $\Pr(\text{object}) \cdot \text{IoU}$; the final
+  score is that times the class probability. Confusing the two wrecks your NMS ranking.
+- **Anchor-free is not NMS-free.** YOLOv8 dropped anchors but still needs NMS; only YOLOv10's dual
+  label assignment removes NMS as well. Interviewers love this distinction.
+- **Interview cue:** explain the square-root-on-size trick — "the same pixel error hurts a small box more
+  than a large one, and $\sqrt{\cdot}$ encodes that" — it shows you read the original loss.
+
+## Practice
+
+1. **Easy:** With S=7 on a 448×448 image, how many pixels wide is one cell?
+2. **Easy:** A cell predicts x=0.0, y=1.0. Where in the cell is the box center?
+3. **Medium:** Decode a box for cell (col 4, row 1), x=0.25, y=0.75, w=0.2, h=0.1, on a 416×416 image
+   with S=13.
+4. **Medium:** Explain why $\lambda_{\text{noobj}} = 0.5$ and $\lambda_{\text{coord}} = 5$ are both needed
+   given the background-to-foreground imbalance.
+5. **Hard:** Using the efficiency score, rank three models: (mAP 33, 45 fps), (mAP 50, 110 fps),
+   (mAP 46, 200 fps). Which wins, and why is that a crude proxy for Pareto dominance?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Which grid cell is "responsible" for predicting an object in YOLO?',
+      options: [
+        'The cell with the highest pixel value',
+        'The cell that contains the object’s center',
+        'Every cell the object touches',
+        'The top-left cell',
+      ],
+      answer: 1,
+      explain: 'The single cell containing the object center owns the prediction, giving each object exactly one unambiguous target.',
+    },
+    {
+      q: 'YOLO defines box confidence as...',
+      options: [
+        'the class probability',
+        'Pr(object) times IoU with the ground truth',
+        'the softmax over classes',
+        'the anchor scale',
+      ],
+      answer: 1,
+      explain: 'Confidence fuses "is something here" (Pr object) with "is the box good" (IoU) into one scalar.',
+    },
+    {
+      q: 'Why does the YOLOv1 loss take the square root of width and height?',
+      options: [
+        'To keep sizes positive',
+        'So the same absolute error is penalized more on small boxes than large ones',
+        'To make the network anchor-free',
+        'To remove the need for NMS',
+      ],
+      answer: 1,
+      explain: 'sqrt compresses large sizes, so a fixed pixel error costs more on a small object — its gradient 1/(2*sqrt(w)) is larger for small w.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'YOLO reframes detection as <strong>one regression over an S×S grid</strong>, producing a fixed-size tensor in a single pass.',
+    'The cell holding an object’s <strong>center is responsible</strong> for it — one clean target per object.',
+    'Confidence is <strong>Pr(object) × IoU</strong>; multiply by class probability for the final score.',
+    'The v1 loss uses <strong>√w, √h</strong> to weight small boxes and λ weights to fight background imbalance.',
+    'The family evolved to <strong>anchors → multi-scale → anchor-free → NMS-free</strong>, trading a little accuracy for a lot of speed.',
+  ]}
+/>
+
+Boxes tell you *where* and *what*, but not *which pixels* or *which pose*. Next: **Segmentation & Pose**
+— per-object masks and keypoints that turn a box into an outline and a skeleton.

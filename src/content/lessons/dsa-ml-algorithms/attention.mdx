@@ -1,0 +1,240 @@
+---
+title: Attention
+track: dsa-ml-algorithms
+summary: "Scaled dot-product attention: let every token look at every other token and pull in a weighted blend of what matters."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-quantum/grover-shor
+  - transformers/attention
+leadsTo:
+  - dsa-ml-algorithms/transformers
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MlAAttentionMatrix from '../../../components/demos/MlAAttentionMatrix.tsx';
+
+## The hook: reading the word that unlocks the sentence
+
+Read "the animal didn't cross the street because **it** was too tired." What does *it* refer to?
+Your brain instantly reaches back to *animal*, not *street*. To do that you didn't process the words
+one at a time in isolation — you let *it* **look at every other word** and decide which ones matter.
+That single operation — every token comparing itself against every other token and pulling in a
+weighted mix of their information — is **attention**, and it is the engine inside GPT, Claude, and
+every modern language model.
+
+<Callout type="intuition" title="The one-sentence idea">
+Attention scores how relevant every token is to every other token, turns those scores into weights
+that sum to one, and rebuilds each token as a weighted blend of the others' values.
+</Callout>
+
+## Intuition: queries, keys, and values
+
+Think of a library. Each token asks a **query** ("what am I looking for?"). Every token also advertises
+a **key** ("here's what I'm about"). You match a query against all keys to get relevance scores. Then
+each token hands over its **value** ("here's my actual content"), and you take a weighted average of
+those values using the scores. Tokens that matched strongly contribute a lot; irrelevant ones barely
+register.
+
+Three moves do all the work:
+
+1. **Score** — compare a query with every key using a dot product. Aligned vectors score high.
+2. **Normalize** — softmax the scores into weights that sum to 1 (a probability distribution over "where to look").
+3. **Blend** — take the weighted sum of the value vectors.
+
+Because every token attends to every other one *in parallel*, attention captures long-range
+relationships in a single step — no waiting, no forgetting, unlike the recurrent networks it replaced.
+
+## Play with it
+
+Pick a query token and step through the three moves. Watch the raw scores appear, collapse into a
+softmax distribution, then blend the value vectors into one output.
+
+<MlAAttentionMatrix client:visible />
+
+<Callout type="tip">
+Change the query token and notice the weights redistribute completely. Each token computes its *own*
+attention pattern — that's why the full operation produces an $n \times n$ matrix, one row per query.
+</Callout>
+
+## How it works: the dry run
+
+Take a query $q$ and three keys with these dot-product scores, using dimension $d_k = 4$ so the scale is
+$1/\sqrt{4} = 0.5$:
+
+```
+raw q·k      = [3.0, 1.0, 2.0]
+scaled (×0.5)= [1.5, 0.5, 1.0]
+softmax      = [0.51, 0.19, 0.31]   ← a probability distribution
+output       = 0.51·v1 + 0.19·v2 + 0.31·v3
+```
+
+The highest-scoring key claims about half the weight, but nothing is ignored — softmax keeps every
+token in the mix, just at different strengths. The output is a new vector: the query, now enriched with
+context.
+
+<CodeRunner
+  client:visible
+  code={`// Scaled dot-product attention on tiny matrices (plain JS)
+function dot(a, b) { return a.reduce((s, x, i) => s + x * b[i], 0); }
+function softmax(row) {
+  const m = Math.max(...row);
+  const e = row.map((x) => Math.exp(x - m));
+  const s = e.reduce((a, b) => a + b, 0);
+  return e.map((x) => x / s);
+}
+function attention(Q, K, V) {
+  const dk = K[0].length, scale = 1 / Math.sqrt(dk);
+  return Q.map((q) => {
+    const scores = K.map((k) => dot(q, k) * scale);
+    const w = softmax(scores);
+    return V[0].map((_, j) => w.reduce((s, wi, i) => s + wi * V[i][j], 0));
+  });
+}
+const Q = [[1, 0, 1, 0]];
+const K = [[1, 0, 1, 0], [0, 1, 0, 1], [1, 1, 0, 0]];
+const V = [[10, 0], [0, 10], [5, 5]];`}
+  tests={[
+    { expr: 'softmax([1.5, 0.5, 1.0]).map((x)=>+x.toFixed(2))', label: 'softmax of scaled scores' },
+    { expr: 'attention(Q, K, V)[0].map((x)=>+x.toFixed(2))', label: 'attention output vector' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds attention exactly this way — project the input into $Q$, $K$, $V$, then run
+scaled dot-product attention with an optional causal mask:
+
+```ts
+// /dsa/27-ml-algorithms/01-attention/attention-mechanism.ts
+// Attention(Q, K, V) = softmax(QKᵀ / √d_k) · V
+private computeAttention(Q: Matrix, K: Matrix, V: Matrix, mask?: Matrix) {
+  const scores = matmul(Q, transpose(K));               // 1. QKᵀ similarity
+  const scaled = scaleMatrix(scores, 1 / Math.sqrt(this.d_k)); // 2. scale by √d_k
+  let masked = scaled;
+  if (mask) masked = scaled.map((row, i) =>             // 3. optional causal mask
+    row.map((v, j) => (mask[i][j] === 0 ? -Infinity : v)));
+  const weights = softmax(masked);                      // 4. softmax → weights
+  const output = matmul(weights, V);                    // 5. weighted sum of values
+  return { output, attentionWeights: weights };
+}
+```
+
+Study and run it with `npx tsx 27-ml-algorithms/01-attention/attention-mechanism.ts`. The masking step
+is the whole difference between BERT (bidirectional, no mask) and GPT (causal mask, can't peek ahead).
+
+## Complexity
+
+Every query scores against every key, so the attention matrix is $n \times n$:
+
+$$
+T(n) = O(n^2 \cdot d), \qquad S(n) = O(n^2).
+$$
+
+| Operation | Time | Note |
+|-----------|------|------|
+| $QK^\top$ scores | $O(n^2 d)$ | the quadratic term |
+| softmax | $O(n^2)$ | per row |
+| weights $\cdot V$ | $O(n^2 d)$ | the blend |
+
+<Callout type="why">
+That $O(n^2)$ is why context windows are precious and expensive: double the sequence length and you
+quadruple the attention compute and memory. Nearly every "efficient transformer" — sparse, linear,
+FlashAttention — is a fight against this one quadratic term.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Courtroom" icon="⚖️">
+A juror weighing testimony gives a credible eyewitness a large weight and a vague rumor almost none,
+then forms a verdict as the weighted blend. The query is "what happened?"; each witness is a key-value
+pair scored for relevance.
+</ExampleCard>
+
+<ExampleCard domain="Cooking" icon="🍲">
+Balancing a sauce, you "attend" more to the ingredient that's off — a squeeze more acid, a pinch less
+salt. Each taste is scored against the target flavor and adjusted in proportion to how much it matters.
+</ExampleCard>
+
+<ExampleCard domain="Search engines" icon="🔎">
+A query is matched against every document's key terms to produce relevance scores; the results page is a
+ranked, weighted view of the collection. Attention is soft, differentiable retrieval doing the same job
+inside a neural net.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting the $\sqrt{d_k}$ scale.** Without it, dot products grow with dimension, softmax saturates,
+  and gradients vanish. The scale keeps scores in a sane range.
+- **Confusing self- vs cross-attention.** In self-attention $Q$, $K$, $V$ all come from the same
+  sequence; in cross-attention (translation) the query comes from one sequence and keys/values from
+  another.
+- **Mask direction.** A causal mask is *lower-triangular* — position $i$ may attend to $j \le i$ only.
+  Set the future to $-\infty$ *before* softmax, not after.
+- **Interview cue:** "Why is attention $O(n^2)$?" Answer: every token scores against every other, so the
+  score matrix has $n^2$ entries. Bonus points for naming FlashAttention or linear attention.
+
+## Practice
+
+1. **Easy:** For scaled scores `[2, 2, 2]`, what are the softmax weights? Why?
+2. **Easy:** With one query and three identical value vectors, what is the attention output, regardless of scores?
+3. **Medium:** Write the causal mask for a length-4 sequence as a 0/1 matrix.
+4. **Medium:** Explain why growing $d_k$ without the $1/\sqrt{d_k}$ scale hurts training.
+5. **Hard:** Attention is permutation-equivariant — shuffle the tokens and the outputs shuffle the same
+   way. What extra ingredient (next lesson) breaks this so word order matters?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does the softmax step in attention produce?',
+      options: [
+        'The final output vector',
+        'A set of weights over the tokens that sum to 1',
+        'The query-key dot products',
+        'The value matrix',
+      ],
+      answer: 1,
+      explain: 'Softmax turns the scaled scores of one query into a probability distribution — attention weights that sum to 1 — used to blend the value vectors.',
+    },
+    {
+      q: 'Why divide the QKᵀ scores by √d_k before softmax?',
+      options: [
+        'To make the matrix square',
+        'To keep dot products from growing with dimension and saturating softmax',
+        'To add positional information',
+        'To enforce causality',
+      ],
+      answer: 1,
+      explain: 'Dot products scale with d_k; dividing by √d_k keeps scores in a moderate range so softmax gradients stay healthy.',
+    },
+    {
+      q: 'Why is self-attention O(n²) in the sequence length n?',
+      options: [
+        'Because softmax is quadratic',
+        'Because every token computes a score against every other token',
+        'Because of the feed-forward layer',
+        'Because embeddings are n-dimensional',
+      ],
+      answer: 1,
+      explain: 'The score matrix QKᵀ is n×n — one entry per (query, key) pair — so both time and memory grow with n².',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Attention rebuilds each token as a <strong>weighted blend of value vectors</strong>, weighted by query-key relevance.',
+    'The three moves are <strong>score (QKᵀ), normalize (softmax), blend (·V)</strong>, scaled by <strong>1/√d_k</strong>.',
+    '<strong>Self-attention</strong> uses one sequence for Q, K, V; <strong>cross-attention</strong> queries one sequence against another.',
+    'A <strong>causal mask</strong> sets future positions to −∞ before softmax — the difference between GPT and BERT.',
+    'Cost is <strong>O(n²·d)</strong>, the quadratic wall that every efficient-transformer variant tries to break.',
+  ]}
+/>
+
+Next up: **Transformers** — stacking attention with feed-forward layers, residuals, and normalization
+into the block that scales to billions of parameters.

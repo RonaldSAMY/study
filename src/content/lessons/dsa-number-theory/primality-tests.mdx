@@ -1,0 +1,239 @@
+---
+title: Primality Testing
+track: dsa-number-theory
+summary: "Deciding if one big number is prime: trial division for small n, and the Miller-Rabin witness test that catches even the Carmichael numbers that fool Fermat."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-number-theory/gcd-euclidean
+leadsTo:
+  - dsa-number-theory/sieve-eratosthenes
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NTMillerRabinWitness from '../../../components/demos/NTMillerRabinWitness.tsx';
+
+## The hook: your browser just tested a 600-digit number
+
+Every time you open an `https://` page, somewhere a computer generated a fresh random number hundreds of
+digits long and asked "is this prime?" — and answered in milliseconds. You obviously cannot trial-divide
+a 600-digit number; the universe would end first. The trick is a *probabilistic* test that interrogates
+the number with a few random "witnesses." If any witness catches it lying, it is composite for sure; if
+enough witnesses fail to catch it, it is prime with overwhelming confidence.
+
+<Callout type="intuition" title="The one-sentence idea">
+Instead of hunting for a factor, Miller-Rabin picks random bases $a$ and checks an identity that *all*
+primes must satisfy; a single base that violates it proves the number composite.
+
+</Callout>
+
+## Intuition
+
+Fermat's little theorem says that for a prime $p$ and any $a$ not divisible by $p$,
+$a^{p-1} \equiv 1 \pmod p$. Turn it around: if $a^{n-1} \not\equiv 1 \pmod n$ for some $a$, then $n$ is
+*definitely* not prime. That is the Fermat test — fast, but it has a fatal flaw: **Carmichael numbers**
+like 561 and 1729 satisfy the identity for every base yet are composite.
+
+Miller-Rabin patches the hole with one extra idea. Factor out the twos: write $n - 1 = 2^s \cdot d$ with
+$d$ odd. For a real prime, the chain
+
+$$
+a^{d}, \; a^{2d}, \; a^{4d}, \; \dots, \; a^{2^{s-1} d} \pmod n
+$$
+
+must either start at 1, or hit $n-1$ somewhere before it can reach 1. Why? Because modulo a prime the only
+square roots of 1 are $\pm 1$. If you ever see a 1 appear *without* a preceding $n-1$, you have found a
+"nontrivial square root of 1" — impossible for a prime — so $n$ is composite, and $a$ is the *witness*
+that proves it.
+
+## Play with it
+
+Pick a number $n$ and a witness $a$. The demo writes $n-1 = 2^s \cdot d$ and reveals the squaring chain
+one term at a time, checking each against 1 and $n-1$.
+
+<NTMillerRabinWitness client:visible />
+
+<Callout type="tip">
+Load $n = 561$ (a Carmichael number) with $a = 2$. Fermat is fooled here, but watch the chain produce a
+nontrivial square root of 1 — Miller-Rabin catches it instantly. A single good witness is all it takes.
+</Callout>
+
+## How it works
+
+Test $n = 221 = 13 \times 17$. Then $n - 1 = 220 = 2^2 \cdot 55$, so $s = 2$, $d = 55$. Try witness $a = 174$:
+
+```
+x0 = 174^55 mod 221 = 47      (not 1, not 220)
+x1 = 47^2   mod 221 = 220     (= n-1)  ->  passes for a = 174
+```
+
+So 174 fails to expose 221. But most bases do expose it — try $a = 137$ and the chain never reaches 220,
+proving 221 composite. For a real prime like 220 nothing ever catches it, no matter the base. Running $k$
+random witnesses drops the chance of a wrong "prime" to at most $4^{-k}$.
+
+<CodeRunner
+  client:visible
+  code={`function modPow(base, exp, m) {
+  let r = 1n; base = BigInt(base) % BigInt(m); const M = BigInt(m); let e = BigInt(exp);
+  while (e > 0n) { if (e & 1n) r = (r * base) % M; base = (base * base) % M; e >>= 1n; }
+  return r;
+}
+// One Miller-Rabin round: does base 'a' witness that n is composite?
+function passesWitness(n, a) {
+  let s = 0, d = n - 1;
+  while (d % 2 === 0) { d /= 2; s++; }
+  let x = modPow(a, d, n);
+  const N = BigInt(n);
+  if (x === 1n || x === N - 1n) return true;
+  for (let r = 1; r < s; r++) {
+    x = (x * x) % N;
+    if (x === N - 1n) return true;   // found -1 in time
+    if (x === 1n) return false;      // nontrivial root of 1 -> composite
+  }
+  return false;
+}`}
+  tests={[
+    { expr: 'passesWitness(561, 2)', label: '561 vs witness 2 (Carmichael, exposed)' },
+    { expr: 'passesWitness(221, 174)', label: '221 vs 174 (a liar)' },
+    { expr: 'passesWitness(221, 137)', label: '221 vs 137 (a witness)' },
+    { expr: 'passesWitness(1000003, 2)', label: '1000003 vs 2 (a real prime)' },
+  ]}
+/>
+
+## The real implementation
+
+The course file uses `bigint` for the witness loop and a fixed witness set to make the test
+*deterministic* below a huge bound:
+
+```ts
+// /dsa/22-number-theory/primality-tests.ts
+function millerRabinWitness(a: bigint, d: bigint, s: bigint, n: bigint): boolean {
+  let x = modPowBigInt(a, d, n);
+  if (x === 1n || x === n - 1n) return true;
+  for (let r = 1n; r < s; r++) {
+    x = (x * x) % n;
+    if (x === n - 1n) return true;    // possibly prime
+    if (x === 1n) return false;       // definitely composite
+  }
+  return false;                       // definitely composite
+}
+
+export function isPrimeDeterministic(n: number): boolean {
+  if (n < 2) return false;
+  if (n % 2 === 0) return n === 2;
+  let s = 0, d = n - 1;
+  while (d % 2 === 0) { d /= 2; s++; }
+  // These specific bases prove primality for all n below ~3.3·10^24
+  const witnesses = [2n, 3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n];
+  for (const a of witnesses) {
+    if (a >= BigInt(n)) continue;
+    if (!millerRabinWitness(a, BigInt(d), BigInt(s), BigInt(n))) return false;
+  }
+  return true;
+}
+```
+
+The same file also ships the naive `isPrimeTrialDivision` (the $6k \pm 1$ wheel) and the Carmichael list.
+Run the full file: `npx tsx 22-number-theory/primality-tests.ts`.
+
+## Complexity
+
+Each witness is one modular exponentiation plus up to $s$ squarings, and $s < \log_2 n$:
+
+$$
+T_{\text{trial}}(n) = O(\sqrt n), \qquad T_{\text{Miller-Rabin}}(n) = O\!\left(k \log^3 n\right).
+$$
+
+| Algorithm | Type | Time | Notes |
+|-----------|------|------|-------|
+| Trial division | Deterministic | $O(\sqrt n)$ | Fine for small $n$ |
+| Fermat | Probabilistic | $O(k \log^2 n)$ | Fooled by Carmichael numbers |
+| Miller-Rabin ($k$ random) | Probabilistic | $O(k \log^3 n)$ | Error $\le 4^{-k}$ |
+| Miller-Rabin (fixed bases) | Deterministic | $O(\log^3 n)$ | Exact below a known bound |
+
+For a 600-digit RSA prime, $\sqrt n$ is astronomically infeasible while $\log^3 n$ is a few thousand
+operations — the entire reason public-key crypto is practical.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cryptography" icon="🔐">
+RSA and elliptic-curve key generation repeatedly draw a random odd number and Miller-Rabin it until a
+prime appears. Get the test wrong and you ship a factorable key.
+</ExampleCard>
+
+<ExampleCard domain="Hashing" icon="🧱">
+Hash tables and universal hashing pick a *prime* table size or modulus to spread keys evenly. Libraries
+keep a list of primes, or test candidates on the fly with exactly this routine.
+</ExampleCard>
+
+<ExampleCard domain="Distributed systems" icon="🌐">
+Randomized primality is a poster child for Monte Carlo algorithms: fast, occasionally wrong in a
+*one-sided* way, and made arbitrarily reliable by repetition — the same trade-off behind Bloom filters
+and randomized consensus.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Fermat is not enough.** Carmichael numbers (561, 1105, 1729, ...) pass Fermat for every coprime base.
+  Always use Miller-Rabin when correctness matters.
+- **Overflow in the squaring.** $x \cdot x$ for large $x$ overflows 64-bit integers; use `bigint` or
+  128-bit multiplication, exactly as the reference does.
+- **Order of the checks matters.** You must see $n-1$ *before* a 1 appears. Reaching 1 without a prior
+  $n-1$ is the composite signal — swapping the checks breaks the test.
+- **Interview cue:** "generate a large prime" or "is this number prime for $n$ up to $10^{18}$?" wants
+  deterministic Miller-Rabin with a fixed witness set, not $O(\sqrt n)$ trial division.
+
+## Practice
+
+1. **Easy:** Use trial division with the $6k \pm 1$ pattern to test 91 and 97 by hand.
+2. **Easy:** Factor $560 = n - 1$ for $n = 561$ into $2^s \cdot d$ and give $s$ and $d$.
+3. **Medium:** Show that base $a = 2$ exposes 561 as composite by tracing the squaring chain.
+4. **Medium:** Explain why a "nontrivial square root of 1" cannot exist modulo a prime.
+5. **Hard:** Implement deterministic Miller-Rabin for all $n < 3{,}215{,}031{,}751$ using the witness set
+   $\{2, 3, 5, 7\}$ and test it against a sieve.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why is the plain Fermat test unreliable?',
+      options: [
+        'It is too slow',
+        'Carmichael numbers pass it for every base yet are composite',
+        'It only works for even numbers',
+        'It needs the factorization of n',
+      ],
+      answer: 1,
+      explain: 'Carmichael numbers like 561 satisfy a^(n-1) ≡ 1 for all coprime a, so Fermat calls them prime.',
+    },
+    {
+      q: 'In Miller-Rabin we write n - 1 as which form?',
+      options: ['2^s + d', 's · d with d prime', '2^s · d with d odd', 'd^2 - 1'],
+      answer: 2,
+      explain: 'Pull out all factors of 2: n - 1 = 2^s · d with d odd, then square a^d up to s - 1 times.',
+    },
+    {
+      q: 'If a witness produces 1 in the chain without a preceding n - 1, what do we conclude?',
+      options: ['n is prime', 'n is composite', 'try a bigger base', 'the test is inconclusive'],
+      answer: 1,
+      explain: 'That is a nontrivial square root of 1, impossible modulo a prime, so n is definitely composite.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Big-number primality is <strong>probabilistic</strong>: random witnesses, one-sided error.',
+    'Fermat\'s test is fooled by <strong>Carmichael numbers</strong>; Miller-Rabin is not.',
+    'Write <strong>n − 1 = 2^s · d</strong> and square a^d, watching for n − 1 before any 1 appears.',
+    'A single failing witness proves composite; k rounds cut the error to at most <strong>4^(−k)</strong>.',
+    'Fixed witness sets make it <strong>deterministic and exact</strong> below huge bounds — the crypto workhorse.',
+  ]}
+/>
+
+Next up: **Sieves** — when you need *all* primes up to $n$ rather than testing one, crossing out
+multiples on a grid beats testing each number individually.

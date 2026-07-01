@@ -1,0 +1,324 @@
+---
+title: Raycasting & Intersection
+track: dsa-3d-graphics
+summary: "Shooting rays to pick objects and trace light: the parametric ray, ray-sphere and Möller–Trumbore ray-triangle intersection, and the t you solve for."
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - dsa-3d-graphics/spatial-acceleration
+leadsTo:
+  - dsa-3d-graphics/shading-lighting
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import G3dRayIntersect from '../../../components/demos/G3dRayIntersect.tsx';
+
+## The hook: one click, one ray, one answer
+
+You click a character in a game and it lights up. You point a controller at a menu in VR and a button
+highlights. A path tracer fires a million lines of light through a scene and paints a photorealistic
+frame. Underneath all three is the *same* question, asked over and over: **starting here, shooting that
+way, what is the first thing I hit — and how far away is it?**
+
+That "how far" has a name: **t**. Every ray is a moving point, and t is the dial that slides it forward.
+Solve for the smallest positive t and you have found the nearest surface. This lesson is about setting up
+and solving that one equation for spheres, planes, and triangles.
+
+<Callout type="intuition" title="The one-sentence idea">
+A ray is the parametric point $P(t) = O + t\,D$; intersecting it with a shape means substituting that
+point into the shape's equation and solving for the **smallest positive t** — the first surface the ray
+reaches.
+</Callout>
+
+## Intuition
+
+Write the ray as a point that walks forward:
+
+$$
+P(t) = O + t\,D, \qquad t \ge 0.
+$$
+
+$O$ is the **origin** (where the ray starts), $D$ is the **direction** (which way it goes, kept unit
+length so $t$ is literally distance in world units), and $t$ is the **parameter** — turn the dial from
+$0$ upward and $P$ slides out along the ray. We only accept $t \ge 0$; a negative $t$ points *behind*
+the origin, which no camera or bullet ever cares about.
+
+Now the trick that makes every intersection test work: a shape is a set of points that satisfy some
+equation. A sphere is "all points exactly $r$ from the center." A plane is "all points whose offset from
+a reference point is perpendicular to the normal." **Substitute $P(t)$ into that equation and the only
+unknown left is $t$.** The ray's whole geometry collapses into solving one algebraic equation:
+
+- **Sphere** → the point's distance equation is quadratic, so you get $a t^2 + b t + c = 0$. The
+  discriminant's sign tells you *miss / graze / pierce* before you even take a square root.
+- **Plane** → the equation is linear, so a single division gives $t$.
+- **Triangle** → a small $3 \times 3$ linear system whose solution hands you $t$ *and* the barycentric
+  coordinates in one shot.
+
+When several shapes are hit, you keep the one with the **smallest positive t** — it is nearest the
+origin, so it is the one you actually see (everything behind it is occluded).
+
+## Play with it
+
+Below, a ray marches out from $O$ along $D$; the accumulator is the parameter $t$ growing frame by frame
+until it lands on the solved entry point of the sky-blue sphere. Drag $O$, the direction endpoint $D$,
+or the sphere center, slide the radius, and press Play to watch $t$ climb to the hit.
+
+<G3dRayIntersect client:visible />
+
+<Callout type="tip">
+Watch the discriminant $\Delta = b^2 - 4ac$ in the readout. Drag the sphere just off the dashed aim line
+and $\Delta$ flips negative — the quadratic has no real root and the ray sails past. Nudge it back on and
+$\Delta > 0$ gives two roots; the demo stops the march at the **smaller** one, the entry face.
+</Callout>
+
+## How it works
+
+Let's solve a ray-sphere hit by hand. A sphere of center $C$ and radius $r$ is every point $P$ with
+$|P - C|^2 = r^2$. Substitute the ray $P = O + t\,D$ and let $m = O - C$:
+
+$$
+|m + t\,D|^2 = r^2 \;\Longrightarrow\; (D\cdot D)\,t^2 + 2(m\cdot D)\,t + (m\cdot m - r^2) = 0.
+$$
+
+That is a quadratic $a t^2 + b t + c = 0$ with $a = D\cdot D$, $b = 2\,(m\cdot D)$, and
+$c = m\cdot m - r^2$. Take the camera-style ray $O = (0,0,0)$, $D = (0,0,-1)$ and a sphere at
+$C = (0,0,-5)$, $r = 1$. Then $m = O - C = (0,0,5)$ and:
+
+```
+a = D·D = 1
+b = 2(m·D) = 2·(5·(-1)) = -10
+c = m·m - r^2 = 25 - 1 = 24
+Δ = b^2 - 4ac = 100 - 96 = 4      (> 0 → two hits)
+√Δ = 2
+t = (-b ± √Δ) / (2a) = (10 ± 2) / 2 = {4, 6}
+nearest positive t = 4  →  P = O + 4D = (0, 0, -4)
+```
+
+The near root $t = 4$ is the front face; $t = 6$ is where the ray exits the back. We keep $t = 4$. If the
+smaller root had been negative but the larger positive, the origin would be *inside* the sphere and we'd
+take the exit instead.
+
+<CodeRunner
+  client:visible
+  code={`// Nearest positive t where a ray hits a sphere, or null on a miss.
+// Vectors are [x, y, z] arrays; helpers are inlined.
+function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function sub(a, b) { return [a[0]-b[0], a[1]-b[1], a[2]-b[2]]; }
+
+function raySphere(o, d, c, r) {
+  const m = sub(o, c);              // O - C
+  const a = dot(d, d);              // = 1 if d is normalized
+  const b = 2 * dot(m, d);
+  const cc = dot(m, m) - r * r;
+  const disc = b*b - 4*a*cc;        // discriminant
+  if (disc < 0) return null;        // Δ < 0 → ray misses
+  const sq = Math.sqrt(disc);
+  let t = (-b - sq) / (2*a);        // near root
+  if (t < 0) t = (-b + sq) / (2*a); // origin inside → use exit
+  return t < 0 ? null : t;          // both behind origin → miss
+}`}
+  tests={[
+    { expr: 'raySphere([0,0,0],[0,0,-1],[0,0,-5],1)', label: 'hits sphere at t' },
+    { expr: 'raySphere([0,0,0],[0,0,-1],[0,0,-5],2)', label: 'bigger sphere, nearer t' },
+    { expr: 'raySphere([3,0,0],[0,0,-1],[0,0,-5],1)', label: 'ray aimed wide → null' },
+  ]}
+/>
+
+## The real implementation
+
+The course file solves the exact same quadratic, then returns the hit point and surface normal. For
+triangles it uses **Möller–Trumbore**, which never builds the plane explicitly — it solves the
+$3\times3$ system $[\,-D \mid E_1 \mid E_2\,]\,[t,u,v]^\top = O - V_0$ by Cramer's rule, reusing cross
+products, and falls out with $t$ *plus* the barycentric coordinates $u, v$ (exactly what you need to
+interpolate UVs and normals):
+
+```ts
+// /dsa/33-3d-graphics/04-intersection-raycasting/ray-intersections.ts
+export function raySphere(ray: Ray, sphere: Sphere): Hit | null {
+  const m = sub(ray.origin, sphere.center);        // O - C
+  const a = dot(ray.direction, ray.direction);     // = 1 if normalized
+  const b = 2 * dot(m, ray.direction);
+  const c = dot(m, m) - sphere.radius * sphere.radius;
+
+  const discriminant = b * b - 4 * a * c;
+  if (discriminant < 0) return null;               // Δ < 0 → misses entirely
+
+  const sqrtD = Math.sqrt(discriminant);
+  const t0 = (-b - sqrtD) / (2 * a);               // near root
+  const t1 = (-b + sqrtD) / (2 * a);               // far root
+  let t = t0;
+  if (t < 0) t = t1;                               // origin inside → exit point
+  if (t < 0) return null;                          // both behind origin
+  return { t, point: rayAt(ray, t), normal: normalize(sub(rayAt(ray, t), sphere.center)) };
+}
+
+// Ray vs triangle — Möller–Trumbore (barycentric u, v via Cramer's rule).
+export function rayTriangle(ray: Ray, tri: Triangle): Hit | null {
+  const e1 = sub(tri.v1, tri.v0);                  // edge 1
+  const e2 = sub(tri.v2, tri.v0);                  // edge 2
+  const pvec = cross(ray.direction, e2);           // D × E2
+  const det = dot(e1, pvec);                        // determinant of the system
+  if (Math.abs(det) < 1e-8) return null;           // ray parallel to the plane
+  const invDet = 1 / det;
+
+  const tvec = sub(ray.origin, tri.v0);            // T = O - V0
+  const u = dot(tvec, pvec) * invDet;
+  if (u < 0 || u > 1) return null;                 // outside edge V0→V1
+
+  const qvec = cross(tvec, e1);                     // T × E1
+  const v = dot(ray.direction, qvec) * invDet;
+  if (v < 0 || u + v > 1) return null;             // outside the triangle
+
+  const t = dot(e2, qvec) * invDet;
+  if (t < 0) return null;                          // behind the origin
+  return { t, point: rayAt(ray, t), normal: normalize(cross(e1, e2)), u, v };
+}
+```
+
+**Picking** ties it to the mouse: unproject a screen click through the inverse view-projection to get a
+world-space ray, then run these tests against the scene and keep the nearest hit — accelerated by the
+[BVH](/lessons/dsa-3d-graphics/spatial-acceleration) so you skip most triangles. Study and run it at
+`33-3d-graphics/04-intersection-raycasting/ray-intersections.ts` (and `picking.ts` for the unprojection).
+
+## Complexity & math
+
+The ray itself:
+
+$$
+P(t) = O + t\,D, \qquad t \ge 0.
+$$
+
+Ray-sphere is a quadratic whose discriminant decides everything:
+
+$$
+a t^2 + b t + c = 0, \quad a = D\cdot D,\; b = 2\,(m\cdot D),\; c = m\cdot m - r^2, \quad m = O - C,
+$$
+
+$$
+\Delta = b^2 - 4ac \;\begin{cases} < 0 & \text{miss} \\ = 0 & \text{tangent (graze)} \\ > 0 & \text{two hits: enter, exit} \end{cases}
+$$
+
+Ray-plane is a single linear solve for the plane $\{P : n\cdot(P - p_0) = 0\}$:
+
+$$
+t = \frac{(p_0 - O)\cdot n}{D\cdot n}, \qquad D\cdot n = 0 \Rightarrow \text{parallel (no hit)}.
+$$
+
+Every primitive test is constant time; the real cost of a scene is the *number* of tests, which is why
+you cull with a BVH first.
+
+| Intersection test | Cost | What you solve | Extra output |
+|-------------------|------|----------------|--------------|
+| Ray-plane | $O(1)$ | one division | face side from sign of $D\cdot n$ |
+| Ray-sphere | $O(1)$ | one quadratic | normal $(P-C)/r$ |
+| Ray-AABB (slab) | $O(1)$ | ~6 divisions | which face was crossed |
+| Ray-triangle (Möller–Trumbore) | $O(1)$ | one $3\times3$ system | barycentric $u, v$ |
+| Ray vs mesh (brute force) | $O(F)$ | test all $F$ faces | nearest hit |
+| Ray vs mesh + BVH | $O(\log F)$ avg | cull, then test few | nearest hit |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Editors & CAD" icon="🖱️">
+Click-to-select in Blender, Unity, Unreal, or a CAD tool is pure picking: the mouse pixel becomes a
+world-space ray, every candidate object runs a ray test, and the smallest positive <code>t</code> is the
+part under your cursor. Snapping the cursor to the nearest surface point is the same query.
+</ExampleCard>
+
+<ExampleCard domain="Ray-traced rendering & film" icon="🎬">
+Path tracers (Arnold, Cycles, RenderMan, OptiX) fire billions of ray-triangle tests per frame — camera
+rays, shadow rays, bounces — each solving for <code>t</code> and reusing Möller–Trumbore's <code>u, v</code>
+to interpolate texture and normal data. GPU RT cores implement ray-AABB and ray-triangle in silicon.
+This is exactly the [ray tracing](/lessons/rendering/ray-tracing) covered in the Game Dev course.
+</ExampleCard>
+
+<ExampleCard domain="Physics, hit-scan & lidar" icon="🎯">
+A hit-scan weapon raycasts from the muzzle and applies damage at the nearest hit; a ground check
+raycasts down to find footing; a lidar sensor or robot casts thousands of rays per sweep to build a
+point cloud. Same equation, same "smallest positive <code>t</code>," different payload at the end.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Normalize the direction, or lose the meaning of t.** If $|D| \ne 1$ then $a = D\cdot D \ne 1$ and
+  $t$ is no longer world-space distance — comparisons between hits on different rays break.
+- **Take the *smallest positive* root, not just the smaller one.** If the near root is negative, the
+  origin is inside (or past) the sphere; use the far root. If both are negative, it's a miss even though
+  $\Delta > 0$.
+- **Reject t &lt; 0.** A ray is a half-line. Forgetting the sign test lets objects *behind* the camera
+  "get picked," a classic bug.
+- **Guard the parallel case.** Ray-plane divides by $D\cdot n$ and ray-triangle divides by the
+  determinant; when either is ~$0$ the ray is parallel to the surface — return no hit instead of a NaN.
+- **Interview cue:** "find what the mouse is over" or "first surface a light ray meets" is a raycasting
+  question. Say "parametric ray, substitute into the shape, solve for the nearest positive $t$" and
+  reach for a BVH the moment the scene is big.
+
+## Practice
+
+1. **Easy:** For $O=(0,0,0)$, $D=(0,0,-1)$, sphere $C=(0,0,-8)$, $r=2$, compute $a$, $b$, $c$, then
+   $\Delta$ and the nearest $t$. (Expect $t = 6$.)
+2. **Easy:** Given a plane with normal $n=(0,1,0)$ through $p_0=(0,-3,0)$ and a ray $O=(0,5,0)$,
+   $D=(0,-1,0)$, solve $t = (p_0 - O)\cdot n / (D\cdot n)$.
+3. **Medium:** Modify `raySphere` to return *both* roots (entry and exit) so a shader can render the
+   segment of the ray *inside* the sphere (useful for volumetrics).
+4. **Medium:** Turn a mouse pixel into a ray: given NDC $(x, y)$ and an inverse view-projection matrix,
+   unproject the near and far points and build $O$ and $D$. (See `picking.ts`.)
+5. **Hard:** Implement Möller–Trumbore from scratch and verify it on $V_0=(-1,-1,-3)$, $V_1=(1,-1,-3)$,
+   $V_2=(0,1,-3)$ with the camera ray above — you should get $t=3$, $u=0.25$, $v=0.5$.
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'In the ray-sphere quadratic a·t² + b·t + c = 0, what does a discriminant Δ = b² − 4ac that is exactly zero mean?',
+      options: [
+        'The ray misses the sphere',
+        'The ray is tangent — it grazes the surface at a single point',
+        'The origin is inside the sphere',
+        'The direction was not normalized',
+      ],
+      answer: 1,
+      explain: 'Δ = 0 gives one repeated root: the ray touches the sphere at exactly one point (a graze). Δ < 0 is a miss; Δ > 0 gives an entry and an exit.',
+    },
+    {
+      q: 'Both roots of a ray-sphere hit come back as t₀ = -2 and t₁ = 5. Which do you use, and why?',
+      options: [
+        't₀ = -2, it is the smaller root',
+        't₁ = 5, because t₀ is behind the origin so the origin is inside the sphere',
+        'Neither — a negative root means a miss',
+        'Their average, t = 1.5',
+      ],
+      answer: 1,
+      explain: 'A negative near root with a positive far root means the origin sits inside the sphere, so the first surface ahead is the exit at t₁ = 5. You always take the smallest positive t.',
+    },
+    {
+      q: 'What extra information does Möller–Trumbore hand you for free alongside t?',
+      options: [
+        'The sphere radius',
+        'The barycentric coordinates u, v of the hit inside the triangle',
+        'The full view-projection matrix',
+        'The number of triangles in the mesh',
+      ],
+      answer: 1,
+      explain: 'Solving the 3×3 system yields t together with the barycentric u, v — exactly what you need to interpolate UVs, normals, and vertex colors at the hit point.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A ray is the parametric point <strong>P(t) = O + t·D</strong> with t ≥ 0; intersection means solving for the <strong>smallest positive t</strong>.',
+    'Ray-sphere substitutes into |P − C|² = r² to get a quadratic; the <strong>discriminant sign</strong> gives miss / graze / pierce before any square root.',
+    'Ray-plane is a single division <strong>t = (p₀ − O)·n / (D·n)</strong>; a zero denominator means the ray is parallel.',
+    '<strong>Möller–Trumbore</strong> solves a 3×3 system for ray-triangle and returns t plus the barycentric u, v in one shot.',
+    'Picking unprojects a screen click into a world ray, tests the scene, and keeps the nearest hit — <strong>accelerated by a BVH</strong>.',
+  ]}
+/>
+
+Next up: **Shading & Lighting** — now that you know *where* a ray hits and the surface normal there, you
+can decide *how bright* that point is. Head to [Shading & Lighting](/lessons/dsa-3d-graphics/shading-lighting).

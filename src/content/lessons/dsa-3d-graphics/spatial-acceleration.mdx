@@ -1,0 +1,332 @@
+---
+title: Spatial Acceleration
+track: dsa-3d-graphics
+summary: "BVHs, octrees and frustum culling: spatial data structures that let a renderer skip almost everything and touch only what matters."
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - dsa-3d-graphics/rendering-pipeline
+leadsTo:
+  - dsa-3d-graphics/raycasting
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import G3dBvhCull from '../../../components/demos/G3dBvhCull.tsx';
+
+## The hook: a million triangles, and you touch twenty
+
+A modern scene has millions of triangles, thousands of objects, and a camera that can see maybe a few
+hundred of them at once. The naive renderer asks, every frame, "is *this* object on screen? is *that*
+one? and that one?" — a full linear scan, one test per object. Spatial acceleration structures replace
+that scan with a single question asked of a **tree**: if a whole branch is off-screen, you throw away
+everything under it in one comparison. A ray that would have tested a million triangles instead touches
+about twenty boxes. This is the difference between a slideshow and a game.
+
+<Callout type="intuition" title="The one-sentence idea">
+Wrap objects in cheap boxes, nest those boxes into a tree, and any query — a ray, or the camera's
+view — descends the tree skipping whole subtrees whose box it misses, turning an $O(n)$ scan into
+about $O(\log n)$.
+</Callout>
+
+## Intuition
+
+Everything here is built on one humble primitive: the **axis-aligned bounding box** (AABB), a box whose
+faces line up with the world axes, stored as just two corners `min` and `max`. Because it is
+axis-aligned, "do these two boxes overlap?" is at most six number comparisons — they overlap only if
+their intervals overlap on *every* axis. That is the cheap first-pass test that lets us reject an
+expensive object without ever looking at its geometry.
+
+One box is nice; a *hierarchy* of boxes is transformative. A **Bounding Volume Hierarchy (BVH)** is a
+binary tree of AABBs. Each leaf wraps a few primitives; each internal node's box is the union of its
+children's boxes. You build it top-down: put all primitives in the root box, split them into a left set
+and a right set, and recurse until a node holds only a handful. The split can be a **median split**
+(sort by centroid on the longest axis, cut in the middle) or the sharper **Surface Area Heuristic**
+(SAH), which picks the split that minimizes the expected cost of future queries.
+
+BVHs partition *objects* — every object lives in exactly one leaf, though sibling boxes may overlap in
+space. Their cousins **octrees** and **k-d trees** partition *space* instead: each node owns a region,
+children own disjoint sub-regions, and one object can straddle several cells. An octree cuts a cube into
+8 equal octants; a k-d tree cuts along one axis at a time at the median. Different bookkeeping, same
+payoff: a query prunes every region it does not touch.
+
+The killer application is **frustum culling**. The camera sees only what is inside its view frustum —
+the truncated pyramid bounded by 6 planes (near, far, left, right, top, bottom). To cull, you test each
+node's AABB against those 6 planes; if the box lies entirely outside any one plane, the whole subtree is
+off-screen and pruned. The clever bit is that you only ever check *one* corner of the box per plane — the
+"positive vertex", the corner farthest along the plane's normal. That is the same object-partitioning
+idea Game Dev covers under [spatial partitioning](/lessons/engine/spatial-partitioning); here we push it
+all the way into the rendering path.
+
+## Play with it
+
+The scene below is a top-down world of little objects. We build a BVH by recursive median split, then
+drag a camera **view** across it — watch the traversal descend the tree, prune whole subtrees whose box
+the view misses (they go gray and dashed), and keep only the objects actually inside (emerald).
+
+<G3dBvhCull client:visible />
+
+Notice the "nodes hit" counter: dragging the view into a corner culls most of the scene after only a
+handful of node tests, never touching the objects in the branches it pruned.
+
+<Callout type="tip">
+Slide the view to the far edge of the scene and step through one node at a time. The very first test on
+a distant subtree's box fails, and every object beneath it is culled at once — that single rejection is
+where the $O(\log n)$ win comes from.
+</Callout>
+
+## How it works
+
+Two mechanics do all the work: the **overlap test** at each node, and the **median split** that built
+the tree. Start with the overlap test on three boxes:
+
+```
+A: min=(0,0,0) max=(2,2,2)
+B: min=(1,1,1) max=(3,3,3)
+C: min=(5,5,5) max=(6,6,6)
+
+A vs B?  X: 0 ≤ 3 and 2 ≥ 1 ✓   Y: ✓   Z: ✓   → OVERLAP
+A vs C?  X: A.max.x (2) ≥ C.min.x (5)?  2 ≥ 5 is false → SEPARATE (early-out on X)
+```
+
+Two boxes overlap only when their intervals overlap on all three axes; the moment one axis separates,
+they are disjoint and we stop. Now build a tiny 2-level tree by median split over five objects laid on a
+line at centroids `x = 0, 1, 2, 10, 11`:
+
+```
+root box spans x∈[0,12]         longest axis = X
+sort by centroid → 0,1,2,10,11
+median cut at index 2:
+  left  = {0,1,2}   box x∈[0,3]
+  right = {10,11}   box x∈[10,12]
+each child (≤ leaf size) becomes a leaf
+```
+
+A query box over `x∈[9.5,12.5]` tests the root (overlap → descend), tests the left child `x∈[0,3]`
+(no overlap → prune objects 0,1,2 in one shot), tests the right child `x∈[10,12]` (overlap → keep
+objects 3,4). Three node tests, two objects reported — not five object tests. Here is the overlap
+primitive itself, plus the point-in-box test:
+
+<CodeRunner
+  client:visible
+  code={`// Axis-aligned bounding box overlap: do two boxes share any space?
+// A box is { min:[x,y,z], max:[x,y,z] }. They overlap only if their
+// intervals overlap on EVERY axis; any separating axis means disjoint.
+function aabbOverlap(a, b) {
+  for (let i = 0; i < 3; i++) {
+    if (a.max[i] < b.min[i] || a.min[i] > b.max[i]) return false; // separated here
+  }
+  return true;
+}
+
+// Point inside a box? The point must lie in all three [min,max] intervals.
+function pointInAABB(p, box) {
+  for (let i = 0; i < 3; i++) {
+    if (p[i] < box.min[i] || p[i] > box.max[i]) return false;
+  }
+  return true;
+}
+
+const A = { min: [0, 0, 0], max: [2, 2, 2] };
+const B = { min: [1, 1, 1], max: [3, 3, 3] };
+const C = { min: [5, 5, 5], max: [6, 6, 6] };`}
+  tests={[
+    { expr: 'aabbOverlap(A, B)', label: 'A vs B overlap (share the corner region)' },
+    { expr: 'aabbOverlap(A, C)', label: 'A vs C overlap (far apart → false)' },
+    { expr: 'pointInAABB([1, 1, 1], A)', label: '(1,1,1) inside A' },
+    { expr: 'pointInAABB([3, 3, 3], A)', label: '(3,3,3) inside A (on the far corner → false)' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds the tree top-down and answers ray queries with a stack-based descent that prunes
+on every missed box — exactly the loop the demo animates:
+
+```ts
+// /dsa/33-3d-graphics/03-spatial-acceleration/bvh.ts
+// Build: split primitives, recurse, stop at a leaf.
+buildRecursive(prims, depth) {
+  const node = new BVHNode(this.boundsOf(prims));   // node box = union of all boxes
+  if (prims.length <= this.leafSize) { node.primitives = prims; return node; }
+  const split = this.chooseSplitSAH(prims, node.box) // or chooseSplitMedian(prims)
+             ?? (node.primitives = prims, null);
+  node.left  = this.buildRecursive(split.left,  depth + 1);
+  node.right = this.buildRecursive(split.right, depth + 1);
+  return node;
+}
+
+// Query: visit a node only if the ray hits its box; a miss prunes the subtree.
+raycast(ray) {
+  const stack = [this.root];
+  while (stack.length) {
+    const node = stack.pop();
+    if (rayIntersectsAABB(ray, node.box) === null) continue;   // ← prune whole subtree
+    if (node.isLeaf()) { /* test the few primitives here */ }
+    else { stack.push(node.left, node.right); }
+  }
+}
+```
+
+Frustum culling reuses the same tree with a different rejection test — the positive-vertex plane test,
+which decides a box against a plane by checking a single corner:
+
+```ts
+// /dsa/33-3d-graphics/03-spatial-acceleration/frustum-culling.ts
+// p-vertex = the box corner farthest along the plane normal n.
+const pVert = v3(
+  n.x >= 0 ? box.max.x : box.min.x,
+  n.y >= 0 ? box.max.y : box.min.y,
+  n.z >= 0 ? box.max.z : box.min.z,
+);
+if (plane.signedDistance(pVert) < 0) return Intersection.OUTSIDE; // whole box outside → cull
+```
+
+Study and run the full versions at `33-3d-graphics/03-spatial-acceleration/bvh.ts`,
+`bounding-volumes.ts`, `octree-kdtree.ts`, and `frustum-culling.ts` — each has a guarded demo that prints
+the node-visit counts proving the pruning.
+
+## Complexity & math
+
+Let the tree be balanced, so each split roughly halves the primitive count and its height is
+$\lceil \log_2 n \rceil$. A ray descends one root-to-leaf path, touching $O(\log n)$ nodes instead of all
+$n$:
+
+$$
+T_{\text{query}} = O(\log n), \qquad T_{\text{query}}^{\text{brute}} = O(n).
+$$
+
+Building the tree is a divide-and-conquer recurrence $T(n) = 2T(n/2) + O(n)$, which solves to:
+
+$$
+T_{\text{build}} = O(n \log n).
+$$
+
+| Approach | Query | Build | Space |
+|----------|-------|-------|-------|
+| Brute-force scan | $O(n)$ | — | $O(1)$ |
+| BVH (median split) | $O(\log n)$ avg | $O(n \log n)$ | $O(n)$ |
+| BVH (binned SAH) | $O(\log n)$ avg | $O(n \log n)$ | $O(n)$ |
+| Octree / k-d tree range query | $O(\log n + k)$ avg | $O(n \log n)$ | $O(n)$ |
+
+The Surface Area Heuristic sharpens the *constant* hidden in that average. For a ray with uniformly
+random origin and direction, the probability it enters a child given it entered the parent is the ratio
+of their surface areas, $A_{\text{child}} / A_{\text{parent}}$ (Cauchy's formula). So SAH scores a split
+by its expected traversal cost,
+
+$$
+C(\text{split}) = C_{t} + \frac{A_L}{A}\,N_L\,C_{i} + \frac{A_R}{A}\,N_R\,C_{i},
+$$
+
+and keeps the minimum over candidate splits — rewarding cuts that hide many primitives behind a *small*
+box and bracket empty space. A degenerate BVH can still be $O(n)$; SAH exists precisely to keep real
+scenes near the good case.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Open-world games" icon="🎮">
+An open-world engine keeps a BVH (or octree) of the whole map and frustum-culls it every frame: whole
+districts behind the camera are rejected at one node, so only the handful of on-screen chunks are ever
+submitted as draw calls. The <a href="/lessons/engine/spatial-partitioning">spatial partitioning</a>
+lesson in the Game Dev course builds exactly this from the gameplay side.
+</ExampleCard>
+
+<ExampleCard domain="Ray tracing & film" icon="🎬">
+Every path tracer — PBRT, Intel's Embree, NVIDIA's RTX hardware — puts each triangle in the leaf of an
+SAH BVH. A ray walks the tree testing boxes; RTX's "RT cores" are silicon that does ray-vs-box and
+ray-vs-triangle. Without the BVH, tracing a single ray against a million triangles would be a million
+tests instead of about twenty.
+</ExampleCard>
+
+<ExampleCard domain="Physics broad-phase" icon="🧱">
+Collision engines (Bullet's dynamic AABB tree, Box2D's <code>b2DynamicTree</code>) refit a BVH of
+collider boxes each step to find *candidate* overlapping pairs cheaply before running the exact
+narrow-phase test. It answers "which of these thousands of bodies could possibly be touching?" in
+$O(n \log n)$ instead of the $O(n^2)$ all-pairs check.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Object partition vs space partition.** A BVH splits *objects* (leaves are disjoint, boxes may
+  overlap); an octree/k-d tree splits *space* (regions are disjoint, an object may span cells). Say which
+  one you mean — the query and update costs differ.
+- **$O(\log n)$ is average, not worst.** A pathological BVH (all centroids coincident, or a bad split)
+  degenerates to $O(n)$. SAH and depth caps are what keep you in the good regime.
+- **Frustum culling is conservative, and that's fine.** The p-vertex test can occasionally keep a box
+  just outside a frustum corner — an extra draw, never a missing object. That trade is deliberate.
+- **Moving objects.** Rebuilding a BVH every frame is expensive; for rigid or small motion you *refit*
+  (recompute box sizes bottom-up, keep the tree shape) in $O(n)$. Chaotic motion every frame may favor a
+  grid or sweep-and-prune instead.
+- **Frustum culling is not occlusion culling.** It removes off-screen geometry, not objects that are
+  on-screen but hidden behind a wall — you need a separate occlusion pass for that.
+
+## Practice
+
+1. **Easy:** By hand, do boxes `A: min=(0,0,0) max=(2,2,2)` and `B: min=(3,0,0) max=(4,2,2)` overlap?
+   Which axis separates them?
+2. **Easy:** Five objects have centroids `x = 1, 2, 3, 8, 9`. Do a median split on the X axis — which
+   objects land in each child, and what are the two child boxes' X extents?
+3. **Medium:** A query box misses the root node's AABB entirely. How many objects does the BVH test, and
+   how many nodes does it visit? Contrast with brute force.
+4. **Medium:** For a plane with inward normal `n = (0, 0, 1)` and a box `min=(−1,−1,−11) max=(1,1,−9)`,
+   which corner is the positive vertex, and is the box inside or outside?
+5. **Hard:** Given a left child box with surface area 14 holding 3 primitives and a right child with area
+   10 holding 2, parent area 50, and costs $C_t = C_i = 1$, compute the SAH cost of the split and compare
+   it to making a leaf of all 5.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is the key structural difference between a BVH and an octree?',
+      options: [
+        'A BVH is 2D; an octree is 3D',
+        'A BVH partitions objects (leaves disjoint, boxes may overlap); an octree partitions space (regions disjoint, objects may straddle)',
+        'A BVH is always faster to build',
+        'An octree cannot be used for frustum culling',
+      ],
+      answer: 1,
+      explain: 'A BVH groups objects — each object sits in exactly one leaf though sibling boxes can overlap. An octree/k-d tree carves space into disjoint regions that one object may span.',
+    },
+    {
+      q: 'A query descends a BVH and a node’s AABB does not overlap the query. What happens?',
+      options: [
+        'Every object in that node’s subtree is skipped in one test',
+        'Each object under the node is tested individually',
+        'The tree is rebuilt',
+        'The query fails',
+      ],
+      answer: 0,
+      explain: 'A missed box prunes the entire subtree beneath it — one comparison rejects all the objects below, which is exactly where the O(log n) speedup comes from.',
+    },
+    {
+      q: 'In frustum culling’s positive-vertex test, why check only one box corner per plane?',
+      options: [
+        'To save memory',
+        'Because the corner farthest along the plane normal decides whether the whole box is outside that plane',
+        'Because boxes only have one visible corner',
+        'It is an approximation that can miss objects',
+      ],
+      answer: 1,
+      explain: 'If even the p-vertex (the corner most toward the inside) lies outside the plane, the entire box is outside. It is exact for the cull decision, not an object-missing shortcut.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'An <strong>AABB overlap test</strong> is ≤ 6 comparisons — cheap rejection before any geometry test — and every structure here is built from it.',
+    'A <strong>BVH</strong> is a binary tree of AABBs built top-down by <strong>median split or SAH</strong>; a query prunes whole subtrees, turning <strong>O(n) into ~O(log n)</strong>.',
+    'BVHs partition <strong>objects</strong>; octrees and k-d trees partition <strong>space</strong> — same pruning idea, different bookkeeping.',
+    '<strong>Frustum culling</strong> tests each node’s box against 6 camera planes via the <strong>positive vertex</strong>, dropping off-screen subtrees before the GPU sees them.',
+    'Build costs <strong>O(n log n)</strong>; the <strong>Surface Area Heuristic</strong> picks splits that minimize expected ray cost, keeping real scenes near the O(log n) best case.',
+  ]}
+/>
+
+Next up: **[Raycasting & Intersection](/lessons/dsa-3d-graphics/raycasting)** — how a single ray actually
+walks this tree, hits the slabs of an AABB, and reports the nearest surface. This lesson builds on
+**[The Rendering Pipeline](/lessons/dsa-3d-graphics/rendering-pipeline)**; the acceleration structures
+here are what make that ray tractable.

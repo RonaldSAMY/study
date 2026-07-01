@@ -1,0 +1,256 @@
+---
+title: Convex Hull
+track: dsa-geometry
+summary: "The convex hull is the tightest rubber band around a point set: sort once, then pop every right turn off a growing chain."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-geometry/line-intersection
+leadsTo:
+  - dsa-geometry/point-in-polygon
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GeoConvexHull from '../../../components/demos/GeoConvexHull.tsx';
+
+## The hook: stretch a rubber band around the pushpins
+
+Hammer a scatter of pushpins into a corkboard, then stretch a rubber band wide and let it snap shut. It
+clings to the outermost pins and ignores everyone inside — that shape is the **convex hull**, the
+smallest convex polygon containing every point. It answers "what is the outline of this cloud?" for
+everything from a robot's footprint to a country's border to a cluster of stars. And you can compute it
+with almost nothing more than the orientation test: sort the points once, then walk them while
+**popping every right turn**.
+
+<Callout type="intuition" title="The one-sentence idea">
+Build the boundary by adding points one at a time; whenever the last three make a **right turn**
+(a clockwise bend, cross ≤ 0), the middle point is a dent, so pop it — only left turns survive on a
+convex boundary.
+
+</Callout>
+
+## Intuition: a convex boundary never turns the wrong way
+
+Walk anticlockwise around a convex polygon and you are always turning **left**. So if, while tracing a
+candidate boundary, the last three vertices ever make a **right** turn, the middle one bulges inward —
+it cannot be a hull vertex, so we discard it and re-check. That single rule, applied with a stack, is
+**Andrew's monotone chain**:
+
+1. **Sort** the points by x (ties by y). Sorting is the only $O(n \log n)$ cost; everything after is
+   linear.
+2. Sweep left→right building the **lower** hull: push each point, and while the top three make a
+   non-left turn ($\operatorname{cross} \le 0$), pop the middle.
+3. Sweep right→left building the **upper** hull the same way.
+4. Glue the two chains (dropping the shared endpoints) into one counter-clockwise loop.
+
+Each point is pushed once and popped at most once, so the walk is $O(n)$ — the sort dominates. The
+orientation predicate from the primitives lesson is doing all the deciding; the hull algorithm is just
+a disciplined way of asking "left or right?" over and over.
+
+## Play with it
+
+Click empty space to add points; drag any dot to move it. Play to watch the lower chain grow, then the
+upper chain — every red dashed bend is a right turn being popped off the stack.
+
+<GeoConvexHull client:visible />
+
+<Callout type="tip">
+Drop a point deep inside the cloud and step through: it gets pushed onto the chain, then popped the
+moment the next point exposes it as a right-turn dent. Interior points never survive to the final hull.
+</Callout>
+
+## How it works
+
+Lower hull of the points (0,0), (1,1), (2,0.5), (3,1), (4,0), sorted by x — watch the stack pop the
+dent at (1,1):
+
+```
+push (0,0)                      stack: (0,0)
+push (1,1)                      stack: (0,0)(1,1)
+consider (2,0.5):
+  cross((0,0),(1,1),(2,0.5)) = -1.5 ≤ 0  → right turn, POP (1,1)
+push (2,0.5)                    stack: (0,0)(2,0.5)
+push (3,1)                      stack: (0,0)(2,0.5)(3,1)
+consider (4,0):
+  cross((2,0.5),(3,1),(4,0)) = -1.5 ≤ 0  → POP (3,1)
+  cross((0,0),(2,0.5),(4,0)) = -2  ≤ 0   → POP (2,0.5)
+push (4,0)                      lower hull: (0,0)(4,0)
+```
+
+Here is the whole monotone chain — two nearly identical loops:
+
+<CodeRunner
+  client:visible
+  code={`function cross(o, a, b) {
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+function convexHull(points) {
+  const pts = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+  const n = pts.length;
+  if (n < 3) return pts;
+  const lower = [];
+  for (const p of pts) {
+    while (lower.length >= 2 &&
+           cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const p = pts[i];
+    while (upper.length >= 2 &&
+           cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop(); upper.pop();               // drop shared endpoints
+  return [...lower, ...upper];            // counter-clockwise loop
+}
+const P = [{x:0,y:3},{x:2,y:2},{x:1,y:1},{x:2,y:1},{x:3,y:0},{x:0,y:0},{x:3,y:3}];`}
+  tests={[
+    { expr: 'convexHull(P).map(p => `(${p.x},${p.y})`).join(" ")', label: 'hull vertices (CCW)' },
+    { expr: 'convexHull(P).length', label: 'number of hull vertices' },
+  ]}
+/>
+
+## The real implementation
+
+Straight from the course file — the lower and upper passes with the pop-on-non-left-turn rule:
+
+```ts
+// /dsa/23-geometry/convex-hull.ts
+export function andrewsMonotoneChain(points: Point[]): Point[] {
+  const n = points.length;
+  if (n < 3) return [...points];
+
+  const sorted = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
+
+  const lower: Point[] = [];
+  for (const p of sorted) {
+    while (lower.length >= 2 &&
+           cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) {
+      lower.pop();
+    }
+    lower.push(p);
+  }
+
+  const upper: Point[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const p = sorted[i];
+    while (upper.length >= 2 &&
+           cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) {
+      upper.pop();
+    }
+    upper.push(p);
+  }
+
+  lower.pop();          // last point of each half is the first of the other
+  upper.pop();
+  return [...lower, ...upper];
+}
+```
+
+Run the full file: `npx tsx 23-geometry/convex-hull.ts`. The same file also carries Graham scan,
+gift wrapping, and Quickhull — all four are "orientation test plus bookkeeping."
+
+## Complexity
+
+Sorting dominates; the two linear scans amortise to $O(n)$:
+
+$$
+T(n) = \underbrace{O(n \log n)}_{\text{sort}} + \underbrace{O(n)}_{\text{two scans}} = O(n \log n),
+\qquad S(n) = O(n).
+$$
+
+| Algorithm | Time | When it shines |
+|-----------|------|----------------|
+| Gift wrapping (Jarvis) | $O(nh)$ | few hull vertices $h$ |
+| **Andrew's monotone chain** | $O(n\log n)$ | simple, general-purpose default |
+| Graham scan | $O(n\log n)$ | angular sort variant |
+| Chan's algorithm | $O(n\log h)$ | output-sensitive optimum |
+
+Here $h$ is the number of hull vertices. Since each point is pushed and popped at most once, the scan is
+linear no matter how many dents get discarded.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Robotics" icon="🤖">
+A mobile robot approximates its own body (or an obstacle) by the convex hull of its outline points.
+Convex shapes make collision tests cheap, so motion planners run against hulls, not raw geometry.
+</ExampleCard>
+
+<ExampleCard domain="Data science" icon="📊">
+The convex hull of a 2-D scatter is its outer envelope; points on the hull are extreme observations, a
+quick visual for outliers and for the "spread" of a cluster before deeper analysis.
+</ExampleCard>
+
+<ExampleCard domain="Meteorology" icon="🌩️">
+Storm-tracking systems wrap a hull around all radar cells above a rain threshold to define the storm's
+footprint and its bearing, then watch how that polygon drifts frame to frame.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing" icon="🏭">
+The minimum bounding shape for nesting parts on a sheet, or for gripping an object, starts from its
+convex hull — rotating calipers on the hull then find the tightest enclosing rectangle.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Collinear points on an edge.** Using `cross <= 0` discards points that lie exactly on a hull edge;
+  use `cross < 0` if the problem (like "erect the fence") wants every boundary point kept. Decide
+  deliberately.
+- **Fewer than three points.** Guard the tiny cases: 0, 1, or 2 points have no polygon, and 3 collinear
+  points collapse to a segment.
+- **Duplicate points** can cause zero-length edges and confuse the pop condition; dedupe first.
+- **Winding direction.** Monotone chain returns counter-clockwise with the "pop when cross ≤ 0" rule; if
+  you need clockwise, reverse the result rather than flipping comparisons and getting confused.
+- **Interview cue:** "smallest polygon / rubber band / outline / extreme points" all signal convex hull;
+  say "sort, then pop right turns in two passes" and quote the $O(n\log n)$ bound.
+
+## Practice
+
+1. **Easy:** By hand, find the hull of (0,0), (1,1), (2,0), (1,-1), and the interior point (1,0).
+2. **Easy:** Explain why an interior point can never survive the popping loop.
+3. **Medium:** Modify the code to keep collinear boundary points (LeetCode 587, "Erect the Fence").
+4. **Medium:** Compute the hull's area and perimeter with the Shoelace formula once you have the loop.
+5. **Hard:** Use rotating calipers on the hull to find the farthest pair of points (the set's diameter)
+   in $O(n \log n)$.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'While building the lower hull, the last three points make a right turn (cross ≤ 0). What happens?',
+      options: ['Push the new point and continue', 'Pop the middle of the three, then re-check', 'Restart the scan', 'Swap the last two points'],
+      answer: 1,
+      explain: 'A right turn means the middle point is a dent, so it is popped; the loop then re-checks the new top three.',
+    },
+    {
+      q: 'What sets the overall O(n log n) running time of monotone chain?',
+      options: ['The two hull scans', 'The initial sort by x', 'Computing each cross product', 'Gluing the two chains'],
+      answer: 1,
+      explain: 'Each point is pushed and popped at most once, so the scans are O(n); the sort is the dominant cost.',
+    },
+    {
+      q: 'Why prefer squared distance (not distance) when breaking ties among collinear points?',
+      options: ['It changes the ordering', 'It avoids an irrational square root while preserving order', 'It is required for the cross product', 'It handles negative coordinates'],
+      answer: 1,
+      explain: 'Squared distance preserves the comparison order and skips a slow, inexact sqrt.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The convex hull is the <strong>smallest convex polygon</strong> containing all points — the rubber-band outline.',
+    'Andrew’s monotone chain: <strong>sort by x</strong>, then build lower and upper chains popping non-left turns.',
+    'The decision at every step is one <strong>orientation test</strong>; pop when <strong>cross ≤ 0</strong>.',
+    'Each point is pushed and popped once → the scans are <strong>O(n)</strong>; the <strong>sort dominates at O(n log n)</strong>.',
+    'Choose <strong>≤ 0 vs &lt; 0</strong> deliberately to drop or keep <strong>collinear</strong> edge points.',
+  ]}
+/>
+
+Next up: **Point in Polygon** — now that you can build the boundary, decide whether a query point lands
+inside it by casting a ray and counting crossings.

@@ -1,0 +1,272 @@
+---
+title: Curves & Animation
+track: dsa-3d-graphics
+summary: "Bézier and Catmull-Rom curves via de Casteljau, plus skeletal animation: the smooth paths that move cameras, characters and keyframes."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-3d-graphics/shading-lighting
+leadsTo:
+  - dsa-system-design/system-design-fundamentals
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import G3dBezierCurve from '../../../components/demos/G3dBezierCurve.tsx';
+
+## The hook: four dots, infinite smooth motion
+
+A camera glides along a cinematic arc. A character's hand swings up to wave. A font's letter `S` curls
+just so. None of these store thousands of positions — each keeps a *handful* of **control points** and a
+rule for blending between them. Slide a single knob, the parameter `t`, from 0 to 1 and a smooth path
+unspools point by point. The whole trick is built from one humble operation you already know: the
+**lerp** — a weighted average of two points.
+
+<Callout type="intuition" title="The one-sentence idea">
+A curve is just lerps of lerps: blend neighbouring control points, blend those results, and keep going
+until a single point remains — that point, swept over t in [0,1], IS the curve.
+</Callout>
+
+## Intuition: lerp, then lerp again
+
+Linear interpolation between two points is the atom:
+
+$$
+\operatorname{lerp}(A, B, t) = (1-t)\,A + t\,B, \qquad t \in [0,1].
+$$
+
+At t=0 you get A, at t=1 you get B, and in between you glide straight across. Now stack it. Take three
+points and lerp the first pair and the last pair, then lerp *those* two results — you have traced a
+**quadratic Bézier**. Add a fourth point and recurse one level deeper and you have a **cubic Bézier**,
+the workhorse of fonts, vector art and easing curves. This nested-lerp recipe is **de Casteljau's
+algorithm**: geometric, numerically gentle (it only ever takes convex combinations, so it never
+amplifies floating-point error), and the exact routine production engines like THREE.js run.
+
+A Bézier curve is *pulled toward* its interior control points but passes only through the two endpoints —
+the control points steer, they are not waypoints. When you genuinely need the curve to hit every point
+(camera waypoints, animation keyframes), you reach for a **Catmull-Rom spline**, which threads all of its
+points and stays smooth (C1 continuous) by choosing each point's tangent from its neighbours.
+
+## Play with it
+
+Drag the four indigo control points, then press Play to sweep t from 0 to 1. In Bézier mode watch the de
+Casteljau scaffolding collapse: the control polygon, then the sky intermediate points, then the single
+emerald point tracing the curve. Flip to Catmull-Rom to see a curve that passes *through* every point
+instead of being pulled toward it.
+
+<G3dBezierCurve client:visible />
+
+<Callout type="tip">
+Drag the two interior points far apart and notice the Bézier curve leans toward them but never touches
+them, while Catmull-Rom always runs straight through all four. That single difference — approximating vs
+interpolating — is what decides which curve a tool uses.
+</Callout>
+
+## How it works
+
+Take a cubic Bézier with control points P0 = (0, 0), P1 = (0, 2), P2 = (2, 2), P3 = (2, 0) and evaluate at
+t = 0.5. De Casteljau is nothing but repeated lerps, shrinking the array by one each round:
+
+```
+level 0 (control points):  P0(0,0)  P1(0,2)  P2(2,2)  P3(2,0)
+
+level 1 — lerp each edge at t=0.5:
+  Q0 = lerp(P0,P1,.5) = (0, 1)
+  Q1 = lerp(P1,P2,.5) = (1, 2)
+  Q2 = lerp(P2,P3,.5) = (2, 1)
+
+level 2 — lerp the 2 remaining edges:
+  R0 = lerp(Q0,Q1,.5) = (0.5, 1.5)
+  R1 = lerp(Q1,Q2,.5) = (1.5, 1.5)
+
+level 3 — the last lerp:
+  B  = lerp(R0,R1,.5) = (1.0, 1.5)   ← the point on the curve
+```
+
+Three points became one. That final `(1.0, 1.5)` is B(0.5), and no polynomial coefficients were ever
+computed — only convex combinations of points. Here is the same construction as runnable code:
+
+<CodeRunner
+  client:visible
+  code={`// de Casteljau: repeated lerps collapse the control points to B(t).
+function lerp(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+// points is [[x,y], ...]; works for a cubic (length 4) or any degree.
+function deCasteljau(points, t) {
+  let pts = points.map((p) => [p[0], p[1]]);
+  while (pts.length > 1) {
+    const next = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      next.push(lerp(pts[i], pts[i + 1], t));
+    }
+    pts = next;
+  }
+  return pts[0];
+}
+
+const P = [[0, 0], [0, 2], [2, 2], [2, 0]];`}
+  tests={[
+    { expr: 'deCasteljau(P, 0)', label: 't=0 → P0' },
+    { expr: 'deCasteljau(P, 1)', label: 't=1 → P3' },
+    { expr: 'deCasteljau(P, 0.5)', label: 't=0.5 → midpoint' },
+  ]}
+/>
+
+At t=0 the collapse leaves P0, at t=1 it leaves P3, and at t=0.5 it lands on the `(1, 1.5)` we computed by
+hand — the endpoints are interpolated, the interior points only pull.
+
+## The real implementation
+
+The course file evaluates a Bézier two ways — the numerically stable de Casteljau recursion and the
+direct Bernstein sum — and adds Catmull-Rom for curves that must pass through their points:
+
+```ts
+// /dsa/33-3d-graphics/07-curves-animation/curves-splines.ts
+export function bezierDeCasteljau(points: Vec3[], t: number): Vec3 {
+  let pts = points.map((p) => p.clone());
+  while (pts.length > 1) {
+    const next: Vec3[] = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      next.push(pts[i].lerp(pts[i + 1], t)); // (1−t)Pᵢ + t Pᵢ₊₁
+    }
+    pts = next;
+  }
+  return pts[0];
+}
+
+// Catmull-Rom segment p1→p2, tangents from neighbours: m₁=(p2−p0)/2, m₂=(p3−p1)/2.
+export function catmullRomSegment(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, t: number): Vec3 {
+  const t2 = t * t, t3 = t2 * t;
+  const calc = (a: number, b: number, c: number, d: number): number =>
+    0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+  return new Vec3(
+    calc(p0.x, p1.x, p2.x, p3.x),
+    calc(p0.y, p1.y, p2.y, p3.y),
+    calc(p0.z, p1.z, p2.z, p3.z),
+  );
+}
+```
+
+The sibling file `skeletal-animation.ts` reuses the very same interpolation atoms over *time*: a bone's
+position and scale are **lerp**-ed between keyframes, and its rotation is **slerp**-ed (spherical lerp of
+quaternions, so the turn advances at constant angular speed along the shortest arc). Keyframes are just
+control points on a timeline; easing curves that shape the blend are — you guessed it — cubic Béziers.
+
+Study and run both at `33-3d-graphics/07-curves-animation/curves-splines.ts` and
+`33-3d-graphics/07-curves-animation/skeletal-animation.ts`.
+
+## Complexity & math
+
+A degree-3 Bézier expands into the **Bernstein basis** — the binomial weights of Pascal's triangle:
+
+$$
+B(t) = \sum_{i=0}^{3} \binom{3}{i} (1-t)^{3-i}\, t^{i}\, P_i
+     = (1-t)^3 P_0 + 3(1-t)^2 t\, P_1 + 3(1-t) t^2 P_2 + t^3 P_3.
+$$
+
+The weights are non-negative and sum to one, $\sum_i \binom{3}{i}(1-t)^{3-i}t^i = ((1-t)+t)^3 = 1$, which
+is why the curve stays inside the convex hull of its control points and why $B(0)=P_0$, $B(1)=P_3$. The
+tangent (velocity) is the derivative $B'(t) = 3(1-t)^2 (P_1 - P_0) + 6(1-t) t\, (P_2 - P_1) + 3 t^2 (P_3 - P_2)$ —
+normalize it to orient a camera or a car along the path.
+
+De Casteljau evaluates the same point with repeated lerps in $O(n^2)$ time for degree $n$ (tiny, usually
+$n=3$) while staying numerically stable. Catmull-Rom evaluates one segment in $O(1)$ and, crucially,
+*passes through* each control point with matching tangents on both sides, giving C1 continuity.
+
+| Method | Passes through points? | Evaluate one point | Continuity |
+|--------|------------------------|--------------------|------------|
+| Bézier (de Casteljau) | Endpoints only | $O(n^2)$ | C-inf within a segment |
+| Bézier (Bernstein sum) | Endpoints only | $O(n)$ | C-inf within a segment |
+| Catmull-Rom | Every point | $O(1)$ per segment | C1 across joints |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Games & Film" icon="🎬">
+Camera rails and character motion ride splines: designers drop waypoints and a Catmull-Rom path threads
+them so the camera hits every mark, while keyframe animation blends bone poses over time with lerp/slerp —
+the same interpolation atoms applied along a timeline.
+</ExampleCard>
+
+<ExampleCard domain="Design tools & fonts" icon="✒️">
+Every vector editor and font format is Béziers: TrueType glyphs use quadratic curves, PostScript/CFF use
+cubics, and the pen tool's draggable handles are literally the control points P1 and P2 steering each arc.
+</ExampleCard>
+
+<ExampleCard domain="Robotics & drones" icon="🤖">
+Path planners fit smooth splines through waypoints so a drone or CNC tool moves with continuous velocity
+and bounded jerk — no sudden corners. Arc-length reparameterization then makes it travel at *constant
+speed*, not merely constant t.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Control points are not waypoints (for Bézier).** The curve touches only P0 and P3; it is pulled
+  toward P1 and P2. If someone needs the curve to hit every point, switch to Catmull-Rom or a natural
+  spline.
+- **Equal steps in t are NOT equal steps in distance.** A curve moves slowly then quickly for uniform Δt.
+  For constant-velocity motion, build an arc-length table and remap t — otherwise your camera lurches.
+- **Chain cubics; don't raise the degree.** A single high-degree Bézier wiggles and loses local control.
+  Real paths are piecewise cubics joined with matched tangents.
+- **Rotations need slerp, not lerp.** Linearly interpolating quaternion components drifts off the unit
+  sphere and changes speed; slerp keeps constant angular velocity along the short arc.
+- **Interview cue:** "smooth path through N points" almost always means *spline* — say "piecewise cubic,
+  Catmull-Rom if it must pass through the points, and watch the t-vs-arc-length distinction."
+
+## Practice
+
+1. **Easy:** Compute $\operatorname{lerp}((0,0), (10,4), 0.25)$ by hand.
+2. **Easy:** For a cubic Bézier, what are B(0) and B(1) in terms of the control points, and why?
+3. **Medium:** Run the de Casteljau demo above at t=0.5 on the default points; verify the two second-level
+   points and the final point by tracing the lerps.
+4. **Medium:** Evaluate the Bernstein weights $\binom{3}{i}(1-t)^{3-i}t^i$ at t=0.25 and confirm they sum
+   to 1.
+5. **Hard:** Given four keyframe rotations, explain why you would slerp between them rather than lerp their
+   raw quaternion components, and what "shortest arc" correction slerp applies.
+
+## Quick check
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What single operation is de Casteljau built entirely out of?',
+      options: ['Matrix inversion', 'Linear interpolation (lerp) between neighbouring points', 'Dot products', 'Cross products'],
+      answer: 1,
+      explain: 'Each round lerps neighbouring points at parameter t and shrinks the array by one, until a single point — B(t) — remains.',
+    },
+    {
+      q: 'Which control points does a cubic Bézier curve actually pass through?',
+      options: ['All four', 'Only the two endpoints P0 and P3', 'Only the interior points P1 and P2', 'None of them'],
+      answer: 1,
+      explain: 'B(0)=P0 and B(1)=P3; the interior points P1 and P2 only pull the curve toward them (it stays in their convex hull).',
+    },
+    {
+      q: 'You need a camera path that passes exactly through a set of waypoints and stays smooth. Best choice?',
+      options: ['A single high-degree Bézier', 'A Catmull-Rom spline', 'Straight-line lerp between waypoints', 'Nearest-neighbour snapping'],
+      answer: 1,
+      explain: 'Catmull-Rom interpolates every point and derives each tangent from its neighbours, giving a C1-smooth path through all the waypoints.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A curve is <strong>lerps of lerps</strong>: de Casteljau collapses control points to a single point B(t) using only convex combinations.',
+    'Cubic Bézier in Bernstein form is <strong>B(t) = Σ C(3,i)(1−t)^(3−i) t^i P_i</strong>; weights sum to 1, so the curve stays in the convex hull and hits only P0 and P3.',
+    '<strong>Bézier approximates</strong> (pulled toward interior points); <strong>Catmull-Rom interpolates</strong> (passes through every point, C1 smooth) — pick by whether points are steers or waypoints.',
+    'The <strong>tangent B′(t)</strong> gives velocity/orientation; equal steps in t are not equal in distance, so remap by arc length for constant speed.',
+    'Skeletal animation reuses the same atoms over <strong>time</strong>: lerp positions, <strong>slerp</strong> rotation quaternions between keyframes, with easing curves that are themselves cubic Béziers.',
+  ]}
+/>
+
+That closes the **3D Graphics** track — from vectors and matrices through the scene graph, shading, and
+now the curves that move it all. Everything so far has lived inside one machine; next we zoom out to
+[System Design Fundamentals](/lessons/dsa-system-design/system-design-fundamentals), where the challenge
+becomes coordinating many machines at once. This lesson builds on
+[Shading & Lighting](/lessons/dsa-3d-graphics/shading-lighting), and for more on blending over time see
+[interpolation & easing](/lessons/game-math/interpolation-easing) in the Game Dev course.

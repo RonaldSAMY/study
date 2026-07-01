@@ -1,0 +1,230 @@
+---
+title: GCD & Extended Euclidean
+track: dsa-number-theory
+summary: "The oldest algorithm still in use: repeatedly replace (a, b) with (b, a mod b) to find the GCD — and carry along the coefficients that solve ax + by = gcd."
+difficulty: intermediate
+estMinutes: 18
+prereqs:
+  - dsa-number-theory/modular-arithmetic
+leadsTo:
+  - dsa-number-theory/primality-tests
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NTExtendedEuclid from '../../../components/demos/NTExtendedEuclid.tsx';
+
+## The hook: two gears that finally line up
+
+Two meshed gears with 48 and 18 teeth turn together. After how many teeth do the *same* two teeth meet
+again? The answer is their least common multiple, and to get it you first need the greatest common
+divisor. Euclid wrote down how to find it around 300 BC, and we still run essentially his algorithm
+today — it is the fastest known and it powers the modular inverse you needed at the end of the last
+lesson. The "extended" version does something extra: it tells you exactly how to *combine* the two
+numbers to reach their GCD.
+
+<Callout type="intuition" title="The one-sentence idea">
+$\gcd(a, b) = \gcd(b, a \bmod b)$ — replacing the larger number by the remainder shrinks the problem
+fast, and tracking two bookkeeping coefficients along the way solves $ax + by = \gcd(a, b)$ for free.
+</Callout>
+
+## Intuition
+
+Any common divisor of $a$ and $b$ also divides $a - b$, and more sharply, it divides $a \bmod b$. So the
+pair $(a, b)$ and the pair $(b, a \bmod b)$ have *exactly the same* common divisors. Keep replacing the
+big number by the remainder and the numbers plummet; when the remainder hits 0, the other entry is the
+GCD. That is the whole Euclidean algorithm.
+
+The **extended** version notices that every remainder in that chain can be written as a combination
+$a \cdot x + b \cdot y$ of the two originals. If you carry $(x, y)$ down each row, the last non-zero row
+hands you Bezout's identity:
+
+$$
+a \cdot x + b \cdot y = \gcd(a, b).
+$$
+
+Why care? When $\gcd(a, m) = 1$, Bezout gives $a \cdot x + m \cdot y = 1$, so $a \cdot x \equiv 1 \pmod m$
+— meaning $x$ is the **modular inverse** of $a$, the "divide on the clock" operation we were missing.
+
+## Play with it
+
+The demo runs the extended algorithm as a table that shrinks toward the GCD. Watch the remainder column
+march down while the $x$ and $y$ columns keep the invariant $a \cdot x + b \cdot y = r$ true on *every*
+row.
+
+<NTExtendedEuclid client:visible />
+
+<Callout type="tip">
+Load $a = 48$, $b = 18$. The remainders go $48, 18, 12, 6, 0$; the row holding 6 also holds $x = -1$,
+$y = 3$, and indeed $48(-1) + 18(3) = 6$. Now try two coprime numbers like 17 and 5 — the GCD is 1, so
+that final coefficient is a modular inverse.
+</Callout>
+
+## How it works
+
+Trace $\gcd(48, 18)$ as division-with-remainder, then read the coefficients off the shrinking pairs:
+
+```
+48 = 2·18 + 12     r: 48, 18, 12, 6, 0   (stop when r = 0)
+18 = 1·12 + 6      gcd = 6  (the last non-zero remainder)
+12 = 2·6  + 0
+
+Extended bookkeeping (a·x + b·y = r on each row):
+r=48  x=1  y=0     48·1  + 18·0  = 48
+r=18  x=0  y=1     48·0  + 18·1  = 18
+r=12  x=1  y=-2    48·1  + 18·-2 = 12
+r=6   x=-1 y=3     48·-1 + 18·3  = 6   ← Bezout: x=-1, y=3
+```
+
+Each new row subtracts the quotient times the row above — the same recipe for the remainder *and* for the
+coefficients.
+
+<CodeRunner
+  client:visible
+  code={`// Iterative extended Euclid: returns {g, x, y} with a*x + b*y = g
+function extendedGcd(a, b) {
+  let [oldR, r] = [a, b];
+  let [oldX, x] = [1, 0];
+  let [oldY, y] = [0, 1];
+  while (r !== 0) {
+    const q = Math.floor(oldR / r);
+    [oldR, r] = [r, oldR - q * r];
+    [oldX, x] = [x, oldX - q * x];
+    [oldY, y] = [y, oldY - q * y];
+  }
+  return { g: oldR, x: oldX, y: oldY };
+}
+
+// Modular inverse of a mod m (exists iff gcd(a, m) = 1)
+function modInverse(a, m) {
+  const { g, x } = extendedGcd(a, m);
+  if (g !== 1) return null;        // no inverse
+  return ((x % m) + m) % m;
+}`}
+  tests={[
+    { expr: 'extendedGcd(48, 18)', label: 'gcd and Bezout coeffs of (48,18)' },
+    { expr: 'extendedGcd(48, 18).g', label: 'gcd(48,18)' },
+    { expr: 'modInverse(3, 11)', label: '3^-1 mod 11' },
+    { expr: '(3 * modInverse(3, 11)) % 11', label: 'check 3 · 3^-1 mod 11' },
+    { expr: 'modInverse(4, 6)', label: '4^-1 mod 6 (no inverse)' },
+  ]}
+/>
+
+## The real implementation
+
+The recursive form from the course file mirrors the math almost line for line, and modular inverse is a
+three-line consequence:
+
+```ts
+// /dsa/22-number-theory/extended-euclidean.ts
+export function extendedGcd(a: number, b: number): { gcd: number; x: number; y: number } {
+  if (b === 0) return { gcd: a, x: 1, y: 0 };      // base case: a·1 + 0·0 = a
+  const r = extendedGcd(b, a % b);                  // recurse on (b, a mod b)
+  return { gcd: r.gcd, x: r.y, y: r.x - Math.floor(a / b) * r.y };
+}
+
+export function modularInverse(a: number, m: number): number {
+  const { gcd: g, x } = extendedGcd(a, m);
+  if (g !== 1) return -1;                           // inverse exists iff coprime
+  return ((x % m) + m) % m;
+}
+```
+
+The same file uses this to solve $ax + by = c$ (Diophantine equations) and to combine congruences.
+Run the full file: `npx tsx 22-number-theory/extended-euclidean.ts`.
+
+## Complexity
+
+The remainders shrink at least as fast as the Fibonacci numbers grow, so the number of steps is
+logarithmic:
+
+$$
+T(a, b) = O(\log \min(a, b)).
+$$
+
+| Task | Method | Time |
+|------|--------|------|
+| Plain GCD | Euclid | $O(\log \min(a,b))$ |
+| Bezout coefficients | Extended Euclid | $O(\log \min(a,b))$ |
+| Modular inverse (any coprime $m$) | Extended Euclid | $O(\log m)$ |
+| Modular inverse (prime $m$) | Fermat: $a^{m-2}$ | $O(\log m)$ |
+
+The worst case is consecutive Fibonacci numbers — a famous fact that ties this ancient algorithm to the
+golden ratio.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cryptography" icon="🔑">
+RSA key generation computes the private exponent as the modular inverse of the public exponent modulo
+$\varphi(n)$. No extended Euclid, no private key — the whole scheme rests on Bezout's identity.
+</ExampleCard>
+
+<ExampleCard domain="Puzzles & measurement" icon="🪣">
+The water-jug puzzle — measure 4 litres with 3- and 5-litre jugs — is solvable exactly when
+$\gcd(3, 5) = 1$ divides 4. Bezout's coefficients even tell you the sequence of pours.
+</ExampleCard>
+
+<ExampleCard domain="Computer graphics" icon="🖥️">
+Drawing a line or tiling a texture at a rational slope repeats with a period set by a GCD; reducing a
+fraction to lowest terms (dividing numerator and denominator by their GCD) is the same computation.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Inverse may not exist.** $a$ has an inverse mod $m$ only when $\gcd(a, m) = 1$. Check the GCD before
+  trusting the coefficient — `modInverse(4, 6)` must return "none," not garbage.
+- **Sign of the coefficient.** $x$ can come out negative; normalize with `((x % m) + m) % m` before using
+  it as an inverse.
+- **Recursion depth is tiny.** It is logarithmic, so the recursive form is safe, but the iterative form
+  avoids the stack entirely and is the competitive-programming default.
+- **Interview cue:** "solve $ax + by = c$," "find the modular inverse," or "when can you measure exactly
+  $z$?" are all extended-Euclid questions in disguise.
+
+## Practice
+
+1. **Easy:** Run Euclid on $(56, 98)$ by hand. What is the GCD, and what is $\mathrm{lcm}(56, 98)$?
+2. **Easy:** Find integers $x, y$ with $35x + 15y = 5$.
+3. **Medium:** Compute $7^{-1} \bmod 13$ with extended Euclid and verify $7x \equiv 1$.
+4. **Medium:** Decide whether you can measure 5 litres with 2- and 6-litre jugs, and justify with a GCD.
+5. **Hard:** Given coprime $m_1, m_2$, use Bezout to combine $x \equiv a_1 \pmod{m_1}$ and
+   $x \equiv a_2 \pmod{m_2}$ into a single congruence (a baby Chinese Remainder Theorem).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'The Euclidean algorithm replaces (a, b) with which pair?',
+      options: ['(a - b, b)', '(b, a mod b)', '(a, b - a)', '(a mod b, b mod a)'],
+      answer: 1,
+      explain: 'gcd(a, b) = gcd(b, a mod b); using the remainder shrinks the numbers geometrically fast.',
+    },
+    {
+      q: 'When does a have a modular inverse modulo m?',
+      options: ['Always', 'When a < m', 'When gcd(a, m) = 1', 'When m is even'],
+      answer: 2,
+      explain: 'An inverse exists exactly when a and m are coprime, because Bezout then gives a·x + m·y = 1.',
+    },
+    {
+      q: 'Extended Euclid on (48, 18) gives gcd 6 with 48·(-1) + 18·3 = 6. What identity is this?',
+      options: ['Fermat\'s little theorem', 'Bezout\'s identity', 'The Chinese Remainder Theorem', 'Euler\'s theorem'],
+      answer: 1,
+      explain: 'Writing the gcd as a·x + b·y is exactly Bezout\'s identity, the extra output of the extended algorithm.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    '<strong>gcd(a, b) = gcd(b, a mod b)</strong>: replace the big number with the remainder until it hits 0.',
+    'It runs in <strong>O(log min(a, b))</strong> — the worst case is consecutive Fibonacci numbers.',
+    'Extended Euclid also returns <strong>x, y with a·x + b·y = gcd</strong> (Bezout\'s identity).',
+    'A <strong>modular inverse</strong> is just Bezout when gcd(a, m) = 1 — the way to "divide" on the clock.',
+    'It builds <strong>RSA private keys, reduces fractions, and solves ax + by = c</strong>.',
+  ]}
+/>
+
+Next up: **Primality Testing** — deciding whether a single big number is prime, from schoolbook trial
+division to the probabilistic Miller-Rabin test that guards real cryptographic keys.

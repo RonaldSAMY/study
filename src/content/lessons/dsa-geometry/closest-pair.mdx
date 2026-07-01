@@ -1,0 +1,258 @@
+---
+title: Closest Pair of Points
+track: dsa-geometry
+summary: "Find the two nearest points among thousands: divide by a median line, recurse, then scan a thin strip in O(n log n)."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-geometry/point-in-polygon
+leadsTo:
+  - dsa-geometry/line-sweep
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GeoClosestPair from '../../../components/demos/GeoClosestPair.tsx';
+
+## The hook: which two aircraft are closest?
+
+Air-traffic control watches thousands of blips. The single most safety-critical question is: **which
+two are closest right now?** Comparing every pair is $n^2/2$ checks — fine for a hundred planes,
+hopeless for a hundred thousand sensor points refreshed every second. The elegant fix is one of the
+prettiest divide-and-conquer results in all of algorithms: split the plane, solve each half, and then
+prove that only a **thin vertical strip** down the middle can hold a closer cross-boundary pair — and
+that strip costs only linear work.
+
+<Callout type="intuition" title="The one-sentence idea">
+Split the points by a median line, find the closest pair in each half (distance δ), then the only pairs
+that could beat δ lie within a **strip of width 2δ** around the line — and each point there needs to be
+compared with just a handful of neighbours.
+
+</Callout>
+
+## Intuition: the strip is where the magic hides
+
+Sort the points by x and cut them in half with a vertical line. Recursively find the closest pair on the
+left (distance $\delta_L$) and on the right ($\delta_R$); let $\delta = \min(\delta_L, \delta_R)$. Any
+pair closer than $\delta$ that we have not yet considered must have one point on each side — and both
+points must lie within $\delta$ of the dividing line, or they'd be farther than $\delta$ apart just from
+their x-gap. So collect only the points inside the **strip** of width $2\delta$.
+
+Now the crucial counting argument: sort the strip by y, and for each point look only at the next few
+points **above** it. Because every point already respects the $\delta$ spacing within its own half, a
+$\delta \times 2\delta$ box can hold at most a constant number of them — you never need more than **7**
+comparisons per strip point. That constant is what turns the combine step from quadratic into linear,
+giving the recurrence $T(n) = 2T(n/2) + O(n)$ and the beautiful $O(n \log n)$.
+
+## Play with it
+
+Drag points across the divide. Play to watch the split, the best pair in each half, the δ-wide strip
+light up, and the strip scan hunt for a closer cross-boundary pair.
+
+<GeoClosestPair client:visible />
+
+<Callout type="tip">
+Put the two closest points on **opposite** sides of the divide. Neither half "sees" them — only the
+strip scan catches the pair. That is exactly the case the whole strip argument exists to handle.
+</Callout>
+
+## How it works
+
+With δ set by the two halves, the strip check compares each point only to later points whose y is within
+δ, and bails out early the moment the y-gap alone exceeds δ:
+
+```
+δ = min(left best, right best)
+strip = points with |x − midX| < δ,   sorted by y
+for i in strip:
+  for j = i+1 while strip[j].y − strip[i].y < δ:   ← at most ~7 iterations
+    update best if dist(strip[i], strip[j]) < best
+```
+
+The inner `while` almost never runs more than a few times — that is the 7-point bound at work:
+
+<CodeRunner
+  client:visible
+  code={`function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+function brute(p) {
+  let best = Infinity, pair = null;
+  for (let i = 0; i < p.length; i++)
+    for (let j = i + 1; j < p.length; j++) {
+      const d = dist(p[i], p[j]);
+      if (d < best) { best = d; pair = [p[i], p[j]]; }
+    }
+  return { best, pair };
+}
+function closest(points) {
+  const px = [...points].sort((a, b) => a.x - b.x);
+  function rec(px) {
+    const n = px.length;
+    if (n <= 3) return brute(px);
+    const mid = n >> 1, midX = px[mid].x;
+    let r = rec(px.slice(0, mid)), q = rec(px.slice(mid));
+    let best = r.best < q.best ? r : q;
+    const strip = px.filter(p => Math.abs(p.x - midX) < best.best).sort((a, b) => a.y - b.y);
+    for (let i = 0; i < strip.length; i++)
+      for (let j = i + 1; j < strip.length && strip[j].y - strip[i].y < best.best; j++) {
+        const d = dist(strip[i], strip[j]);
+        if (d < best.best) best = { best: d, pair: [strip[i], strip[j]] };
+      }
+    return best;
+  }
+  return rec(px);
+}
+const P = [{x:2,y:3},{x:12,y:30},{x:40,y:50},{x:5,y:1},{x:12,y:10},{x:3,y:4}];`}
+  tests={[
+    { expr: 'closest(P).best.toFixed(3)', label: 'closest distance' },
+    { expr: 'closest(P).pair.map(p => `(${p.x},${p.y})`).join(" - ")', label: 'the closest pair' },
+  ]}
+/>
+
+## The real implementation
+
+The course file pre-sorts by x and by y, then recurses; the strip scan uses the y-sorted order and the
+early `y < δ` cutoff:
+
+```ts
+// /dsa/23-geometry/closest-pair.ts
+function closestPairRecursive(px: Point[], py: Point[]): { distance: number; pair: [Point, Point] } {
+  const n = px.length;
+  if (n <= 3) return closestPairBruteForce(px);
+
+  const mid = Math.floor(n / 2);
+  const midPoint = px[mid];
+
+  const leftResult = closestPairRecursive(/* left half, y-sorted */ ...);
+  const rightResult = closestPairRecursive(/* right half, y-sorted */ ...);
+
+  let best = leftResult.distance < rightResult.distance ? leftResult : rightResult;
+  const delta = best.distance;
+
+  // Combine: only points within delta of the midline can beat delta
+  const strip: Point[] = [];
+  for (const p of py) if (Math.abs(p.x - midPoint.x) < delta) strip.push(p);
+
+  for (let i = 0; i < strip.length; i++) {
+    for (let j = i + 1; j < strip.length && strip[j].y - strip[i].y < delta; j++) {
+      const dist = strip[i].distanceTo(strip[j]);
+      if (dist < best.distance) best = { distance: dist, pair: [strip[i], strip[j]] };
+    }
+  }
+  return best;
+}
+```
+
+Run the full file: `npx tsx 23-geometry/closest-pair.ts`. It also carries an $O(n \log n)$ line-sweep
+variant and a randomized grid method that runs in expected $O(n)$.
+
+## Complexity
+
+Two half-size subproblems plus a linear combine:
+
+$$
+T(n) = 2\,T\!\left(\tfrac{n}{2}\right) + O(n) = O(n \log n), \qquad S(n) = O(n).
+$$
+
+| Approach | Time | Notes |
+|----------|------|-------|
+| Brute force | $O(n^2)$ | all pairs; fine for small $n$ |
+| **Divide & conquer** | $O(n \log n)$ | optimal deterministic |
+| Line sweep | $O(n \log n)$ | active set by y, next lesson |
+| Randomized grid | $O(n)$ expected | hashing into cells of size δ |
+
+The whole trick is that the strip's inner loop is $O(1)$ per point (the 7-point bound), so the combine
+is $O(n)$, not $O(n^2)$ — that is what keeps the recursion at $O(n \log n)$.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Air traffic control" icon="✈️">
+Collision-avoidance systems continuously track the minimum separation between aircraft; the closest pair
+is the first alarm to sound, computed far faster than checking every pair of flights.
+</ExampleCard>
+
+<ExampleCard domain="Molecular dynamics" icon="🧪">
+Simulations of proteins and fluids need the nearest atom pairs to evaluate short-range forces; spatial
+divide-and-conquer (and its grid cousin) avoids the $n^2$ pairwise blow-up each timestep.
+</ExampleCard>
+
+<ExampleCard domain="Machine learning" icon="🧠">
+Nearest-neighbour and de-duplication pipelines lean on closest-pair-style spatial partitioning (k-d
+trees generalise the same divide idea) to find near-duplicate embeddings without exhaustive comparison.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="🌌">
+Detecting gravitationally interacting or merging galaxy pairs in a survey catalogue is a closest-pair
+search over millions of sky positions, where $O(n^2)$ is simply out of the question.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Do not re-sort by y inside the recursion.** Sorting the strip by y each level would add a log factor
+  and make it $O(n \log^2 n)$; pre-sort once and merge y-order like mergesort to stay at $O(n \log n)$.
+- **The strip bound is a proof, not a guess.** Trust the early `y-gap < δ` cutoff; it is provably at
+  most a constant number of comparisons per point, so do not add an arbitrary "check the next 7" cap.
+- **Strict vs non-strict δ.** Duplicate points give distance 0; decide whether coincident points count as
+  the answer, and keep the comparison consistent.
+- **Ties and identical coordinates** can break naive x-splitting; break ties by y when sorting so the
+  median split is well defined.
+- **Interview cue:** "closest pair in the plane" is the canonical divide-and-conquer geometry question —
+  lead with "median split, recurse, then a δ-wide strip with an O(1) scan per point."
+
+## Practice
+
+1. **Easy:** For 6 points, run brute force and confirm the divide-and-conquer answer matches.
+2. **Easy:** Explain in one sentence why a cross-boundary pair closer than δ must lie in the strip.
+3. **Medium:** Prove the strip inner loop needs at most a constant number of comparisons per point.
+4. **Medium:** Adapt the algorithm to return the *k* closest pairs.
+5. **Hard:** Implement the merge that keeps a y-sorted order through the recursion so the total stays
+   $O(n \log n)$ rather than $O(n \log^2 n)$.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'After solving both halves with minimum distance δ, which pairs still need checking?',
+      options: [
+        'All remaining pairs',
+        'Only pairs with both points within δ of the dividing line (the strip)',
+        'Only pairs in the left half',
+        'None — δ is already the answer',
+      ],
+      answer: 1,
+      explain: 'A closer pair must straddle the divide with both points within δ of it, so only the strip can improve on δ.',
+    },
+    {
+      q: 'Why is scanning the strip only O(n) work overall?',
+      options: [
+        'The strip is always empty',
+        'Each strip point needs at most a constant number of comparisons (the 7-point bound)',
+        'The strip is sorted by x',
+        'We skip the strip entirely',
+      ],
+      answer: 1,
+      explain: 'δ-spacing within each half means a δ×2δ box holds O(1) points, so each strip point compares against a constant few.',
+    },
+    {
+      q: 'What recurrence gives the running time?',
+      options: ['T(n) = T(n−1) + O(n)', 'T(n) = 2T(n/2) + O(n)', 'T(n) = 2T(n/2) + O(n²)', 'T(n) = T(n/2) + O(1)'],
+      answer: 1,
+      explain: 'Two half-size subproblems plus a linear combine solve to O(n log n) by the master theorem.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Split by a <strong>median x line</strong>, recurse on each half, then combine — classic divide and conquer.',
+    'Only points in a <strong>strip of width 2δ</strong> around the divide can beat the halves’ best distance δ.',
+    'Sorting the strip by y lets each point compare with a <strong>constant number</strong> of neighbours (the 7-point bound).',
+    'That linear combine yields <strong>T(n) = 2T(n/2) + O(n) = O(n log n)</strong>, optimal and deterministic.',
+    'Pre-sort by y and <strong>merge the order through the recursion</strong> to avoid an extra log factor.',
+  ]}
+/>
+
+Next up: **Line Sweep** — a single moving line that turns closest-pair, segment-intersection, and
+rectangle-area problems into a tidy stream of 1-D events.

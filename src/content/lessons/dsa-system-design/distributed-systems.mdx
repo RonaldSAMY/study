@@ -1,0 +1,259 @@
+---
+title: Distributed Systems
+track: dsa-system-design
+summary: "When the network breaks: CAP forces a choice between consistency and availability, and quorums, consensus, and 2PC are how systems cope with unreliable nodes."
+difficulty: advanced
+estMinutes: 22
+prereqs:
+  - dsa-system-design/databases-storage
+leadsTo:
+  - dsa-system-design/scalability
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SysCapPartition from '../../../components/demos/SysCapPartition.tsx';
+
+## The hook: the message that never arrived
+
+Last lesson your primary replicated a write to its followers. But networks are not reliable: packets drop,
+links saturate, a switch reboots. The moment two of your nodes cannot talk — a **network partition** — you
+face a decision no amount of clever code avoids. A write arrives on one side of the split. Do you accept it
+(and risk the two sides disagreeing), or refuse it (and become unavailable to that client)? You cannot have
+both. This is the **CAP theorem**, and it is the fault line running under every distributed database, queue,
+and consensus system ever built.
+
+<Callout type="intuition" title="The one-sentence idea">
+When the network partitions, a distributed system must choose: keep every replica consistent (reject some
+requests) or stay available to everyone (let replicas diverge) — you cannot do both at once.
+</Callout>
+
+## Intuition: pick two, but the partition is not optional
+
+CAP names three properties:
+
+- **Consistency (C)** — every read returns the most recent write.
+- **Availability (A)** — every request gets a (non-error) response.
+- **Partition tolerance (P)** — the system keeps working despite dropped messages between nodes.
+
+The subtlety students miss: **P is not a choice**. In any real network, partitions *will* happen, so you
+must tolerate them. What CAP really says is that *during a partition* you choose **C or A**. That splits the
+world in two:
+
+- **CP systems** (consistency first) refuse requests they cannot make consistent. ZooKeeper, HBase, etcd,
+  Spanner, CockroachDB. Good when correctness is non-negotiable (config, locks, balances).
+- **AP systems** (availability first) always answer, and reconcile divergence later. Cassandra, DynamoDB,
+  CouchDB. Good when being up matters more than being perfectly fresh (shopping carts, feeds, presence).
+
+How does a system stay consistent while nodes fail? **Quorums.** With $N$ replicas, require a write to reach
+$W$ of them and a read to consult $R$ of them; if $W + R > N$, the read set and write set must overlap in at
+least one node, so a read always sees the latest write. A **majority** quorum ($N/2 + 1$) is the common
+choice: with 5 nodes, any 3 form a majority, and two majorities always intersect — which is exactly why the
+minority side of a partition must step back.
+
+For decisions that need a single agreed answer (who is the leader? what is the next log entry?), systems run
+a **consensus algorithm** like **Raft** or **Paxos**. Raft elects a leader with randomized timeouts
+(150–300 ms), replicates a log, and commits an entry once a majority acknowledges it. The math of fault
+tolerance is stark: **$2f + 1$ nodes tolerate $f$ failures** — 3 nodes survive 1 loss, 5 survive 2. And when
+a transaction must span multiple machines atomically, **two-phase commit (2PC)** coordinates a *prepare* then
+*commit* round — correct, but it **blocks**: if the coordinator dies mid-flight, participants hold locks
+indefinitely, which is why high-availability systems often prefer **sagas** (compensating steps) instead.
+
+## Play with it
+
+Five replicas, all consistent. Trigger a partition, then send a write to the majority or minority side, and
+compare **CP** (refuse to break consistency) against **AP** (stay available, diverge, reconcile on heal).
+
+<SysCapPartition client:visible />
+
+<Callout type="tip">
+Run CP with the write on the **minority** side: the write is refused, because those two nodes cannot form a
+quorum. Now switch to AP with the same write: it is accepted, the two sides show different values, and only
+when the partition heals does last-writer-wins reconcile them. That single toggle *is* the CAP trade-off.
+</Callout>
+
+## How it works: quorums and the overlap guarantee
+
+The whole "consistency under failure" trick reduces to set overlap. If writes touch $W$ nodes and reads
+touch $R$ nodes out of $N$, then $W + R > N$ forces at least one node to be in both — so no read can miss the
+latest write. Here is the arithmetic, plus Raft-style failure tolerance:
+
+<CodeRunner
+  client:visible
+  code={`// Quorum consistency: does every read overlap the latest write?
+function stronglyConsistent(N, W, R) {
+  return W + R > N; // pigeonhole: the read set and write set must share a node
+}
+
+// Majority quorum and how many failures a cluster tolerates.
+function majority(N) { return Math.floor(N / 2) + 1; }
+function faultsTolerated(N) { return Math.floor((N - 1) / 2); } // 2f+1 tolerates f
+
+// Can the majority side of a partition still make progress?
+function sideCanServe(sideSize, N) { return sideSize >= majority(N); }`}
+  tests={[
+    { expr: 'stronglyConsistent(3, 2, 2)', label: 'N=3,W=2,R=2 strongly consistent?' },
+    { expr: 'stronglyConsistent(5, 1, 1)', label: 'N=5,W=1,R=1 strongly consistent?' },
+    { expr: 'majority(5) + " nodes = quorum; tolerates " + faultsTolerated(5) + " failures"', label: 'N=5 quorum & fault tolerance' },
+    { expr: 'sideCanServe(2, 5)', label: 'can a 2-node minority serve?' },
+  ]}
+/>
+
+`N=3,W=2,R=2` is strongly consistent (4 > 3); `N=5,W=1,R=1` is not (2 is not > 5), so it can return stale
+reads. A 5-node cluster needs 3 for a majority, tolerates 2 failures, and a 2-node minority cannot serve —
+the reason the demo's minority side goes dark in CP mode.
+
+## The real implementation
+
+Raft's vote decision — grant your vote only to a candidate whose log is at least as current as yours:
+
+```ts
+// /dsa/system-design/03-distributed-systems/consensus-algorithms.ts
+const logOk =
+  args.lastLogTerm > lastLogTerm ||
+  (args.lastLogTerm === lastLogTerm && args.lastLogIndex >= this.log.length);
+
+if ((this.votedFor === null || this.votedFor === args.candidateId) && logOk) {
+  this.votedFor = args.candidateId;
+  reply.voteGranted = true;      // a leader needs a MAJORITY of these
+  this.resetElectionTimer();
+}
+```
+
+And the coordinator of a two-phase commit — prepare everyone, and commit only on a unanimous yes:
+
+```ts
+// /dsa/system-design/03-distributed-systems/distributed-transactions.ts
+async execute(): Promise<boolean> {
+  this.state = TransactionState.PREPARING;
+  const votes = await Promise.all(this.participants.map((p) => p.prepare())); // phase 1
+  return votes.every((v) => v) ? this.commitAll() : this.abortAll();          // phase 2
+}
+```
+
+Study them at `/dsa/system-design/03-distributed-systems/` — `consensus-algorithms.ts` (Raft),
+`consistency-patterns.ts` (the strong → eventual spectrum), `leader-election.ts` (fencing tokens,
+split-brain), and `distributed-transactions.ts` (2PC vs saga vs TCC). The CAP walkthrough itself is in
+`/dsa/system-design/00-fundamentals/cap-theorem.ts`.
+
+## Numbers that decide the design
+
+The two inequalities that govern correctness under failure:
+
+$$
+W + R > N \quad (\text{strong consistency}), \qquad N \ge 2f + 1 \quad (\text{tolerate } f \text{ failures}).
+$$
+
+| Concept | Rule | Example |
+|---------|------|---------|
+| Quorum consistency | $W + R > N$ | N=3, W=2, R=2 → strong |
+| Majority quorum | $N/2 + 1$ | 5 nodes → 3 |
+| Crash fault tolerance | $2f + 1$ nodes tolerate $f$ | 5 → 2 failures |
+| Byzantine fault tolerance | $3f + 1$ nodes tolerate $f$ | 4 → 1 malicious |
+| Raft election timeout | 150–300 ms (randomized) | avoids split votes |
+| 2PC latency | ~2 round trips, and it **blocks** | coordinator failure = held locks |
+
+There is even a refinement, **PACELC**: *if* Partitioned, choose A or C; *else* (normal operation) choose
+Latency or Consistency. DynamoDB is PA/EL (available and low-latency), Spanner is PC/EC (consistent even at a
+latency cost) — a compact way to describe a system's whole personality.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Banking / ledgers" icon="🏦">
+A bank balance must be a CP system: during a partition it would rather refuse a withdrawal than let two ATMs
+both hand out the last \$100. Spanner and CockroachDB use consensus and synchronized clocks to keep the
+ledger linearizable across regions, accepting extra latency as the price of never double-spending.
+</ExampleCard>
+
+<ExampleCard domain="Shopping cart" icon="🛒">
+Amazon's Dynamo famously chose AP for the cart: always let a customer add an item, even during a partition.
+If two replicas diverge, they reconcile later — the worst case is a re-added deleted item, which is far
+better than a checkout that refuses to work on Black Friday.
+</ExampleCard>
+
+<ExampleCard domain="Cluster coordination" icon="🧭">
+Kubernetes and Kafka lean on etcd/ZooKeeper (CP, Raft/ZAB) to answer "who is the leader?" with one agreed
+answer. A **fencing token** — a number that only increases — stops a slow old leader from acting after a new
+one is elected, defusing split-brain.
+</ExampleCard>
+
+<ExampleCard domain="Collaborative editing" icon="📝">
+Google Docs keeps every editor available (AP-leaning) and reconciles concurrent edits with CRDTs / operational
+transforms, so two people typing during a blip both keep their keystrokes and the document converges — no
+one is ever told "you may not type right now."
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Claiming a "CA" system.** Since partitions are inevitable, CA does not exist in a distributed setting —
+  you are always really choosing CP or AP. Saying otherwise is an instant red flag.
+- **Even-numbered clusters.** 4 nodes tolerate the same 1 failure as 3 but are more likely to split evenly
+  with no majority. Use odd sizes (3, 5, 7).
+- **Split-brain.** Without quorum and fencing tokens, two nodes can both believe they are leader and issue
+  conflicting writes. Require a majority to lead.
+- **2PC as a default.** It blocks on coordinator failure and holds locks; for cross-service workflows prefer
+  a **saga** with compensating actions, accepting eventual consistency.
+- **Assuming replication is instant.** Async replicas lag; "read your writes" and monotonic reads need
+  routing to the primary or version tracking.
+- **Interview cue:** state the consistency requirement first, then pick CP or AP and justify with a quorum
+  ($W + R > N$) and a fault-tolerance number ($2f + 1$).
+
+## Practice
+
+1. **Easy:** Is a system with N = 5, W = 3, R = 3 strongly consistent? Show the inequality.
+2. **Easy:** How many node failures does a 7-node consensus cluster tolerate?
+3. **Medium:** During a partition, a bank's minority side receives a withdrawal. Explain what a CP system does
+   and why.
+4. **Medium:** Give one workload where AP is the right call and one where CP is, and justify each in a sentence.
+5. **Hard:** Design the coordination layer for a distributed lock service: choose CP or AP, a cluster size,
+   quorum values, and how you prevent split-brain. Justify every number.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'During a network partition, what does the CAP theorem force you to choose between?',
+      options: [
+        'Latency and throughput',
+        'Consistency and availability',
+        'Sharding and replication',
+        'Reads and writes',
+      ],
+      answer: 1,
+      explain: 'Partition tolerance is mandatory in a real network, so during a partition you must sacrifice either consistency or availability — you cannot keep both.',
+    },
+    {
+      q: 'A quorum system has N = 5. Which (W, R) pair guarantees strong consistency?',
+      options: ['W = 1, R = 1', 'W = 2, R = 2', 'W = 3, R = 3', 'W = 1, R = 3'],
+      answer: 2,
+      explain: 'Strong consistency needs W + R > N. Only 3 + 3 = 6 > 5 forces the read and write sets to overlap.',
+    },
+    {
+      q: 'Why do high-availability systems often avoid two-phase commit (2PC)?',
+      options: [
+        'It is not consistent',
+        'It blocks: a coordinator failure leaves participants holding locks indefinitely',
+        'It cannot span more than two machines',
+        'It is only for single-node databases',
+      ],
+      answer: 1,
+      explain: '2PC holds locks across both phases; if the coordinator dies between prepare and commit, participants block, hurting availability. Sagas avoid this with compensating actions.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Partitions are inevitable, so <strong>CAP</strong> is really a choice during a partition: <strong>CP</strong> (reject to stay consistent) vs <strong>AP</strong> (stay available, diverge, reconcile).',
+    'Quorums give consistency under failure: <strong>W + R &gt; N</strong> forces read/write overlap, and a <strong>majority (N/2 + 1)</strong> lets only one side of a partition make progress.',
+    'Consensus (Raft/Paxos) needs a majority to elect a leader and commit; <strong>2f + 1 nodes tolerate f failures</strong> — use odd cluster sizes.',
+    'Prevent <strong>split-brain</strong> with quorum leadership and <strong>fencing tokens</strong>; a stale old leader must not be able to act.',
+    '<strong>2PC</strong> is strongly consistent but <strong>blocks</strong> on coordinator failure; prefer <strong>sagas</strong> (compensating steps) for available cross-service transactions.',
+  ]}
+/>
+
+Next up: **Designing for Scale** — putting caching, sharding, replication, and these consistency choices
+together, sized with back-of-envelope math and smoothed with queues.

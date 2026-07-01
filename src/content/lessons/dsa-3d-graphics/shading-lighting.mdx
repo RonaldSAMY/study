@@ -1,0 +1,297 @@
+---
+title: Shading & Lighting
+track: dsa-3d-graphics
+summary: "Normals, the BRDF and physically based rendering: from Lambert's N·L diffuse to Cook-Torrance specular that makes surfaces look real."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-3d-graphics/raycasting
+leadsTo:
+  - dsa-3d-graphics/curves-animation
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import G3dShadingLab from '../../../components/demos/G3dShadingLab.tsx';
+
+## The hook: why a grey ball looks like a ball
+
+Fill a circle with flat grey and you get a coin. Vary the grey so the side facing the lamp is bright,
+the far side sinks into shadow, and a tight white glint sits where the light mirrors into your eye —
+suddenly it is a polished sphere. Nothing about the geometry changed; only the *brightness per point*
+did. Shading is the art of answering one question for every surface point: given the surface's tilt,
+the light, and your eye, **how bright is this pixel?** The whole difference between a flat sticker and
+a chrome bearing is that one number, computed well.
+
+<Callout type="intuition" title="The one-sentence idea">
+A surface point's brightness is driven by angles between three unit vectors — the normal `N`, the
+direction to the light `L`, and the direction to your eye `V` — and dot products turn those angles
+into numbers you can paint.
+</Callout>
+
+## Intuition
+
+Every shading model starts with the **surface normal** `N`, the unit vector pointing straight out of
+the surface, plus the unit direction to the light `L` and the unit direction to the eye `V`. Two
+angles decide everything:
+
+- **How square-on the light hits.** When `N` and `L` point the same way, the surface catches the beam
+  full-on and is brightest. As the surface tilts away, the same beam of light smears across more area,
+  so each point dims — this is Lambert's cosine law, and since `N` and `L` are unit vectors, that
+  cosine *is* the dot product `N·L`. This **diffuse** term looks the same from every angle: a matte
+  wall is equally bright wherever you stand.
+- **Whether the mirror bounce reaches your eye.** A shiny surface also throws a concentrated
+  **specular** highlight toward wherever the light would reflect. Blinn's shortcut is the **half-vector**
+  `H = normalize(L + V)` — the direction exactly between light and eye. When `H` lines up with `N`, you
+  are looking straight into the reflection, so `N·H` peaks. Raise it to a **shininess** power and the
+  highlight tightens to a glossy dot.
+
+Physically based rendering (PBR) keeps this skeleton but makes it obey physics: energy in ≥ energy out,
+and the highlight's shape driven by **roughness** and **metalness** instead of an arbitrary exponent.
+This whole lesson mirrors the Game Dev track's [lighting & PBR](/lessons/rendering/lighting-pbr); it
+builds on [Raycasting & Intersection](/lessons/dsa-3d-graphics/raycasting) (which found *where* a ray
+hits and the normal there) and leads to [Curves & Animation](/lessons/dsa-3d-graphics/curves-animation).
+
+## Play with it
+
+Drag the light around the sphere. The bright spot always sits where the surface faces the light most
+squarely (`N·L → 1`), and the ringed glint tracks the half-vector `H`. Push the shininess up to
+shrink the highlight to a hard chrome dot; pull it down for a soft plastic sheen; toggle specular off
+to see the pure Lambert diffuse falloff to the terminator.
+
+<G3dShadingLab client:visible />
+
+<Callout type="tip">
+Notice the highlight and the diffuse bright spot are *not* in the same place: diffuse peaks where the
+surface faces the **light**, specular peaks where it faces **halfway between the light and your eye**.
+That offset is exactly why the glint slides across a sphere as you move your head.
+</Callout>
+
+## How it works
+
+Take a concrete point. Its normal points straight up, `N = (0, 1, 0)`. The light sits up and to the
+right, so the direction to it is `L = normalize(1, 1, 0) = (0.7071, 0.7071, 0)`. Your eye is up and to
+the left, `V = normalize(-1, 1, 0) = (-0.7071, 0.7071, 0)`.
+
+**Diffuse (Lambert):**
+
+```
+N·L = (0)(0.7071) + (1)(0.7071) + (0)(0) = 0.7071
+diffuse = k_d · max(0, N·L) = 0.9 × 0.7071 = 0.6364
+```
+
+**Specular (Blinn-Phong):** build the half-vector, then dot it with the normal and raise to the
+shininess:
+
+```
+H   = normalize(L + V) = normalize(0, 1.4142, 0) = (0, 1, 0)
+N·H = 1.0
+specular = k_s · max(0, N·H)^s = 0.5 × 1.0^32 = 0.5
+```
+
+Here the eye happens to sit right in the mirror direction, so `N·H = 1` and the highlight is at full
+strength. Add a little ambient fill and the point's brightness is `0.1 + 0.6364 + 0.5 = 1.24`, clamped
+to `1.0` — a bright, glossy pixel. Tilt the normal away and both terms shrink; turn it past 90° from
+the light and `max(0, N·L)` clamps the whole thing to black.
+
+<CodeRunner
+  client:visible
+  code={`// Lambert diffuse + Blinn-Phong specular for one surface point.
+// N, L, V are [x, y, z] arrays; returns a single brightness value.
+function dot(a, b) { return a[0]*b[0] + a[1]*b[1] + a[2]*b[2]; }
+function normalize(v) {
+  const m = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0]/m, v[1]/m, v[2]/m];
+}
+
+function shade(N, L, V, kd, ks, shininess) {
+  N = normalize(N); L = normalize(L); V = normalize(V);
+  const ndotl = Math.max(0, dot(N, L));
+  const diffuse = kd * ndotl;                 // Lambert
+  let specular = 0;
+  if (ndotl > 0) {                            // no highlight if light is behind
+    const H = normalize([L[0]+V[0], L[1]+V[1], L[2]+V[2]]);
+    specular = ks * Math.pow(Math.max(0, dot(N, H)), shininess);
+  }
+  return diffuse + specular;
+}`}
+  tests={[
+    { expr: 'shade([0,1,0],[0,1,0],[0,1,0],0.9,0.5,32)', label: 'light straight on the normal (bright)' },
+    { expr: 'shade([0,1,0],[1,1,0],[-1,1,0],0.9,0.5,32)', label: 'the worked example above' },
+    { expr: 'shade([0,1,0],[1,0,0],[0,1,0],0.9,0.5,32)', label: 'grazing light — N·L = 0 (dark)' },
+    { expr: 'shade([0,1,0],[0,-1,0],[0,1,0],0.9,0.5,32)', label: 'light behind the surface (zero)' },
+  ]}
+/>
+
+## The real implementation
+
+Blinn-Phong is cheap and pretty, but its highlight is an invented exponent, not physics — you can
+tune it to reflect more light than arrives. Real engines use the energy-conserving **Cook-Torrance**
+microfacet BRDF instead: model the surface as a sea of tiny mirrors and ask what fraction of light
+from `L` scatters toward `V`. The specular term is `D · F · G / (4 (N·V)(N·L))`, where `D` is the
+GGX distribution of microfacet normals (driven by roughness), `F` is Fresnel reflectance, and `G` is
+geometric shadowing:
+
+```ts
+// /dsa/33-3d-graphics/05-shading-lighting/pbr.ts
+// GGX / Trowbridge-Reitz: D(h) = α² / (π ((n·h)²(α²−1)+1)²), α = roughness²
+function distributionGGX(ndoth: number, alpha: number): number {
+  const a2 = alpha * alpha;
+  const nh = Math.max(0, ndoth);
+  const denom = nh * nh * (a2 - 1) + 1;
+  return a2 / (Math.PI * denom * denom);
+}
+
+// Fresnel-Schlick: F = F0 + (1 − F0)(1 − (h·v))^5
+function fresnelSchlick(hdotv: number, F0: RGB): RGB {
+  const x = Math.pow(1 - Math.max(0, Math.min(1, hdotv)), 5);
+  return new RGB(F0.r + (1 - F0.r) * x, F0.g + (1 - F0.g) * x, F0.b + (1 - F0.b) * x);
+}
+
+// Cook-Torrance specular = D·F·G / (4 (n·l)(n·v))
+const D = distributionGGX(ndoth, alpha);
+const F = fresnelSchlick(hdotv, F0);
+const G = geometrySmith(ndotl, ndotv, alpha);
+const specular = F.scale((D * G) / (4 * ndotl * ndotv + 1e-7));
+// diffuse split: k_d = (1 − F)(1 − metalness); metals have NO diffuse
+```
+
+The **metalness/roughness workflow** wires two sliders into these terms: roughness feeds `α` in `D`
+(smooth ⇒ tight mirror highlight, rough ⇒ broad blur), and metalness lerps `F0` from a dull 0.04 for
+dielectrics up to the material's colour for metals, while zeroing their diffuse. To decide whether a
+lit point is also in *shadow*, engines add **shadow mapping**: render a depth image from the light,
+then for each point compare its distance to the light against the stored nearest depth — farther means
+something blocked it, so it is shadowed.
+
+Study and run the full derivation at `33-3d-graphics/05-shading-lighting/pbr.ts` (and its siblings
+`lighting-models.ts` and `shadow-mapping.ts`).
+
+## Complexity & math
+
+Every term is `O(1)` per surface point per light — a handful of dot products, one `pow`, no data
+structures — which is exactly why these run per-pixel at 60+ FPS. A full frame is $O(P \cdot L)$ for
+`P` shaded pixels and `L` lights.
+
+The diffuse and Blinn-Phong specular terms:
+
+$$
+I_d = k_d \, \max(0,\, N\cdot L), \qquad
+I_s = k_s \, \max(0,\, N\cdot H)^{s}, \quad H = \mathrm{normalize}(L+V).
+$$
+
+PBR replaces the ad-hoc specular with the discretized **rendering equation** — outgoing radiance is
+the sum over lights of the BRDF times incoming light times the cosine foreshortening:
+
+$$
+L_o(V) = \sum_{\text{lights}} f(L,V)\, L_i \, (N\cdot L),
+\qquad
+f_{\text{spec}} = \frac{D\,F\,G}{4\,(N\cdot V)(N\cdot L)}.
+$$
+
+| Term | Name | Controls |
+|------|------|----------|
+| $D$ | Normal distribution (GGX) | highlight **shape** from roughness: $D = \alpha^2 / (\pi((N\cdot H)^2(\alpha^2-1)+1)^2)$, $\alpha=\text{roughness}^2$ |
+| $F$ | Fresnel (Schlick) | reflectance rising at grazing angles: $F = F_0 + (1-F_0)(1 - H\cdot V)^5$ |
+| $G$ | Geometry / shadow-masking | microfacets blocking each other, darkening rough silhouettes |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Game Engines / PBR Materials" icon="🎮">
+Unreal, Unity, Godot and Three.js (<code>MeshStandardMaterial</code>) all ship Cook-Torrance GGX. An
+artist authors one material with base colour, metalness and roughness maps, and it looks right under
+sunny noon, a dim room, or an HDR sky — because the shader conserves energy per pixel.
+</ExampleCard>
+
+<ExampleCard domain="Film / Offline Path Tracing" icon="🎬">
+Renderers like Arnold and RenderMan evaluate the *full* rendering-equation integral, tracing thousands
+of rays per pixel to sample all incoming light. Disney's "principled BRDF" wraps the same D·F·G
+microfacet model in intuitive sliders, and it became the film-and-game interchange standard.
+</ExampleCard>
+
+<ExampleCard domain="Automotive / Product Visualization" icon="🚗">
+Car configurators and e-commerce viewers live or die on believable metal flake, clearcoat and gloss.
+PBR's physically meaningful roughness/metalness lets a paint or a leather look correct across every
+lighting rig, so the on-screen product matches the real one buyers receive.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Forgetting to normalize.** `N·L` is only the cosine when both are unit length. Interpolating
+  normals across a triangle shortens them — renormalize in the fragment shader or your shading dims.
+- **Dropping the `max(0, …)`.** A negative `N·L` means the light is *behind* the surface; without the
+  clamp you paint negative light and get black rims or, worse, a specular highlight on an unlit back.
+- **Confusing diffuse and specular peaks.** Diffuse peaks along `L`; specular peaks along `H`. Say
+  that split out loud in an interview — it explains why highlights move with the camera and diffuse
+  does not.
+- **Phong exponents ≠ Blinn exponents.** To match a Phong look with Blinn-Phong you need roughly
+  4× the exponent; they are different numbers for the same visual tightness.
+- **PBR must run in linear light.** Do the math in linear RGB, *then* tone-map and gamma-encode.
+  Shade in sRGB and energy conservation quietly breaks.
+
+## Practice
+
+1. **Easy:** With `N = (0,1,0)` and `L = (0,1,0)`, what is the diffuse term `max(0, N·L)`? Now tilt the
+   light to `L = normalize(1,1,0)` — does it get brighter or dimmer, and why?
+2. **Easy:** A light points straight up but the surface faces sideways, `N = (1,0,0)`. Compute `N·L`
+   and explain what the `max(0, …)` is protecting against.
+3. **Medium:** For `N = (0,1,0)`, `L = normalize(1,1,0)`, `V = normalize(-1,1,0)`, compute `H` and
+   `N·H`. Why is the highlight at full strength here?
+4. **Medium:** Raise the Blinn-Phong shininess from 8 to 128 in the demo. Describe what happens to the
+   highlight's size and why the exponent controls it.
+5. **Hard:** In the GGX term `D = α²/(π((N·H)²(α²−1)+1)²)`, set `N·H = 1` (facet faces straight up) and
+   show the peak is `1/(π α²)`. What does that say about smooth (small `α`) vs rough surfaces?
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does the diffuse term use N·L rather than just a constant brightness?',
+      options: [
+        'It makes the math faster',
+        'A beam hitting at an angle spreads over more area, so brightness scales with the cosine N·L',
+        'It keeps colors in gamut',
+        'It is only for shiny surfaces',
+      ],
+      answer: 1,
+      explain: 'Lambert’s cosine law: a beam arriving at angle θ smears across 1/cosθ more surface, so irradiance per area is E₀·cosθ = N·L for unit vectors.',
+    },
+    {
+      q: 'The Blinn-Phong half-vector is H = normalize(L + V). When is the specular highlight strongest?',
+      options: [
+        'When H is perpendicular to N',
+        'When L points straight at the camera',
+        'When H aligns with the normal N, so N·H peaks',
+        'When roughness is maximal',
+      ],
+      answer: 2,
+      explain: 'The highlight peaks where N·H = 1 — the surface faces exactly halfway between the light and the eye, i.e. you are looking into the mirror reflection.',
+    },
+    {
+      q: 'In the Cook-Torrance term D·F·G / (4(N·V)(N·L)), what does the D (GGX) factor control?',
+      options: [
+        'The Fresnel rim brightness',
+        'Whether the point is in shadow',
+        'The distribution of microfacet normals — the highlight’s shape from roughness',
+        'The diffuse albedo color',
+      ],
+      answer: 2,
+      explain: 'D is the normal distribution function: it counts how many microfacets point along H. Smooth surfaces give a tall narrow peak (tight highlight); rough ones give a low broad lobe (blurry highlight).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Shading answers one question per point: given normal <strong>N</strong>, light <strong>L</strong>, and eye <strong>V</strong>, how bright is this pixel?',
+    'Lambert diffuse is <strong>k_d · max(0, N·L)</strong> — view-independent, brightest facing the light; the max clamps light from behind.',
+    'Blinn-Phong specular is <strong>k_s · max(0, N·H)^s</strong> with <strong>H = normalize(L + V)</strong>; the exponent sets highlight tightness.',
+    'PBR replaces the invented exponent with the energy-conserving <strong>Cook-Torrance BRDF D·F·G / (4(N·V)(N·L))</strong>, driven by roughness and metalness.',
+    'Every term is <strong>O(1) per point per light</strong>, which is why local shading runs per-pixel in real time.',
+  ]}
+/>
+
+Next up: **Curves & Animation** — once a surface is shaded, we make it *move*, using Bézier and spline
+curves to steer position, orientation, and the lights themselves smoothly through time.

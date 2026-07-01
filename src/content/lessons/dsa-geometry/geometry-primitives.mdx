@@ -1,0 +1,245 @@
+---
+title: Geometry Primitives
+track: dsa-geometry
+summary: "One number rules 2-D geometry: the cross product's sign tells you left, right, or straight — no angles, no trigonometry, no division."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-number-theory/fft-ntt
+  - linear-algebra/vectors
+  - game-math/dot-cross-product
+leadsTo:
+  - dsa-geometry/line-intersection
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GeoOrientationDemo from '../../../components/demos/GeoOrientationDemo.tsx';
+
+## The hook: which way does the road bend?
+
+A self-driving car is tracing a route. At each corner it must answer a deceptively simple question:
+am I about to turn **left**, turn **right**, or keep going **straight**? You could reach for
+`atan2`, subtract angles, and worry about the seam where the angle wraps around. Or you could compute
+**one subtraction-heavy number** whose *sign* answers the question exactly — no angles, no division,
+no floating-point trigonometry. That number is the 2-D cross product, and it is the atom that every
+other geometry algorithm in this track is built from.
+
+<Callout type="intuition" title="The one-sentence idea">
+The signed area of the parallelogram spanned by AB and AC is positive when C is to the **left** of the
+ray A→B, negative when it is to the **right**, and zero when the three points are **collinear**.
+</Callout>
+
+## Intuition: turn the vectors you already know into a compass
+
+You already met the dot product (how much two vectors agree) and the cross product (how much they
+disagree, and in which rotational sense) in the vectors lesson and in Game Dev's dot & cross product.
+Here we specialise the cross product to the plane. Given three points A, B, C, form two vectors that
+start at A:
+
+- $\vec{AB} = B - A$ — the direction you are travelling,
+- $\vec{AC} = C - A$ — the direction to the third point.
+
+Their cross product in 2-D is a single scalar (the z-component of the 3-D cross product):
+
+$$
+\operatorname{cross}(A, B, C) = (B_x - A_x)(C_y - A_y) - (B_y - A_y)(C_x - A_x).
+$$
+
+Geometrically it is the **signed area** of the parallelogram on those two vectors. The *magnitude*
+tells you how far C sits from the line; the *sign* tells you which side. Sweep C from one side of the
+line to the other and the number glides through zero exactly as C crosses — that zero is collinearity.
+Because the whole test is additions, subtractions and multiplications on the coordinates, it is exact
+for integer inputs: no rounding, no `atan2`, no special cases at the angle wrap-around.
+
+## Play with it
+
+Drag A, B, and C. Step through to watch the two vectors appear, the parallelogram shade in, and the
+sign flip as C crosses the line A→B.
+
+<GeoOrientationDemo client:visible />
+
+<Callout type="tip">
+Move C slowly across the line and watch the readout pass through zero. The exact instant it reads 0 is
+the moment all three points line up — the algorithm's definition of "straight ahead."
+</Callout>
+
+## How it works
+
+Take A = (0, 0), B = (4, 0), and a moving C. The base vector is $\vec{AB} = (4, 0)$, so the formula
+collapses to $4 \cdot C_y$ — the sign is simply the sign of C's height:
+
+```
+A=(0,0)  B=(4,0)
+C=(1, 2):  cross = (4)(2) - (0)(1) =  8   > 0  → left  (counter-clockwise)
+C=(1,-2):  cross = (4)(-2) - (0)(1) = -8  < 0  → right (clockwise)
+C=(2, 0):  cross = (4)(0) - (0)(2) =  0        → collinear
+```
+
+Reduce the raw value to just its sign and you get the **orientation** predicate, the workhorse of
+computational geometry:
+
+<CodeRunner
+  client:visible
+  code={`// 2-D cross product of AB and AC (signed parallelogram area)
+function cross(o, a, b) {
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+
+// orientation: +1 = left/CCW, -1 = right/CW, 0 = collinear
+function orientation(o, a, b) {
+  const v = cross(o, a, b);
+  return v > 0 ? 1 : v < 0 ? -1 : 0;
+}
+
+// triangle area via the same number (Shoelace for a triangle)
+function triangleArea(a, b, c) {
+  return Math.abs(cross(a, b, c)) / 2;
+}`}
+  tests={[
+    { expr: 'orientation({x:0,y:0},{x:4,y:0},{x:1,y:2})', label: 'C above AB' },
+    { expr: 'orientation({x:0,y:0},{x:4,y:0},{x:1,y:-2})', label: 'C below AB' },
+    { expr: 'orientation({x:0,y:0},{x:4,y:0},{x:2,y:0})', label: 'C on AB' },
+    { expr: 'triangleArea({x:0,y:0},{x:4,y:0},{x:0,y:3})', label: 'area of right triangle' },
+  ]}
+/>
+
+## The real implementation
+
+Every file in this track opens with the same primitive. Here it is verbatim from the convex-hull
+source, with the sign convention spelled out:
+
+```ts
+// /dsa/23-geometry/convex-hull.ts
+/**
+ * Cross product of vectors OA and OB.
+ * Returns positive if OAB makes a counter-clockwise turn,
+ * negative if clockwise, zero if collinear.
+ */
+export function cross(O: Point, A: Point, B: Point): number {
+  return (A.x - O.x) * (B.y - O.y) - (A.y - O.y) * (B.x - O.x);
+}
+
+export function distanceSquared(a: Point, b: Point): number {
+  return (a.x - b.x) ** 2 + (a.y - b.y) ** 2;   // compare distances without a sqrt
+}
+```
+
+Run the full file: `npx tsx 23-geometry/convex-hull.ts`.
+
+Two habits worth stealing: keep distances **squared** whenever you only need to compare them (a
+square root is slow and irrational), and treat `cross` as the single source of truth for "which side."
+
+## Complexity
+
+Each primitive is a fixed handful of arithmetic operations:
+
+$$
+T_{\text{cross}} = O(1), \qquad T_{\text{area}} = O(1), \qquad T_{\text{orientation}} = O(1).
+$$
+
+| Primitive | Formula | Time | Notes |
+|-----------|---------|------|-------|
+| Cross product | $(B-A)\times(C-A)$ | $O(1)$ | exact for integers |
+| Orientation | sign of cross | $O(1)$ | left / right / straight |
+| Triangle area | $\lvert\text{cross}\rvert / 2$ | $O(1)$ | Shoelace, one triangle |
+| Distance² | $(a-b)\cdot(a-b)$ | $O(1)$ | avoids the square root |
+
+The magic is not the speed of one call — it is that hulls, intersections, and polygon tests are just
+**many** of these $O(1)$ tests stitched together.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Robotics" icon="🤖">
+A robot arm checks whether its next waypoint lies to the left or right of the current heading to decide
+which way to rotate its wrist. One orientation test replaces an angle subtraction that would otherwise
+misbehave near the ±180° wrap.
+</ExampleCard>
+
+<ExampleCard domain="Cartography / GIS" icon="🗺️">
+Map tools store polygon boundaries and must know their winding direction (clockwise vs counter-clockwise)
+to fill them correctly. Summing the cross products around the ring gives twice the signed area — its sign
+is the winding direction.
+</ExampleCard>
+
+<ExampleCard domain="3-D graphics" icon="🎮">
+Back-face culling skips triangles that face away from the camera. In screen space that is exactly the
+sign of the cross product of two triangle edges — negative-area triangles are pointing away and never
+get drawn.
+</ExampleCard>
+
+<ExampleCard domain="Sports analytics" icon="⚽">
+Offside detection asks whether an attacker is ahead of the second-to-last defender relative to the goal
+line. Projected onto the pitch, that is a left/right orientation test against the defensive line.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Floating-point zero is a lie.** With `double` coordinates the cross product is rarely *exactly* 0
+  for near-collinear points. Compare against a small epsilon (the source uses `1e-9`), or use integer
+  coordinates so the test is exact.
+- **Sign flips with the y-axis.** The formula gives positive = counter-clockwise when y points **up**
+  (math convention). On a screen where y points **down**, the same number reads clockwise. Pick one
+  convention and hold it across the whole codebase.
+- **Order matters.** `cross(A, B, C)` and `cross(A, C, B)` are negatives of each other — swapping the
+  last two points flips the answer. Fix the argument order to the "pivot, from, to" pattern.
+- **Overflow on big integers.** Coordinates in the millions squared can exceed 32-bit range; in
+  JavaScript stay under $2^{53}$, or reach for BigInt when multiplying large fixed-point values.
+- **Interview cue:** if a problem says "left turn," "same side," "counter-clockwise," or "is the point
+  above the line," reach for the cross product's sign before you even think about slopes.
+
+## Practice
+
+1. **Easy:** Compute `cross((0,0),(2,0),(2,2))` by hand and state the orientation.
+2. **Easy:** Show that `cross(A,B,C) = -cross(A,C,B)` for any three points.
+3. **Medium:** Use only orientation tests to decide whether point P is inside triangle ABC (hint: it
+   must be on the same side of all three edges).
+4. **Medium:** Given a polygon's vertices in order, compute its signed area and report whether they are
+   listed clockwise or counter-clockwise.
+5. **Hard:** Sort a set of points by polar angle around a pivot using `cross` as the comparator, with no
+   call to `atan2`, breaking ties by distance.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'With y pointing up, cross(A, B, C) is negative. Where is C relative to the ray A→B?',
+      options: ['To the left (counter-clockwise)', 'To the right (clockwise)', 'Exactly on the line', 'Cannot tell without angles'],
+      answer: 1,
+      explain: 'Positive is a left/counter-clockwise turn; negative is a right/clockwise turn; zero is collinear.',
+    },
+    {
+      q: 'Why prefer the cross product over comparing slopes to test three points?',
+      options: [
+        'Slopes are faster to compute',
+        'The cross product avoids division and the undefined slope of vertical lines',
+        'Slopes give the signed area directly',
+        'The cross product needs trigonometry',
+      ],
+      answer: 1,
+      explain: 'A vertical line has infinite slope; the cross product is pure add/subtract/multiply, so it never divides and never blows up.',
+    },
+    {
+      q: 'What does the absolute value of cross(A, B, C) equal?',
+      options: ['The perimeter of triangle ABC', 'Twice the area of triangle ABC', 'The distance from C to line AB', 'The angle at vertex A'],
+      answer: 1,
+      explain: 'It is the area of the parallelogram on AB and AC, which is exactly twice the triangle area.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'The 2-D cross product <strong>cross(A,B,C) = (Bx−Ax)(Cy−Ay) − (By−Ay)(Cx−Ax)</strong> is the signed parallelogram area.',
+    'Its <strong>sign</strong> is the orientation: <strong>+ left / − right / 0 collinear</strong> — no angles, no division.',
+    'Its <strong>magnitude</strong> is twice the triangle area and scales with distance from the line.',
+    'Keep distances <strong>squared</strong> for comparisons, and guard collinearity with an <strong>epsilon</strong> on floats.',
+    'This one O(1) predicate is the atom of <strong>hulls, intersections, and polygon tests</strong> throughout the track.',
+  ]}
+/>
+
+Next up: **Segment Intersection** — firing four of these orientation tests to decide, exactly, whether
+two line segments cross.

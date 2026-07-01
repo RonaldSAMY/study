@@ -1,0 +1,266 @@
+---
+title: Caching & Load Balancing
+track: dsa-system-design
+summary: "Two moves that carry most of the load: keep hot data close in a cache, and spread requests across a fleet — with consistent hashing tying both together."
+difficulty: intermediate
+estMinutes: 20
+prereqs:
+  - dsa-system-design/system-design-fundamentals
+leadsTo:
+  - dsa-system-design/databases-storage
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import SysConsistentHashRing from '../../../components/demos/SysConsistentHashRing.tsx';
+
+## The hook: the same viral photo, ten million times
+
+A photo goes viral. Without help, every one of ten million views becomes a database read for the *same*
+bytes — a self-inflicted denial-of-service. Two ideas prevent it. First, **cache** the photo so the second
+through ten-millionth reads never touch the database: a cache read is under a millisecond, a database read
+is 10–100 ms. Second, **load-balance** the requests across a fleet of servers so no single machine melts.
+The subtle part is the glue: when you spread cached data across many cache servers and the fleet grows or
+shrinks, you do *not* want every key to suddenly land on a different server. That is the problem consistent
+hashing was invented to solve.
+
+<Callout type="intuition" title="The one-sentence idea">
+A cache keeps hot data one hop away instead of on disk; a load balancer fans requests across a fleet; and
+consistent hashing lets you add or remove servers while remapping only about 1/n of the keys.
+</Callout>
+
+## Intuition: absorb reads, then spread them
+
+Start with the **80/20 rule** you know from everywhere else: a small slice of data serves most of the
+traffic. A cache exploits exactly that — store the hot 20% in fast memory and you can absorb 80–99% of
+reads before they reach the database. Good caches routinely hit 95%+ hit rates; an e-commerce catalog can
+reach 99.9%.
+
+But a cache raises three questions that recur through the whole field:
+
+- **What do you evict when it fills?** The classic answer is **LRU** (least-recently-used): drop whatever
+  has gone longest untouched. It runs in $O(1)$ using a hash map plus a doubly linked list — the same
+  structure you met in [hash tables](/lessons/dsa-hash-tables/collision-handling).
+- **How do writes stay consistent?** *Write-through* updates cache and database together (safe, slower);
+  *write-back* updates the cache now and the database later (fast, risky); *cache-aside* lets the app load
+  on a miss and populate the cache itself.
+- **How stale is too stale?** A **TTL** trades freshness for hit rate — seconds for prices, an hour for
+  descriptions.
+
+Once one cache server is not enough, you shard the cache across many — and now you need a rule mapping each
+key to a server. Naive `hash(key) % n` looks fine until you add a server: **n** changes, and nearly every
+key remaps at once, stampeding the database. **Consistent hashing** fixes this by placing servers *and*
+keys on a ring; a key belongs to the first server clockwise, so adding a server only steals one arc.
+
+Meanwhile, at the front door, a **load balancer** picks which server handles each request: **round-robin**
+cycles through them, **least-connections** favors the least-busy, **weighted** variants respect bigger
+boxes, and **IP-hash** or consistent hashing pin a client to a server for stickiness.
+
+## Play with it
+
+The ring below places three cache servers at fixed points and hashes each key onto the circle. Step through
+the keys to watch each one walk clockwise to its server — then tick **Add cache-4** and see how few keys
+actually move.
+
+<SysConsistentHashRing client:visible />
+
+<Callout type="tip">
+Turn on cache-4 and read the banner: only the keys sitting in the new arc get remapped — everyone else is
+untouched. With plain modulo hashing, changing the server count reshuffles almost the entire keyspace at
+once. That difference is the whole reason distributed caches and databases use the ring.
+</Callout>
+
+## How it works: routing keys on the ring
+
+A key's home is found by hashing it to a position, then binary-searching for the first server position at
+or after it (wrapping around if you run off the end). Adding a server inserts one new position; only the
+keys between it and the previous server change hands.
+
+<CodeRunner
+  client:visible
+  code={`// A tiny consistent-hash ring: keys map to the first node clockwise.
+function makeRing(nodes) {
+  const hash = (s) => { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619); } return (h >>> 0) % 360; };
+  const ring = nodes.map((id) => ({ id, pos: hash(id) })).sort((a, b) => a.pos - b.pos);
+  return {
+    getNode(key) {
+      const p = hash(key);
+      for (const n of ring) if (n.pos >= p) return n.id;
+      return ring[0].id; // wrap around the ring
+    },
+  };
+}
+
+function remapCount(before, after, keys) {
+  return keys.filter((k) => before.getNode(k) !== after.getNode(k)).length;
+}
+
+const keys = Array.from({ length: 1000 }, (_, i) => 'key:' + i);
+const r3 = makeRing(['A', 'B', 'C']);
+const r4 = makeRing(['A', 'B', 'C', 'D']);`}
+  tests={[
+    { expr: "r3.getNode('user:alice')", label: "server for user:alice" },
+    { expr: "r3.getNode('user:bob')", label: "server for user:bob" },
+    { expr: 'remapCount(r3, r4, keys) + " of 1000 keys moved when adding D"', label: 'remap on add' },
+  ]}
+/>
+
+Run it: adding a fourth server moves only a fraction of the 1,000 keys — roughly $1/n$, not all of them.
+(With three single-position nodes the split is uneven; production rings add ~150 *virtual nodes* per server
+so the load evens out by the law of large numbers.)
+
+## The real implementation
+
+The course ships a production-flavored ring with virtual nodes, binary search, and replication:
+
+```ts
+// /dsa/system-design/algorithms/03-load-balancing/consistent-hashing.ts
+class ConsistentHashRing {
+  private ring: VirtualNode[] = []; // sorted by hash
+
+  addNode(node: PhysicalNode): void {
+    // give each physical node many positions so keys spread evenly
+    const vnodeCount = Math.floor(this.virtualNodesCount * (node.weight || 1));
+    for (let i = 0; i < vnodeCount; i++) {
+      const hash = this.hashFunction(`${node.id}:vnode:${i}`);
+      this.insertSorted({ hash, physicalNodeId: node.id, virtualIndex: i });
+    }
+  }
+
+  getNode(key: string): PhysicalNode | null {
+    const hash = this.hashFunction(key);
+    const index = this.findNodeIndex(hash);      // binary search: first vnode >= hash
+    return this.nodes.get(this.ring[index].physicalNodeId) || null;
+  }
+}
+```
+
+And the two everyday load-balancing algorithms, verbatim in spirit:
+
+```ts
+// /dsa/system-design/algorithms/03-load-balancing/round-robin.ts — cycle with wraparound
+getNextServer() {
+  const server = this.servers[this.currentIndex];
+  this.currentIndex = (this.currentIndex + 1) % this.servers.length;
+  return server.healthy ? server : /* skip to next healthy */ null;
+}
+
+// /dsa/system-design/algorithms/03-load-balancing/least-connections.ts — pick the least busy
+getNextServer() {
+  let min = null, best = Infinity;
+  for (const s of this.servers) if (s.healthy && s.activeConnections < best) { best = s.activeConnections; min = s; }
+  if (min) min.activeConnections++;
+  return min;
+}
+```
+
+Study them at `/dsa/system-design/algorithms/03-load-balancing/` and the caching building block at
+`/dsa/system-design/01-building-blocks/caching.ts` (write policies, TTL, eviction). The ring's hashing
+cousin — trading exactness for a compact fingerprint — appears in
+[locality-sensitive hashing](/lessons/dsa-modern-structures/locality-sensitive-hashing).
+
+## Numbers that decide the design
+
+$$
+\text{keys remapped when adding a server} \approx \frac{1}{n}, \qquad \text{hit rate} = \frac{\text{hits}}{\text{hits} + \text{misses}}.
+$$
+
+| Concern | Cheap tier | Costly tier | Ratio |
+|---------|------------|-------------|-------|
+| Read latency | cache < 1 ms | database 10–100 ms | ~10–100× |
+| DB load with 95% hit rate | 5% of reads reach DB | — | 20× fewer |
+| Modulo rehash on scale | — | ~100% keys move | worst case |
+| Consistent-hash rehash | ~1/n keys move | — | best case |
+| Load-balancer choice | round-robin $O(1)$ | least-conn $O(n)$ | per pick |
+
+A cache with a 95% hit rate cuts database read traffic by 20×; push it to 99% and it is 100×. That single
+lever is often the difference between one database and a painful sharding project.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Music streaming" icon="🎧">
+Spotify caches the audio for popular tracks on edge servers near listeners. The hot 1% of songs drive most
+plays, so a small cache serves the vast majority of streams — and consistent hashing routes each track ID
+to a stable cache node even as the edge fleet autoscales through the day.
+</ExampleCard>
+
+<ExampleCard domain="Multiplayer gaming" icon="🎮">
+A game backend uses IP-hash or consistent hashing to pin every player in a match to the *same* game server,
+so their state stays in one place. Least-connections then spreads brand-new matches toward the emptiest
+boxes, keeping any one server from tipping over at peak.
+</ExampleCard>
+
+<ExampleCard domain="News at breaking-story scale" icon="📰">
+When a story breaks, one article gets hammered. A CDN plus an application cache serve it from memory, so the
+origin sees a handful of requests instead of millions — but editors set a short TTL so a correction
+propagates in seconds, the classic freshness-versus-hit-rate trade-off.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **The thundering herd.** When a hot key's TTL expires, thousands of requests miss at once and stampede the
+  database. Fix with request coalescing (single-flight): let one request refill while the rest wait.
+- **Naive `hash % n`.** It is fine for a fixed pool, catastrophic for an elastic one — every scaling event
+  reshuffles the whole cache. Reach for the ring the moment servers come and go.
+- **Skipping virtual nodes.** A few single-position servers distribute unevenly (one may own 80% of the
+  ring). Give each server 100–200 virtual nodes.
+- **Least-connections without health checks.** Sending traffic to the "least busy" server is a trap if that
+  server is least busy because it is *dead*. Always health-check first.
+- **Caching writes indiscriminately.** Write-heavy or rarely-read data pollutes the cache. Cache what reads
+  often and updates rarely; consider write-around for the rest.
+- **Interview cue:** name L4 vs L7 load balancing (L4 routes on IP/port, fast; L7 reads URLs/headers, smart)
+  and say *why* consistent hashing beats modulo — "only 1/n keys move."
+
+## Practice
+
+1. **Easy:** A cache serves a 90% hit rate on 1,000,000 reads. How many reach the database?
+2. **Easy:** With round-robin over 4 healthy servers, which server handles the 9th request if the 1st went to server 0?
+3. **Medium:** On a ring with servers at 30°, 150°, 270°, which server owns a key hashing to 200°? To 300°?
+4. **Medium:** Explain why adding one server to a 4-server modulo scheme (`% 4` → `% 5`) can move ~80% of keys.
+5. **Hard:** Design the cache + load-balancing tier for a product page hit 200,000 times/second, 99% cacheable.
+   Pick eviction policy, write policy, TTL, and the routing algorithm — and justify each with a number.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does consistent hashing beat plain hash(key) % n when the server pool changes?',
+      options: [
+        'It makes lookups O(1) instead of O(n)',
+        'It moves only about 1/n of keys instead of nearly all of them',
+        'It never has hash collisions',
+        'It removes the need for a load balancer',
+      ],
+      answer: 1,
+      explain: 'On the ring, adding or removing a server only reassigns the keys in one arc — about 1/n — while modulo reshuffles almost the entire keyspace.',
+    },
+    {
+      q: 'A cache has a 95% hit rate on 2,000,000 reads. Roughly how many reads reach the database?',
+      options: ['100,000', '200,000', '1,000,000', '1,900,000'],
+      answer: 0,
+      explain: '5% of 2,000,000 is 100,000 reads that miss the cache and fall through to the database.',
+    },
+    {
+      q: 'Which load-balancing algorithm is best when requests have very different processing times and connections are long-lived?',
+      options: ['Round-robin', 'Least-connections', 'Random', 'Fixed to one server'],
+      answer: 1,
+      explain: 'Least-connections routes to the server with the fewest in-flight requests, which naturally balances uneven and long-lived work.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>cache</strong> exploits the 80/20 rule: keeping the hot data in memory absorbs 80–99% of reads (cache &lt; 1 ms vs DB 10–100 ms).',
+    'Know the cache dials: <strong>LRU eviction</strong> ($O(1)$ via hash map + linked list), <strong>write-through / write-back / cache-aside</strong>, and <strong>TTL</strong> for freshness.',
+    '<strong>Consistent hashing</strong> places servers and keys on a ring so scaling remaps only ~<code>1/n</code> keys; <strong>virtual nodes</strong> (100–200/server) even out the load.',
+    'Load balancers spread requests: <strong>round-robin</strong> ($O(1)$), <strong>least-connections</strong> for uneven work, <strong>IP-hash / consistent hashing</strong> for stickiness — always behind health checks.',
+    'Beware the <strong>thundering herd</strong> on TTL expiry and <strong>naive modulo hashing</strong> on an elastic fleet — both stampede the database.',
+  ]}
+/>
+
+Next up: **Databases & Storage** — where the reads that *do* get through go, and how sharding and
+replication let a database outgrow a single machine.

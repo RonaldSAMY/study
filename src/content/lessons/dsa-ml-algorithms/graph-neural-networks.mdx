@@ -1,0 +1,230 @@
+---
+title: Graph Neural Networks
+track: dsa-ml-algorithms
+summary: "Message passing: each node repeatedly aggregates its neighbors' features, so a graph learns representations that respect its own connectivity."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-ml-algorithms/transformers
+  - dsa-graphs/graph-representations
+leadsTo:
+  - dsa-ml-algorithms/diffusion-models
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import MlAMessagePassing from '../../../components/demos/MlAMessagePassing.tsx';
+
+## The hook: you are the company you keep
+
+To guess whether a social-media account is a bot, one strong clue is who it connects to: bots cluster
+with bots. A molecule's properties depend on how its atoms are *bonded*, not just which atoms are
+present. A fraudster hides in a web of transactions. All of these live on **graphs**, where the
+structure — who is connected to whom — carries the signal. A Graph Neural Network learns from that
+structure by having each node repeatedly **listen to its neighbors** and update itself.
+
+<Callout type="intuition" title="The one-sentence idea">
+A GNN updates every node by aggregating a normalized average of its neighbors' features, and repeating
+that message-passing step lets information flow outward across the graph.
+</Callout>
+
+## Intuition: message passing
+
+You already know graphs from adjacency lists and BFS. A GNN adds *features* to each node — a vector —
+and one simple rule that fires in rounds:
+
+1. **Message.** Every node looks at each neighbor's current feature vector.
+2. **Aggregate.** It combines those messages (sum, mean, or max) with its own.
+3. **Update.** It transforms the aggregate through a learned weight matrix and a nonlinearity to get its
+   new feature.
+
+After **one** round, each node knows about its immediate neighbors — like one hop of BFS. After **two**
+rounds, it indirectly hears from neighbors-of-neighbors. After $k$ rounds, information has travelled $k$
+hops. The famous Graph Convolutional Network (GCN) is just this with a specific *normalized* average that
+stops high-degree hub nodes from dominating.
+
+## Play with it
+
+Click a node to make it a signal source, then step through the rounds. Watch the value diffuse outward
+one hop at a time — and keep going to see it blur into sameness (over-smoothing).
+
+<MlAMessagePassing client:visible />
+
+<Callout type="tip">
+Run too many rounds and every node converges to the same value — <strong>over-smoothing</strong>. It's
+why most GNNs are shallow (2–3 layers): unlike transformers, stacking many message-passing layers
+*erases* the distinctions you're trying to learn.
+</Callout>
+
+## How it works: the dry run
+
+A GCN layer is $H^{(l+1)} = \sigma\!\left(\tilde{D}^{-1/2}\tilde{A}\,\tilde{D}^{-1/2} H^{(l)} W^{(l)}\right)$,
+where $\tilde{A} = A + I$ adds self-loops and $\tilde{D}$ is its degree matrix. Per node that's a
+degree-weighted average of neighbors, then a linear map and ReLU:
+
+```
+node i update:
+  h_i ← σ( Σ_{j ∈ N(i) ∪ {i}}  (1 / √(d_i · d_j)) · h_j · W )
+
+  the 1/√(d_i·d_j) factor down-weights messages from
+  high-degree neighbors so hubs don't drown everyone out.
+```
+
+<CodeRunner
+  client:visible
+  code={`// One GCN-style message-passing round on a tiny graph (plain JS)
+// edges (undirected) + self-loops, symmetric normalization
+const N = 4;
+const edges = [[0,1],[1,2],[2,3],[0,2]];
+const adj = Array.from({length:N}, () => Array(N).fill(0));
+for (let i=0;i<N;i++) adj[i][i]=1;                 // self-loops
+for (const [u,v] of edges){ adj[u][v]=1; adj[v][u]=1; }
+const deg = adj.map((r)=>r.reduce((a,b)=>a+b,0));
+function propagate(h) {
+  return h.map((_, i) => {
+    let acc = 0;
+    for (let j=0;j<N;j++) if (adj[i][j]) acc += h[j] / Math.sqrt(deg[i]*deg[j]);
+    return acc;
+  });
+}
+let h = [1, 0, 0, 0];         // a signal on node 0
+const r1 = propagate(h);
+const r2 = propagate(r1);`}
+  tests={[
+    { expr: 'propagate([1,0,0,0]).map((x)=>+x.toFixed(2))', label: 'features after 1 round' },
+    { expr: 'propagate(propagate([1,0,0,0])).map((x)=>+x.toFixed(2))', label: 'features after 2 rounds' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds the normalized adjacency once, then each layer is a matrix multiply through it:
+
+```ts
+// /dsa/27-ml-algorithms/03-graph-neural-networks/gcn.ts
+// H^(l+1) = σ( D^(-1/2) A D^(-1/2) H^(l) W^(l) )
+forward(features: Matrix, normalizedAdj: Matrix): Matrix {
+  const hw  = features.multiply(this.weights);   // H · W   (transform)
+  const ahw = normalizedAdj.multiply(hw);        // Â · (HW) (aggregate neighbors)
+  // add bias, then apply the activation (ReLU)
+  return ahw.addBias(this.bias).apply(this.activation);
+}
+```
+
+Run it with `npx tsx 27-ml-algorithms/03-graph-neural-networks/gcn.ts`. The siblings `graphsage.ts`
+(neighbor *sampling* for huge graphs) and `gat.ts` (attention *over* neighbors) are variations on the
+same aggregate-and-update theme.
+
+## Complexity
+
+Work is proportional to the edges, since messages travel along them:
+
+$$
+T = O(L \cdot (E\,d + V\,d^2)), \qquad S = O(V d + E),
+$$
+
+for $L$ layers, $V$ nodes, $E$ edges, feature dimension $d$.
+
+| Term | Cost | Meaning |
+|------|------|---------|
+| Aggregate ($\hat{A}H$) | $O(E\,d)$ per layer | one message per edge |
+| Transform ($HW$) | $O(V\,d^2)$ per layer | learned linear map |
+
+<Callout type="why">
+Because cost scales with $E$, not $V^2$, GNNs handle sparse real-world graphs (social networks,
+molecules) efficiently — you only ever touch edges that exist, never the full adjacency matrix.
+</Callout>
+
+## The same idea, different worlds
+
+<ExampleCard domain="Chemistry" icon="🧪">
+Represent a molecule as atoms (nodes) and bonds (edges). Message passing lets each atom sense its
+chemical environment, predicting properties like toxicity or solubility — this is how modern
+drug-discovery models screen candidates.
+</ExampleCard>
+
+<ExampleCard domain="Recommendations" icon="🛒">
+Model users and products as a bipartite graph. A user's embedding aggregates the items they bought, and
+each item aggregates its buyers — Pinterest and others use GraphSAGE this way to recommend at scale.
+</ExampleCard>
+
+<ExampleCard domain="Traffic & maps" icon="🚦">
+Road intersections are nodes, roads are edges. A GNN propagates congestion from one junction to its
+neighbors, which is how Google Maps improved arrival-time predictions across a city's road graph.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Over-smoothing.** Too many layers and all node features converge — keep GNNs shallow (2–3 layers) or
+  use residual/jumping-knowledge connections.
+- **Forgetting self-loops.** Without $A + I$, a node's update ignores its *own* current feature and only
+  sees neighbors. Add the identity.
+- **Skipping normalization.** Plain neighbor sums let hub nodes explode in magnitude; the
+  $\tilde{D}^{-1/2}\tilde{A}\tilde{D}^{-1/2}$ symmetric normalization fixes it.
+- **Interview cue:** "How is a GNN related to a transformer?" Both aggregate information from other
+  elements — a transformer is (loosely) attention over a *fully connected* graph; a GNN respects the
+  actual edges.
+
+## Practice
+
+1. **Easy:** After 1 message-passing round, how many hops away can a node's information reach?
+2. **Easy:** Why add self-loops before aggregating?
+3. **Medium:** Explain over-smoothing and one way to mitigate it.
+4. **Medium:** Why does GCN normalize by $1/\sqrt{d_i d_j}$ rather than a plain mean?
+5. **Hard:** Sketch how GraphSAGE lets you train on a graph too large to fit in memory (hint: sample
+   neighbors).
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What happens in a single message-passing round?',
+      options: [
+        'Every node is replaced by a global average',
+        'Each node aggregates its neighbors’ features and updates itself',
+        'Edges are added between all node pairs',
+        'The graph is sorted topologically',
+      ],
+      answer: 1,
+      explain: 'Each node collects messages from its direct neighbors (plus itself), aggregates them, and transforms the result into a new feature vector.',
+    },
+    {
+      q: 'Why do most GNNs use only 2–3 layers?',
+      options: [
+        'To save memory only',
+        'Because too many rounds cause over-smoothing — all node features converge',
+        'Because graphs have at most 3 hops',
+        'Because deeper layers overflow',
+      ],
+      answer: 1,
+      explain: 'Repeated averaging blurs features together; after many layers every node looks the same, erasing the distinctions the model needs.',
+    },
+    {
+      q: 'Why is a GNN’s cost proportional to the number of edges E?',
+      options: [
+        'Because it materializes the full V×V adjacency matrix',
+        'Because one message is passed along each existing edge per layer',
+        'Because softmax is O(E)',
+        'Because nodes are stored as edges',
+      ],
+      answer: 1,
+      explain: 'Aggregation sends a message across each real edge, so per-layer cost is O(E·d) — efficient on sparse graphs.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A GNN learns on graphs by <strong>message passing</strong>: aggregate neighbor features, then update each node.',
+    'After k rounds, information has travelled <strong>k hops</strong> — like unrolling BFS with learnable weights.',
+    'GCN uses a <strong>symmetric-normalized adjacency</strong> (with self-loops) so hub nodes don’t dominate.',
+    'Stacking too many layers causes <strong>over-smoothing</strong>; keep GNNs shallow or add skip connections.',
+    'Cost scales with <strong>edges (O(E·d))</strong>, making GNNs efficient on sparse real-world graphs.',
+  ]}
+/>
+
+Next up: **Diffusion Models** — generating data by learning to reverse a gradual noising process, one
+denoising step at a time.

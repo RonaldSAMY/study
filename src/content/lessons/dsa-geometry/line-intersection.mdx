@@ -1,0 +1,238 @@
+---
+title: Segment Intersection
+track: dsa-geometry
+summary: "Do two segments cross? Four orientation tests answer it exactly — each segment must straddle the other's line."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-geometry/geometry-primitives
+leadsTo:
+  - dsa-geometry/convex-hull
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GeoSegmentIntersect from '../../../components/demos/GeoSegmentIntersect.tsx';
+
+## The hook: did the laser hit the wall?
+
+A game fires a laser bolt — a short segment — across a level full of wall panels, each also a segment.
+For every panel the engine must answer, thousands of times per second: **do these two segments cross?**
+Solving for the intersection point with algebra works, but it wastes effort (most pairs miss) and it
+divides, which explodes on parallel lines. There is a cheaper, exact test that never divides and
+returns a clean yes/no. It reuses the orientation predicate you just learned — four times.
+
+<Callout type="intuition" title="The one-sentence idea">
+Two segments properly cross exactly when **each one straddles the other's line**: the endpoints of
+segment 1 fall on opposite sides of line 2, and the endpoints of segment 2 fall on opposite sides of
+line 1.
+</Callout>
+
+## Intuition: straddling, in two directions
+
+Think of one segment as an infinite line drawn on the floor. If the other segment is going to cross it,
+that segment's two endpoints must sit on **opposite sides** of the line — one left, one right. That is a
+single sign disagreement in the orientation test. But straddling the line is only half the story: a
+short segment can straddle a long line without the long segment reaching back through it. So we demand
+the condition **both ways**:
+
+- $d_1 = \operatorname{cross}(P_3, P_4, P_1)$ and $d_2 = \operatorname{cross}(P_3, P_4, P_2)$ must have
+  **opposite signs** — segment 1's ends straddle line $P_3P_4$.
+- $d_3 = \operatorname{cross}(P_1, P_2, P_3)$ and $d_4 = \operatorname{cross}(P_1, P_2, P_4)$ must have
+  **opposite signs** — segment 2's ends straddle line $P_1P_2$.
+
+If both pairs straddle, the segments **properly** cross. The degenerate cases — an endpoint lying
+exactly *on* the other segment, or two collinear segments overlapping — show up as a zero in one of the
+four numbers, and are handled by an explicit on-segment check.
+
+## Play with it
+
+Drag the four endpoints. Step 1 highlights the first straddle test, step 2 the second, and the final
+step declares whether they cross and draws the meeting point.
+
+<GeoSegmentIntersect client:visible />
+
+<Callout type="tip">
+Pin three endpoints and drag the fourth. The verdict flips the instant that endpoint slides across the
+other segment's line — that is one of the four signs changing from + to −.
+</Callout>
+
+## How it works
+
+Take the classic X: segment 1 from (0,0) to (4,4) and segment 2 from (0,4) to (4,0).
+
+```
+d1 = cross(P3,P4,P1) = cross((0,4),(4,0),(0,0)) = +16   ┐ opposite signs →
+d2 = cross(P3,P4,P2) = cross((0,4),(4,0),(4,4)) = -16   ┘ seg 1 straddles line 2
+d3 = cross(P1,P2,P3) = cross((0,0),(4,4),(0,4)) = -16   ┐ opposite signs →
+d4 = cross(P1,P2,P4) = cross((0,0),(4,4),(4,0)) = +16   ┘ seg 2 straddles line 1
+both straddle  →  they cross (at (2,2))
+```
+
+The boolean test never computes the point — it just reads four signs:
+
+<CodeRunner
+  client:visible
+  code={`function cross(o, a, b) {
+  return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+}
+function onSeg(p, q, r) { // is q inside the bounding box of p,r?
+  return Math.min(p.x, r.x) <= q.x && q.x <= Math.max(p.x, r.x) &&
+         Math.min(p.y, r.y) <= q.y && q.y <= Math.max(p.y, r.y);
+}
+function segmentsIntersect(a, b, c, d) {
+  const d1 = cross(c, d, a), d2 = cross(c, d, b);
+  const d3 = cross(a, b, c), d4 = cross(a, b, d);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) &&
+      ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return true;
+  if (d1 === 0 && onSeg(c, a, d)) return true;   // collinear touch cases
+  if (d2 === 0 && onSeg(c, b, d)) return true;
+  if (d3 === 0 && onSeg(a, c, b)) return true;
+  if (d4 === 0 && onSeg(a, d, b)) return true;
+  return false;
+}`}
+  tests={[
+    { expr: 'segmentsIntersect({x:0,y:0},{x:4,y:4},{x:0,y:4},{x:4,y:0})', label: 'crossing X' },
+    { expr: 'segmentsIntersect({x:0,y:0},{x:1,y:1},{x:2,y:2},{x:3,y:3})', label: 'disjoint collinear' },
+    { expr: 'segmentsIntersect({x:0,y:0},{x:4,y:0},{x:2,y:0},{x:2,y:5})', label: 'T-touch at endpoint' },
+  ]}
+/>
+
+## The real implementation
+
+The course file computes the boolean with the four straddle tests, then handles the collinear touch
+cases explicitly — note the epsilon guards on the sign comparisons:
+
+```ts
+// /dsa/23-geometry/line-intersection.ts
+export function segmentsIntersect(seg1: Segment, seg2: Segment): boolean {
+  const d1 = cross(seg1.p1, seg1.p2, seg2.p1);
+  const d2 = cross(seg1.p1, seg1.p2, seg2.p2);
+  const d3 = cross(seg2.p1, seg2.p2, seg1.p1);
+  const d4 = cross(seg2.p1, seg2.p2, seg1.p2);
+
+  // Standard case: each segment straddles the other's line
+  if (((d1 > EPSILON && d2 < -EPSILON) || (d1 < -EPSILON && d2 > EPSILON)) &&
+      ((d3 > EPSILON && d4 < -EPSILON) || (d3 < -EPSILON && d4 > EPSILON))) {
+    return true;
+  }
+  // Collinear / endpoint-on-segment cases
+  if (Math.abs(d1) < EPSILON && pointOnSegment(seg2.p1, seg1)) return true;
+  if (Math.abs(d2) < EPSILON && pointOnSegment(seg2.p2, seg1)) return true;
+  if (Math.abs(d3) < EPSILON && pointOnSegment(seg1.p1, seg2)) return true;
+  if (Math.abs(d4) < EPSILON && pointOnSegment(seg1.p2, seg2)) return true;
+  return false;
+}
+```
+
+Run the full file: `npx tsx 23-geometry/line-intersection.ts`. When you actually need the point,
+`segmentSegmentIntersection` solves the two parameters $t_1, t_2$ and checks both lie in $[0, 1]$.
+
+## Complexity
+
+A fixed number of orientation tests per pair:
+
+$$
+T_{\text{one pair}} = O(1), \qquad T_{\text{all pairs, naive}} = O(n^2).
+$$
+
+| Task | Approach | Time |
+|------|----------|------|
+| Two segments cross? | 4 orientation tests | $O(1)$ |
+| Intersection point | solve for $t_1, t_2$ | $O(1)$ |
+| All crossings among $n$ | brute force pairs | $O(n^2)$ |
+| All crossings among $n$ | Bentley–Ottmann sweep | $O((n+k)\log n)$ |
+
+For many segments, testing every pair is $O(n^2)$; the **Line Sweep** lesson later in this track brings
+it down by only comparing segments that are near each other.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Video games" icon="🎯">
+Hit-scan weapons and laser sights test a bullet segment against level geometry. The boolean straddle
+test rejects the vast majority of walls instantly, and only the survivors pay for the exact hit point.
+</ExampleCard>
+
+<ExampleCard domain="Aviation / maritime" icon="✈️">
+Conflict-detection systems flag when two planned tracks cross within a time window. Each track leg is a
+segment; a crossing (plus overlapping times) means a potential separation loss to alert on.
+</ExampleCard>
+
+<ExampleCard domain="VLSI chip design" icon="🔌">
+Design-rule checkers verify that metal wires on the same layer never cross. With millions of wire
+segments, a sweep over segment endpoints replaces the impossible all-pairs comparison.
+</ExampleCard>
+
+<ExampleCard domain="Traffic planning" icon="🚦">
+Deciding where two roads or a road and a rail line intersect (and must therefore have a junction or
+bridge) is a segment-intersection query over the road network's edges.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Straddling one line is not enough.** A short segment can cross the *infinite* line of a long one
+  while missing the long *segment* entirely. You must test straddle in **both** directions.
+- **Endpoint touches are collinear cases.** When an endpoint lies exactly on the other segment, one
+  of the four values is zero; the standard sign test misses it, so add the explicit on-segment checks.
+- **Parallel is not the same as collinear.** Parallel segments never meet; collinear ones might overlap.
+  Distinguish them by whether a cross-difference is also zero before scanning for overlap.
+- **Epsilons cut both ways.** Too tight and near-touches read as misses; too loose and clear misses read
+  as touches. Integer coordinates dodge the whole problem when you can afford them.
+- **Interview cue:** "do these two segments intersect" almost always wants the four-orientation test,
+  not solving a linear system — say "each must straddle the other" to signal you know the clean method.
+
+## Practice
+
+1. **Easy:** By hand, decide whether (0,0)–(2,2) and (0,2)–(2,0) intersect using the four signs.
+2. **Easy:** Give two segments that are parallel but not collinear, and confirm all four tests avoid a
+   false positive.
+3. **Medium:** Extend the boolean test to also return the intersection point when it exists.
+4. **Medium:** Write a check for whether a segment intersects an axis-aligned rectangle (hint: test its
+   four edges, and also whether an endpoint is inside).
+5. **Hard:** Given $n$ segments, report whether *any* two intersect in better than $O(n^2)$ using a
+   sweep over sorted endpoints.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'For a proper crossing, what must be true of d1 = cross(P3,P4,P1) and d2 = cross(P3,P4,P2)?',
+      options: ['Both positive', 'Both zero', 'Opposite signs', 'Equal magnitude'],
+      answer: 2,
+      explain: 'Opposite signs mean P1 and P2 lie on opposite sides of line P3P4 — segment 1 straddles it.',
+    },
+    {
+      q: 'Why test straddling in both directions instead of just one?',
+      options: [
+        'To handle vertical segments',
+        'A segment can straddle the other’s infinite line yet miss the actual segment',
+        'To compute the intersection point',
+        'To speed up the test',
+      ],
+      answer: 1,
+      explain: 'Straddling only the infinite line is necessary but not sufficient; both segments must straddle each other.',
+    },
+    {
+      q: 'An endpoint of one segment lies exactly on the other segment. How does it show up?',
+      options: ['All four values are equal', 'One of the four cross values is zero', 'The determinant is negative', 'The test always returns false'],
+      answer: 1,
+      explain: 'Collinearity makes that orientation exactly zero, which is why the collinear on-segment checks exist.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Two segments <strong>properly cross</strong> when each straddles the other’s line — two sign disagreements.',
+    'The test is <strong>four orientation (cross-product) calls</strong>: O(1), no division, exact on integers.',
+    'A single straddle is <strong>necessary but not sufficient</strong>; demand it in both directions.',
+    'Zeros in the four values flag <strong>collinear / endpoint-touch</strong> cases needing an on-segment check.',
+    'Only compute the actual point when needed — most pairs are rejected by the <strong>cheap boolean</strong> first.',
+  ]}
+/>
+
+Next up: **Convex Hull** — repeatedly popping right turns with the very same orientation test to wrap
+the tightest rubber band around a cloud of points.

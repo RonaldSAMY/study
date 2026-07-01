@@ -1,0 +1,240 @@
+---
+title: Zstandard
+track: dsa-compression
+summary: "Zstandard keeps LZ's back-references but adds an entropy coder (FSE + Huffman) and a trainable dictionary — winning back most of Brotli's ratio while staying close to LZ4's speed."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-compression/lz-family
+leadsTo:
+  - dsa-compression/brotli
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import CompZstdPipeline from '../../../components/demos/CompZstdPipeline.tsx';
+
+## The hook: the compressor that ate gzip's lunch
+
+For twenty years, `gzip` was the default everywhere — HTTP, tarballs, databases. Then in 2015 Yann Collet (the same author as LZ4) shipped **Zstandard**, and within a few years Meta, the Linux kernel, Kafka, npm, and GitHub had switched. Zstd's pitch is almost greedy: *better* compression than gzip **and** several times faster. How do you beat a codec on both axes at once? By combining the two levers from the basics lesson — redundancy removal and entropy coding — and engineering each one hard.
+
+<Callout type="intuition" title="The one-sentence idea">
+Zstandard runs LZ match-finding to strip repeats, then feeds the leftover literals and match tokens through a fast entropy coder (FSE + Huffman) that gives common symbols short codes — the ratio LZ4 threw away, bought back cheaply.
+</Callout>
+
+## Intuition: LZ4's ratio problem, fixed
+
+You just saw [LZ4](/lessons/dsa-compression/lz-family) skip entropy coding for speed. That leaves money on the table: after LZ, the literal bytes are still stored as flat 8-bit characters even though — as [entropy](/lessons/information-theory/entropy) tells us — some appear far more often than others. Zstd adds the missing stage:
+
+1. **Stage 1 — LZ (redundancy).** The same sliding window and `(offset, length)` matches, but with a larger window and smarter parsing than LZ4.
+2. **Stage 2 — entropy coding (skew).** The literals and the match tokens are re-encoded so frequent symbols use fewer bits. Zstd uses **FSE** (Finite State Entropy, a fast table-driven arithmetic-style coder) for most streams and **Huffman** for the literals.
+
+On top of both, zstd adds a **dictionary**: train it once on samples of your data and prepend it to the window, so even the *first* message compresses well — the fix for the "first occurrence is never compressed" problem that plagues plain LZ on small payloads.
+
+## Play with it
+
+Watch both stages on one timeline. Stage 1 turns your text into LZ tokens; Stage 2 assigns each literal a Huffman code (short for frequent letters). The two readouts — **after LZ** and **+ entropy** — let you see the second stage carve off extra bytes that LZ4 would have left behind.
+
+<CompZstdPipeline client:visible />
+
+<Callout type="tip">
+Feed it natural language and watch the "+ entropy" number dip below "after LZ" — that gap is exactly what zstd wins over LZ4. Now feed it something with only two or three distinct letters: the Huffman codes get tiny and the gap widens, because skew (low entropy) is precisely what the second stage feeds on.
+</Callout>
+
+## How it works
+
+Think of the pipeline as: `raw → [LZ] → tokens → [entropy] → bits`.
+
+```
+"the quick brown fox the quick brown fox"
+   ↓ Stage 1: LZ match finding
+literals: "the quick brown fox "   +   match(offset 20, length 19)
+   ↓ Stage 2: entropy coding of the literals
+'the '  → e is frequent → 2–3 bit codes;  'q','x' rare → longer codes
+```
+
+The match collapsed the entire repeated half into one token; the entropy coder then squeezed the surviving literals below 8 bits each. Zstd's **compression level** (1–22) dials how hard Stage 1 searches: level 1 is near-LZ4 speed, level 22 parses almost optimally for maximum ratio.
+
+<CodeRunner
+  client:visible
+  code={`// Toy zstd: LZ pass, then price literals by a Huffman-style code length.
+function lzTokens(s, minMatch = 4) {
+  const toks = []; let pos = 0;
+  while (pos < s.length) {
+    let bestLen = 0, bestStart = -1;
+    for (let start = 0; start < pos; start++) {
+      let len = 0;
+      while (pos + len < s.length && s[start + len] === s[pos + len]) len++;
+      if (len > bestLen) { bestLen = len; bestStart = start; }
+    }
+    if (bestLen >= minMatch) { toks.push({ m: [pos - bestStart, bestLen] }); pos += bestLen; }
+    else { toks.push({ lit: s[pos] }); pos++; }
+  }
+  return toks;
+}
+
+// bits after entropy coding: rarer literals cost more (approx by -log2 p)
+function entropyBits(toks) {
+  const lits = toks.filter(t => t.lit).map(t => t.lit);
+  const freq = {}; for (const c of lits) freq[c] = (freq[c] || 0) + 1;
+  let bits = 0;
+  for (const t of toks) {
+    if (t.m) bits += 24;                              // match ~3 bytes
+    else bits += Math.max(1, -Math.log2(freq[t.lit] / lits.length));
+  }
+  return Math.ceil(bits / 8);
+}`}
+  tests={[
+    { expr: 'lzTokens("the quick brown fox the quick brown fox").length + " tokens"', label: 'LZ tokens' },
+    { expr: 'entropyBits(lzTokens("the quick brown fox the quick brown fox")) + " bytes (LZ+entropy)"', label: 'zstd-style size' },
+    { expr: '"raw: 39 bytes"', label: 'original' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds the LZ stage with a windowed hash table of candidate positions and a configurable level; the sequences it produces are what a real entropy coder would then compress. From the file:
+
+```ts
+// /dsa/30-compression/zstandard.ts
+export class ZstdCompressor {
+  constructor(level = 3) {
+    this.config = {
+      level: Math.max(1, Math.min(22, level)),
+      windowSize: Math.min(128 * 1024, 1 << (10 + level)), // bigger window at higher levels
+      hashLog: Math.min(20, 12 + level),
+    };
+  }
+
+  compress(input: Uint8Array): Uint8Array {
+    const sequences = [];
+    const hashTable = new Map<number, number[]>();
+    let pos = 0, literalStart = 0;
+
+    while (pos < input.length) {
+      const hash = this.hash(input, pos);
+      (hashTable.get(hash) ?? hashTable.set(hash, []).get(hash)!).push(pos);
+      const match = this.findLongestMatch(input, pos, hashTable);
+
+      if (match.length >= 4) {
+        sequences.push({ literals: input.slice(literalStart, pos), ...match });
+        pos += match.length;
+        literalStart = pos;
+      } else {
+        pos++;
+      }
+    }
+    // sequences → entropy-coded block (FSE/Huffman in real zstd)
+    return this.encodeSequences(sequences);
+  }
+}
+```
+
+Run the full file: `npx tsx 30-compression/zstandard.ts`.
+
+## Complexity
+
+Match finding over a window of size `m` costs a log factor for candidate search:
+
+$$
+T(n) = O(n \log m), \qquad S(n) = O(m).
+$$
+
+The entropy stage is a second linear pass. Decompression stays O(n) and fast.
+
+| Algorithm | Ratio (vs gzip) | Comp speed | Decomp speed | Key feature |
+|-----------|-----------------|------------|--------------|-------------|
+| LZ4 | ~0.9x | ~10x | ~15x | no entropy stage |
+| gzip | 1.0x | 1x | 1x | LZ77 + Huffman |
+| **Zstd (lvl 3)** | ~1.1x | ~3.5x | ~4x | LZ + FSE/Huffman + dictionary |
+| Brotli | ~1.15x | ~0.4x | ~1.2x | + built-in dictionary |
+
+Zstd's superpower is the **tunable dial**: one algorithm spans from near-LZ4 speed (level 1) to near-LZMA ratio (level 22), so you pick a point on the ratio-vs-speed curve per use case instead of switching codecs.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Streaming pipelines" icon="🌊">
+Apache Kafka compresses message batches with zstd. Producers get gzip-beating ratio to cut network and disk, while consumers decompress fast enough to keep up with millions of events per second — the balanced point LZ4 (too weak) and Brotli (too slow) miss.
+</ExampleCard>
+
+<ExampleCard domain="Package registries" icon="📦">
+npm and PyPI distribute packages compressed with zstd. Millions of identical dependencies download smaller and faster, and a trained dictionary means even a tiny package's first bytes compress well instead of shipping as raw literals.
+</ExampleCard>
+
+<ExampleCard domain="Small JSON APIs" icon="🔌">
+Microservices exchange thousands of near-identical JSON responses. A zstd dictionary trained on a sample of those responses captures the shared field names and structure, so each 300-byte payload compresses as if it had a long history behind it — dictionaries beating the LZ cold-start.
+</ExampleCard>
+
+<ExampleCard domain="Filesystems & backups" icon="💾">
+Btrfs and OpenZFS offer transparent zstd compression, and backup tools default to it. It gives archival-grade ratio at a speed that does not bottleneck disk throughput, so storage shrinks without slowing every read and write.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Levels trade time for ratio, not correctness.** A file compressed at level 19 decompresses exactly like one at level 1 — only the encoder worked harder. Decompression speed is roughly level-independent.
+- **Dictionaries are for many small, similar payloads.** On one big file they add little; on thousands of tiny JSON blobs they are transformative. Train on a representative sample, ship the dictionary to both ends.
+- **FSE vs Huffman is not a detail.** Huffman rounds each symbol to a whole number of bits; FSE (arithmetic-style) can spend fractional bits, getting closer to the entropy floor on skewed data. Zstd uses each where it wins.
+- **Do not over-compress the hot path.** Level 19 on live traffic can cost more CPU than the bytes are worth. Match the level to whether data is written once (go high) or streamed in real time (stay low).
+- **Interview cue:** "beat gzip on ratio and speed" is zstd. Say "LZ stage plus a fast entropy coder, with a tunable level and optional trained dictionary."
+
+## Practice
+
+1. **Easy:** Name the two stages of the zstd pipeline and which of redundancy/skew each removes.
+2. **Easy:** Why does raising the compression level barely change decompression time?
+3. **Medium:** You compress 10,000 JSON responses from one endpoint. Explain why a trained dictionary helps far more here than on a single 1 GB log file.
+4. **Medium:** Given the toy code above, construct a string where the entropy stage saves more than the LZ stage, and one where the reverse holds.
+5. **Hard:** FSE can assign a symbol 2.3 bits while Huffman must use 2 or 3. On a source that is 90% one symbol, estimate the per-symbol bits each achieves and the ratio gap.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does Zstandard add that LZ4 deliberately omits?',
+      options: [
+        'The sliding window',
+        'An entropy-coding stage (FSE/Huffman) after LZ match finding',
+        'Lossy compression',
+        'Back-references',
+      ],
+      answer: 1,
+      explain: 'Both use LZ back-references, but zstd re-encodes the literals and tokens with FSE/Huffman so frequent symbols use fewer bits — the ratio LZ4 gives up for speed.',
+    },
+    {
+      q: 'When does a trained zstd dictionary help the most?',
+      options: [
+        'On a single very large file',
+        'On already-compressed images',
+        'On many small, similar payloads that individually lack history',
+        'On random data',
+      ],
+      answer: 2,
+      explain: 'A dictionary supplies shared context up front, fixing the LZ cold start where a tiny first message has nothing behind it to reference.',
+    },
+    {
+      q: 'What does the zstd compression level (1–22) primarily control?',
+      options: [
+        'The decompression speed',
+        'How hard the encoder searches for matches (ratio vs compression speed)',
+        'Whether output is lossless',
+        'The alphabet size',
+      ],
+      answer: 1,
+      explain: 'Higher levels use bigger windows and more thorough parsing for better ratio at the cost of compression time; decompression stays fast and roughly constant.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Zstd is <strong>LZ match finding + an entropy coder</strong> (FSE for most streams, Huffman for literals) — both compression levers at once.',
+    'It beats gzip on <strong>ratio and speed simultaneously</strong>, which is why it replaced gzip across Kafka, npm, the Linux kernel, and more.',
+    'A single <strong>tunable level</strong> (1–22) slides from near-LZ4 speed to near-LZMA ratio; decompression stays fast regardless.',
+    'A <strong>trained dictionary</strong> fixes the LZ cold start, making tiny, similar payloads compress as if they had long histories.',
+    '<strong>FSE</strong> can spend fractional bits per symbol, hugging the entropy floor closer than whole-bit Huffman on skewed data.',
+  ]}
+/>
+
+Next up: **Brotli** — push ratio further with a 120 KB *built-in* dictionary of common web strings and context modeling, the compressor tuned for shipping the web.

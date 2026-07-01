@@ -1,0 +1,256 @@
+---
+title: Grover & Shor
+track: dsa-quantum
+summary: "Two flagship quantum algorithms: Grover amplifies the marked item to search in O(√N), and Shor turns factoring into period-finding to break RSA in polynomial time."
+difficulty: advanced
+estMinutes: 20
+prereqs:
+  - dsa-quantum/quantum-gates
+leadsTo:
+  - dsa-ml-algorithms/attention
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import QbitGroverAmplification from '../../../components/demos/QbitGroverAmplification.tsx';
+
+## The hook: the two algorithms that made the world care
+
+Quantum computing was a curiosity until two algorithms gave it teeth. In 1994 **Shor** showed how to factor
+a large integer in *polynomial* time — the exact problem RSA encryption bets its life on being hard, the
+math you meet in the [number-theory track's Euler's totient lesson](/lessons/dsa-number-theory/euler-totient).
+Two years later **Grover** showed how to search an unstructured space of $N$ items in $O(\sqrt N)$ steps
+instead of $O(N)$. One threatens to break the internet's encryption; the other speeds up brute force
+everywhere. Both run on the same engine: prepare a superposition, then use **interference** to make the
+answer you want loud and the answers you don't quiet.
+
+<Callout type="intuition" title="The one-sentence idea">
+Grover repeatedly reflects the amplitude vector to pump probability into the marked item — reaching it in
+about $\tfrac{\pi}{4}\sqrt N$ steps — while Shor factors $N$ by using a quantum Fourier transform to find
+the *period* of $a^x \bmod N$, converting an exponentially hard search into polynomial-time arithmetic.
+</Callout>
+
+## Intuition
+
+**Grover — amplitude amplification.** Start every one of the $N$ items at equal amplitude $1/\sqrt N$. Each
+Grover iteration does two reflections:
+
+1. **Oracle:** flip the *sign* of the marked item's amplitude (a phase kick — it knows which item is "good"
+   without revealing it).
+2. **Diffusion:** reflect every amplitude about their mean. The marked item, now negative, ends up far
+   *above* the average while the others dip.
+
+Geometrically each iteration rotates the state a fixed small angle toward the marked item. After about
+$\tfrac{\pi}{4}\sqrt N$ rotations you are pointing almost exactly at it, so a measurement returns the answer
+with high probability. Compare that to the [binary-search world](/lessons/dsa-searching/binary-search): binary
+search is $O(\log N)$ but *demands sorted data*; Grover needs no structure at all — it beats the only honest
+classical baseline for unstructured search, the $O(N)$ linear scan.
+
+**Shor — period-finding.** Factoring feels like search, but Shor sidesteps searching entirely. To factor
+$N$, pick a random $a$ and look at the sequence $a^1, a^2, a^3, \dots \pmod N$. It always **repeats** with
+some period $r$. If you can find $r$, a little arithmetic ($\gcd(a^{r/2} \pm 1, N)$) usually hands you a
+factor. Finding a period is exactly what a **quantum Fourier transform** does brilliantly — it turns a
+repeating signal into a sharp spike at its frequency, all $N$ inputs evaluated in superposition at once.
+
+## Play with it
+
+Watch Grover pump up the marked item. Pick $N$ and which item is marked, then step through: each **oracle**
+half-step flips the star's amplitude negative, and each **diffusion** half-step reflects about the mean
+(sky dashed line), launching it upward. The readout shows the marked probability climbing.
+
+<QbitGroverAmplification client:visible />
+
+<Callout type="tip">
+Set iterations well past the optimal $\approx \tfrac{\pi}{4}\sqrt N$ and keep stepping. The marked bar
+overshoots the top and *falls back down* — Grover is a rotation, not a ratchet. Stopping at the right number
+of iterations matters as much as the algorithm itself.
+</Callout>
+
+## How it works
+
+Take $N = 4$ with item 2 marked. Start uniform, then one full Grover iteration:
+
+```
+start        [ 0.5,  0.5,  0.5,  0.5 ]   every item 25%
+oracle       [ 0.5,  0.5, -0.5,  0.5 ]   marked item's sign flipped
+mean = 0.25
+diffuse      [ 0.0,  0.0,  1.0,  0.0 ]   reflect about mean: marked -> 100%
+```
+
+For $N = 4$ a single iteration nails it — $\tfrac{\pi}{4}\sqrt4 \approx 1.57$, rounding to one or two steps.
+For larger $N$ each iteration only rotates a little, which is why you need $\sqrt N$ of them.
+
+<CodeRunner
+  client:visible
+  code={`// Grover on N amplitudes: oracle flips the marked sign,
+// diffusion reflects every amplitude about the mean.
+function grover(N, marked, iters) {
+  let a = new Array(N).fill(1 / Math.sqrt(N));
+  for (let k = 0; k < iters; k++) {
+    a[marked] = -a[marked];                     // oracle
+    const mean = a.reduce((s, v) => s + v, 0) / N;
+    a = a.map(v => 2 * mean - v);               // diffusion
+  }
+  return a;
+}
+const N = 16, marked = 10;
+const optimal = Math.round(Math.PI / 4 * Math.sqrt(N));
+const amps = grover(N, marked, optimal);
+const markedProb = +(amps[marked] ** 2).toFixed(3);`}
+  tests={[
+    { expr: 'optimal', label: 'optimal iterations for N=16' },
+    { expr: 'markedProb', label: 'P(marked) after Grover' },
+    { expr: '+(grover(16, 10, 100)[10] ** 2).toFixed(3)', label: 'P(marked) with too many iters (overshoot)' },
+  ]}
+/>
+
+## The real implementation
+
+The course file gives the primitives Grover and Shor are built from — superposition via H, phase via Z, and
+measurement. Here is the Hadamard/CNOT-style state plus a Grover-flavoured oracle-and-diffuse loop expressed
+with them:
+
+```ts
+// /dsa/31-quantum-algorithms/quantum-basics.ts
+// Superposition + interference are the engine under both algorithms.
+const qc = new QuantumCircuit(1);
+qc.h(0);                 // |0> -> (|0> + |1>)/√2   (equal superposition)
+qc.h(0);                 // H² = I: the |1> paths interfere and cancel
+// State is back to |0> with certainty — amplitudes CANCELLED, not averaged.
+
+// Grover's core (schematic), on the same state-vector machinery:
+//   1. put all n qubits in superposition with H on each
+//   2. ORACLE:    flip the phase of the marked basis state  (a Z-like kick)
+//   3. DIFFUSION: reflect all amplitudes about their mean
+//   4. repeat ~ (π/4)·√N times, then measure
+// Shor replaces the oracle loop with the Quantum Fourier Transform to read
+// off the PERIOD r of a^x mod N, then classically gcd(a^{r/2} ± 1, N).
+```
+
+Run the full file: `npx tsx 31-quantum-algorithms/quantum-basics.ts`.
+
+## Complexity
+
+Grover gives a **quadratic** speed-up; Shor gives a **super-polynomial** one. The prefactor $\tfrac{\pi}{4}$
+matters — it is why the demo has an optimal stopping point:
+
+$$
+\text{Grover: } O\!\left(\sqrt N\right) \text{ vs classical } O(N), \qquad
+\text{iterations} \approx \frac{\pi}{4}\sqrt N.
+$$
+
+$$
+\text{Shor: } O\!\left((\log N)^2 (\log\log N)(\log\log\log N)\right) \text{ vs classical } \exp\!\big(O(\log N)^{1/3}\big).
+$$
+
+| Problem | Best classical | Quantum | Speed-up |
+|---------|----------------|---------|----------|
+| Unstructured search ($N$ items) | $O(N)$ | $O(\sqrt N)$ | quadratic |
+| Factor an $n$-bit integer | $\exp(O(n^{1/3}))$ (GNFS) | $O(n^2 \log n)$ (Shor) | super-polynomial |
+| Search *sorted* data | $O(\log N)$ (binary search) | $O(\log N)$ | none — classical already wins |
+
+That last row is the honest caveat: quantum does **not** beat binary search on sorted data. Grover's win is
+specifically against the $O(N)$ scan you are forced into when there is *no* structure to exploit.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Cryptography" icon="🔐">
+Shor is why "post-quantum" cryptography exists. RSA's security rests on factoring being hard; a large
+fault-tolerant quantum computer running Shor would peel a public key apart in hours, so NIST is already
+standardising lattice-based schemes that period-finding cannot touch.
+</ExampleCard>
+
+<ExampleCard domain="Chemistry" icon="🧪">
+Simulating a molecule means tracking an exponentially large quantum state — the very thing classical
+machines choke on. Quantum computers represent it natively, so the same interference tricks estimate
+reaction energies for drug discovery and battery design that are otherwise out of reach.
+</ExampleCard>
+
+<ExampleCard domain="Logistics" icon="🚚">
+Grover-style amplitude amplification accelerates brute-force optimisation: checking $N$ candidate routes or
+schedules for one that meets every constraint drops from $O(N)$ trials to $O(\sqrt N)$, a real edge when the
+search space has no exploitable order.
+</ExampleCard>
+
+<ExampleCard domain="Databases" icon="🗄️">
+"Find the one record satisfying a black-box predicate" in an unindexed table is textbook Grover: no sort, no
+index, just a test you can apply — so classical needs a full $O(N)$ scan while Grover needs $O(\sqrt N)$
+queries to the same predicate.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **More Grover iterations is not better.** The amplitude *rotates*; past $\tfrac{\pi}{4}\sqrt N$ it
+  overshoots and the marked probability falls. Know the optimal stopping count.
+- **Grover does not beat binary search.** Against sorted, indexed data classical $O(\log N)$ wins. Grover's
+  quadratic edge is only over the $O(N)$ unstructured scan.
+- **No cloning.** You cannot copy an unknown qubit ($\text{copy}$ is not unitary), so you cannot "save a
+  backup" of a superposition and retry measurements — every run reprepares from scratch.
+- **Measurement collapses everything.** Grover carefully builds a state that is *mostly* the answer, then
+  measures once. Peek early and you destroy the interference you spent iterations creating.
+- **Decoherence is the real-world killer.** Qubits leak their phase to the environment in microseconds;
+  Shor on a 2048-bit key needs millions of near-perfect gates, which is why it is not yet a practical threat.
+- **Interview cue:** "unstructured search, no order to exploit" → Grover $O(\sqrt N)$; "factoring / discrete
+  log / breaks RSA" → Shor via period-finding and the quantum Fourier transform.
+
+## Practice
+
+1. **Easy:** For $N = 100$, roughly how many Grover iterations are optimal? Use $\tfrac{\pi}{4}\sqrt N$.
+2. **Easy:** Why does searching a *sorted* array not benefit from Grover?
+3. **Medium:** In the demo set $N = 9$ and run 4 iterations. Does the marked probability keep rising? Explain
+   the overshoot in terms of rotation.
+4. **Medium:** To factor $15$ with $a = 2$, list $2^x \bmod 15$ until it repeats. What is the period $r$, and
+   what does $\gcd(2^{r/2} \pm 1, 15)$ give?
+5. **Hard:** Explain why finding the period of $a^x \bmod N$ is the hard step of factoring, and which quantum
+   subroutine (from the intuition section) makes it efficient.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'How many iterations does Grover need to search N unstructured items?',
+      options: ['About log₂ N', 'About N', 'About (π/4)·√N', 'Exactly 1 regardless of N'],
+      answer: 2,
+      explain: 'Each iteration rotates the state a fixed small angle toward the marked item; about (π/4)·√N of them point it almost exactly at the answer — an O(√N) search.',
+    },
+    {
+      q: 'What does Shor’s algorithm actually compute on the quantum hardware to factor N?',
+      options: [
+        'The prime factors directly by trial division',
+        'The period r of a^x mod N, using the quantum Fourier transform',
+        'A sorted list of all divisors',
+        'The gcd of N and a random number',
+      ],
+      answer: 1,
+      explain: 'Shor reduces factoring to period-finding: the QFT extracts the period r of a^x mod N, and classical arithmetic gcd(a^{r/2} ± 1, N) then yields a factor.',
+    },
+    {
+      q: 'Why is running many extra Grover iterations counterproductive?',
+      options: [
+        'It uses too much classical memory',
+        'The amplitude keeps rotating and overshoots the marked item, lowering its probability',
+        'The oracle stops working after a few steps',
+        'It violates the no-cloning theorem',
+      ],
+      answer: 1,
+      explain: 'Grover is a rotation in a 2-D plane. Past the optimal angle the state rotates beyond the marked item, so the marked probability falls back down.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Grover searches <strong>unstructured</strong> data in <strong>O(√N)</strong> via amplitude amplification — oracle sign-flip then diffusion about the mean.',
+    'Stop Grover at about <strong>(π/4)·√N</strong> iterations; going further <strong>overshoots</strong> and lowers the marked probability.',
+    'Shor factors integers in <strong>polynomial time</strong> by turning factoring into <strong>period-finding</strong> with the quantum Fourier transform — the threat behind post-quantum crypto.',
+    'Both algorithms run on the same engine: <strong>superposition + interference</strong> to amplify the right answer and cancel wrong ones.',
+    'Caveats that trip people up: <strong>no cloning</strong>, measurement collapse, decoherence, and that Grover does <strong>not</strong> beat binary search on sorted data.',
+  ]}
+/>
+
+That closes the quantum track — from a single spinning qubit to algorithms that reshape cryptography. Next
+you step into **Attention (Q, K, V)**, where the same instinct returns in classical form: score every option
+at once, then let a softmax amplify the matches that matter.

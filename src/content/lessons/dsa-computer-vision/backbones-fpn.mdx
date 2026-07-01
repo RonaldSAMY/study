@@ -1,0 +1,274 @@
+---
+title: Backbones & Feature Pyramids
+track: dsa-computer-vision
+summary: "Deep features know what, shallow features know where: a feature pyramid fuses them so one detector sees objects at every scale."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-computer-vision/cv-foundations
+leadsTo:
+  - dsa-computer-vision/rcnn-detectors
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import CvFeaturePyramid from '../../../components/demos/CvFeaturePyramid.tsx';
+
+## The hook: the same photo, a bug and a bus
+
+A single street photo can contain a bus filling the frame and a mosquito-sized traffic light two blocks
+away. A detector must find both. But a convolutional backbone faces a cruel trade-off: its **deep**
+layers are rich in meaning ("this is a vehicle") yet so downsampled that the tiny traffic light has
+been blurred out of existence, while its **shallow** layers keep fine resolution but have no idea what
+they are looking at. The Feature Pyramid Network resolves the tension by pushing deep meaning *down*
+into the high-resolution maps — so one network genuinely sees at every scale.
+
+<Callout type="intuition" title="The one-sentence idea">
+A backbone produces feature maps at several resolutions; a feature pyramid takes the deep, semantic map
+and repeatedly upsamples-and-adds it onto the shallower, higher-resolution maps, so every scale ends up
+both detailed and meaningful.
+</Callout>
+
+## Intuition
+
+A **backbone** — ResNet, CSPDarknet — is a stack of [convolutions](/lesson/neural-networks/convolutional-networks).
+Each stride-2 step halves the spatial size and roughly doubles the channels, producing a ladder of maps
+usually named C2, C3, C4, C5 (strides 4, 8, 16, 32). Going up the ladder, resolution falls but semantic
+strength rises.
+
+The problem: run your detector only on the deep C5 and small objects have vanished; run it only on the
+shallow C2 and the features are semantically blind. FPN's fix is a **top-down pathway with lateral
+connections**. Start at the deepest map. A 1×1 convolution (a "lateral") matches every level to a shared
+channel count. Then upsample the deep map by two and *add* it onto the next-shallower lateral. Repeat
+down the ladder. The add is the same identity-preserving trick as a residual skip — gradients flow
+unchanged to both inputs — but applied **across scales** rather than across depth. YOLO's neck adds a
+second **bottom-up** path (PANet) so crisp localization also climbs back up to the deep levels.
+
+## Play with it
+
+Set the deep semantic value at the top level and step the top-down fusion. Watch a single deep number
+get upsampled and summed into all four cells below it — that is meaning reaching the high-resolution map.
+
+<CvFeaturePyramid client:visible />
+
+<Callout type="tip">
+Crank the L5 value to its maximum and step to P3. Every one of the sixteen cells inherits that big deep
+value on top of its own local detail. Small objects that only register on the high-res level now sit on
+top of "vehicle-ness" borrowed from the deep level — exactly why FPN rescues small-object detection.
+</Callout>
+
+## How it works
+
+Two levels, one channel each. The deep lateral L5 is 1×1; the shallower L4 is 2×2:
+
+```
+L5 (deep, 1x1):      L4 (shallow, 2x2):
+  [10]                 2  4
+                       6  8
+
+P5 = L5 = [10]
+Upsample x2 (nearest-neighbor):   10 10
+                                  10 10
+P4 = L4 + Upsample(P5):   2+10  4+10  =  12 14
+                          6+10  8+10     16 18
+```
+
+The deep value 10 is copied into every cell and added to the local detail. Reproduce the fusion, the
+conv output-size rule, and anchor shapes:
+
+<CodeRunner
+  client:visible
+  code={`// nearest-neighbor upsample x2
+function upsample2(g) {
+  const H = g.length, W = g[0].length, out = [];
+  for (let i = 0; i < H*2; i++) {
+    out.push([]);
+    for (let j = 0; j < W*2; j++) out[i].push(g[(i/2)|0][(j/2)|0]);
+  }
+  return out;
+}
+// element-wise add (the FPN fusion)
+const add = (a, b) => a.map((row, i) => row.map((v, j) => v + b[i][j]));
+
+const L5 = [[10]];
+const L4 = [[2,4],[6,8]];
+const P4 = add(L4, upsample2(L5));
+
+// conv output size:  floor((W - k + 2p)/s) + 1
+const convOut = (W, k, p, s) => Math.floor((W - k + 2*p) / s) + 1;
+
+// anchor shape from (scale, aspect ratio): w = s*sqrt(r), h = s/sqrt(r)
+function anchorShape(s, r) {
+  return [s * Math.sqrt(r), s / Math.sqrt(r)];
+}`}
+  tests={[
+    { expr: 'JSON.stringify(P4)', label: 'P4 = L4 + Upsample(P5)' },
+    { expr: 'convOut(224, 3, 1, 2)', label: 'output size, k=3 p=1 s=2' },
+    { expr: 'JSON.stringify(anchorShape(64, 4))', label: 'anchor w,h for scale 64, ratio 4' },
+  ]}
+/>
+
+## The real implementation
+
+The course FPN walks the levels deepest-last, seeds the top with its lateral, then fuses downward with a
+single upsample-and-add per level:
+
+```ts
+// /dsa/32-computer-vision/02-backbones-necks/feature-pyramid.ts
+forward(C: Tensor3[]): Tensor3[] {
+  const n = C.length;
+  const L = C.map((Ci) => conv2d(Ci, this.getLateral(Ci.length), null, { stride: 1, pad: 0 }));
+  const P: Tensor3[] = new Array(n);
+  P[n - 1] = L[n - 1];                 // P_top = L_top
+  for (let i = n - 2; i >= 0; i--) {
+    const up = upsample(P[i + 1], 2);  // bring deeper map up to this resolution
+    P[i] = addTensors(L[i], up);       // fuse by element-wise add
+  }
+  return P.map((Pi) => conv2d(Pi, this.getSmooth(), null, { stride: 1, pad: 1 })); // 3x3 anti-alias
+}
+```
+
+Anchors then tile each pyramid level; the shape math turns a scale and aspect ratio into a width and
+height whose area is exactly the scale squared:
+
+```ts
+// /dsa/32-computer-vision/01-foundations/anchor-boxes.ts
+export function anchorShapes(scales, ratios) {
+  const shapes = [];
+  for (const s of scales) for (const r of ratios) {
+    const sr = Math.sqrt(r);
+    shapes.push([s * sr, s / sr]);     // w*h = s^2,  w/h = r
+  }
+  return shapes;
+}
+```
+
+Study the derivation — top-down recurrence, PANet's bottom-up path, and k-means anchors — at
+`/dsa/32-computer-vision/02-backbones-necks/feature-pyramid.ts` and `.../01-foundations/anchor-boxes.ts`.
+
+## Formulas and complexity
+
+A stride-$s$ convolution with kernel $k$ and padding $p$ maps an input of width $W$ to:
+
+$$
+W_{\text{out}} = \left\lfloor \frac{W - k + 2p}{s} \right\rfloor + 1.
+$$
+
+The FPN top-down recurrence, with lateral $L_i = \text{Conv}_{1\times1}(C_i)$:
+
+$$
+P_5 = L_5, \qquad P_i = L_i + \text{Upsample}_{\times 2}(P_{i+1}) \quad (i = 4, 3, 2).
+$$
+
+Because fusion is an **add**, backprop sends the gradient unchanged to both branches,
+$\partial(a+b)/\partial a = 1$, so deep features get supervised at every scale they feed. An anchor of
+scale $s$ and aspect ratio $r$ has
+
+$$
+w = s\sqrt{r}, \qquad h = \frac{s}{\sqrt{r}}, \qquad w \cdot h = s^2, \qquad \frac{w}{h} = r.
+$$
+
+| Operation | Time | Space |
+|-----------|------|-------|
+| 2D convolution | $O(H W\, C_{in} C_{out} k^2)$ | $O(HWC)$ |
+| Lateral 1×1 + upsample + add (per level) | $O(d\, H_i W_i)$ | $O(d\, H_i W_i)$ |
+| Whole FPN | $\sim$ linear in total pixels | all levels stored |
+| Anchor generation | $O(F^2 A)$ | $O(F^2 A)$ |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Satellite imagery" icon="🛰️">
+An aerial scene holds ships hundreds of pixels long beside cars just a few pixels wide. Detectors here
+lean hard on the high-resolution pyramid levels; without top-down fusion the small vehicles disappear
+into the downsampled deep map entirely.
+</ExampleCard>
+
+<ExampleCard domain="Manufacturing QA" icon="🏭">
+A defect-inspection camera must catch both a warped panel (large, whole-part) and a hairline scratch
+(tiny, local). The large flaw is obvious on the deep level; the scratch only survives on a shallow level
+that FPN has injected semantics into.
+</ExampleCard>
+
+<ExampleCard domain="Sports broadcast" icon="🏟️">
+In a wide stadium shot the near players are huge and the far players are specks. A pyramid lets one
+model track all of them, feeding player-tracking graphics that would flicker if only a single scale were
+used.
+</ExampleCard>
+
+<ExampleCard domain="Augmented reality" icon="🥽">
+An AR headset detects both a nearby hand and a distant poster to anchor content. Multi-scale features
+keep both localized in real time, and PANet's bottom-up path sharpens the localization the compositor
+needs to avoid jitter.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Channel mismatch breaks the add.** The lateral 1×1 conv exists precisely to unify channel counts;
+  skip it and you cannot element-wise add a 2048-channel deep map onto a 256-channel shallow one.
+- **Upsample then add, not add then upsample.** The deeper map must be brought *up* to the shallower
+  map's resolution first, or the shapes don't match.
+- **Anchors must cover your object scales.** If every object is far larger or smaller than your anchor
+  set, most ground truths go unmatched — add pyramid levels or re-cluster anchors with k-means on IoU.
+- **Interview cue:** explain why the fusion is an add and not a concat — "same gradient trick as a
+  residual skip, but across scales" is the answer they want, plus that add keeps channels and cost fixed.
+
+## Practice
+
+1. **Easy:** Compute the output size of a 3×3 stride-1 "same" convolution (padding 1) on a 32-wide map.
+2. **Easy:** For scale 32 and aspect ratio 1, what are the anchor width and height?
+3. **Medium:** A backbone outputs C5 at 7×7. What spatial sizes are C4, C3, C2 under stride-2 steps, and
+   what upsample factor aligns each with its lateral?
+4. **Medium:** Explain, in gradient terms, why FPN's fused deep features receive supervision from every
+   shallower level.
+5. **Hard:** Add a PANet bottom-up step: given FPN outputs P2..P5, compute N3 = Conv(Downsample(N2)) + P3
+   for toy 4×4 and 2×2 maps and confirm the shapes line up.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why does FPN push features from deep layers DOWN to shallow ones?',
+      options: [
+        'Shallow layers are high-resolution but semantically weak, so they borrow meaning from deep layers',
+        'Deep layers are higher resolution than shallow ones',
+        'To reduce the number of channels',
+        'Because upsampling is cheaper than downsampling',
+      ],
+      answer: 0,
+      explain: 'Shallow maps keep fine detail (good for small objects) but lack semantics; the top-down path injects deep meaning into them.',
+    },
+    {
+      q: 'What is the role of the lateral 1x1 convolution in FPN?',
+      options: [
+        'It downsamples the feature map',
+        'It matches each backbone level to a shared channel count so maps can be added',
+        'It applies non-max suppression',
+        'It computes IoU',
+      ],
+      answer: 1,
+      explain: 'The 1x1 lateral projects every level to the same channel dimension (e.g. 256) so the element-wise fusion add is well-defined.',
+    },
+    {
+      q: 'An anchor has scale 64 and aspect ratio 4. Its width is closest to...',
+      options: ['16', '64', '128', '256'],
+      answer: 2,
+      explain: 'w = s*sqrt(r) = 64*sqrt(4) = 64*2 = 128 (and h = 64/2 = 32, so area = 64^2).',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A <strong>backbone</strong> is a conv ladder: deep = semantic but low-res, shallow = detailed but semantically weak.',
+    'A <strong>feature pyramid</strong> fuses them top-down with upsample-and-add, giving every scale both detail and meaning.',
+    'The fusion <strong>add preserves gradients</strong> across scales — the residual-skip trick applied to resolution.',
+    'A <strong>lateral 1×1 conv</strong> unifies channels so levels can be added; a 3×3 smooths upsampling aliasing.',
+    'Anchors of scale s and ratio r have <strong>w = s√r, h = s/√r</strong>, tiling each pyramid level for the detector head.',
+  ]}
+/>
+
+You now have multi-scale features and a grid of anchors. Next: **R-CNN to Faster R-CNN** — how a
+two-stage detector turns those anchors into region proposals and then into precise, classified boxes.

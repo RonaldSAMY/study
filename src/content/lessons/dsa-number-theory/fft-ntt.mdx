@@ -1,0 +1,266 @@
+---
+title: FFT & NTT
+track: dsa-number-theory
+summary: "Multiplying polynomials the fast way: evaluate at clever points, multiply pointwise, interpolate back — the divide-and-conquer FFT in O(n log n), and its exact integer twin, the NTT."
+difficulty: advanced
+estMinutes: 22
+prereqs:
+  - dsa-number-theory/euler-totient
+leadsTo:
+  - dsa-geometry/geometry-primitives
+  - fourier/dft-fft
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import NTFFTButterfly from '../../../components/demos/NTFFTButterfly.tsx';
+
+## The hook: multiply two 10,000-digit numbers before lunch
+
+Grade-school multiplication of two $n$-digit numbers takes $n^2$ single-digit products — a million for
+1000 digits, a hundred million for 10,000. Yet your computer multiplies enormous integers almost
+instantly. The secret is a change of viewpoint borrowed from signal processing: a number (or polynomial)
+is easier to *multiply* when you describe it by its values at a handful of magic points rather than by its
+digits. The Fast Fourier Transform switches between those two views in $O(n \log n)$, and that single idea
+collapses the whole $n^2$ wall.
+
+<Callout type="intuition" title="The one-sentence idea">
+A degree-$n$ polynomial is pinned down by its values at $n+1$ points, and in *value form* multiplication
+is just pointwise products — so evaluate, multiply, and interpolate back, each in $O(n \log n)$.
+</Callout>
+
+## Intuition
+
+There are two ways to describe a polynomial: by its **coefficients** $[a_0, a_1, \dots]$, or by its
+**values** at some chosen points $[(x_0, A(x_0)), (x_1, A(x_1)), \dots]$. Multiplying in coefficient form
+is a convolution — $O(n^2)$. But in value form, $C(x_i) = A(x_i) \cdot B(x_i)$: one multiplication per
+point, $O(n)$ total. The catch is converting between the two views cheaply.
+
+The FFT makes both conversions $O(n \log n)$ by evaluating at very special points — the **$n$-th roots of
+unity** $\omega^k = e^{2\pi i k / n}$, evenly spaced around the unit circle (the clock, again!). Their
+magic is a self-similar symmetry: splitting a polynomial into its even- and odd-indexed coefficients lets
+you compute the size-$n$ transform from two size-$n/2$ transforms, combined by a cheap **butterfly**
+$A(x) = E(x^2) + x \cdot O(x^2)$. That divide-and-conquer recursion is the entire algorithm.
+
+The **NTT** plays the identical game but over integers modulo a special prime, using a primitive root in
+place of $\omega$. Same butterflies, no floating-point error — the right choice when you need *exact*
+results.
+
+## Play with it
+
+Type a short signal, choose $n = 4$ or $8$, and step through the butterfly network. The input starts in
+bit-reversed order; each stage combines top/bottom pairs with a twiddle factor until the final column
+holds the transform.
+
+<NTFFTButterfly client:visible />
+
+<Callout type="tip">
+Notice the crossing "butterfly" wires repeat at every stage — that self-similarity *is* the
+divide-and-conquer. With $n = 8$ there are just 3 stages of 4 butterflies: $n \log_2 n = 24$ operations
+instead of $n^2 = 64$.
+</Callout>
+
+## How it works
+
+Multiply $A = 1 + 2x + 3x^2$ by $B = 4 + 5x$ via the transform round-trip:
+
+```
+resultLen = 3 + 2 - 1 = 4  ->  pad both to n = 4 (next power of two)
+1. FFT(A), FFT(B): evaluate both at the 4th roots of unity   [O(n log n)]
+2. pointwise multiply the value vectors                       [O(n)]
+3. inverse FFT: interpolate back to coefficients              [O(n log n)]
+result = [4, 13, 22, 15]  =  4 + 13x + 22x^2 + 15x^3
+```
+
+Check by hand: $(1 + 2x + 3x^2)(4 + 5x) = 4 + 13x + 22x^2 + 15x^3$. The FFT never "expanded" the product
+directly — it went out to value space and back.
+
+<CodeRunner
+  client:visible
+  code={`// Recursive Cooley-Tukey FFT on arrays of {re, im}
+function fft(a, invert) {
+  const n = a.length;
+  if (n === 1) return a;
+  const even = fft(a.filter((_, i) => i % 2 === 0), invert);
+  const odd  = fft(a.filter((_, i) => i % 2 === 1), invert);
+  const ang = (2 * Math.PI / n) * (invert ? -1 : 1);
+  const out = new Array(n);
+  let wr = 1, wi = 0;
+  for (let k = 0; k < n / 2; k++) {
+    const tr = wr * odd[k].re - wi * odd[k].im;   // twiddle · odd[k]
+    const ti = wr * odd[k].im + wi * odd[k].re;
+    out[k]         = { re: even[k].re + tr, im: even[k].im + ti };
+    out[k + n / 2] = { re: even[k].re - tr, im: even[k].im - ti };
+    const nwr = wr * Math.cos(ang) - wi * Math.sin(ang);
+    wi = wr * Math.sin(ang) + wi * Math.cos(ang); wr = nwr;
+  }
+  return out;
+}
+function multiply(a, b) {
+  let n = 1; while (n < a.length + b.length - 1) n <<= 1;
+  const pad = (arr) => arr.concat(Array(n - arr.length).fill(0)).map((x) => ({ re: x, im: 0 }));
+  const fa = fft(pad(a), false), fb = fft(pad(b), false);
+  const fc = fa.map((c, i) => ({ re: c.re*fb[i].re - c.im*fb[i].im, im: c.re*fb[i].im + c.im*fb[i].re }));
+  const inv = fft(fc, true);
+  return inv.slice(0, a.length + b.length - 1).map((c) => Math.round(c.re / n));
+}`}
+  tests={[
+    { expr: 'multiply([1,2,3],[4,5])', label: '(1+2x+3x^2)(4+5x)' },
+    { expr: 'multiply([1,2,1],[1,-2,1])', label: '(1+x)^2 · (1-x)^2' },
+    { expr: 'multiply([1,1,1],[1,1,1])', label: '[1,1,1] * [1,1,1]' },
+    { expr: 'multiply([9],[9])', label: 'trivial 9 × 9' },
+  ]}
+/>
+
+## The real implementation
+
+The iterative in-place FFT and NTT from the course file share the exact same butterfly structure — the
+NTT just swaps roots of unity for modular arithmetic so results are integer-exact:
+
+```ts
+// /dsa/22-number-theory/fft-ntt.ts
+export function fft(a: Complex[], invert = false): void {
+  const n = a.length;
+  for (let i = 1, j = 0; i < n; i++) {          // bit-reversal permutation
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) [a[i], a[j]] = [a[j], a[i]];
+  }
+  for (let len = 2; len <= n; len *= 2) {       // stage by stage
+    const ang = (2 * Math.PI / len) * (invert ? -1 : 1);
+    const wlen = Complex.fromPolar(1, ang);
+    for (let i = 0; i < n; i += len) {
+      let w = new Complex(1);
+      for (let j = 0; j < len / 2; j++) {       // the butterfly
+        const u = a[i + j];
+        const v = a[i + j + len / 2].mul(w);
+        a[i + j] = u.add(v);
+        a[i + j + len / 2] = u.sub(v);
+        w = w.mul(wlen);
+      }
+    }
+  }
+  if (invert) for (let i = 0; i < n; i++) a[i] = a[i].div(n);
+}
+```
+
+`multiplyPolynomialsNTT` uses the NTT-friendly prime $998244353 = 119 \cdot 2^{23} + 1$ with primitive
+root 3. The file also does big-integer multiplication, string matching by convolution, and polynomial
+powers. Run the full file: `npx tsx 22-number-theory/fft-ntt.ts`.
+
+## Complexity
+
+The transform recurses over $\log n$ stages of $n$ work each; multiplication is three transforms plus a
+pointwise pass:
+
+$$
+T_{\text{FFT}}(n) = O(n \log n), \qquad T_{\text{multiply}}(n) = O(n \log n).
+$$
+
+| Task | Naive | FFT / NTT |
+|------|-------|-----------|
+| Polynomial / big-int multiply | $O(n^2)$ | $O(n \log n)$ |
+| Convolution of two length-$n$ signals | $O(n^2)$ | $O(n \log n)$ |
+| One transform | $O(n^2)$ (naive DFT) | $O(n \log n)$ |
+
+FFT wins only once $n$ is large enough (roughly $n \ge 64$) to pay off its constant factor — below that,
+schoolbook multiplication is faster. Use NTT when you need exact integers modulo a prime; use FFT for
+real-valued signals where small floating-point error is fine.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Signal processing" icon="🎚️">
+The FFT was born to compute spectra: decompose audio or radio into frequencies, filter, and reconstruct.
+Filtering *is* convolution, and convolution becomes a pointwise multiply in frequency space — the same
+round-trip you just stepped through. This is precisely the DFT & FFT you meet in the Fourier track.
+</ExampleCard>
+
+<ExampleCard domain="Cryptography & big integers" icon="🔢">
+Multiplying the hundreds-of-digits numbers in RSA, or the huge polynomials in lattice schemes, uses
+NTT-based multiplication for exact, overflow-free products — the fast core inside big-integer libraries.
+</ExampleCard>
+
+<ExampleCard domain="Machine learning" icon="🧠">
+Convolutional layers can be evaluated as FFT multiplications, and image blurs, correlations, and
+autocorrelations all ride on the transform. Positional encodings and spectral methods lean on the same
+frequency view.
+</ExampleCard>
+
+<ExampleCard domain="Dynamic programming" icon="⚙️">
+Counting problems whose transitions are convolutions — "how many ways to reach each sum?" — turn an
+$O(n^2)$ DP into $O(n \log n)$ with FFT, a trick that shows up in divide-and-conquer DP optimization.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Pad to a power of two, and to at least $\deg A + \deg B + 1$.** Too small and the result wraps
+  (circular convolution) instead of the linear product you wanted.
+- **Floating-point error.** FFT accumulates rounding; `Math.round` the real parts at the end, and switch
+  to NTT when the numbers are large or must be exact.
+- **Bit-reversal and twiddle direction.** The inverse transform negates the angle *and* divides by $n$.
+  Forget the $1/n$ and every coefficient is scaled wrong.
+- **Interview cue:** "multiply two big numbers," "count pairs/sums by convolution," or "match a pattern
+  with wildcards" are FFT/NTT problems — recognize the convolution and reach for the transform.
+
+## Practice
+
+1. **Easy:** Multiply $[1, 1]$ by $[1, 1]$ with the round-trip and read off the coefficients of $(1+x)^2$.
+2. **Easy:** Why must you pad two degree-2 polynomials to length 8 rather than 4 before multiplying?
+3. **Medium:** Use FFT multiplication to compute $123 \times 456$ by treating digits as coefficients and
+   handling carries.
+4. **Medium:** Explain why NTT avoids the rounding that FFT suffers, and what property the modulus needs.
+5. **Hard:** Given two dice with custom faces, use one convolution to produce the full distribution of
+   their sum, then extend to $k$ dice with $\log k$ convolutions.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'Why is multiplication cheap in the "value" (point) representation?',
+      options: [
+        'Values are always integers',
+        'C(x_i) = A(x_i) · B(x_i) is one product per point, so it is O(n)',
+        'It needs no roots of unity',
+        'The degree drops',
+      ],
+      answer: 1,
+      explain: 'In value form each evaluation point multiplies independently, giving O(n) versus the O(n^2) convolution of coefficients.',
+    },
+    {
+      q: 'What is the time complexity of the FFT?',
+      options: ['O(n)', 'O(n log n)', 'O(n^2)', 'O(n sqrt n)'],
+      answer: 1,
+      explain: 'log n divide-and-conquer stages, each doing O(n) butterfly work, gives O(n log n).',
+    },
+    {
+      q: 'When should you prefer NTT over FFT?',
+      options: [
+        'For real-valued audio signals',
+        'When you need exact integer results modulo a prime',
+        'When n is very small',
+        'When the input has complex numbers',
+      ],
+      answer: 1,
+      explain: 'NTT works in a finite field, so there is no floating-point error — ideal for exact integer convolutions.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'A polynomial in <strong>value form</strong> multiplies pointwise in O(n) — the hard part is converting views.',
+    'The FFT evaluates at <strong>roots of unity</strong> and recurses via butterflies in <strong>O(n log n)</strong>.',
+    'Multiply = <strong>FFT, pointwise multiply, inverse FFT</strong>, collapsing O(n^2) products.',
+    'The <strong>NTT</strong> runs the same butterflies over a prime field for exact integer results.',
+    'It powers <strong>signal processing, big-integer and RSA math, ML convolutions, and DP speed-ups</strong>.',
+  ]}
+/>
+
+That closes the Number Theory track — from clock arithmetic to the transform that multiplies the
+universe's biggest numbers. Next you can carry the divide-and-conquer instinct into **Computational
+Geometry**, or revisit **DFT & FFT** in the Fourier track to see the same butterflies through a
+signal-processing lens.

@@ -1,0 +1,246 @@
+---
+title: Brotli
+track: dsa-compression
+summary: "Brotli adds a 120 KB built-in dictionary of common web strings plus context modeling on top of LZ and Huffman, so even the first bytes of a page compress — the codec tuned for shipping the web."
+difficulty: advanced
+estMinutes: 17
+prereqs:
+  - dsa-compression/zstandard
+leadsTo:
+  - dsa-quantum/qubits-superposition
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import CompBrotliDictionary from '../../../components/demos/CompBrotliDictionary.tsx';
+
+## The hook: the compressor that already knows what the web looks like
+
+Every website starts the same way — `<!DOCTYPE html>`, `<meta charset="utf-8">`, `Content-Type: text/html`, `function`, `return`, `https://`. An LZ compressor has to *see* a string before it can point back at it, so the first copy of each of these is stored the expensive way, as raw literals. Google's engineers asked: what if the compressor shipped with a phrasebook of the web already memorized? That is **Brotli** — and it is why the fonts and scripts loading this very page arrived 15-25% smaller than gzip could manage.
+
+<Callout type="intuition" title="The one-sentence idea">
+Brotli is LZ + Huffman like the others, but with a **120 KB built-in dictionary** of common web strings baked in — so patterns like `Content-Type` or `<div class="` compress on their *first* appearance, with no prior copy required.
+</Callout>
+
+## Intuition: solving the cold start once and for all
+
+In [Zstandard](/lessons/dsa-compression/zstandard) you saw a *trained* dictionary fix LZ's cold start for small, similar payloads — but you had to build and ship that dictionary yourself. Brotli takes the idea further: it standardizes a single dictionary of ~13,000 common strings and word-transforms (RFC 7932) that every Brotli encoder and every browser already has. Nothing to train, nothing to send.
+
+Brotli stacks three techniques:
+
+1. **Built-in dictionary** — check the 120 KB phrasebook first; a hit is a 2-byte reference even on first use.
+2. **LZ back-references** — the familiar sliding window for repeats that *aren't* in the dictionary (your own content).
+3. **Huffman + context modeling** — entropy-code the result, and switch Huffman tables based on *context* (HTML tags vs. text vs. numbers each get their own), squeezing skew harder than a single table can.
+
+The result is the best ratio of the three codecs on typical web assets — at the cost of much slower compression, which is why Brotli is used at **build time**, not on every dynamic request.
+
+## Play with it
+
+The visualizer tries the dictionary first (indigo), then LZ back-references (sky), then literals (emerald). Paste HTML-shaped text and watch dictionary entries fire on the *first* `<div class="` or `Content-Type` — hits that plain LZ could never make until a second copy appeared.
+
+<CompBrotliDictionary client:visible />
+
+<Callout type="tip">
+Step through slowly and compare with the LZ demo two lessons back: there, the opening tokens were all literals because nothing had been seen yet. Here, the dictionary lights up immediately. That head start on the *first* occurrence is exactly why Brotli wins on small files and page headers, where LZ's cold start hurts most.
+</Callout>
+
+## How it works
+
+At each position, Brotli asks three questions in order: is this in my dictionary? If not, did I see it earlier in this file? If not, emit a literal.
+
+```
+input:  <div class="a"><div class="b">
+step 1: "<div class=\"" → dictionary entry #6   (2 bytes, FIRST time!)
+step 2: 'a'             → literal
+step 3: '">'            → literals
+step 4: "<div class=\"" → LZ back-reference OR dictionary again
+step 5: 'b'             → literal ...
+```
+
+The first `<div class="` cost 2 bytes via the dictionary where LZ would have spent 12 literal bytes. Brotli's **quality levels** run 0-11: low levels (0-4) are fast enough for dynamic content, while 10-11 search exhaustively and are reserved for compressing static assets once at build time. WOFF2, the web font format, is literally Brotli applied to font tables.
+
+<CodeRunner
+  client:visible
+  code={`// Toy Brotli: dictionary first, then LZ back-reference, then literal.
+const DICT = ['<div class="', '</div>', 'Content-Type', 'text/html', 'https://', 'the '];
+
+function brotli(s) {
+  const out = []; let pos = 0;
+  while (pos < s.length) {
+    // 1. built-in dictionary (works on first use)
+    let best = '';
+    for (const d of DICT) if (s.startsWith(d, pos) && d.length > best.length) best = d;
+    if (best) { out.push('DICT:' + best); pos += best.length; continue; }
+    // 2. LZ back-reference into earlier text
+    let bLen = 0, bStart = -1;
+    for (let k = 0; k < pos; k++) {
+      let l = 0;
+      while (pos + l < s.length && s[k + l] === s[pos + l]) l++;
+      if (l > bLen) { bLen = l; bStart = k; }
+    }
+    if (bLen >= 4) { out.push('MATCH:' + (pos - bStart) + ',' + bLen); pos += bLen; continue; }
+    // 3. literal
+    out.push(s[pos]); pos++;
+  }
+  return out;
+}
+
+// bytes: dict ref = 2, match = 3, literal = 1
+function size(tokens) {
+  return tokens.reduce((n, t) =>
+    n + (t.startsWith && t.startsWith('DICT:') ? 2 : t.startsWith && t.startsWith('MATCH:') ? 3 : 1), 0);
+}`}
+  tests={[
+    { expr: 'JSON.stringify(brotli(\'<div class="x">Content-Type\'))', label: 'tokens (dictionary fires first)' },
+    { expr: 'size(brotli(\'<div class="x">Content-Type\')) + " bytes of 26"', label: 'compressed size' },
+    { expr: 'size(brotli("the the the the")) + " bytes"', label: 'dictionary + LZ mix' },
+  ]}
+/>
+
+## The real implementation
+
+The course file builds a simplified web dictionary and tries it before falling back to an LZ back-reference — the exact priority order that gives Brotli its edge on small, web-shaped data. From the file:
+
+```ts
+// /dsa/30-compression/brotli.ts
+private buildWebDictionary(): Map<string, number> {
+  const dict = new Map<string, number>();
+  const commonStrings = [
+    '<html>', '</html>', '<body>', '</body>', '<div class="', '<script>',
+    'Content-Type', 'application/json', 'text/html', 'charset=utf-8',
+    'the ', 'and ', 'for ', 'https://', 'www.', '.com', '.js', '.css',
+  ];
+  commonStrings.forEach((str, idx) => dict.set(str, idx));
+  return dict;
+}
+
+compress(input: string): Uint8Array {
+  const encoded = [];
+  let pos = 0;
+  while (pos < input.length) {
+    const dictMatch = this.findDictionaryMatches(input, pos);   // try phrasebook FIRST
+    if (dictMatch) {
+      encoded.push({ type: 'dict', data: dictMatch.id, length: dictMatch.pattern.length });
+      pos += dictMatch.pattern.length;
+      continue;
+    }
+    const backRef = this.findBackReference(input, pos);         // then LZ window
+    if (backRef && backRef.length >= 4) {
+      encoded.push({ type: 'match', data: backRef.offset, length: backRef.length });
+      pos += backRef.length;
+    } else {
+      encoded.push({ type: 'literal', data: input[pos] });      // else raw byte
+      pos++;
+    }
+  }
+  return this.encodeSequences(encoded);   // then Huffman with per-context tables
+}
+```
+
+Run the full file: `npx tsx 30-compression/brotli.ts`.
+
+## Complexity
+
+High quality levels search the window hard, so compression can approach quadratic in the window size; decompression stays linear and fast:
+
+$$
+T_{\text{comp}}(n) = O(n \cdot w)\ \text{to}\ O(n \cdot w^2), \qquad T_{\text{decomp}}(n) = O(n).
+$$
+
+The dictionary is a fixed 120 KB regardless of input.
+
+| Algorithm | Ratio (vs gzip) | Comp speed | Decomp speed | Where it runs |
+|-----------|-----------------|------------|--------------|---------------|
+| LZ4 | ~0.9x | ~10x | ~15x | hot path, real time |
+| Zstd | ~1.1x | ~3.5x | ~4x | dynamic + archival |
+| **Brotli (lvl 11)** | ~1.2x | ~0.4x | ~1.2x | static assets, build time |
+
+The ratio-vs-speed trade reaches its logical end here: Brotli spends the *most* CPU of the three to win the *best* ratio, which only pays off when you compress **once** and serve **many** times — the definition of a static web asset.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Web fonts (WOFF2)" icon="🔤">
+The WOFF2 font format is Brotli applied to font tables, shrinking files roughly 30% below the older WOFF. Every Google Fonts request you have ever made arrived Brotli-compressed, so glyphs render sooner on slow connections.
+</ExampleCard>
+
+<ExampleCard domain="CDN edge delivery" icon="🌐">
+Cloudflare and Fastly pre-compress static JS, CSS, and HTML with Brotli level 11 and serve the `.br` variant to any browser that sends `Accept-Encoding: br`. Compress once at the edge, deliver millions of times — exactly the case Brotli's slow encoder is built for.
+</ExampleCard>
+
+<ExampleCard domain="Rich HTML email" icon="✉️">
+Marketing emails are bloated, boilerplate-heavy HTML — inline styles, tables, tracking markup repeated across every message. Brotli's built-in web dictionary shreds the common tag soup, cutting transfer size where the same skeleton ships to millions of inboxes.
+</ExampleCard>
+
+<ExampleCard domain="Progressive web apps" icon="📱">
+A PWA ships a large JS bundle once and caches it. Build tools (webpack, Vite) emit Brotli-compressed bundles so first load over a mobile network is as small as possible; after that the service worker serves from cache, so the heavy compression cost is paid a single time.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Never Brotli-compress dynamic responses at level 11.** The encoder is far too slow for per-request work; use level 4-5 for dynamic content, or reach for zstd. Level 10-11 is strictly for build-time static assets.
+- **The dictionary only helps web-shaped data.** On genomic reads or binary blobs the built-in phrasebook rarely fires, and Brotli loses its edge over zstd. Match the codec to the content.
+- **Serve the right variant.** Precompressing to `.br` is useless if the server ignores `Accept-Encoding` and ships the raw file anyway. Wire up content negotiation and set `Vary: Accept-Encoding`.
+- **Do not double-compress.** Brotli over an already-gzipped or already-minified-and-compressed asset wastes CPU and can grow the file — compress the original once.
+- **Interview cue:** "best ratio for static web assets" is Brotli. Say "built-in 120 KB dictionary + LZ + context-modeled Huffman, compressed once at build time."
+
+## Practice
+
+1. **Easy:** Why can Brotli reference `Content-Type` on its first appearance while plain LZ cannot?
+2. **Easy:** Which Brotli quality level would you pick for a per-request dynamic API response, and which for a build-time JS bundle?
+3. **Medium:** Explain why Brotli's advantage over zstd shrinks on non-web data such as DNA reads or raw sensor logs.
+4. **Medium:** In the toy code, add three more dictionary entries and find an HTML string whose compressed size drops by at least 6 bytes as a result.
+5. **Hard:** Context modeling gives HTML tags and body text separate Huffman tables. Sketch why one shared table would waste bits, using the idea of entropy from the basics lesson.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What is Brotli\'s defining feature versus zstd?',
+      options: [
+        'It is lossy',
+        'A 120 KB built-in dictionary of common web strings, shipped with every encoder and browser',
+        'It skips entropy coding',
+        'It has no sliding window',
+      ],
+      answer: 1,
+      explain: 'Brotli standardizes a built-in web dictionary (RFC 7932) so common patterns compress on first use, with nothing to train or transmit — the key difference from zstd\'s optional trained dictionary.',
+    },
+    {
+      q: 'Why is Brotli level 11 used at build time rather than per request?',
+      options: [
+        'It produces different output each run',
+        'Its exhaustive search makes compression very slow, so it only pays off when you compress once and serve many times',
+        'Browsers cannot decompress it live',
+        'It is lossy at high levels',
+      ],
+      answer: 1,
+      explain: 'Level 11 spends the most CPU of any common codec for the best ratio; that cost is only worth it for static assets compressed once and served repeatedly.',
+    },
+    {
+      q: 'On which data does Brotli lose most of its edge over zstd?',
+      options: [
+        'HTML and CSS',
+        'JavaScript bundles',
+        'Non-web data like genomic reads or binary blobs, where the built-in dictionary rarely matches',
+        'Web fonts',
+      ],
+      answer: 2,
+      explain: 'The built-in dictionary is tuned for web strings; on data unlike the web it seldom fires, so Brotli\'s ratio advantage over zstd largely disappears.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Brotli is <strong>LZ + Huffman + a 120 KB built-in dictionary</strong> of common web strings, so patterns compress on their <strong>first</strong> appearance.',
+    'Unlike zstd\'s trained dictionary, Brotli\'s is <strong>standardized (RFC 7932)</strong> and already present in every encoder and browser — nothing to build or ship.',
+    '<strong>Context modeling</strong> switches Huffman tables for tags vs. text vs. numbers, squeezing skew harder than a single table could.',
+    'It wins the <strong>best ratio</strong> on web assets but is the <strong>slowest to compress</strong>, so it runs at <strong>build time</strong> (levels 10-11), not per request.',
+    'Match the codec to the job: <strong>LZ4</strong> for the hot path, <strong>zstd</strong> for dynamic and archival, <strong>Brotli</strong> for static web content.',
+  ]}
+/>
+
+That completes the Compression track — you have traced the same two levers, redundancy and skew, from the entropy floor through LZ back-references to entropy coders and built-in dictionaries. Next up: **Qubits & Superposition**, where a single bit learns to be 0 and 1 at once.

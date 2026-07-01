@@ -1,0 +1,269 @@
+---
+title: R-CNN to Faster R-CNN
+track: dsa-computer-vision
+summary: "Propose, then decide: two-stage detectors learn where objects might be, refine each anchor with box deltas, then classify — the accuracy-first lineage."
+difficulty: advanced
+estMinutes: 18
+prereqs:
+  - dsa-computer-vision/backbones-fpn
+leadsTo:
+  - dsa-computer-vision/yolo-family
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import CvRpnProposals from '../../../components/demos/CvRpnProposals.tsx';
+
+## The hook: from 47 seconds to real time
+
+The first deep detector, R-CNN (2014), was breathtakingly accurate and painfully slow: it cropped
+around **two thousand** region proposals per image and ran a full CNN on each one — about 47 seconds per
+photo. Over three years the R-CNN family fixed this by asking a sharper question each time. Share the
+convolution across all regions (Fast R-CNN). Then *learn* the proposals with a tiny network instead of
+a slow external algorithm (Faster R-CNN). The result is the two-stage detector that still anchors
+accuracy-first systems and Mask R-CNN today.
+
+<Callout type="intuition" title="The one-sentence idea">
+A two-stage detector first proposes where objects might be by scoring a grid of anchors and nudging them
+onto nearby objects, then a second head classifies each surviving proposal and refines its box.
+</Callout>
+
+## Intuition
+
+Stage one is the **Region Proposal Network** (RPN). Recall the anchors tiled across a feature map: the
+RPN slides over that map and, at every location, asks two questions per anchor — "is there an object
+here?" (objectness) and "how should I nudge this anchor to fit it?" (four box deltas). Anchors are
+labelled by their IoU with ground truth: high overlap is a **positive** target, low overlap is
+**background**, and the ambiguous middle is **ignored**. The positives, refined and de-duplicated with
+[NMS](/lesson/dsa-computer-vision/cv-foundations), become **region proposals**.
+
+The crucial trick is that a box is never predicted from raw coordinates. Instead the network predicts a
+small **correction** to an anchor: shift the center (normalized by anchor size) and scale the width and
+height in log space. Log space means the network's natural zero output says "keep the anchor as is", and
+a box twice as large and half as large are symmetric corrections. Stage two then pools features from
+each proposal — with **RoIAlign**, which samples at exact float coordinates instead of rounding — and
+runs a classifier plus a per-class box refiner.
+
+## Play with it
+
+Drag the object. Each grid cell holds an anchor; step the scan to see each anchor scored by IoU and
+labelled positive, ignore, or negative — then watch the positives regress onto the object as proposals.
+
+<CvRpnProposals client:visible />
+
+<Callout type="tip">
+Move the object into a corner and notice how few anchors turn green — many ground truths would get *no*
+positive anchor at all. That is why the real matching rule adds a guarantee: the single highest-IoU
+anchor for every object is forced positive, so no object is ever left without a training target.
+</Callout>
+
+## How it works
+
+Anchor A has center (50, 50) and size 40×40; ground truth G has center (65, 60) and size 50×40. Encode
+the regression targets, then decode a network prediction back to a box:
+
+```
+t_x = (65-50)/40 = 0.375     t_y = (60-50)/40 = 0.250
+t_w = log(50/40) = 0.22314   t_h = log(40/40) = 0.0
+
+predict t = (0.40, 0.20, 0.25, 0.05)  ->
+pred_x = 50 + 0.40*40 = 66      pred_w = 40*exp(0.25) = 51.36
+pred_y = 50 + 0.20*40 = 58      pred_h = 40*exp(0.05) = 42.05
+```
+
+Run the encode/decode and the smooth-L1 box loss:
+
+<CodeRunner
+  client:visible
+  code={`const toCenter = ([x1,y1,x2,y2]) => ({ cx:(x1+x2)/2, cy:(y1+y2)/2, w:x2-x1, h:y2-y1 });
+
+// encode a ground-truth box relative to an anchor -> targets (tx,ty,tw,th)
+function encodeBox(anchor, gt) {
+  const A = toCenter(anchor), G = toCenter(gt);
+  return [ (G.cx-A.cx)/A.w, (G.cy-A.cy)/A.h, Math.log(G.w/A.w), Math.log(G.h/A.h) ];
+}
+// decode network deltas back to a box (center form)
+function decodeBox(anchor, t) {
+  const A = toCenter(anchor);
+  return { cx: A.cx + t[0]*A.w, cy: A.cy + t[1]*A.h, w: A.w*Math.exp(t[2]), h: A.h*Math.exp(t[3]) };
+}
+// smooth-L1 (Huber): quadratic near 0, linear in the tails
+const smoothL1 = (x) => Math.abs(x) < 1 ? 0.5*x*x : Math.abs(x) - 0.5;
+function boxRegLoss(t, tStar) {
+  let s = 0; for (let m = 0; m < 4; m++) s += smoothL1(t[m] - tStar[m]); return s;
+}
+
+const anchor = [30,30,70,70];         // center (50,50), 40x40
+const gt = [40,40,90,80];             // center (65,60), 50x40
+const tStar = encodeBox(anchor, gt);
+const tPred = [0.40, 0.20, 0.25, 0.05];`}
+  tests={[
+    { expr: 'tStar.map(v => +v.toFixed(4))', label: 'targets t* [tx,ty,tw,th]' },
+    { expr: 'JSON.stringify((d => ({cx:+d.cx.toFixed(2),cy:+d.cy.toFixed(2),w:+d.w.toFixed(2),h:+d.h.toFixed(2)}))(decodeBox(anchor, tPred)))', label: 'decoded box' },
+    { expr: 'boxRegLoss(tPred, tStar).toFixed(6)', label: 'smooth-L1 box loss' },
+  ]}
+/>
+
+## The real implementation
+
+The course encodes and decodes with exactly the log/normalize parameterization above:
+
+```ts
+// /dsa/32-computer-vision/03-context-detectors/rcnn-family.ts
+export function encodeBox(anchor: Box, gt: Box) {
+  const A = cornersToCenter(anchor), G = cornersToCenter(gt);
+  return [ (G.cx - A.cx) / A.w, (G.cy - A.cy) / A.h, Math.log(G.w / A.w), Math.log(G.h / A.h) ];
+}
+export function decodeBox(anchor: Box, t: number[]): Box {
+  const A = cornersToCenter(anchor);
+  return centerToCorners({
+    cx: A.cx + t[0] * A.w, cy: A.cy + t[1] * A.h,
+    w: A.w * Math.exp(t[2]), h: A.h * Math.exp(t[3]),
+  });
+}
+```
+
+The RPN multi-task loss combines binary cross-entropy objectness with smooth-L1 box regression, and the
+box term fires **only for positive anchors** — there is no correct box for background:
+
+```ts
+// /dsa/32-computer-vision/03-context-detectors/rcnn-family.ts
+for (const a of anchors) {
+  if (a.label === -1) continue;                 // ignored anchors: no loss
+  clsSum += bceLoss(a.p, a.label); nCls++;
+  if (a.label === 1) regSum += boxRegLoss(a.t, a.tStar);   // positives only
+  nReg++;
+}
+// L = (1/N_cls) * clsSum  +  lambda * (1/N_reg) * regSum
+```
+
+Study the derivation — RoI pooling versus RoIAlign's bilinear sampling, and the full RPN forward pass —
+at `/dsa/32-computer-vision/03-context-detectors/rcnn-family.ts`.
+
+## Formulas and complexity
+
+Box regression targets normalize the center shift by anchor size and take the log of the size ratio:
+
+$$
+t_x = \frac{G_x - A_x}{A_w}, \quad t_y = \frac{G_y - A_y}{A_h}, \quad
+t_w = \log\frac{G_w}{A_w}, \quad t_h = \log\frac{G_h}{A_h}.
+$$
+
+The regression uses the smooth-L1 (Huber) function — quadratic near zero for stable gradients, linear
+far out for robustness:
+
+$$
+\text{smooth}_{L_1}(x) = \begin{cases} 0.5\,x^2 & |x| < 1 \\ |x| - 0.5 & \text{otherwise.} \end{cases}
+$$
+
+The full RPN objective is a weighted sum of a classification and a regression term:
+
+$$
+L = \frac{1}{N_{\text{cls}}} \sum_i L_{\text{cls}}(p_i, p_i^\star)
+  + \lambda \, \frac{1}{N_{\text{reg}}} \sum_i p_i^\star \, L_{\text{reg}}(t_i, t_i^\star).
+$$
+
+| Stage | Time | Note |
+|-------|------|------|
+| R-CNN (test) | $O(R \cdot \text{CNN})$, $R \approx 2000$ | a full CNN per region |
+| Fast R-CNN | $O(\text{CNN} + R \cdot \text{head})$ | one shared CNN pass |
+| Faster R-CNN | $O(\text{CNN} + \text{RPN} + R \cdot \text{head})$ | proposals nearly free |
+| RoI Align (one) | $O(H_o W_o \cdot \text{samples} \cdot C)$ | per proposal |
+
+## The same idea, different worlds
+
+<ExampleCard domain="Medical imaging" icon="🧬">
+Pathology and radiology favour two-stage detectors: when a missed tumour is unacceptable, the extra
+proposal-then-refine pass buys accuracy that offline batch processing can afford to wait for.
+</ExampleCard>
+
+<ExampleCard domain="Aerial mapping" icon="🗺️">
+Counting thousands of small buildings across a huge orthophoto suits Faster R-CNN's dense anchor grid
+and precise second-stage refinement, where crowded, tiny objects reward proposal-based methods.
+</ExampleCard>
+
+<ExampleCard domain="Document AI" icon="📄">
+Layout analysis detects titles, paragraphs, tables, and figures as regions. RoIAlign's sub-pixel
+accuracy matters because a table's border a few pixels off changes which cells are parsed.
+</ExampleCard>
+
+<ExampleCard domain="Warehouse robotics" icon="🦾">
+A picking robot proposes candidate grasp regions, then a second head verifies the object class and
+tightens the box before the gripper commits — proposal-then-decide mirrors the two-stage pattern.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Predict deltas, never raw coordinates.** Regressing absolute pixels is unstable across scales; the
+  normalized, log-space parameterization is what makes training converge.
+- **The box term is masked to positives.** Multiplying by $p_i^\star$ means background anchors
+  contribute no regression loss — there is no "correct box" for empty space.
+- **RoI Pooling misaligns; RoIAlign fixes it.** Pooling rounds RoI edges to integer cells, shifting
+  features by up to a stride. Mask R-CNN's masks only became sharp once RoIAlign removed that rounding.
+- **Interview cue:** the one-line story of the family is "R-CNN runs a CNN per region; Fast shares the
+  CNN with RoI pooling; Faster learns the proposals with an RPN so proposals become nearly free."
+
+## Practice
+
+1. **Easy:** Encode a ground truth identical to its anchor. What are the four targets, and why is that
+   reassuring?
+2. **Easy:** Why is $t_w = \log(G_w / A_w)$ rather than $G_w - A_w$?
+3. **Medium:** An anchor at (100, 100) size 50×50 gets deltas (0.1, -0.2, 0, 0.3). Decode the box.
+4. **Medium:** Explain why smooth-L1 is preferred over plain L2 for box regression on noisy targets.
+5. **Hard:** Given a feature map and a non-integer RoI, describe how RoIAlign's bilinear sampling differs
+   from RoI pooling, and why the difference shrinks as feature resolution grows.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'What does a Region Proposal Network output at each anchor?',
+      options: [
+        'A segmentation mask',
+        'An objectness score and four box-delta regressions',
+        'The final class label',
+        'An IoU threshold',
+      ],
+      answer: 1,
+      explain: 'The RPN scores objectness (object vs background) and regresses four deltas to nudge the anchor onto a nearby object.',
+    },
+    {
+      q: 'Why are width and height regressed in log space?',
+      options: [
+        'To keep sizes positive and make scaling symmetric, with zero meaning "no change"',
+        'To make the loss non-differentiable',
+        'Because log is faster than multiply',
+        'To force boxes to be square',
+      ],
+      answer: 0,
+      explain: 'exp() of a real number is always positive, and log makes doubling vs halving symmetric around a zero output that means "keep the anchor size".',
+    },
+    {
+      q: 'What was the key change from Fast R-CNN to Faster R-CNN?',
+      options: [
+        'Adding a segmentation mask head',
+        'Replacing the external Selective Search proposals with a learned RPN',
+        'Removing the CNN backbone',
+        'Switching from IoU to GIoU',
+      ],
+      answer: 1,
+      explain: 'Faster R-CNN made proposals learned and nearly free by adding the RPN, which shares the backbone features.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Two-stage detection = <strong>propose regions, then classify and refine</strong> each one.',
+    'The <strong>RPN</strong> scores anchor objectness and regresses four box deltas; NMS turns positives into proposals.',
+    'Boxes are predicted as <strong>normalized, log-space corrections</strong> to anchors, not raw coordinates.',
+    'The multi-task loss uses BCE for objectness and <strong>smooth-L1</strong> for boxes, masked to positive anchors.',
+    'The family trades speed for accuracy; <strong>RoIAlign</strong> removed pooling misalignment and enabled Mask R-CNN.',
+  ]}
+/>
+
+Two stages buy accuracy but cost time. Next: **The YOLO Family** — throw away proposals entirely and
+regress every box in a single forward pass, fast enough for live video.

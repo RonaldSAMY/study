@@ -1,0 +1,240 @@
+---
+title: Point in Polygon
+track: dsa-geometry
+summary: "Is a point inside a shape? Fire a ray and count edge crossings: odd means inside, even means outside."
+difficulty: intermediate
+estMinutes: 16
+prereqs:
+  - dsa-geometry/convex-hull
+leadsTo:
+  - dsa-geometry/closest-pair
+---
+
+import Callout from '../../../components/Callout.astro';
+import ExampleCard from '../../../components/ExampleCard.astro';
+import KeyTakeaways from '../../../components/KeyTakeaways.astro';
+import Quiz from '../../../components/Quiz.tsx';
+import CodeRunner from '../../../components/demos/CodeRunner.tsx';
+import GeoPointInPolygon from '../../../components/demos/GeoPointInPolygon.tsx';
+
+## The hook: is the pin inside the delivery zone?
+
+You drop a pin on a map. The app must instantly know: is this address **inside** the delivery zone, a
+blobby polygon with dozens of corners? Convex tricks do not help — the zone can have dents and notches.
+The classic answer is almost silly in its simplicity: shoot a ray from the pin off to the right and
+**count how many times it crosses the boundary**. Cross an odd number of times and you started inside;
+an even number and you started outside. It works for any simple polygon, convex or wildly concave.
+
+<Callout type="intuition" title="The one-sentence idea">
+Each time a ray from the point crosses an edge it flips between inside and outside, so an **odd** total
+of crossings means the point began **inside** the polygon.
+</Callout>
+
+## Intuition: every crossing flips your world
+
+Stand at the query point and stare off toward the right edge of the plane. If you are outside the shape,
+your line of sight might miss it entirely (0 crossings), or pass in one side and out the other
+(2 crossings) — always an **even** number. If you are inside, the ray must exit the shape to escape to
+infinity, and every exit is balanced by an entrance except the one you started within — an **odd**
+number. So we walk the polygon's edges and, for each edge, ask two questions:
+
+1. Does the edge span the ray's height? One endpoint must be at or below the point's y and the other
+   strictly above — otherwise a horizontal ray can't cross it.
+2. If so, is the crossing to the **right** of the point? Compute the x where the edge meets the ray and
+   check the point's x is smaller.
+
+Count the qualifying crossings; parity is the answer. The subtle bit is the "at or below vs strictly
+above" rule at endpoints — it stops a vertex that the ray grazes from being double-counted. Points that
+land exactly on an edge are handled as a separate boundary case.
+
+## Play with it
+
+Drag the green query point in and out of the shape, or reshape the polygon by dragging its vertices.
+Play to fire the ray and test each edge; the running crossing count and verdict update live.
+
+<GeoPointInPolygon client:visible />
+
+<Callout type="tip">
+Park the point so the ray passes exactly through a vertex, then nudge it up and down. The half-open
+rule ("lower endpoint counts, upper endpoint does not") is what keeps that grazing case from
+miscounting.
+</Callout>
+
+## How it works
+
+A square with corners (0,0), (4,0), (4,4), (0,4) and the point (2,2). The rightward ray at height y=2
+crosses only the **right** edge (4,0)–(4,4):
+
+```
+edge (0,0)-(4,0): spans y=2?  0..0 → no
+edge (4,0)-(4,4): spans y=2?  0..4 → yes; x at crossing = 4 > 2 → count = 1
+edge (4,4)-(0,4): spans y=2?  4..4 → no
+edge (0,4)-(0,0): spans y=2?  4..0 → yes; x at crossing = 0 < 2 → to the LEFT, skip
+crossings = 1  → odd → INSIDE
+```
+
+The whole test is one loop over the edges:
+
+<CodeRunner
+  client:visible
+  code={`// ray casting: horizontal ray to the right, count crossings
+function inside(poly, pt) {
+  const n = poly.length;
+  let crossings = 0;
+  for (let i = 0; i < n; i++) {
+    const p1 = poly[i], p2 = poly[(i + 1) % n];
+    // half-open in y: lower endpoint inclusive, upper endpoint exclusive
+    if ((p1.y <= pt.y && p2.y > pt.y) || (p2.y <= pt.y && p1.y > pt.y)) {
+      const xCross = p1.x + ((pt.y - p1.y) / (p2.y - p1.y)) * (p2.x - p1.x);
+      if (pt.x < xCross) crossings++;
+    }
+  }
+  return crossings % 2 === 1;   // odd → inside
+}
+const square = [{x:0,y:0},{x:4,y:0},{x:4,y:4},{x:0,y:4}];
+const concave = [{x:0,y:0},{x:4,y:0},{x:4,y:4},{x:2,y:2},{x:0,y:4}];`}
+  tests={[
+    { expr: 'inside(square, {x:2,y:2})', label: 'centre of square' },
+    { expr: 'inside(square, {x:5,y:2})', label: 'outside the square' },
+    { expr: 'inside(concave, {x:3,y:3})', label: 'inside the notch → outside' },
+    { expr: 'inside(concave, {x:1,y:1})', label: 'inside the concave shape' },
+  ]}
+/>
+
+## The real implementation
+
+The course file's ray-casting routine, including the on-boundary check and the same half-open crossing
+rule:
+
+```ts
+// /dsa/23-geometry/point-in-polygon.ts
+export function rayCasting(polygon: Polygon, point: Point): PointLocation {
+  const n = polygon.length;
+  if (n < 3) return PointLocation.OUTSIDE;
+
+  let crossings = 0;
+  for (let i = 0; i < n; i++) {
+    const p1 = polygon[i];
+    const p2 = polygon[(i + 1) % n];
+
+    if (isPointOnSegment(point, p1, p2)) return PointLocation.ON_BOUNDARY;
+
+    // edge must straddle the ray's height (half-open avoids double-counting vertices)
+    if ((p1.y <= point.y && p2.y > point.y) || (p2.y <= point.y && p1.y > point.y)) {
+      const xIntersect = p1.x + ((point.y - p1.y) / (p2.y - p1.y)) * (p2.x - p1.x);
+      if (point.x < xIntersect) crossings++;
+    }
+  }
+  return crossings % 2 === 1 ? PointLocation.INSIDE : PointLocation.OUTSIDE;
+}
+```
+
+Run the full file: `npx tsx 23-geometry/point-in-polygon.ts`. The same file also has the **winding
+number** method (which handles self-intersecting polygons) and an $O(\log n)$ binary-search test for
+**convex** polygons.
+
+## Complexity
+
+One pass over the edges per query:
+
+$$
+T_{\text{ray casting}} = O(n), \qquad T_{\text{convex, preprocessed}} = O(\log n).
+$$
+
+| Method | Time | Works on |
+|--------|------|----------|
+| Ray casting | $O(n)$ | any simple polygon |
+| Winding number | $O(n)$ | self-intersecting too |
+| Cross-product side test | $O(n)$ | convex only |
+| Binary search | $O(\log n)$ | convex, after $O(n)$ prep |
+
+For a single blob, $O(n)$ per query is fine. If you will ask millions of queries against a fixed convex
+region, preprocess once and answer each in $O(\log n)$.
+
+## The same idea, different worlds
+
+<ExampleCard domain="Geofencing" icon="📍">
+Ride-share and delivery apps decide surge zones, airport pickup areas, and "is the driver in the
+region" by ray-casting the GPS point against a zone polygon — thousands of times a second.
+</ExampleCard>
+
+<ExampleCard domain="Digital art / vector graphics" icon="🎨">
+The "even-odd fill rule" in SVG and PostScript is literally ray-casting parity: a pixel is painted when
+a ray from it crosses the path an odd number of times, which is how overlapping shapes leave holes.
+</ExampleCard>
+
+<ExampleCard domain="Epidemiology / public health" icon="🧬">
+Mapping which census tracts fall inside a contamination or exposure boundary is a point-in-polygon test
+per centroid, aggregating population at risk within an irregular hazard zone.
+</ExampleCard>
+
+<ExampleCard domain="Astronomy" icon="🔭">
+Survey pipelines flag which detected sources fall inside a telescope's oddly shaped field-of-view mask,
+keeping only points that ray-cast as inside the observed footprint.
+</ExampleCard>
+
+## Common pitfalls & interview tips
+
+- **Vertex grazing double-counts.** If the ray passes exactly through a vertex, a naive test counts both
+  incident edges. The half-open rule ("lower endpoint inclusive, upper exclusive") fixes it — do not
+  drop it.
+- **Horizontal edges.** An edge at exactly the point's height contributes no crossing; the half-open
+  y-span test already skips it, so resist adding special cases that reintroduce bugs.
+- **On the boundary is ambiguous.** "Inside" versus "on the edge" is a policy choice; test boundary
+  membership explicitly if your problem distinguishes them.
+- **Concave and holes.** Ray casting handles concavity for free; polygons with holes need each ring
+  tested, combining parities.
+- **Interview cue:** "is the point inside this arbitrary polygon" wants ray casting; mention parity of
+  crossings and the vertex half-open rule to show you know the traps.
+
+## Practice
+
+1. **Easy:** Ray-cast the point (2,2) against the triangle (0,0), (4,0), (0,4) by hand.
+2. **Easy:** Explain why 0 and 2 crossings both mean "outside."
+3. **Medium:** Extend the routine to report ON_BOUNDARY when the point lies exactly on an edge.
+4. **Medium:** Implement the winding-number method and find a self-intersecting polygon where it
+   disagrees with even-odd ray casting.
+5. **Hard:** Preprocess a convex polygon so each query runs in $O(\log n)$ via binary search over the
+   fan of triangles from vertex 0.
+
+<Quiz
+  client:visible
+  questions={[
+    {
+      q: 'A rightward ray from the query point crosses the polygon boundary 3 times. Where is the point?',
+      options: ['Outside', 'Inside', 'On the boundary', 'Undetermined'],
+      answer: 1,
+      explain: 'An odd number of crossings means the point is inside; even means outside.',
+    },
+    {
+      q: 'What is the purpose of the half-open y-test (p1.y ≤ y and p2.y > y)?',
+      options: [
+        'To handle vertical edges',
+        'To avoid double-counting when the ray passes through a vertex',
+        'To speed up the loop',
+        'To detect convex polygons',
+      ],
+      answer: 1,
+      explain: 'Making one endpoint inclusive and the other exclusive counts a shared vertex exactly once.',
+    },
+    {
+      q: 'For a fixed convex region queried millions of times, which is best?',
+      options: ['Ray casting every time, O(n)', 'Winding number, O(n)', 'Preprocess once, then O(log n) binary search', 'Rebuild the hull per query'],
+      answer: 2,
+      explain: 'A convex polygon admits an O(log n) binary-search test after O(n) preprocessing — far cheaper per query at scale.',
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  points={[
+    'Ray casting fires a ray from the point and <strong>counts boundary crossings</strong>; odd = inside, even = outside.',
+    'Each crossing <strong>flips</strong> inside/outside, so only the <strong>parity</strong> of the count matters.',
+    'The <strong>half-open</strong> y-span rule prevents a grazed vertex from being counted twice.',
+    'Ray casting is <strong>O(n) per query</strong> and works on <strong>any simple polygon</strong>, concave included.',
+    'For a fixed <strong>convex</strong> region, preprocess once and answer queries in <strong>O(log n)</strong>.',
+  ]}
+/>
+
+Next up: **Closest Pair of Points** — from testing one point against a shape to finding the two nearest
+points among thousands, in O(n log n).
